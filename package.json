@@ -2,12 +2,16 @@
   "name": "nt-agent",
   "displayName": "Агент Neural Tower",
   "description": "Интеллектуальный ассистент для разработки на базе локальной модели Neural Tower",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "repository": "https://github.com/nt-agent/nt-agent",
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["AI", "Machine Learning", "Chat"],
+  "categories": [
+    "AI",
+    "Machine Learning",
+    "Chat"
+  ],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
@@ -183,7 +187,9 @@
         },
         "nt-agent.autoApprove.tools": {
           "type": "array",
-          "items": { "type": "string" },
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "description": "Список имён инструментов для автоодобрения даже при отключённой общей функции"
         },
@@ -217,6 +223,9 @@
       }
     }
   },
+  "versionScript": "node ./bump-version.js",
+  "versionScript": "node ./bump-version.js",
+  "versionScript": "node ./bump-version.js",
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc --noEmit && esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
@@ -226,10 +235,11 @@
     "glob": "^10.3.0"
   },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
-    "@types/node": "^20.0.0",
     "@types/glob": "^8.1.0",
-    "typescript": "^5.4.0",
-    "esbuild": "^0.20.0"
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.20.0",
+    "ovsx": "^1.0.0",
+    "typescript": "^5.4.0"
   }
 }

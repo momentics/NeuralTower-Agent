@@ -4,3 +4,5 @@ out/**/*.js.map
 ref/
 src/
 *.bat
+bump-version.js
+.github/
