@@ -53,7 +53,7 @@ jobs:
       - name: Upload VSIX Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nt-agent-v${{ steps.version.outputs.version }}
+          name: neuralTowerAgent-v${{ steps.version.outputs.version }}
           path: "*.vsix"
           retention-days: 30
 
@@ -85,7 +85,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && github.event.inputs.publish_marketplace == 'true')
     environment:
       name: vscode-marketplace
-      url: https://marketplace.visualstudio.com/items?itemName=nt-agent.nt-agent
+      url: https://marketplace.visualstudio.com/items?itemName=neuralTowerAgent.neuralTowerAgent
     steps:
       - name: Checkout
         uses: actions/checkout@v4

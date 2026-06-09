@@ -35,14 +35,14 @@ export class App {
 
   /** Вызывается при активации расширения. */
   async init(): Promise<void> {
-    console.log(`[nt-agent] инициализация версии ${this.version()}`)
+    console.log(`[NeuralTower Agent] инициализация версии ${this.version()}`)
   }
 
   /** Вызывается при деактивации расширения. */
   dispose(): void {
     for (const p of this.providers) p.dispose()
     for (const d of this.disposables) d.dispose()
-    console.log("[nt-agent] ресурсы освобождены")
+    console.log("[NeuralTower Agent] ресурсы освобождены")
   }
 
   private version(): string {

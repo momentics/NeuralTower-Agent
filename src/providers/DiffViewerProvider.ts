@@ -3,7 +3,7 @@ import * as crypto from "crypto"
 import type { GitDiffResult } from "../services/git/GitService"
 
 export class DiffViewerProvider implements vscode.Disposable {
-  public static readonly viewType = "nt-agent.diffViewer"
+  public static readonly viewType = "neuralTowerAgent.diffViewer"
   public static readonly title = "Изменения агента"
 
   private panel: vscode.WebviewPanel | undefined

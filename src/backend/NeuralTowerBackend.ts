@@ -15,7 +15,7 @@ export class NeuralTowerBackend implements IBackend {
   private static readonly DEFAULT_MODEL = "qwen3.6-27b"
 
   async getConfig(): Promise<BackendConfig> {
-    const cfg = vscode.workspace.getConfiguration("nt-agent")
+    const cfg = vscode.workspace.getConfiguration("neuralTowerAgent")
     return {
       url: cfg.get<string>("neuralTowerUrl", NeuralTowerBackend.DEFAULT_URL)!,
       model: cfg.get<string>("model", NeuralTowerBackend.DEFAULT_MODEL)!,
@@ -25,7 +25,7 @@ export class NeuralTowerBackend implements IBackend {
   }
 
   async updateConfig(partial: Partial<BackendConfig>): Promise<void> {
-    const cfg = vscode.workspace.getConfiguration("nt-agent")
+    const cfg = vscode.workspace.getConfiguration("neuralTowerAgent")
     if (partial.url) await cfg.update("neuralTowerUrl", partial.url, true)
     if (partial.model) await cfg.update("model", partial.model, true)
     if (partial.maxRetries !== undefined) await cfg.update("maxRetries", partial.maxRetries, true)

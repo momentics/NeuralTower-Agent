@@ -19,8 +19,8 @@ export class SettingsProvider {
     }
     const inst = new SettingsProvider(extUri, backend)
     inst.panel = vscode.window.createWebviewPanel(
-      "nt-agent.settings",
-      "Агент Neural Tower — Настройки",
+      "neuralTowerAgent.settings",
+      "NeuralTower Agent — Настройки",
       vscode.ViewColumn.Two,
       { enableScripts: true, localResourceRoots: [extUri] },
     )
@@ -34,7 +34,7 @@ export class SettingsProvider {
   private async loadData(): Promise<void> {
     const cfg = await this.backend.getConfig()
     const models = await this.backend.listModels().catch(() => [])
-    const vsCfg = vscode.workspace.getConfiguration("nt-agent")
+    const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
     const autoApprove = vsCfg.get<boolean>("autoApprove.enabled", false) ?? false
     this.panel!.webview.postMessage({
       type: "settingsData",
@@ -51,7 +51,7 @@ export class SettingsProvider {
           if (msg.maxRetries !== undefined) await this.backend.updateConfig({ maxRetries: msg.maxRetries })
           if (msg.timeoutMs !== undefined) await this.backend.updateConfig({ timeoutMs: msg.timeoutMs })
           if (msg.autoApprove !== undefined) {
-            await vscode.workspace.getConfiguration("nt-agent").update(
+            await vscode.workspace.getConfiguration("neuralTowerAgent").update(
               "autoApprove.enabled",
               msg.autoApprove,
               true,

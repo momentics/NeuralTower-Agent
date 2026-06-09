@@ -115,8 +115,12 @@ export class MCPManager {
   }
 
   async syncWithRegistry(registry: ToolRegistry): Promise<void> {
-    const tools = await this.discover()
-    registry.registerMany(this.toolAdapter.adaptAll(tools))
+    for (const server of this.servers) {
+      if (!server.ready || !server.process) continue
+      registry.registerMany(
+        this.toolAdapter.adaptAll(server.tools, server.config.name, this.callTool.bind(this)),
+      )
+    }
   }
 
   listServers(): MCPServerConfig[] {

@@ -16,6 +16,7 @@ export type ExtToWebview =
   | { type: "streamError"; error: string }
   | { type: "newChat" }
   | { type: "toolUse"; toolName: string; args: string }
+  | { type: "toolResult"; toolName: string; output: string; success: boolean }
   | { type: "sessionList"; sessions: Array<{ id: string; title: string; pinned: boolean; updatedAt: number; messageCount: number; active: boolean }> }
   | { type: "switchSession"; sessionId: string }
   | { type: "agentDone" }

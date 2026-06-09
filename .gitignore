@@ -30,7 +30,7 @@ yarn-error.log*
 Thumbs.db
 
 # builds
-nt-agent-*.vsix
+NeuralTower-Agent-*.vsix
 
 # ref
 ref/

@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo Сборка VSIX: nt-agent
+echo Сборка VSIX: NeuralTower-Agent
 echo ========================================
 echo.
 
@@ -16,7 +16,7 @@ if %errorlevel% neq 0 (
 echo.
 
 echo [2/3] Удаление старых пакетов VSIX...
-for %%f in (nt-agent-*.vsix) do del "%%f"
+for %%f in (NeuralTower-Agent-*.vsix) do del "%%f"
 echo.
 
 echo [3/3] Упаковка VSIX...

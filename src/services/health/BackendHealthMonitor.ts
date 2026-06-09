@@ -16,8 +16,8 @@ export class BackendHealthMonitor implements Plugin {
       vscode.StatusBarAlignment.Right,
       99,
     )
-    this.statusBar.command = "nt-agent.settings"
-    this.statusBar.tooltip = "Агент Neural Tower: статус подключения"
+    this.statusBar.command = "neuralTowerAgent.settings"
+    this.statusBar.tooltip = "NeuralTower Agent: статус подключения"
   }
 
   async init(): Promise<void> {

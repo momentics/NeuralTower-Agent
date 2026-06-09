@@ -1,6 +1,17 @@
-import type { ITool, ToolSchema } from "../tools/ITool"
+import type { ITool, ToolSchema, ToolParam } from "../tools/ITool"
 import type { ToolResult } from "../agent/AgentTypes"
-import type { MCPTool } from "./MCPManager"
+
+export interface MCPToolDefinition {
+  name: string
+  description: string
+  schema: Record<string, unknown>
+}
+
+export type CallToolFn = (
+  serverName: string,
+  toolName: string,
+  args: Record<string, unknown>,
+) => Promise<{ output: string; success: boolean }>
 
 /**
  * Адаптер инструментов MCP к интерфейсу ITool.
@@ -11,41 +22,53 @@ export class MCPToolAdapter {
   /**
    * Преобразовать определение MCPTool в экземпляр ITool.
    */
-  adapt(mcpTool: MCPTool): ITool {
+  adapt(
+    mcpTool: MCPToolDefinition,
+    serverName: string,
+    callToolFn: CallToolFn,
+  ): ITool {
+    const fullName = `${serverName}:${mcpTool.name}`
     return {
-      name: mcpTool.name,
-      description: mcpTool.description ?? "MCP-инструмент",
+      name: fullName,
+      description: mcpTool.description || `MCP-инструмент из ${serverName}`,
       category: "mcp",
-      schema: this.toSchema(mcpTool),
+      schema: this.toSchema(mcpTool, serverName),
       isSafe: true,
-      execute: async (_args: Record<string, unknown>): Promise<ToolResult> => {
-        // В полной реализации вызов пересылается на MCP-сервер.
-        // Пока возвращается заглушка.
-        return {
-          output: `MCP-инструмент "${mcpTool.name}" — сервер ещё не подключён`,
-          success: false,
-        }
+      execute: async (args: Record<string, unknown>): Promise<ToolResult> => {
+        return callToolFn(serverName, mcpTool.name, args) as Promise<ToolResult>
       },
     }
   }
 
   /** Адаптировать несколько инструментов MCP. */
-  adaptAll(mcpTools: MCPTool[]): ITool[] {
-    return mcpTools.map((t) => this.adapt(t))
+  adaptAll(
+    mcpTools: MCPToolDefinition[],
+    serverName: string,
+    callToolFn: CallToolFn,
+  ): ITool[] {
+    return mcpTools.map((t) => this.adapt(t, serverName, callToolFn))
   }
 
-  private toSchema(tool: MCPTool): ToolSchema {
+  private toSchema(tool: MCPToolDefinition, serverName: string): ToolSchema {
+    const params: Record<string, ToolParam> = {}
+    if (tool.schema && typeof tool.schema === "object" && "inputSchema" in tool.schema) {
+      const inputSchema = tool.schema.inputSchema as Record<string, unknown>
+      if (inputSchema && typeof inputSchema === "object") {
+        const props = (inputSchema.properties as Record<string, { type: string; description?: string; enum?: string[] }>) ?? {}
+        for (const [k, p] of Object.entries(props)) {
+          params[k] = {
+            type: p.type as ToolParam["type"],
+            description: typeof p.description === "string" ? p.description : undefined,
+            enum: Array.isArray(p.enum) ? p.enum : undefined,
+          }
+        }
+      }
+    }
     return {
-      name: tool.name,
-      description: tool.description ?? "",
-      parameters: {},
+      name: `${serverName}:${tool.name}`,
+      description: tool.description || "",
+      parameters: params,
+      required: [],
     }
   }
-}
-
-// Псевдоним типа для преобразования схем
-type ToolParam = {
-  type: string
-  description?: string
-  enum?: string[]
 }

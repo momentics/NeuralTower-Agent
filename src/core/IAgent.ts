@@ -18,6 +18,7 @@ export interface IAgentOrchestrator {
     query: string,
     onChunk: (text: string) => void,
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
+    onToolResult?: (name: string, result: { output: string; success: boolean }) => void,
     signal?: AbortSignal,
   ): Promise<ChatMessage>
 

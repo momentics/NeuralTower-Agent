@@ -1,9 +1,9 @@
 {
-  "name": "nt-agent",
-  "displayName": "Агент Neural Tower",
+  "name": "NeuralTower-Agent",
+  "displayName": "NeuralTower Agent",
   "description": "Интеллектуальный ассистент для разработки на базе локальной модели Neural Tower",
   "version": "0.1.1",
-  "repository": "https://github.com/nt-agent/nt-agent",
+  "repository": "https://github.com/NeuralTower-Agent/NeuralTower-Agent",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -12,73 +12,73 @@
     "Machine Learning",
     "Chat"
   ],
-  "activationEvents": [],
+  "activationEvents": ["onStartup"],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "nt-agent",
-          "title": "Агент Neural Tower",
+          "id": "neuralTowerAgent",
+          "title": "NeuralTower Agent",
           "icon": "resources/icon.svg"
         }
       ]
     },
     "views": {
-      "nt-agent": [
+      "neuralTowerAgent": [
         {
           "type": "webview",
-          "id": "nt-agent.chat",
+          "id": "neuralTowerAgent.chat",
           "name": "Чат"
         }
       ]
     },
     "commands": [
       {
-        "command": "nt-agent.newChat",
+        "command": "neuralTowerAgent.newChat",
         "title": "Новый чат",
         "icon": "$(add)"
       },
       {
-        "command": "nt-agent.settings",
+        "command": "neuralTowerAgent.settings",
         "title": "Открыть настройки",
         "icon": "$(settings-gear)"
       },
       {
-        "command": "nt-agent.focusChatInput",
+        "command": "neuralTowerAgent.focusChatInput",
         "title": "Перейти к полю ввода чата"
       },
       {
-        "command": "nt-agent.explainCode",
+        "command": "neuralTowerAgent.explainCode",
         "title": "Объяснить код",
         "icon": "$(comment)"
       },
       {
-        "command": "nt-agent.fixCode",
+        "command": "neuralTowerAgent.fixCode",
         "title": "Исправить код",
         "icon": "$(wrench)"
       },
       {
-        "command": "nt-agent.improveCode",
+        "command": "neuralTowerAgent.improveCode",
         "title": "Улучшить код",
         "icon": "$(lightbulb)"
       },
       {
-        "command": "nt-agent.addToContext",
+        "command": "neuralTowerAgent.addToContext",
         "title": "Добавить в контекст",
         "icon": "$(plug)"
       },
       {
-        "command": "nt-agent.generateCommitMessage",
+        "command": "neuralTowerAgent.generateCommitMessage",
         "title": "Сгенерировать текст коммита",
         "icon": "$(git-commit)"
       },
       {
-        "command": "nt-agent.session.list",
+        "command": "neuralTowerAgent.session.list",
         "title": "Список сессий"
       },
       {
-        "command": "nt-agent.openDiffViewer",
+        "command": "neuralTowerAgent.openDiffViewer",
         "title": "Показать изменения",
         "icon": "$(diff)"
       }
@@ -86,116 +86,116 @@
     "menus": {
       "view/title": [
         {
-          "command": "nt-agent.newChat",
-          "when": "view == nt-agent.chat",
+       "command": "neuralTowerAgent.newChat",
+          "when": "view == neuralTowerAgent.chat",
           "group": "navigation"
         },
         {
-          "command": "nt-agent.settings",
-          "when": "view == nt-agent.chat",
+       "command": "neuralTowerAgent.settings",
+          "when": "view == neuralTowerAgent.chat",
           "group": "navigation"
         },
         {
-          "command": "nt-agent.openDiffViewer",
-          "when": "view == nt-agent.chat",
+       "command": "neuralTowerAgent.openDiffViewer",
+          "when": "view == neuralTowerAgent.chat",
           "group": "navigation"
         }
       ],
       "editor/context": [
         {
-          "command": "nt-agent.explainCode",
+       "command": "neuralTowerAgent.explainCode",
           "group": "9_cutcopypaste@1"
         },
         {
-          "command": "nt-agent.fixCode",
+       "command": "neuralTowerAgent.fixCode",
           "group": "9_cutcopypaste@2"
         },
         {
-          "command": "nt-agent.improveCode",
+       "command": "neuralTowerAgent.improveCode",
           "group": "9_cutcopypaste@3"
         },
         {
-          "command": "nt-agent.addToContext",
+       "command": "neuralTowerAgent.addToContext",
           "group": "9_cutcopypaste@4"
         }
       ],
       "scm/title": [
         {
-          "command": "nt-agent.generateCommitMessage",
+       "command": "neuralTowerAgent.generateCommitMessage",
           "group": "navigation"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "nt-agent.focusChatInput",
+        "command": "neuralTowerAgent.focusChatInput",
         "key": "ctrl+shift+a",
         "mac": "cmd+shift+a",
         "when": "editorTextFocus"
       },
       {
-        "command": "nt-agent.explainCode",
+        "command": "neuralTowerAgent.explainCode",
         "key": "ctrl+shift+e",
         "mac": "cmd+shift+e",
         "when": "editorTextFocus"
       },
       {
-        "command": "nt-agent.fixCode",
+        "command": "neuralTowerAgent.fixCode",
         "key": "ctrl+shift+f",
         "mac": "cmd+shift+f",
         "when": "editorTextFocus"
       },
       {
-        "command": "nt-agent.addToContext",
+        "command": "neuralTowerAgent.addToContext",
         "key": "ctrl+k ctrl+a",
         "mac": "cmd+k cmd+a",
         "when": "editorTextFocus"
       },
       {
-        "command": "nt-agent.newChat",
+        "command": "neuralTowerAgent.newChat",
         "key": "ctrl+shift+u",
         "mac": "cmd+shift+u"
       }
     ],
     "configuration": {
-      "title": "Агент Neural Tower",
+      "title": "NeuralTower Agent",
       "properties": {
-        "nt-agent.neuralTowerUrl": {
+        "neuralTowerAgent.neuralTowerUrl": {
           "type": "string",
           "default": "http://localhost:30000",
           "description": "Адрес сервера Neural Tower SGLang"
         },
-        "nt-agent.model": {
+        "neuralTowerAgent.model": {
           "type": "string",
           "default": "qwen3.6-27b",
           "description": "Имя модели по умолчанию"
         },
-        "nt-agent.maxRetries": {
+        "neuralTowerAgent.maxRetries": {
           "type": "number",
           "default": 3,
           "minimum": 0,
           "maximum": 10,
           "description": "Максимальное число повторных попыток при запросах к бэкенду"
         },
-        "nt-agent.timeoutMs": {
+        "neuralTowerAgent.timeoutMs": {
           "type": "number",
           "default": 60000,
           "minimum": 1000,
           "description": "Тайм-аут запроса в миллисекундах"
         },
-        "nt-agent.maxSessions": {
+        "neuralTowerAgent.maxSessions": {
           "type": "number",
           "default": 50,
           "minimum": 5,
           "maximum": 200,
           "description": "Максимальное число сохраняемых сессий"
         },
-        "nt-agent.autoApprove.enabled": {
+        "neuralTowerAgent.autoApprove.enabled": {
           "type": "boolean",
           "default": false,
           "description": "Автоматически одобрять все небезопасные вызовы инструментов без запроса"
         },
-        "nt-agent.autoApprove.tools": {
+        "neuralTowerAgent.autoApprove.tools": {
           "type": "array",
           "items": {
             "type": "string"
@@ -203,29 +203,29 @@
           "default": [],
           "description": "Список имён инструментов для автоодобрения даже при отключённой общей функции"
         },
-        "nt-agent.notifications.enabled": {
+        "neuralTowerAgent.notifications.enabled": {
           "type": "boolean",
           "default": true,
           "description": "Включить уведомления VS Code"
         },
-        "nt-agent.notifications.agentCompletion": {
+        "neuralTowerAgent.notifications.agentCompletion": {
           "type": "boolean",
           "default": true,
           "description": "Показывать уведомление при завершении задачи агентом"
         },
-        "nt-agent.notifications.permissionRequests": {
+        "neuralTowerAgent.notifications.permissionRequests": {
           "type": "boolean",
           "default": true,
           "description": "Показывать уведомление для запросов разрешений"
         },
-        "nt-agent.agent.maxIterations": {
+        "neuralTowerAgent.agent.maxIterations": {
           "type": "number",
           "default": 20,
           "minimum": 1,
           "maximum": 100,
           "description": "Максимальное число итераций вызова инструментов за один ход агента"
         },
-        "nt-agent.git.injectDiffContext": {
+        "neuralTowerAgent.git.injectDiffContext": {
           "type": "boolean",
           "default": true,
           "description": "Добавлять контекст git-различий в системный запрос агента"

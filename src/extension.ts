@@ -5,6 +5,7 @@ import { AgentOrchestrator } from "./agent/AgentOrchestrator"
 import { AgentPlanner } from "./agent/AgentPlanner"
 import { ToolRegistry } from "./tools/ToolRegistry"
 import { SkillManager } from "./skills/SkillManager"
+import { builtInSkills } from "./skills/builtInSkills"
 import { ChatProvider } from "./providers/ChatProvider"
 import { SettingsProvider } from "./providers/SettingsProvider"
 import { DiffViewerProvider } from "./providers/DiffViewerProvider"
@@ -24,15 +25,18 @@ import { EditFileTool } from "./tools/builtins/EditFileTool"
 import { GlobTool } from "./tools/builtins/GlobTool"
 import { GrepTool } from "./tools/builtins/GrepTool"
 import { WebFetchTool } from "./tools/builtins/WebFetchTool"
+import { TodoWriteTool } from "./tools/builtins/TodoWriteTool"
 
 let app: App | undefined
 let backend: NeuralTowerBackend | undefined
 let agent: AgentOrchestrator | undefined
+let todoTool: TodoWriteTool | undefined
 let chatProvider: ChatProvider | undefined
 let diffViewer: DiffViewerProvider | undefined
 let healthMonitor: BackendHealthMonitor | undefined
 let commitMessageService: CommitMessageService | undefined
 let gitService: GitService | undefined
+let agentOutputChannel: vscode.OutputChannel | undefined
 
 export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   app = new App(ctx)
@@ -46,7 +50,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 
   // ── Менеджер разрешений ─────────────────────────────────
   const permissionManager = new PermissionManager()
-  const vsCfg = vscode.workspace.getConfiguration("nt-agent")
+  const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
   const autoApproveEnabled = vsCfg.get<boolean>("autoApprove.enabled", false) ?? false
   const autoApproveTools = vsCfg.get<string[]>("autoApprove.tools", []) ?? []
   permissionManager.setAutoApprove({ enabled: autoApproveEnabled, tools: autoApproveTools, maxCost: 0 })
@@ -64,6 +68,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 
   // ── Реестр инструментов ─────────────────────────────────
   const tools = new ToolRegistry()
+  todoTool = new TodoWriteTool()
   tools.register(new ReadFileTool())
   tools.register(new WriteFileTool())
   tools.register(new BashTool())
@@ -71,6 +76,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   tools.register(new GlobTool())
   tools.register(new GrepTool())
   tools.register(new WebFetchTool())
+  tools.register(todoTool)
 
   // ── MCP-менеджер ────────────────────────────────────────
   const mcpManager = new MCPManager()
@@ -79,6 +85,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 
   // ── Менеджер навыков ────────────────────────────────────
   const skills = new SkillManager()
+  skills.registerMany(builtInSkills)
 
   // ── Оркестратор агента ──────────────────────────────────
   agent = new AgentOrchestrator(backend, tools, skills)
@@ -117,21 +124,22 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   // ── Команды ─────────────────────────────────────────────
 
   // Команды чата
-  app.registerCommand("nt-agent.newChat", () => {
+  app.registerCommand("neuralTowerAgent.newChat", () => {
     chatProvider?.broadcastNewChat()
+    todoTool?.clear()
   })
 
-  app.registerCommand("nt-agent.focusChatInput", () => {
-    vscode.commands.executeCommand("nt-agent.chat.focus")
+  app.registerCommand("neuralTowerAgent.focusChatInput", () => {
+    vscode.commands.executeCommand("neuralTowerAgent.chat.focus")
   })
 
   // Настройки
-  app.registerCommand("nt-agent.settings", () => {
+  app.registerCommand("neuralTowerAgent.settings", () => {
     SettingsProvider.render(ctx.extensionUri, backend!)
   })
 
   // Действия над кодом
-  app.registerCommand("nt-agent.explainCode", async () => {
+  app.registerCommand("neuralTowerAgent.explainCode", async () => {
     const editor = vscode.window.activeTextEditor
     if (!editor) {
       vscode.window.showInformationMessage("Активный редактор отсутствует")
@@ -147,7 +155,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
     await sendAgentQuery(`Объясни этот код:\n\n\`\`\`${getLang(filePath)}\n${text}\n\`\`\``, filePath)
   })
 
-  app.registerCommand("nt-agent.fixCode", async () => {
+  app.registerCommand("neuralTowerAgent.fixCode", async () => {
     const editor = vscode.window.activeTextEditor
     if (!editor) {
       vscode.window.showInformationMessage("Активный редактор отсутствует")
@@ -163,7 +171,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
     await sendAgentQuery(`Исправь ошибки и проблемы в этом коде:\n\n\`\`\`${getLang(filePath)}\n${text}\n\`\`\``, filePath)
   })
 
-  app.registerCommand("nt-agent.improveCode", async () => {
+  app.registerCommand("neuralTowerAgent.improveCode", async () => {
     const editor = vscode.window.activeTextEditor
     if (!editor) {
       vscode.window.showInformationMessage("Активный редактор отсутствует")
@@ -179,7 +187,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
     await sendAgentQuery(`Улучши этот код по читаемости, производительности и лучшим практикам:\n\n\`\`\`${getLang(filePath)}\n${text}\n\`\`\``, filePath)
   })
 
-  app.registerCommand("nt-agent.addToContext", async () => {
+  app.registerCommand("neuralTowerAgent.addToContext", async () => {
     const editor = vscode.window.activeTextEditor
     if (!editor) {
       vscode.window.showInformationMessage("Активный редактор отсутствует")
@@ -192,33 +200,33 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   })
 
  // Code Action команды (вызываются из контекстного меню редактора)
-  app.registerCommand("nt-agent.codeAction.fix", async (...args: unknown[]) => {
+  app.registerCommand("neuralTowerAgent.codeAction.fix", async (...args: unknown[]) => {
     const [text, filePath, diagnostics] = [args[0] as string, args[1] as string, args[2] as string]
     if (!text || !filePath) return
     const prompt = `Исправь следующие проблемы в этом коде:\n\nДиагностика:\n${diagnostics}\n\nКод:\n\`\`\`${getLang(filePath)}\n${text}\n\`\`\``
     await sendAgentQuery(prompt, filePath)
   })
 
-  app.registerCommand("nt-agent.codeAction.explain", async (...args: unknown[]) => {
+  app.registerCommand("neuralTowerAgent.codeAction.explain", async (...args: unknown[]) => {
     const [text, filePath] = [args[0] as string, args[1] as string]
     if (!text || !filePath) return
     await sendAgentQuery(`Объясни этот код:\n\n\`\`\`${getLang(filePath)}\n${text}\n\`\`\``, filePath)
   })
 
-  app.registerCommand("nt-agent.codeAction.improve", async (...args: unknown[]) => {
+  app.registerCommand("neuralTowerAgent.codeAction.improve", async (...args: unknown[]) => {
     const [text, filePath] = [args[0] as string, args[1] as string]
     if (!text || !filePath) return
     await sendAgentQuery(`Улучши этот код:\n\n\`\`\`${getLang(filePath)}\n${text}\n\`\`\``, filePath)
   })
 
-  app.registerCommand("nt-agent.codeAction.addToContext", async (...args: unknown[]) => {
+  app.registerCommand("neuralTowerAgent.codeAction.addToContext", async (...args: unknown[]) => {
     const [text, filePath] = [args[0] as string, args[1] as string]
     if (!text || !filePath) return
     await sendAgentQuery(`Вот контекст из ${filePath}:\n\`\`\`${getLang(filePath)}\n${text}\n\`\`\``, filePath)
   })
 
   // Git-команды
-  app.registerCommand("nt-agent.generateCommitMessage", async () => {
+  app.registerCommand("neuralTowerAgent.generateCommitMessage", async () => {
     if (!vscode.workspace.workspaceFolders?.[0]) return
     const dir = vscode.workspace.workspaceFolders[0].uri.fsPath
     const msg = await commitMessageService!.generate(dir)
@@ -238,12 +246,12 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   })
 
   // Команды сессий
-  app.registerCommand("nt-agent.session.list", () => {
-    vscode.commands.executeCommand("nt-agent.chat.focus")
+  app.registerCommand("neuralTowerAgent.session.list", () => {
+    vscode.commands.executeCommand("neuralTowerAgent.chat.focus")
   })
 
   // Diff Viewer
-  app.registerCommand("nt-agent.openDiffViewer", async () => {
+  app.registerCommand("neuralTowerAgent.openDiffViewer", async () => {
     if (!vscode.workspace.workspaceFolders?.[0] || !gitService) return
     const dir = vscode.workspace.workspaceFolders[0].uri.fsPath
     const diff = await gitService.getDiff(dir)
@@ -290,16 +298,18 @@ export function deactivate(): void {
 
 async function sendAgentQuery(query: string, workDir: string): Promise<void> {
   if (!app || !agent) return
-  const outputChannel = vscode.window.createOutputChannel("Агент Neural Tower")
-  outputChannel.show()
-  outputChannel.appendLine(`> ${query.slice(0, 80)}...`)
+  if (!agentOutputChannel) {
+    agentOutputChannel = vscode.window.createOutputChannel("NeuralTower Agent", { log: true })
+  }
+  agentOutputChannel.show()
+  agentOutputChannel.appendLine(`> ${query.slice(0, 80)}...`)
 
   try {
     await agent.run(query, (chunk) => {
       process.stdout.write(chunk)
-      outputChannel.append(chunk)
+      agentOutputChannel!.append(chunk)
     })
-    outputChannel.appendLine("\nГотово.")
+    agentOutputChannel.appendLine("\nГотово.")
 
     // Обновить diff viewer при наличии изменений
     if (gitService) {
@@ -307,9 +317,7 @@ async function sendAgentQuery(query: string, workDir: string): Promise<void> {
       diffViewer?.openPanel(diff)
     }
   } catch (err) {
-    outputChannel.appendLine(`\nОшибка: ${err instanceof Error ? err.message : String(err)}`)
-  } finally {
-    setTimeout(() => outputChannel.dispose(), 10000)
+    agentOutputChannel.appendLine(`\nОшибка: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 

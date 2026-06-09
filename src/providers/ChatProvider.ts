@@ -9,7 +9,7 @@ import type { PermissionManager } from "../services/permission/PermissionManager
 import type { WebviewToExt, ExtToWebview } from "../shared/messages"
 
 export class ChatProvider implements IProvider {
-  public readonly viewType = "nt-agent.chat"
+  public readonly viewType = "neuralTowerAgent.chat"
   private panel: vscode.WebviewView | undefined
   private streaming = false
   private abortController: AbortController | null = null
@@ -32,6 +32,7 @@ export class ChatProvider implements IProvider {
     view.webview.html = this.html()
     this.setupHandler()
     this.sendSessionList()
+    this.sendActiveMessages()
     this.setupPermissionHandler()
   }
 
@@ -137,6 +138,13 @@ export class ChatProvider implements IProvider {
           type: "toolUse",
           toolName,
           args: JSON.stringify(args),
+        } as ExtToWebview)
+      }, (toolName, result) => {
+        this.panel!.webview.postMessage({
+          type: "toolResult",
+          toolName,
+          output: result.output,
+          success: result.success,
         } as ExtToWebview)
       }, this.abortController.signal)
 

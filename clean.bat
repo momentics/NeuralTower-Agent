@@ -16,7 +16,7 @@ if exist "out\" (
 
 echo [2/5] η¨αβª  ― ª¥β®Ά VSIX...
 set "found=0"
-for %%f in (nt-agent-*.vsix) do (
+for %%f in (NeuralTower-Agent-*.vsix) do (
     del "%%f" >nul 2>&1
     set "found=1"
 )

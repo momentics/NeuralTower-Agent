@@ -25,7 +25,7 @@ export class PersistentSessionStore {
   ) {
     this.storagePath = path.join(
       storageUri.fsPath,
-      "nt-agent-sessions.json",
+      "neuralTowerAgent-sessions.json",
     )
     this.maxSessions = maxSessions
   }

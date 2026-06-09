@@ -37,7 +37,7 @@ export class AgentCodeActionProvider implements vscode.CodeActionProvider {
         vscode.CodeActionKind.QuickFix,
       )
       fix.command = {
-        command: "nt-agent.codeAction.fix",
+        command: "neuralTowerAgent.codeAction.fix",
         title: "Исправить с помощью агента",
         arguments: [selection, filePath, diagnosticsText],
       }
@@ -50,7 +50,7 @@ export class AgentCodeActionProvider implements vscode.CodeActionProvider {
       vscode.CodeActionKind.RefactorRewrite,
     )
     explain.command = {
-      command: "nt-agent.codeAction.explain",
+      command: "neuralTowerAgent.codeAction.explain",
       title: "Объяснить код",
       arguments: [selection, filePath],
     }
@@ -61,7 +61,7 @@ export class AgentCodeActionProvider implements vscode.CodeActionProvider {
       vscode.CodeActionKind.RefactorRewrite,
     )
     improve.command = {
-      command: "nt-agent.codeAction.improve",
+      command: "neuralTowerAgent.codeAction.improve",
       title: "Улучшить код",
       arguments: [selection, filePath],
     }
@@ -72,7 +72,7 @@ export class AgentCodeActionProvider implements vscode.CodeActionProvider {
       vscode.CodeActionKind.RefactorRewrite,
     )
     addToContext.command = {
-      command: "nt-agent.codeAction.addToContext",
+      command: "neuralTowerAgent.codeAction.addToContext",
       title: "Добавить в контекст",
       arguments: [selection, filePath],
     }

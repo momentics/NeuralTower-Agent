@@ -62,11 +62,15 @@ export class ToolRegistry {
    * Модель получает эти данные, чтобы знать, какие инструменты доступны.
    */
   toSchemaList(): string {
-    const entries = this.list().map((t) =>
-      `- ${t.name}: ${t.description} [${t.category}]`,
-    )
+    const entries = this.list().map((t) => {
+      const params = Object.entries(t.schema.parameters).map(([k, p]) => {
+        const req = (t.schema.required ?? []).includes(k) ? " (обязат.)" : ""
+        return `  ${k}: ${p.type}${p.description ? ` — ${p.description}` : ""}${req}`
+      }).join("\n")
+      return `• ${t.name}: ${t.description}\n${params}`
+    })
     return entries.length > 0
-      ? `Доступные инструменты:\n${entries.join("\n")}`
+      ? `Доступные инструменты (вызывайте через JSON \{"tool": "...", "args": {...}\}):\n${entries.join("\n\n")}`
       : "Инструменты не доступны."
   }
 

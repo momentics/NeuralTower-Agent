@@ -83,6 +83,19 @@ body {
   font-style: italic;
 }
 
+.msg.tool-result {
+  align-self: center;
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  font-style: italic;
+  max-width: 95%;
+  white-space: pre-wrap;
+}
+
+.msg.tool-result.fail {
+  color: var(--vscode-errorForeground);
+}
+
 #chat-form {
   display: flex;
   padding: 8px 12px;

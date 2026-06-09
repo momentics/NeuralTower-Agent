@@ -57,6 +57,15 @@ window.addEventListener("message", (event) => {
       messages.scrollTop = messages.scrollHeight
       break
 
+    case "toolResult":
+      const resMsg = document.createElement("div")
+      resMsg.className = `msg tool-result ${data.success ? "success" : "fail"}`
+      const truncated = data.output.length > 500 ? data.output.slice(0, 500) + "..." : data.output
+      resMsg.textContent = `[result: ${data.toolName}] ${truncated}`
+      messages.appendChild(resMsg)
+      messages.scrollTop = messages.scrollHeight
+      break
+
     case "sessionList":
       sessions = data.sessions
       renderSessionBar()
