@@ -2,32 +2,32 @@
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo ╨б╨▒╨╛╤А╨║╨░ VSIX: nt-agent
+echo Сборка VSIX: nt-agent
 echo ========================================
 echo.
 
-echo [1/3] ╨Ъ╨╛╨╝╨┐╨╕╨╗╤П╤Ж╨╕╤П TypeScript...
+echo [1/3] Компиляция TypeScript...
 call npm run compile
 if %errorlevel% neq 0 (
     echo.
-    echo ╨Ю╤И╨╕╨▒╨║╨░ ╨║╨╛╨╝╨┐╨╕╨╗╤П╤Ж╨╕╨╕. ╨Т╤Л╤Е╨╛╨┤.
+    echo Ошибка компиляции. Выход.
     exit /b 1
 )
 echo.
 
-echo [2/3] ╨г╨┤╨░╨╗╨╡╨╜╨╕╨╡ ╤Б╤В╨░╤А╤Л╤Е ╨┐╨░╨║╨╡╤В╨╛╨▓ VSIX...
+echo [2/3] Удаление старых пакетов VSIX...
 for %%f in (nt-agent-*.vsix) do del "%%f"
 echo.
 
-echo [3/3] ╨г╨┐╨░╨║╨╛╨▓╨║╨░ VSIX...
+echo [3/3] Упаковка VSIX...
 call npx @vscode/vsce package --allow-missing-repository
 if %errorlevel% neq 0 (
     echo.
-    echo ╨Ю╤И╨╕╨▒╨║╨░ ╤Г╨┐╨░╨║╨╛╨▓╨║╨╕. ╨Т╤Л╤Е╨╛╨┤.
+    echo Ошибка упаковки. Выход.
     exit /b 1
 )
 echo.
 
 echo ========================================
-echo ╨б╨▒╨╛╤А╨║╨░ ╨╖╨░╨▓╨╡╤А╤И╨╡╨╜╨░ ╤Г╤Б╨┐╨╡╤И╨╜╨╛
+echo Сборка завершена успешно
 echo ========================================

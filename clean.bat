@@ -2,54 +2,54 @@
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo Очистка временных файлов: nt-agent
+echo ���⪠ �६����� 䠩���: nt-agent
 echo ========================================
 echo.
 
-echo [1/5] Очистка директории out/...
+echo [1/5] ���⪠ ��४�ਨ out/...
 if exist "out\" (
     rmdir /s /q "out" >nul 2>&1
-    echo   удалено
+    echo   㤠����
 ) else (
-    echo   пусто
+    echo   ����
 )
 
-echo [2/5] Очистка пакетов VSIX...
+echo [2/5] ���⪠ ����⮢ VSIX...
 set "found=0"
 for %%f in (nt-agent-*.vsix) do (
     del "%%f" >nul 2>&1
     set "found=1"
 )
 if "!found!"=="1" (
-    echo   удалён(ы)
+    echo   㤠��(�)
 ) else (
-    echo   пусто
+    echo   ����
 )
 
-echo [3/5] Очистка директории dist/...
+echo [3/5] ���⪠ ��४�ਨ dist/...
 if exist "dist\" (
     rmdir /s /q "dist" >nul 2>&1
-    echo   удалено
+    echo   㤠����
 ) else (
-    echo   пусто
+    echo   ����
 )
 
-echo [4/5] Очистка директории .vscode-test/...
+echo [4/5] ���⪠ ��४�ਨ .vscode-test/...
 if exist ".vscode-test\" (
     rmdir /s /q ".vscode-test" >nul 2>&1
-    echo   удалено
+    echo   㤠����
 ) else (
-    echo   пусто
+    echo   ����
 )
 
-echo [5/5] Очистка файлов логов...
+echo [5/5] ���⪠ 䠩��� �����...
 del /q *.log >nul 2>&1
 del /q npm-debug.log* >nul 2>&1
 del /q yarn-debug.log* >nul 2>&1
 del /q yarn-error.log* >nul 2>&1
-echo   выполнено
+echo   �믮�����
 
 echo.
 echo ========================================
-echo Очистка завершена
+echo ���⪠ �����襭�
 echo ========================================
