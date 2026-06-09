@@ -224,8 +224,6 @@
     }
   },
   "versionScript": "node ./bump-version.js",
-  "versionScript": "node ./bump-version.js",
-  "versionScript": "node ./bump-version.js",
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc --noEmit && esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
