@@ -1,0 +1,235 @@
+{
+  "name": "nt-agent",
+  "displayName": "Агент Neural Tower",
+  "description": "Интеллектуальный ассистент для разработки на базе локальной модели Neural Tower",
+  "version": "0.1.0",
+  "repository": "https://github.com/nt-agent/nt-agent",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["AI", "Machine Learning", "Chat"],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "nt-agent",
+          "title": "Агент Neural Tower",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "nt-agent": [
+        {
+          "type": "webview",
+          "id": "nt-agent.chat",
+          "name": "Чат"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "nt-agent.newChat",
+        "title": "Новый чат",
+        "icon": "$(add)"
+      },
+      {
+        "command": "nt-agent.settings",
+        "title": "Открыть настройки",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "nt-agent.focusChatInput",
+        "title": "Перейти к полю ввода чата"
+      },
+      {
+        "command": "nt-agent.explainCode",
+        "title": "Объяснить код",
+        "icon": "$(comment)"
+      },
+      {
+        "command": "nt-agent.fixCode",
+        "title": "Исправить код",
+        "icon": "$(wrench)"
+      },
+      {
+        "command": "nt-agent.improveCode",
+        "title": "Улучшить код",
+        "icon": "$(lightbulb)"
+      },
+      {
+        "command": "nt-agent.addToContext",
+        "title": "Добавить в контекст",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "nt-agent.generateCommitMessage",
+        "title": "Сгенерировать текст коммита",
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "nt-agent.session.list",
+        "title": "Список сессий"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "nt-agent.newChat",
+          "when": "view == nt-agent.chat",
+          "group": "navigation"
+        },
+        {
+          "command": "nt-agent.settings",
+          "when": "view == nt-agent.chat",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "nt-agent.explainCode",
+          "group": "9_cutcopypaste@1"
+        },
+        {
+          "command": "nt-agent.fixCode",
+          "group": "9_cutcopypaste@2"
+        },
+        {
+          "command": "nt-agent.improveCode",
+          "group": "9_cutcopypaste@3"
+        },
+        {
+          "command": "nt-agent.addToContext",
+          "group": "9_cutcopypaste@4"
+        }
+      ],
+      "scm/title": [
+        {
+          "command": "nt-agent.generateCommitMessage",
+          "group": "navigation"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "nt-agent.focusChatInput",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "nt-agent.explainCode",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "nt-agent.fixCode",
+        "key": "ctrl+shift+f",
+        "mac": "cmd+shift+f",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "nt-agent.addToContext",
+        "key": "ctrl+k ctrl+a",
+        "mac": "cmd+k cmd+a",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "nt-agent.newChat",
+        "key": "ctrl+shift+u",
+        "mac": "cmd+shift+u"
+      }
+    ],
+    "configuration": {
+      "title": "Агент Neural Tower",
+      "properties": {
+        "nt-agent.neuralTowerUrl": {
+          "type": "string",
+          "default": "http://localhost:30000",
+          "description": "Адрес сервера Neural Tower SGLang"
+        },
+        "nt-agent.model": {
+          "type": "string",
+          "default": "qwen3.6-27b",
+          "description": "Имя модели по умолчанию"
+        },
+        "nt-agent.maxRetries": {
+          "type": "number",
+          "default": 3,
+          "minimum": 0,
+          "maximum": 10,
+          "description": "Максимальное число повторных попыток при запросах к бэкенду"
+        },
+        "nt-agent.timeoutMs": {
+          "type": "number",
+          "default": 60000,
+          "minimum": 1000,
+          "description": "Тайм-аут запроса в миллисекундах"
+        },
+        "nt-agent.maxSessions": {
+          "type": "number",
+          "default": 50,
+          "minimum": 5,
+          "maximum": 200,
+          "description": "Максимальное число сохраняемых сессий"
+        },
+        "nt-agent.autoApprove.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Автоматически одобрять все небезопасные вызовы инструментов без запроса"
+        },
+        "nt-agent.autoApprove.tools": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Список имён инструментов для автоодобрения даже при отключённой общей функции"
+        },
+        "nt-agent.notifications.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Включить уведомления VS Code"
+        },
+        "nt-agent.notifications.agentCompletion": {
+          "type": "boolean",
+          "default": true,
+          "description": "Показывать уведомление при завершении задачи агентом"
+        },
+        "nt-agent.notifications.permissionRequests": {
+          "type": "boolean",
+          "default": true,
+          "description": "Показывать уведомление для запросов разрешений"
+        },
+        "nt-agent.agent.maxIterations": {
+          "type": "number",
+          "default": 20,
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Максимальное число итераций вызова инструментов за один ход агента"
+        },
+        "nt-agent.git.injectDiffContext": {
+          "type": "boolean",
+          "default": true,
+          "description": "Добавлять контекст git-различий в системный запрос агента"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc --noEmit && esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "watch": "npm run compile -- --watch"
+  },
+  "dependencies": {
+    "glob": "^10.3.0"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "@types/glob": "^8.1.0",
+    "typescript": "^5.4.0",
+    "esbuild": "^0.20.0"
+  }
+}

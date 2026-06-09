@@ -1,0 +1,6 @@
+node_modules/
+.vscode-test/
+out/**/*.js.map
+ref/
+src/
+*.bat

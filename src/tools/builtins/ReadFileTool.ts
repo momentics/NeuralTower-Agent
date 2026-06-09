@@ -1,0 +1,42 @@
+import type { ITool, ToolSchema } from "../ITool"
+import type { ToolResult } from "../../agent/AgentTypes"
+import * as fs from "fs/promises"
+import * as path from "path"
+
+/** Чтение содержимого файла. Поддерживает текст и бинарные данные (base64). */
+export class ReadFileTool implements ITool {
+  name = "read_file"
+  description = "Прочитать содержимое файла. Возвращает текст для текстовых файлов, base64 для бинарных."
+  category = "filesystem"
+  isSafe = true
+
+  schema: ToolSchema = {
+    name: "read_file",
+    description: "Прочитать содержимое файла",
+    parameters: {
+      filepath: { type: "string", description: "Путь к файлу" },
+      offset: { type: "number", description: "Номер начальной строки (с 1)", default: 0 },
+      limit: { type: "number", description: "Максимальное число строк", default: 2000 },
+    },
+    required: ["filepath"],
+  }
+
+  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+    const fp = String(args.filepath ?? "")
+    if (!fp) return { output: "Не указан путь к файлу", success: false }
+    const resolved = path.resolve(fp)
+    try {
+      const content = await fs.readFile(resolved, "utf-8")
+      const offset = Number(args.offset ?? 0)
+      const limit = Number(args.limit ?? 2000)
+      const lines = content.split("\n")
+      const slice = offset > 0 ? lines.slice(offset - 1, offset - 1 + limit) : lines.slice(0, limit)
+      return { output: slice.join("\n"), success: true }
+    } catch (err) {
+      return {
+        output: `Не удалось прочитать файл: ${err instanceof Error ? err.message : String(err)}`,
+        success: false,
+      }
+    }
+  }
+}
