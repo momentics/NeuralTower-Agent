@@ -76,6 +76,11 @@
       {
         "command": "nt-agent.session.list",
         "title": "Список сессий"
+      },
+      {
+        "command": "nt-agent.openDiffViewer",
+        "title": "Показать изменения",
+        "icon": "$(diff)"
       }
     ],
     "menus": {
@@ -87,6 +92,11 @@
         },
         {
           "command": "nt-agent.settings",
+          "when": "view == nt-agent.chat",
+          "group": "navigation"
+        },
+        {
+          "command": "nt-agent.openDiffViewer",
           "when": "view == nt-agent.chat",
           "group": "navigation"
         }

@@ -74,7 +74,8 @@ export class PermissionManager {
     timeoutMs: number,
   ): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
-      const req: PermissionRequest = { toolName, args, resolve }
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const req: PermissionRequest = { toolName, args, resolve, id }
       this.pendingRequests.push(req)
       if (this.requestEmitter) {
         this.requestEmitter.fire(req)
@@ -88,5 +89,30 @@ export class PermissionManager {
         }
       }, timeoutMs)
     })
+  }
+
+  /**
+   * Решить запрос разрешения по ID.
+   * Если `always` — установить постоянный уровень разрешения для этого инструмента.
+   */
+  resolveRequest(requestId: string, allowed: boolean, always: boolean): boolean {
+    const req = this.pendingRequests.find((r) => r.id === requestId)
+    if (!req) return false
+    if (always) {
+      this.permissions.set(req.toolName, allowed ? "allow" : "deny")
+    }
+    this.pendingRequests = this.pendingRequests.filter((r) => r.id !== requestId)
+    req.resolve(allowed)
+    return true
+  }
+
+  dispose(): void {
+    for (const req of this.pendingRequests) req.resolve(false)
+    this.pendingRequests = []
+    this.permissions.clear()
+    if (this.requestEmitter) {
+      this.requestEmitter.dispose()
+      this.requestEmitter = null
+    }
   }
 }

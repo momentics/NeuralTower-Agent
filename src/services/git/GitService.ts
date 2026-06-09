@@ -144,5 +144,17 @@ export class GitService implements Plugin {
     }
   }
 
+  async getCachedDiff(dir: string): Promise<string> {
+    try {
+      const { stdout } = await execAsync(
+        `git -C "${dir}" diff --cached`,
+        { timeout: 10000, maxBuffer: 512 * 1024 },
+      )
+      return stdout
+    } catch {
+      return ""
+    }
+  }
+
   dispose(): void {}
 }

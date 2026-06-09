@@ -9,6 +9,7 @@ export interface PermissionRequest {
   toolName: string
   args: Record<string, unknown>
   resolve: (allowed: boolean) => void
+  id?: string
 }
 
 export interface AutoApproveConfig {

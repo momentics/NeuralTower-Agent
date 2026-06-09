@@ -12,12 +12,13 @@ export interface IAgentOrchestrator {
    * Запустить агент на пользовательском сообщении.
    * Обработчик `onChunk` вызывается для потоковой передачи
    * текста в интерфейс. Обработчик `onToolUse` вызывается при
-   * вызове инструмента.
+   * вызове инструмента. `signal` позволяет отменить выполнение.
    */
   run(
     query: string,
     onChunk: (text: string) => void,
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
+    signal?: AbortSignal,
   ): Promise<ChatMessage>
 
   /** Контекст текущей рабочей директории. */

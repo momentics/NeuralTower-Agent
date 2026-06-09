@@ -12,6 +12,7 @@ export class ChatProvider implements IProvider {
   public readonly viewType = "nt-agent.chat"
   private panel: vscode.WebviewView | undefined
   private streaming = false
+  private abortController: AbortController | null = null
 
   constructor(
     private readonly extUri: vscode.Uri,
@@ -43,6 +44,8 @@ export class ChatProvider implements IProvider {
   }
 
   dispose(): void {
+    this.abortController?.abort()
+    this.abortController = null
     this.panel = undefined
   }
 
@@ -50,7 +53,7 @@ export class ChatProvider implements IProvider {
 
   private setupHandler(): void {
     this.panel!.webview.onDidReceiveMessage(async (msg: WebviewToExt) => {
-      if (this.streaming && msg.type !== "permissionResponse") return
+      if (this.streaming && msg.type !== "permissionResponse" && msg.type !== "stopAgent") return
 
       switch (msg.type) {
         case "sendMessage":
@@ -83,6 +86,9 @@ export class ChatProvider implements IProvider {
         case "permissionResponse":
           this.handlePermissionResponse(msg)
           break
+        case "stopAgent":
+          this.abortController?.abort()
+          break
       }
     })
   }
@@ -92,6 +98,7 @@ export class ChatProvider implements IProvider {
       if (this.panel) {
         this.panel.webview.postMessage({
           type: "permissionRequest",
+          requestId: req.id ?? "",
           toolName: req.toolName,
           description: `Инструмент "${req.toolName}" хочет выполнить вызов с аргументами: ${JSON.stringify(req.args).slice(0, 200)}`,
         } as ExtToWebview)
@@ -105,13 +112,19 @@ export class ChatProvider implements IProvider {
     })
   }
 
-  private handlePermissionResponse(msg: WebviewToExt & { allowed: boolean; always: boolean }): void {
-    // Разрешить последний ожидающий запрос для этого инструмента.
-    // Обработка выполняется внутри менеджера разрешений.
+  private handlePermissionResponse(msg: WebviewToExt & { requestId: string; allowed: boolean; always: boolean }): void {
+    const resolved = this.permissionManager.resolveRequest(msg.requestId, msg.allowed, msg.always)
+    if (!resolved && this.panel) {
+      this.panel.webview.postMessage({
+        type: "streamError",
+        error: `Истёк срок запроса разрешения для "${msg.requestId}"`,
+      } as ExtToWebview)
+    }
   }
 
   private async handleMessage(content: string): Promise<void> {
     this.streaming = true
+    this.abortController = new AbortController()
     this.panel!.webview.postMessage({ type: "messageConfirmed", content } as ExtToWebview)
 
     await this.sessionStore.push({ role: "user", content, timestamp: Date.now() })
@@ -125,21 +138,29 @@ export class ChatProvider implements IProvider {
           toolName,
           args: JSON.stringify(args),
         } as ExtToWebview)
-      })
+      }, this.abortController.signal)
 
       await this.sessionStore.push(result)
       this.panel!.webview.postMessage({ type: "streamDone" } as ExtToWebview)
       this.panel!.webview.postMessage({ type: "agentDone" } as ExtToWebview)
       this.notificationService.show("agentDone", "Агент завершил задачу")
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : "Неизвестная ошибка"
-      this.panel!.webview.postMessage({
-        type: "streamError",
-        error: errorMsg,
-      } as ExtToWebview)
-      this.notificationService.show("error", errorMsg)
+      if (err instanceof Error && err.name === "AbortError") {
+        this.panel!.webview.postMessage({
+          type: "streamError",
+          error: "Задача остановлена пользователем",
+        } as ExtToWebview)
+      } else {
+        const errorMsg = err instanceof Error ? err.message : "Неизвестная ошибка"
+        this.panel!.webview.postMessage({
+          type: "streamError",
+          error: errorMsg,
+        } as ExtToWebview)
+        this.notificationService.show("error", errorMsg)
+      }
     } finally {
       this.streaming = false
+      this.abortController = null
       this.sendSessionList()
     }
   }

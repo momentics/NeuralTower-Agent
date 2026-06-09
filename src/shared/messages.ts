@@ -6,7 +6,8 @@ export type WebviewToExt =
   | { type: "pinSession"; sessionId: string }
   | { type: "renameSession"; sessionId: string; title: string }
   | { type: "sessionList" }
-  | { type: "permissionResponse"; toolName: string; allowed: boolean; always: boolean }
+  | { type: "permissionResponse"; requestId: string; allowed: boolean; always: boolean }
+  | { type: "stopAgent" }
 
 export type ExtToWebview =
   | { type: "messageConfirmed"; content: string }
@@ -18,7 +19,7 @@ export type ExtToWebview =
   | { type: "sessionList"; sessions: Array<{ id: string; title: string; pinned: boolean; updatedAt: number; messageCount: number; active: boolean }> }
   | { type: "switchSession"; sessionId: string }
   | { type: "agentDone" }
-  | { type: "permissionRequest"; toolName: string; description: string }
+  | { type: "permissionRequest"; requestId: string; toolName: string; description: string }
 
 export type SettingsToExt =
   | { type: "settingsSave"; url: string; model: string; maxRetries?: number; timeoutMs?: number; autoApprove?: boolean }
