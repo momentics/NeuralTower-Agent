@@ -35,17 +35,18 @@ export class BackendHealthMonitor implements Plugin {
   async check(): Promise<boolean> {
     if (this.checking) return this.connected
     this.checking = true
+    this.syncBar()
     try {
       const ok = await this.backend.healthCheck()
       this.connected = ok
+      this.checking = false
       this.syncBar()
       return ok
     } catch {
       this.connected = false
+      this.checking = false
       this.syncBar()
       return false
-    } finally {
-      this.checking = false
     }
   }
 

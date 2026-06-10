@@ -269,6 +269,15 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
     },
   )
 
+  // ── Слушатель изменений рабочей директории ─────────────
+  vscode.workspace.onDidChangeWorkspaceFolders(async () => {
+    if (vscode.workspace.workspaceFolders?.[0]) {
+      agent?.setWorkingDir(vscode.workspace.workspaceFolders[0].uri.fsPath)
+      await gitService?.findRoot(vscode.workspace.workspaceFolders[0].uri.fsPath)
+      await agent?.reload()
+    }
+  })
+
   // ── Запуск ──────────────────────────────────────────────
   await app.init()
   telemetry.capture("session_started", { version: "0.1.0" })
@@ -304,12 +313,11 @@ async function sendAgentQuery(query: string, workDir: string): Promise<void> {
   agentOutputChannel.show()
   agentOutputChannel.appendLine(`> ${query.slice(0, 80)}...`)
 
-  try {
-    await agent.run(query, (chunk) => {
-      process.stdout.write(chunk)
-      agentOutputChannel!.append(chunk)
-    })
-    agentOutputChannel.appendLine("\nГотово.")
+   try {
+      await agent.run(query, (chunk) => {
+        agentOutputChannel!.append(chunk)
+      })
+      agentOutputChannel.appendLine("\nГотово.")
 
     // Обновить diff viewer при наличии изменений
     if (gitService) {

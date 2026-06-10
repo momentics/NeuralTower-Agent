@@ -129,7 +129,7 @@ function renderSessionBar(): void {
   }
 }
 
-function handlePermissionRequest(data: { toolName: string; description: string }): void {
+function handlePermissionRequest(data: { requestId: string; toolName: string; description: string }): void {
   const allow = confirm(`Allow ${data.toolName}?\n${data.description}\n\nOK = Allow, Cancel = Deny`)
-  vscode.postMessage({ type: "permissionResponse", toolName: data.toolName, allowed: allow, always: false })
+  vscode.postMessage({ type: "permissionResponse", requestId: data.requestId, allowed: allow, always: false })
 }

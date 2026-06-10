@@ -126,17 +126,32 @@ export class NeuralTowerBackend implements IBackend {
     }
   }
 
-  // ── HTTP-помощник ────────────────────────────────────────
+  // ── HTTP-помощник с повторными попытками ─────────────────
 
   private async request(url: string, init?: RequestInit): Promise<Response> {
-    const ctrl = new AbortController()
     const cfg = await this.getConfig()
-    const timer = setTimeout(() => ctrl.abort(), cfg.timeoutMs)
-    const res = await fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer))
-    if (!res.ok) {
-      const body = await res.text()
-      throw new Error(`HTTP ${res.status}: ${body}`)
+    let lastError: Error | null = null
+
+    for (let attempt = 0; attempt <= cfg.maxRetries; attempt++) {
+      if (attempt > 0) {
+        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000)
+        await new Promise((r) => setTimeout(r, delay))
+      }
+
+      try {
+        const ctrl = new AbortController()
+        const timer = setTimeout(() => ctrl.abort(), cfg.timeoutMs)
+        const res = await fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer))
+        if (!res.ok) {
+          const body = await res.text()
+          throw new Error(`HTTP ${res.status}: ${body}`)
+        }
+        return res
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err))
+      }
     }
-    return res
+
+    throw lastError ?? new Error("Неизвестная ошибка")
   }
 }

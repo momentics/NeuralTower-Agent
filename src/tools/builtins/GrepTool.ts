@@ -1,13 +1,15 @@
 import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
-import { exec } from "child_process"
+import { execFile } from "child_process"
 import { promisify } from "util"
+import * as fs from "fs/promises"
+import * as path from "path"
 
-const execAsync = promisify(exec)
+const execFileAsync = promisify(execFile)
 
 /**
  * Поиск содержимого файлов с помощью ripgrep (rg).
- * При отсутствии rg используется стандартный grep.
+ * При отсутствии rg используется рекурсивный поиск по файлам.
  */
 export class GrepTool implements ITool {
   name = "grep"
@@ -26,24 +28,94 @@ export class GrepTool implements ITool {
     required: ["pattern"],
   }
 
+  private static rgAvailable = true
+
   async execute(args: Record<string, unknown>): Promise<ToolResult> {
     const pattern = String(args.pattern ?? "")
     const root = String(args.path ?? ".")
     const include = args.include ? String(args.include) : undefined
     if (!pattern) return { output: "Не указан шаблон поиска", success: false }
 
-    const cmd = include
-      ? `rg -n --no-heading --color=never "${pattern}" -g "${include}" "${root}"`
-      : `rg -n --no-heading --color=never "${pattern}" "${root}"`
-
     try {
-      const { stdout, stderr } = await execAsync(cmd, { timeout: 15000, maxBuffer: 512 * 1024 })
-      return { output: stdout || "Совпадений не найдено", success: true }
+      if (GrepTool.rgAvailable) {
+        try {
+          const rgResult = await this.executeRg(pattern, root, include)
+          return rgResult
+        } catch {
+          GrepTool.rgAvailable = false
+        }
+      }
+
+      return await this.executeFallback(pattern, root, include)
     } catch (err) {
       return {
         output: `Поиск не выполнен: ${err instanceof Error ? err.message : String(err)}`,
         success: false,
       }
     }
+  }
+
+  private async executeRg(
+    pattern: string,
+    root: string,
+    include: string | undefined,
+  ): Promise<ToolResult> {
+    const fileArg = include ? ["-g", include, root] : [root]
+    const { stdout, stderr } = await execFileAsync("rg", [
+      "-n", "--no-heading", "--color=never", pattern, ...fileArg,
+    ], { timeout: 15000, maxBuffer: 512 * 1024 })
+    if (stderr && !stdout) {
+      throw new Error(stderr)
+    }
+    return { output: stdout || "Совпадений не найдено", success: true }
+  }
+
+  private async executeFallback(
+    pattern: string,
+    root: string,
+    include: string | undefined,
+  ): Promise<ToolResult> {
+    const re = new RegExp(pattern, "i")
+    const results: string[] = []
+    const maxFiles = 5000
+    let counted = 0
+
+    const walk = async (dir: string): Promise<void> => {
+      if (counted >= maxFiles) return
+      const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
+      for (const entry of entries) {
+        if (counted >= maxFiles) return
+        if (entry.name.startsWith(".") || entry.name === "node_modules") continue
+        const full = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          await walk(full)
+        } else {
+          counted++
+          if (include && !this.matchesGlob(entry.name, include)) continue
+          try {
+            const content = await fs.readFile(full, "utf-8")
+            const lines = content.split("\n")
+            for (let i = 0; i < lines.length; i++) {
+              if (re.test(lines[i])) {
+                results.push(`${full}:${i + 1}: ${lines[i].slice(0, 200)}`)
+              }
+            }
+          } catch {
+            // пропустить нечитаемые файлы
+          }
+        }
+      }
+    }
+
+    await walk(root)
+    return {
+      output: results.length > 0 ? results.join("\n").slice(0, 10000) : "Совпадений не найдено",
+      success: true,
+    }
+  }
+
+  private matchesGlob(filename: string, pattern: string): boolean {
+    const parts = pattern.replace(/\*/g, "[^/]+").replace(/\?/g, ".")
+    return new RegExp(`^${parts}$`, "i").test(filename)
   }
 }
