@@ -2,7 +2,6 @@ import * as vscode from "vscode"
 import { App } from "./core/App"
 import { NeuralTowerBackend } from "./backend/NeuralTowerBackend"
 import { AgentOrchestrator } from "./agent/AgentOrchestrator"
-import { AgentPlanner } from "./agent/AgentPlanner"
 import { ToolRegistry } from "./tools/ToolRegistry"
 import { SkillManager } from "./skills/SkillManager"
 import { builtInSkills } from "./skills/builtInSkills"
@@ -26,6 +25,9 @@ import { GlobTool } from "./tools/builtins/GlobTool"
 import { GrepTool } from "./tools/builtins/GrepTool"
 import { WebFetchTool } from "./tools/builtins/WebFetchTool"
 import { TodoWriteTool } from "./tools/builtins/TodoWriteTool"
+import { ContextManager } from "./core/ContextManager"
+import { SessionContext } from "./agent/SessionContext"
+import { SubagentRunner } from "./agent/SubagentRunner"
 
 let app: App | undefined
 let backend: NeuralTowerBackend | undefined
@@ -37,6 +39,8 @@ let healthMonitor: BackendHealthMonitor | undefined
 let commitMessageService: CommitMessageService | undefined
 let gitService: GitService | undefined
 let agentOutputChannel: vscode.OutputChannel | undefined
+let contextManager: ContextManager | undefined
+let subagentRunner: SubagentRunner | undefined
 
 export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   app = new App(ctx)
@@ -63,9 +67,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   const notificationService = new NotificationService()
   await notificationService.init()
 
-  // ── Планировщик агента ──────────────────────────────────
-  const agentPlanner = new AgentPlanner(backend)
-
   // ── Реестр инструментов ─────────────────────────────────
   const tools = new ToolRegistry()
   todoTool = new TodoWriteTool()
@@ -87,11 +88,21 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   const skills = new SkillManager()
   skills.registerMany(builtInSkills)
 
+  // ── Менеджер контекста ──────────────────────────────────
+  contextManager = new ContextManager()
+
   // ── Оркестратор агента ──────────────────────────────────
-  agent = new AgentOrchestrator(backend, tools, skills)
-  agent.setPlanner(agentPlanner)
+  agent = new AgentOrchestrator(backend, tools, skills, contextManager)
   agent.setPermissionManager(permissionManager)
   agent.setGitService(gitService)
+
+  // ── Контекст сессии ─────────────────────────────────────
+  const sessionContext = new SessionContext(sessionStore.activeId, contextManager)
+  agent.setSessionContext(sessionContext)
+
+  // ── Runner подагентов ───────────────────────────────────
+  subagentRunner = new SubagentRunner(backend, tools, skills, contextManager, permissionManager, gitService)
+  agent.setSubagentRunner(subagentRunner)
 
   if (vscode.workspace.workspaceFolders?.[0]) {
     agent.setWorkingDir(vscode.workspace.workspaceFolders[0].uri.fsPath)
@@ -127,6 +138,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   app.registerCommand("neuralTowerAgent.newChat", () => {
     chatProvider?.broadcastNewChat()
     todoTool?.clear()
+    agent?.clearPlan()
   })
 
   app.registerCommand("neuralTowerAgent.focusChatInput", () => {
@@ -199,7 +211,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
     await sendAgentQuery(`Вот контекст из файла ${filePath}:\n\n\`\`\`${getLang(filePath)}\n${text}\n\`\`\``, filePath)
   })
 
- // Code Action команды (вызываются из контекстного меню редактора)
+  // Code Action команды
   app.registerCommand("neuralTowerAgent.codeAction.fix", async (...args: unknown[]) => {
     const [text, filePath, diagnostics] = [args[0] as string, args[1] as string, args[2] as string]
     if (!text || !filePath) return
@@ -280,7 +292,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 
   // ── Запуск ──────────────────────────────────────────────
   await app.init()
-  telemetry.capture("session_started", { version: "0.1.0" })
+  telemetry.capture("session_started", { version: "0.1.1" })
 
   // ── Сохранить объекты для освобождения ──────────────────
   ctx.subscriptions.push({
@@ -313,13 +325,12 @@ async function sendAgentQuery(query: string, workDir: string): Promise<void> {
   agentOutputChannel.show()
   agentOutputChannel.appendLine(`> ${query.slice(0, 80)}...`)
 
-   try {
-      await agent.run(query, (chunk) => {
-        agentOutputChannel!.append(chunk)
-      })
-      agentOutputChannel.appendLine("\nГотово.")
+  try {
+    await agent.run(query, (chunk) => {
+      agentOutputChannel!.append(chunk)
+    })
+    agentOutputChannel.appendLine("\nГотово.")
 
-    // Обновить diff viewer при наличии изменений
     if (gitService) {
       const diff = await gitService.getDiff(workDir)
       diffViewer?.openPanel(diff)
