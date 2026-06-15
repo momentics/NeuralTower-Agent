@@ -306,6 +306,10 @@ export interface CodeSearchEntry {
   size: number
 }
 
+const CODE_SEARCH_MAX_FILES = 50
+const CODE_SEARCH_MAX_SIZE = 50_000
+const CODE_LANGS = new Set(["ts", "tsx", "js", "jsx", "py", "rs", "go", "java", "kt", "rb", "c", "cpp", "cs", "swift", "php", "lua", "dart", "scala"])
+
 export function makeCodeProvider(
   getWorkDir: () => string,
   getFileIndex: () => { findByPattern(pattern: string): CodeSearchEntry[]; findByLanguage(lang: string): CodeSearchEntry[] },
@@ -322,28 +326,38 @@ export function makeCodeProvider(
       const trimmed = query.trim()
       if (!trimmed) return []
 
-      const entries = getFileIndex().findByPattern(trimmed)
-      if (entries.length === 0) {
-        return [{ content: `Ничего не найдено для "${trimmed}"`, name: "code", description: "not found" }]
+      const index = getFileIndex()
+      const results: string[] = []
+
+      const searchInEntries = async (entries: CodeSearchEntry[]) => {
+        for (const entry of entries.slice(0, CODE_SEARCH_MAX_FILES)) {
+          if (results.length >= 10) break
+          try {
+            const stat = await fs.stat(entry.path)
+            if (stat.size > CODE_SEARCH_MAX_SIZE) continue
+            const content = await fs.readFile(entry.path, "utf-8")
+            const matches = extractSymbols(content, trimmed)
+            if (matches.length > 0) {
+              const lines = matches.slice(0, 5).map((m) => `  ${m}`)
+              results.push(`${entry.path} (${entry.language})\n${lines.join("\n")}`)
+            }
+          } catch {
+            // пропустить нечитаемые файлы
+          }
+        }
       }
 
-      const results: string[] = []
-      const maxFiles = 10
-      for (const entry of entries.slice(0, maxFiles)) {
-        try {
-          const content = await fs.readFile(entry.path, "utf-8")
-          const matches = extractSymbols(content, trimmed)
-          if (matches.length > 0) {
-            const lines = matches.slice(0, 5).map((m) => `  ${m}`)
-            results.push(`${entry.path} (${entry.language})\n${lines.join("\n")}`)
-          }
-        } catch {
-          // пропустить нечитаемые файлы
+      await searchInEntries(index.findByPattern(trimmed))
+
+      if (results.length < 5) {
+        for (const lang of CODE_LANGS) {
+          if (results.length >= 10) break
+          await searchInEntries(index.findByLanguage(lang))
         }
       }
 
       if (results.length === 0) {
-        return [{ content: `Файлы найдены, но совпадений по содержимому нет для "${trimmed}"`, name: "code", description: "not found" }]
+        return [{ content: `Символы для "${trimmed}" не найдены`, name: "code", description: "not found" }]
       }
 
       return [{
@@ -379,7 +393,7 @@ export function makeTreeProvider(
         : getWorkDir()
 
       try {
-        const lines = await buildTree(targetDir, targetDir, "", true, 3)
+        const lines = await buildTree(targetDir, targetDir, "", true, 0)
         return [{
           content: `Дерево: ${targetDir}\n\n${lines}`,
           name: `Tree: ${path.default.basename(targetDir) || targetDir}`,
@@ -537,7 +551,8 @@ export function makeRepoMapProvider(
  * Провайдер: правила проекта из файлов правил.
  * Тип: normal (без ввода, показывает все правила).
  *
- * Читает правила из .neuraltower/rules/, .kilo/rules/, AGENTS.md, kilo.json.
+ * Использует общую функцию loadRulesFiles() для избежания
+ * дублирования логики чтения с диска.
  */
 export function makeRulesProvider(
   getWorkDir: () => string,
@@ -550,50 +565,23 @@ export function makeRulesProvider(
       type: "normal",
     },
     async resolve(_query: string): Promise<ContextItem[]> {
-      const fs = await import("fs/promises")
-      const path = await import("path")
-      const workDir = getWorkDir()
-      const parts: string[] = []
-      const ruleDirs = [
-        path.default.join(workDir, ".neuraltower", "rules"),
-        path.default.join(workDir, ".kilo", "rules"),
-        path.default.join(workDir, ".kilo", "command"),
-      ]
+      const rules = await loadRulesFiles(getWorkDir)
 
-      for (const dir of ruleDirs) {
-        try {
-          const entries = await fs.readdir(dir)
-          const mdFiles = entries.filter((e) => e.endsWith(".md")).sort()
-          for (const fname of mdFiles) {
-            const content = await fs.readFile(path.default.join(dir, fname), "utf-8")
-            parts.push(`## ${fname}`)
-            parts.push(content.trim())
-            parts.push("")
-          }
-        } catch {
-          // директория может не существовать
-        }
-      }
-
-      for (const fname of ["AGENTS.md", "CLAUDE.md"]) {
-        try {
-          const content = await fs.readFile(path.default.join(workDir, fname), "utf-8")
-          parts.push(`## ${fname}`)
-          parts.push(content.trim())
-          parts.push("")
-        } catch {
-          // файл может не существовать
-        }
-      }
-
-      if (parts.length === 0) {
+      if (rules.length === 0) {
         return [{ content: "Правила проекта не найдены. Создайте .neuraltower/rules/*.md или AGENTS.md", name: "rules", description: "empty" }]
+      }
+
+      const parts: string[] = []
+      for (const r of rules) {
+        parts.push(`## ${r.name}`)
+        parts.push(r.content)
+        parts.push("")
       }
 
       return [{
         content: parts.join("\n"),
         name: "Rules",
-        description: `${parts.filter((p) => p.startsWith("##")).length} правил`,
+        description: `${rules.length} правил`,
       }]
     },
   }
@@ -696,6 +684,46 @@ function htmlToText(html: string): string {
   t = t.replace(/\u00a0/g, " ")
   t = t.replace(/\n{3,}/g, "\n\n")
   return t.trim()
+}
+
+/**
+ * Общая функция чтения файлов правил.
+ * Используется и RulesSource, и RulesProvider для избежания
+ * дублирования логики чтения с диска.
+ */
+export async function loadRulesFiles(getWorkDir: () => string): Promise<Array<{ name: string; content: string }>> {
+  const fs = await import("fs/promises")
+  const path = await import("path")
+  const workDir = getWorkDir()
+  const rules: Array<{ name: string; content: string }> = []
+  const ruleDirs = [
+    path.default.join(workDir, ".neuraltower", "rules"),
+    path.default.join(workDir, ".kilo", "rules"),
+  ]
+
+  for (const dir of ruleDirs) {
+    try {
+      const entries = await fs.readdir(dir)
+      const mdFiles = entries.filter((e) => e.endsWith(".md")).sort()
+      for (const fname of mdFiles) {
+        const content = await fs.readFile(path.default.join(dir, fname), "utf-8")
+        rules.push({ name: fname, content: content.trim() })
+      }
+    } catch {
+      // директория может не существовать
+    }
+  }
+
+  for (const fname of ["AGENTS.md", "CLAUDE.md"]) {
+    try {
+      const content = await fs.readFile(path.default.join(workDir, fname), "utf-8")
+      rules.push({ name: fname, content: content.trim() })
+    } catch {
+      // файл может не существовать
+    }
+  }
+
+  return rules
 }
 
 function detectLanguageFromPath(filePath: string): string {

@@ -131,6 +131,12 @@ export class MCPManager {
     return this.servers.filter((s) => s.ready).map((s) => s.config.name)
   }
 
+  getToolsByServer(): Array<{ server: string; tools: MCPTool[] }> {
+    return this.servers
+      .filter((s) => s.ready)
+      .map((s) => ({ server: s.config.name, tools: s.tools }))
+  }
+
   async disconnect(): Promise<void> {
     for (const server of this.servers) {
       if (server.process) {

@@ -1,5 +1,6 @@
 import * as vscode from "vscode"
 import type { ContextSource } from "./ContextSource"
+import { loadRulesFiles } from "./ContextProvider"
 
 const MAX_CONTENT_LINES = 300
 
@@ -348,37 +349,7 @@ export function makeRulesSource(
       const now = Date.now()
       if (cached && now - cachedAt < TTL) return cached
 
-      const fs = await import("fs/promises")
-      const path = await import("path")
-      const workDir = getWorkDir()
-      const rules: Array<{ name: string; content: string }> = []
-      const ruleDirs = [
-        path.default.join(workDir, ".neuraltower", "rules"),
-        path.default.join(workDir, ".kilo", "rules"),
-      ]
-
-      for (const dir of ruleDirs) {
-        try {
-          const entries = await fs.readdir(dir)
-          const mdFiles = entries.filter((e) => e.endsWith(".md")).sort()
-          for (const fname of mdFiles) {
-            const content = await fs.readFile(path.default.join(dir, fname), "utf-8")
-            rules.push({ name: fname, content: content.trim() })
-          }
-        } catch {
-          // директория может не существовать
-        }
-      }
-
-      for (const fname of ["AGENTS.md", "CLAUDE.md"]) {
-        try {
-          const content = await fs.readFile(path.default.join(workDir, fname), "utf-8")
-          rules.push({ name: fname, content: content.trim() })
-        } catch {
-          // файл может не существовать
-        }
-      }
-
+      const rules = await loadRulesFiles(getWorkDir)
       const totalChars = rules.reduce((s, r) => s + r.content.length, 0)
       cached = { rules, totalChars }
       cachedAt = now
@@ -433,7 +404,7 @@ export function makeRepoMapSource(
       return cached
     },
     baseline(v) {
-      const path = require("path")
+      const pathMod = require("path") as typeof import("path")
       const parts: string[] = []
       parts.push("## Карта репозитория")
       parts.push(`Файлов: ${v.fileCount}, Директорий: ${v.dirCount}`)
@@ -453,7 +424,7 @@ export function makeRepoMapSource(
       if (v.notableFiles.length > 0) {
         parts.push("Заметные файлы:")
         for (const f of v.notableFiles) {
-          const rel = path.default.relative(getWorkDir(), f)
+          const rel = pathMod.relative(getWorkDir(), f)
           parts.push(`  ${rel}`)
         }
       }

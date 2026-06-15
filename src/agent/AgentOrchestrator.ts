@@ -93,21 +93,18 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     this.providerRegistry.register(makeRulesProvider(() => this.workDir))
     const mcpListFn: MCPToolListFn = async () => {
       if (!this.mcpManager) return []
-      const servers = this.mcpManager.listServers()
-      const result: Array<{ server: string; tool: { name: string; description: string; schema: Record<string, unknown> } }> = []
-      const readyNames = this.mcpManager.getReadyServers()
-      for (const cfg of servers) {
-        if (!readyNames.includes(cfg.name)) continue
-        try {
-          const tools = await this.mcpManager.discover()
+      try {
+        await this.mcpManager.discover()
+        const result: Array<{ server: string; tool: { name: string; description: string; schema: Record<string, unknown> } }> = []
+        for (const { server, tools } of this.mcpManager.getToolsByServer()) {
           for (const t of tools) {
-            result.push({ server: cfg.name, tool: t })
+            result.push({ server, tool: t })
           }
-        } catch {
-          // сервер может не поддерживать tools/list
         }
+        return result
+      } catch {
+        return []
       }
-      return result
     }
     this.providerRegistry.register(makeMCPProvider(mcpListFn))
   }

@@ -6,6 +6,7 @@ import type {
 } from "./ContextSource"
 
 const TOKENS_PER_CHAR = 0.25
+const DEFAULT_TOKEN_BUDGET = 16000
 
 /**
  * ContextManager управляет источниками контекста, строит
@@ -16,12 +17,18 @@ const TOKENS_PER_CHAR = 0.25
  * каждый источник — это типизированный блок с load/baseline/update.
  * ContextManager объединяет источники, создаёт снимок на
  * начало эпохи и согласует изменения при повторных запросах.
+ *
+ * Token budget: источники сортируются по приоритету и
+ * добавляются пока сумма токенов не превысит бюджет.
+ * Это защищает от переполнения контекста при огромных
+ * файлах и правилах.
  */
 export class ContextManager {
   private sources: ContextSource[] = []
   private snapshot: ContextSnapshot[] = []
   private revision = 0
   private previousValues: Map<string, unknown> = new Map()
+  private tokenBudget = DEFAULT_TOKEN_BUDGET
 
   /**
    * Зарегистрировать источник контекста.
@@ -35,6 +42,22 @@ export class ContextManager {
    */
   unregister(key: string): void {
     this.sources = this.sources.filter((s) => s.key !== key)
+  }
+
+  /**
+   * Установить бюджет токенов для системного промпта.
+   * Источники с низким приоритетом будут отброшены,
+   * если общая сумма токенов превышает бюджет.
+   */
+  setTokenBudget(budget: number): void {
+    this.tokenBudget = budget
+  }
+
+  /**
+   * Вернуть текущий бюджет токенов.
+   */
+  getTokenBudget(): number {
+    return this.tokenBudget
   }
 
   /**
@@ -55,6 +78,7 @@ export class ContextManager {
     const baselineParts: string[] = []
     this.previousValues.clear()
     this.revision = 1
+    let usedTokens = 0
 
     const sorted = [...this.sources].sort(
       (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
@@ -65,8 +89,15 @@ export class ContextManager {
         const value = await source.load()
         if (value === undefined) continue
 
-        this.previousValues.set(source.key, value)
         const baseline = source.baseline(value)
+        const tokens = estimateTokens(baseline)
+
+        if (usedTokens + tokens > this.tokenBudget && baselineParts.length > 0) {
+          continue
+        }
+
+        usedTokens += tokens
+        this.previousValues.set(source.key, value)
         baselineParts.push(baseline)
 
         snapshots.push({
