@@ -237,7 +237,9 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc --noEmit && esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
-    "watch": "npm run compile -- --watch"
+    "watch": "npm run compile -- --watch",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "glob": "^10.3.0"
@@ -248,6 +250,7 @@
     "@types/vscode": "^1.85.0",
     "esbuild": "^0.20.0",
     "ovsx": "^1.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^3.0.0"
   }
 }
