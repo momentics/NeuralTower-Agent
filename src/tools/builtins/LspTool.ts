@@ -56,7 +56,7 @@ export class LspTool implements ITool {
         description: "Поисковый запрос для workspaceSymbol. Пустая строка запрашивает все символы.",
       },
     },
-    required: ["operation", "filePath"],
+    required: ["operation"],
   }
 
   async execute(args: Record<string, unknown>): Promise<ToolResult> {
@@ -71,8 +71,8 @@ export class LspTool implements ITool {
       return { output: `Неподдерживаемая операция: ${operation}. Доступно: ${operations.join(", ")}`, success: false }
     }
 
-    if (!filePathRaw) {
-      return { output: "Не указан путь к файлу", success: false }
+    if (!filePathRaw && operation !== "workspaceSymbol") {
+      return { output: "Не указан путь к файлу (требуется для всех операций кроме workspaceSymbol)", success: false }
     }
 
     const line = args.line ? Number(args.line) : undefined
@@ -82,21 +82,21 @@ export class LspTool implements ITool {
     try {
       switch (operation) {
         case "documentSymbol":
-          return await this.executeDocumentSymbol(filePathRaw)
+          return await this.executeDocumentSymbol(filePathRaw!)
         case "workspaceSymbol":
           return await this.executeWorkspaceSymbol(query ?? "")
         case "goToDefinition":
-          return await this.executeGoToDefinition(filePathRaw, line, character)
+          return await this.executeGoToDefinition(filePathRaw!, line, character)
         case "findReferences":
-          return await this.executeFindReferences(filePathRaw, line, character)
+          return await this.executeFindReferences(filePathRaw!, line, character)
         case "hover":
-          return await this.executeHover(filePathRaw, line, character)
+          return await this.executeHover(filePathRaw!, line, character)
         case "goToImplementation":
-          return await this.executeGoToImplementation(filePathRaw, line, character)
+          return await this.executeGoToImplementation(filePathRaw!, line, character)
         case "signatureHelp":
-          return await this.executeSignatureHelp(filePathRaw, line, character)
+          return await this.executeSignatureHelp(filePathRaw!, line, character)
         case "goToTypeDefinition":
-          return await this.executeGoToTypeDefinition(filePathRaw, line, character)
+          return await this.executeGoToTypeDefinition(filePathRaw!, line, character)
       }
     } catch (err) {
       return {
@@ -107,12 +107,14 @@ export class LspTool implements ITool {
   }
 
   private async withTimeout<T>(fn: () => Promise<T>, label: string): Promise<T> {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), LSP_TIMEOUT_MS)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`LSP ${label}: таймаут ${LSP_TIMEOUT_MS}ms`)), LSP_TIMEOUT_MS)
+    })
     try {
-      return await fn()
+      return await Promise.race([fn(), timeoutPromise])
     } finally {
-      clearTimeout(timer)
+      if (timer) clearTimeout(timer)
     }
   }
 
@@ -151,25 +153,26 @@ export class LspTool implements ITool {
       return { output: `Символы не найдены для ${uri.fsPath}`, success: true }
     }
 
-    const lines = this.formatDocumentSymbols(symbols, 0).slice(0, MAX_SYMBOL_RESULTS)
+    const lines = this.formatDocumentSymbols(symbols, 0, [])
+    const output = lines.slice(0, MAX_SYMBOL_RESULTS)
     return {
-      output: `Символы файла ${uri.fsPath}:\n\n${lines.join("\n")}`,
+      output: `Символы файла ${uri.fsPath}:\n\n${output.join("\n")}`,
       success: true,
     }
   }
 
-  private formatDocumentSymbols(symbols: vscode.DocumentSymbol[], depth: number): string[] {
-    const results: string[] = []
+  private formatDocumentSymbols(symbols: vscode.DocumentSymbol[], depth: number, results: string[]): string[] {
     const indent = "  ".repeat(depth)
 
     for (const sym of symbols) {
+      if (results.length >= MAX_SYMBOL_RESULTS) break
       const kindLabel = this.symbolKindLabel(sym.kind)
       const range = `${sym.range.start.line + 1}-${sym.range.end.line + 1}`
       const detail = sym.detail ? ` (${sym.detail})` : ""
       results.push(`${indent}${kindLabel} ${sym.name}${detail} [${range}]`)
 
-      if (sym.children && sym.children.length > 0 && depth < 4) {
-        results.push(...this.formatDocumentSymbols(sym.children, depth + 1))
+      if (sym.children && sym.children.length > 0 && depth < 4 && results.length < MAX_SYMBOL_RESULTS) {
+        this.formatDocumentSymbols(sym.children, depth + 1, results)
       }
     }
 
@@ -221,21 +224,23 @@ export class LspTool implements ITool {
       return { output: `Символы workspace для "${query}" не найдены`, success: true }
     }
 
+    const relevantKinds = new Set([
+      vscode.SymbolKind.Class,
+      vscode.SymbolKind.Function,
+      vscode.SymbolKind.Method,
+      vscode.SymbolKind.Interface,
+      vscode.SymbolKind.Variable,
+      vscode.SymbolKind.Constant,
+      vscode.SymbolKind.Struct,
+      vscode.SymbolKind.Enum,
+    ])
     const filtered = results
-      .filter((s) => {
-        const relevantKinds = new Set([
-          vscode.SymbolKind.Class,
-          vscode.SymbolKind.Function,
-          vscode.SymbolKind.Method,
-          vscode.SymbolKind.Interface,
-          vscode.SymbolKind.Variable,
-          vscode.SymbolKind.Constant,
-          vscode.SymbolKind.Struct,
-          vscode.SymbolKind.Enum,
-        ])
-        return relevantKinds.has(s.kind)
-      })
+      .filter((s) => relevantKinds.has(s.kind))
       .slice(0, MAX_SYMBOL_RESULTS)
+
+    if (filtered.length === 0) {
+      return { output: `Символы workspace для "${query}" не найдены (из ${results.length} результатов нет релевантных видов)`, success: true }
+    }
 
     const lines = filtered.map((s) => {
       const kind = this.symbolKindLabel(s.kind)
@@ -351,6 +356,7 @@ export class LspTool implements ITool {
         "vscode.executeReferenceProvider",
         uri,
         position,
+        { includeDeclaration: true },
       )).then((r) => r ?? []),
       "findReferences",
     )
