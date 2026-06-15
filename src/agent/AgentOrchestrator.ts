@@ -7,6 +7,7 @@ import type { SkillManager } from "../skills/SkillManager"
 import type { AgentTurnResult, ToolResult } from "./AgentTypes"
 import type { PermissionManager } from "../services/permission/PermissionManager"
 import type { GitService } from "../services/git/GitService"
+import type { MCPManager } from "../mcp/MCPManager"
 import { AgentMemory } from "./AgentMemory"
 import { RepoAnalyzer } from "../repo/RepoAnalyzer"
 import { FileIndex } from "../repo/FileIndex"
@@ -18,6 +19,32 @@ import {
   makeProjectMemorySource,
   makeGitDiffSource,
 } from "../core/ContextSources"
+import {
+  makeCurrentFileSource,
+  makeOpenFilesSource,
+  makeProblemsSource,
+  makeClipboardSource,
+  makeDebuggerSource,
+  makeTerminalSource,
+  makeOSSource,
+  makeRulesSource,
+  makeRepoMapSource,
+} from "../core/ContextSources.vscode"
+import {
+  ContextProviderRegistry,
+  makeUrlProvider,
+  makeWebSearchProvider,
+  makeActiveFileProblemsProvider,
+  makeFileProvider,
+  makeCodeProvider,
+  makeTreeProvider,
+  makeRepoMapProvider,
+  makeRulesProvider,
+  makeMCPProvider,
+  type ContextProvider,
+  type ContextItem,
+  type MCPToolListFn,
+} from "../core/ContextProvider"
 import { Plan } from "./Plan"
 import { AgentModeManager, builtInModes, type AgentModeName } from "./AgentMode"
 import { Compactor } from "./Compactor"
@@ -28,6 +55,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
   private workDir = "."
   private permissionManager: PermissionManager | null = null
   private gitService: GitService | null = null
+  private mcpManager: MCPManager | null = null
   private memory: AgentMemory = new AgentMemory()
   private repoAnalyzer: RepoAnalyzer = new RepoAnalyzer()
   private fileIndex: FileIndex = new FileIndex()
@@ -37,6 +65,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
   private contextManager: ContextManager
   private modeManager: AgentModeManager = new AgentModeManager()
   private compactor: Compactor
+  private providerRegistry: ContextProviderRegistry
   private sessionContext: SessionContext | null = null
   private subagentRunner: SubagentRunner | null = null
   private currentPlan: Plan | null = null
@@ -49,6 +78,38 @@ export class AgentOrchestrator implements IAgentOrchestrator {
   ) {
     this.contextManager = contextManager ?? new ContextManager()
     this.compactor = new Compactor(backend)
+    this.providerRegistry = new ContextProviderRegistry()
+    this.providerRegistry.register(makeUrlProvider())
+    this.providerRegistry.register(makeWebSearchProvider())
+    this.providerRegistry.register(makeActiveFileProblemsProvider())
+    this.providerRegistry.register(makeFileProvider(() => this.workDir))
+    this.providerRegistry.register(makeCodeProvider(() => this.workDir, () => this.fileIndex))
+    this.providerRegistry.register(makeTreeProvider(() => this.workDir))
+    this.providerRegistry.register(makeRepoMapProvider(
+      () => this.workDir,
+      () => this.fileIndex,
+      () => this.repoAnalyzer.analyze(this.workDir),
+    ))
+    this.providerRegistry.register(makeRulesProvider(() => this.workDir))
+    const mcpListFn: MCPToolListFn = async () => {
+      if (!this.mcpManager) return []
+      const servers = this.mcpManager.listServers()
+      const result: Array<{ server: string; tool: { name: string; description: string; schema: Record<string, unknown> } }> = []
+      const readyNames = this.mcpManager.getReadyServers()
+      for (const cfg of servers) {
+        if (!readyNames.includes(cfg.name)) continue
+        try {
+          const tools = await this.mcpManager.discover()
+          for (const t of tools) {
+            result.push({ server: cfg.name, tool: t })
+          }
+        } catch {
+          // сервер может не поддерживать tools/list
+        }
+      }
+      return result
+    }
+    this.providerRegistry.register(makeMCPProvider(mcpListFn))
   }
 
   setWorkingDir(dir: string): void {
@@ -61,6 +122,10 @@ export class AgentOrchestrator implements IAgentOrchestrator {
 
   setGitService(git: GitService): void {
     this.gitService = git
+  }
+
+  setMCPManager(mcp: MCPManager): void {
+    this.mcpManager = mcp
   }
 
   /**
@@ -89,6 +154,16 @@ export class AgentOrchestrator implements IAgentOrchestrator {
    */
   getMode(): AgentModeName {
     return this.modeManager.getModeName()
+  }
+
+  getProviderRegistry(): ContextProviderRegistry {
+    return this.providerRegistry
+  }
+
+  async resolveContextProvider(name: string, query: string): Promise<ContextItem[]> {
+    const provider = this.providerRegistry.get(name)
+    if (!provider) return []
+    return provider.resolve(query)
   }
 
   async reload(): Promise<void> {
@@ -146,6 +221,16 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     if (this.gitService) {
       this.contextManager.register(makeGitDiffSource(workDirFn, this.gitService))
     }
+
+    this.contextManager.register(makeCurrentFileSource())
+    this.contextManager.register(makeOpenFilesSource())
+    this.contextManager.register(makeProblemsSource())
+    this.contextManager.register(makeClipboardSource())
+    this.contextManager.register(makeDebuggerSource())
+    this.contextManager.register(makeTerminalSource())
+    this.contextManager.register(makeOSSource())
+    this.contextManager.register(makeRulesSource(workDirFn))
+    this.contextManager.register(makeRepoMapSource(workDirFn, () => this.repoAnalyzer.analyze(this.workDir)))
   }
 
   // ── Цикл агента ──────────────────────────────────────────

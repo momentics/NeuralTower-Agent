@@ -95,6 +95,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   agent = new AgentOrchestrator(backend, tools, skills, contextManager)
   agent.setPermissionManager(permissionManager)
   agent.setGitService(gitService)
+  agent.setMCPManager(mcpManager)
 
   // ── Контекст сессии ─────────────────────────────────────
   const sessionContext = new SessionContext(sessionStore.activeId, contextManager)
