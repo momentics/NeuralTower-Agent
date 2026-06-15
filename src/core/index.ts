@@ -32,6 +32,7 @@ export {
   makeRepoMapProvider,
   makeRulesProvider,
   makeMCPProvider,
+  makeLspProvider,
 } from "./ContextProvider"
 export type {
   ContextItem,

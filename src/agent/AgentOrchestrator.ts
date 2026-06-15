@@ -41,6 +41,7 @@ import {
   makeRepoMapProvider,
   makeRulesProvider,
   makeMCPProvider,
+  makeLspProvider,
   type ContextProvider,
   type ContextItem,
   type MCPToolListFn,
@@ -91,6 +92,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
       () => this.repoAnalyzer.analyze(this.workDir),
     ))
     this.providerRegistry.register(makeRulesProvider(() => this.workDir))
+    this.providerRegistry.register(makeLspProvider(() => this.workDir))
     const mcpListFn: MCPToolListFn = async () => {
       if (!this.mcpManager) return []
       try {
@@ -221,7 +223,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
 
     this.contextManager.register(makeCurrentFileSource())
     this.contextManager.register(makeOpenFilesSource())
-    this.contextManager.register(makeProblemsSource())
+    this.contextManager.register(makeProblemsSource(workDirFn))
     this.contextManager.register(makeClipboardSource())
     this.contextManager.register(makeDebuggerSource())
     this.contextManager.register(makeTerminalSource())

@@ -25,6 +25,7 @@ import { GlobTool } from "./tools/builtins/GlobTool"
 import { GrepTool } from "./tools/builtins/GrepTool"
 import { WebFetchTool } from "./tools/builtins/WebFetchTool"
 import { TodoWriteTool } from "./tools/builtins/TodoWriteTool"
+import { LspTool } from "./tools/builtins/LspTool"
 import { ContextManager } from "./core/ContextManager"
 import { SessionContext } from "./agent/SessionContext"
 import { SubagentRunner } from "./agent/SubagentRunner"
@@ -77,6 +78,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   tools.register(new GlobTool())
   tools.register(new GrepTool())
   tools.register(new WebFetchTool())
+  tools.register(new LspTool())
   tools.register(todoTool)
 
   // ── MCP-менеджер ────────────────────────────────────────

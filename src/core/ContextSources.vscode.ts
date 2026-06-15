@@ -23,10 +23,16 @@ interface ProblemEntry {
   severity: string
   message: string
   line: number
+  code?: string | number
+  source?: string
+  relatedInfo?: string
 }
 
 interface ProblemsData {
   problems: ProblemEntry[]
+  errorCount: number
+  warningCount: number
+  totalFiles: number
 }
 
 interface ClipboardData {
@@ -141,7 +147,9 @@ export function makeOpenFilesSource(): ContextSource<OpenFileData[]> {
   }
 }
 
-export function makeProblemsSource(): ContextSource<ProblemsData> {
+export function makeProblemsSource(
+  getWorkDir: () => string,
+): ContextSource<ProblemsData> {
   const severityMap: Record<number, string> = {
     0: "error",
     1: "warning",
@@ -149,44 +157,96 @@ export function makeProblemsSource(): ContextSource<ProblemsData> {
     3: "hint",
   }
 
+  const pathMod = require("path") as typeof import("path")
+
   return {
     key: "problems",
     priority: 88,
     async load(): Promise<ProblemsData> {
       const allDiagnostics = vscode.languages.getDiagnostics()
       const problems: ProblemEntry[] = []
+      const affectedFiles = new Set<string>()
 
       for (const [uri, diagnostics] of allDiagnostics) {
         if (diagnostics.length === 0 || uri.scheme !== "file") continue
+        affectedFiles.add(uri.fsPath)
         for (const d of diagnostics.slice(0, 10)) {
-          problems.push({
+          const entry: ProblemEntry = {
             file: uri.fsPath,
             severity: severityMap[d.severity] ?? "unknown",
             message: d.message.slice(0, 300),
             line: d.range.start.line + 1,
-          })
+          }
+
+          if (d.code != null) {
+            entry.code = typeof d.code === "string" ? d.code : String(d.code)
+          }
+
+          if (d.source) {
+            entry.source = d.source
+          }
+
+          if (d.relatedInformation && d.relatedInformation.length > 0) {
+            const related = d.relatedInformation.slice(0, 3).map((ri) => {
+              const relPath = pathMod.relative(getWorkDir(), ri.location.uri.fsPath)
+              return `${relPath}:${ri.location.range.start.line + 1} ${ri.message.slice(0, 120)}`
+            })
+            entry.relatedInfo = related.join("; ")
+          }
+
+          problems.push(entry)
         }
       }
 
-      return { problems }
+      const errors = problems.filter((p) => p.severity === "error")
+      const warnings = problems.filter((p) => p.severity === "warning")
+
+      return {
+        problems,
+        errorCount: errors.length,
+        warningCount: warnings.length,
+        totalFiles: affectedFiles.size,
+      }
     },
     baseline(v) {
       if (v.problems.length === 0) return ""
-      const errors = v.problems.filter((p) => p.severity === "error")
-      const warnings = v.problems.filter((p) => p.severity === "warning")
       const lines: string[] = []
-      if (errors.length > 0) lines.push(`  Ошибок: ${errors.length}`)
-      if (warnings.length > 0) lines.push(`  Предупреждений: ${warnings.length}`)
+      lines.push(`  Файлов с проблемами: ${v.totalFiles}, Ошибок: ${v.errorCount}, Предупреждений: ${v.warningCount}`)
       lines.push("")
-      for (const p of v.problems.slice(0, 15)) {
-        lines.push(`  [${p.severity}] ${p.file}:${p.line} — ${p.message}`)
+
+      const grouped = new Map<string, ProblemEntry[]>()
+      for (const p of v.problems) {
+        const arr = grouped.get(p.file) ?? []
+        arr.push(p)
+        grouped.set(p.file, arr)
       }
+
+      let shown = 0
+      const maxShown = 25
+      for (const [file, entries] of grouped) {
+        if (shown >= maxShown) break
+        const relPath = pathMod.relative(getWorkDir(), file)
+        for (const p of entries) {
+          if (shown >= maxShown) break
+          const codePart = p.code != null ? ` [${p.code}]` : ""
+          const sourcePart = p.source ? ` (${p.source})` : ""
+          lines.push(`  [${p.severity}] ${relPath}:${p.line}${codePart}${sourcePart} — ${p.message}`)
+          if (p.relatedInfo) {
+            lines.push(`    Связано: ${p.relatedInfo}`)
+          }
+          shown++
+        }
+      }
+
       return `## Проблемы в коде\n${lines.join("\n")}`
     },
     update(prev, cur) {
-      const pc = cur.problems.length
-      const pp = prev.problems.length
-      if (pc !== pp) return `Проблемы: ${pc} (было ${pp})`
+      if (cur.errorCount !== prev.errorCount) {
+        return `Ошибки: ${cur.errorCount} (было ${prev.errorCount})`
+      }
+      if (cur.problems.length !== prev.problems.length) {
+        return `Проблемы: ${cur.problems.length} (было ${prev.problems.length})`
+      }
       return ""
     },
   }

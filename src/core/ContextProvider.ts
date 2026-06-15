@@ -663,6 +663,204 @@ export function makeMCPProvider(
   }
 }
 
+// ── LSP провайдер ──────────────────────────────────────────
+
+/**
+ * Провайдер: LSP-операции для семантического анализа кода.
+ * Тип: query (пользователь вводит имя символа или путь:строка:колонка).
+ *
+ * Поддерживает форматы запроса:
+ * - "SymbolName" — поиск символа в workspace
+ * - "path/to/file.ts" — символы файла
+ * - "path/to/file.ts:10:5" — определение символа в позиции
+ */
+export function makeLspProvider(
+  getWorkDir: () => string,
+): ContextProvider {
+  return {
+    description: {
+      name: "lsp",
+      displayTitle: "LSP",
+      description: "LSP-операции: символы, определения, ссылки, hover",
+      type: "query",
+    },
+    async resolve(query: string): Promise<ContextItem[]> {
+      const vscode = await import("vscode")
+      const path = await import("path")
+      const trimmed = query.trim()
+      if (!trimmed) return []
+
+      let filePath: string | undefined
+      let line: number | undefined
+      let character: number | undefined
+      let symbolQuery: string | undefined
+
+      const posMatch = trimmed.match(/^(.+?)(?::(\d+)(?::(\d+))?)?$/)
+      if (posMatch) {
+        const possiblePath = posMatch[1]
+        line = posMatch[2] ? parseInt(posMatch[2], 10) : undefined
+        character = posMatch[3] ? parseInt(posMatch[3], 10) : undefined
+
+        if (possiblePath.includes("/") || possiblePath.includes("\\")) {
+          filePath = possiblePath
+          if (!path.default.isAbsolute(filePath)) {
+            filePath = path.default.join(getWorkDir(), filePath)
+          }
+        } else {
+          symbolQuery = possiblePath
+        }
+      } else {
+        symbolQuery = trimmed
+      }
+
+      try {
+        if (symbolQuery && !filePath) {
+          const results = await Promise.resolve(vscode.commands.executeCommand<any[]>(
+            "vscode.executeWorkspaceSymbolProvider",
+            symbolQuery,
+          )).then((r) => r ?? [])
+
+          if (!results || results.length === 0) {
+            return [{ content: `Символы workspace для "${symbolQuery}" не найдены`, name: "lsp", description: "not found" }]
+          }
+
+          const lines = results.slice(0, 30).map((s: any) => {
+            const kindLabel = lspSymbolKindLabel(s.kind)
+            const container = s.containerName ? ` <${s.containerName}>` : ""
+            const loc = s.location || s
+            return `${kindLabel} ${s.name}${container} — ${loc.uri.fsPath}:${loc.range.start.line + 1}`
+          })
+
+          return [{
+            content: `Символы workspace для "${symbolQuery}" (${results.length}):\n\n${lines.join("\n")}`,
+            name: `LSP: ${symbolQuery}`,
+            description: `${results.length} результатов`,
+          }]
+        }
+
+        if (filePath) {
+          const uri = vscode.Uri.file(filePath)
+
+          if (line && character) {
+            const position = new vscode.Position(line - 1, character - 1)
+
+            const [definitions, references, hovers] = await Promise.all([
+              Promise.resolve(vscode.commands.executeCommand<any[]>(
+                "vscode.executeDefinitionProvider", uri, position,
+              )).then((r) => r ?? []),
+              Promise.resolve(vscode.commands.executeCommand<any[]>(
+                "vscode.executeReferenceProvider", uri, position,
+              )).then((r) => r ?? []),
+              Promise.resolve(vscode.commands.executeCommand<any[]>(
+                "vscode.executeHoverProvider", uri, position,
+              )).then((r) => r ?? []),
+            ])
+
+            const parts: string[] = []
+
+            if (hovers.length > 0) {
+              for (const hover of hovers) {
+                for (const content of hover.contents) {
+                  const text = typeof content === "string" ? content :
+                    ("value" in content ? (content as any).value : String(content))
+                  if (text) parts.push(`Hover:\n${text.slice(0, 2000)}`)
+                }
+              }
+            }
+
+            if (definitions.length > 0) {
+              const defLines = definitions.slice(0, 5).map((d) => {
+                const rel = path.default.relative(getWorkDir(), d.uri.fsPath)
+                return `  ${rel}:${d.range.start.line + 1}`
+              })
+              parts.push(`Определение (${definitions.length}):\n${defLines.join("\n")}`)
+            }
+
+            if (references.length > 0) {
+              const refLines = references.slice(0, 15).map((r) => {
+                const rel = path.default.relative(getWorkDir(), r.uri.fsPath)
+                return `  ${rel}:${r.range.start.line + 1}`
+              })
+              parts.push(`Ссылки (${references.length}):\n${refLines.join("\n")}`)
+            }
+
+            if (parts.length === 0) {
+              return [{ content: `LSP-информация не найдена для ${filePath}:${line}:${character}`, name: "lsp", description: "empty" }]
+            }
+
+            return [{
+              content: parts.join("\n\n"),
+              name: `LSP: ${path.default.basename(filePath)}:${line}:${character}`,
+              description: `${definitions.length} def, ${references.length} ref`,
+            }]
+          }
+
+          const symbols = await Promise.resolve(vscode.commands.executeCommand<any[]>(
+            "vscode.executeDocumentSymbolProvider", uri,
+          )).then((r) => r ?? [])
+
+          if (!symbols || symbols.length === 0) {
+            return [{ content: `Символы не найдены для ${filePath}`, name: "lsp", description: "empty" }]
+          }
+
+          const lines = formatDocSymbols(symbols, 0).slice(0, 50)
+          return [{
+            content: `Символы файла ${filePath}:\n\n${lines.join("\n")}`,
+            name: `LSP: ${path.default.basename(filePath)}`,
+            description: `${symbols.length} символов`,
+          }]
+        }
+
+        return [{ content: `Некорректный запрос: ${trimmed}`, name: "lsp", description: "error" }]
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        return [{ content: `LSP-ошибка: ${msg}`, name: "lsp", description: "error" }]
+      }
+    },
+  }
+}
+
+function lspSymbolKindLabel(kind: number): string {
+  const vscode = require("vscode") as typeof import("vscode")
+  const map: Record<number, string> = {
+    [vscode.SymbolKind.Class]: "class",
+    [vscode.SymbolKind.Function]: "function",
+    [vscode.SymbolKind.Method]: "method",
+    [vscode.SymbolKind.Interface]: "interface",
+    [vscode.SymbolKind.Variable]: "variable",
+    [vscode.SymbolKind.Constant]: "constant",
+    [vscode.SymbolKind.Struct]: "struct",
+    [vscode.SymbolKind.Enum]: "enum",
+    [vscode.SymbolKind.Property]: "property",
+    [vscode.SymbolKind.Field]: "field",
+    [vscode.SymbolKind.Constructor]: "constructor",
+    [vscode.SymbolKind.Module]: "module",
+    [vscode.SymbolKind.Namespace]: "namespace",
+    [vscode.SymbolKind.Package]: "package",
+    [vscode.SymbolKind.TypeParameter]: "type_param",
+  }
+  return map[kind] ?? `kind:${kind}`
+}
+
+function formatDocSymbols(symbols: any[], depth: number): string[] {
+  const vscode = require("vscode") as typeof import("vscode")
+  const results: string[] = []
+  const indent = "  ".repeat(depth)
+
+  for (const sym of symbols) {
+    const kind = lspSymbolKindLabel(sym.kind)
+    const range = `${sym.range.start.line + 1}-${sym.range.end.line + 1}`
+    const detail = sym.detail ? ` (${sym.detail})` : ""
+    results.push(`${indent}${kind} ${sym.name}${detail} [${range}]`)
+
+    if (sym.children && sym.children.length > 0 && depth < 4) {
+      results.push(...formatDocSymbols(sym.children, depth + 1))
+    }
+  }
+
+  return results
+}
+
 // ── Утилиты ────────────────────────────────────────────────
 
 function extractTitle(html: string): string | null {
