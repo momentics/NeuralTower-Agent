@@ -2,54 +2,54 @@
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo Очистка временных файлов: nt-agent
+echo Cleaning temporary files: nt-agent
 echo ========================================
 echo.
 
-echo [1/5] Очистка директории out/...
+echo [1/5] Cleaning out/ directory...
 if exist "out\" (
     rmdir /s /q "out" >nul 2>&1
-    echo   удалено
+    echo   deleted
 ) else (
-    echo   пусто
+    echo   empty
 )
 
-echo [2/5] Очистка пакетов VSIX...
+echo [2/5] Cleaning VSIX packages...
 set "found=0"
 for %%f in (NeuralTower-Agent-*.vsix) do (
     del "%%f" >nul 2>&1
     set "found=1"
 )
 if "!found!"=="1" (
-    echo   удалён(ы)
+    echo   deleted
 ) else (
-    echo   пусто
+    echo   empty
 )
 
-echo [3/5] Очистка директории dist/...
+echo [3/5] Cleaning dist/ directory...
 if exist "dist\" (
     rmdir /s /q "dist" >nul 2>&1
-    echo   удалено
+    echo   deleted
 ) else (
-    echo   пусто
+    echo   empty
 )
 
-echo [4/5] Очистка директории .vscode-test/...
+echo [4/5] Cleaning .vscode-test/ directory...
 if exist ".vscode-test\" (
     rmdir /s /q ".vscode-test" >nul 2>&1
-    echo   удалено
+    echo   deleted
 ) else (
-    echo   пусто
+    echo   empty
 )
 
-echo [5/5] Очистка файлов логов...
+echo [5/5] Cleaning log files...
 del /q *.log >nul 2>&1
 del /q npm-debug.log* >nul 2>&1
 del /q yarn-debug.log* >nul 2>&1
 del /q yarn-error.log* >nul 2>&1
-echo   выполнено
+echo   done
 
 echo.
 echo ========================================
-echo Очистка завершена
+echo Cleanup complete
 echo ========================================
