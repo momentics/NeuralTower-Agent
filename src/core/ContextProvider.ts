@@ -3,11 +3,11 @@ import * as vscode from "vscode"
 /**
  * On-demand контекстный провайдер.
  *
- * В отличие от ContextSource (автоматическая инъекция в системный
+ * В отличие от ContextSource (автоматическая вставка в системный
  * промпт), ContextProvider вызывается по запросу пользователя,
  * например через @mention в чате: @url https://example.com.
  *
- * Аналог continue.dev IContextProvider.
+ * Провайдеры контекста вызываются по запросу пользователя.
  */
 
 const LSP_PROVIDER_TIMEOUT_MS = 10_000
@@ -756,6 +756,7 @@ export function makeLspProvider(
 
         if (filePath) {
           const uri = vscode.Uri.file(filePath)
+          await vscode.workspace.openTextDocument(uri)
 
           if (line && character) {
             const position = new vscode.Position(line - 1, character - 1)

@@ -30,4 +30,7 @@ export interface IAgentOrchestrator {
 
   /** Освободить ресурсы. */
   dispose(): void
+
+  /** Сбросить контекст сессии (новый чат / переключение сессии). */
+  resetSession(): void
 }

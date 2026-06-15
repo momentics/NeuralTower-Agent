@@ -60,7 +60,7 @@ export interface SubagentConfig {
   /** Максимальное число итераций. */
   maxIterations?: number
 
-  /** Тайм-аут в мс. */
+  /** Таймаут в мс. */
   timeoutMs?: number
 }
 
@@ -68,9 +68,8 @@ export interface SubagentConfig {
  * SubagentRunner управляет запуском подагентов для
  * параллельных/независимых задач.
  *
- * Вдохновлён opencode subagent mode: каждый подагент
- * — это изолированный экземпляр AgentOrchestrator с
- * собственным контекстом и ограничениями.
+ * Каждый подагент — это изолированный экземпляр
+ * AgentOrchestrator с собственным контекстом и ограничениями.
  */
 export class SubagentRunner {
   private running: Map<string, SubagentHandle> = new Map()
@@ -86,7 +85,7 @@ export class SubagentRunner {
   ) {}
 
   /**
-   * Запустить подагента.
+   * Запустить подагент.
    */
   async spawn(
     config: SubagentConfig,
@@ -185,7 +184,7 @@ export class SubagentRunner {
   }
 
   /**
-   * Отменить подагента по ID.
+   * Отменить подагент по ID.
    */
   cancel(id: string): boolean {
     const handle = this.running.get(id)

@@ -2,10 +2,10 @@ import type { ChatMessage } from "../core/IBackend"
 
 /**
  * Источник контекста — типизированный блок данных, который
- * ContextManager загружает, сравнивает с baseline и включает
+ * ContextManager загружает, сравнивает с базовым текстом и включает
  * в системный промпт при изменении.
  *
- * Аналог opencode Source<A>, но без Effect/Schema.
+ * Типизированный интерфейс без внешних зависимостей.
  */
 export interface ContextSource<T = unknown> {
   /** Уникальный ключ источника. */
@@ -14,10 +14,10 @@ export interface ContextSource<T = unknown> {
   /** Загрузить текущее значение источника. */
   load(): Promise<T | undefined>
 
-  /** Сформировать baseline-текст из начального значения. */
+  /** Сформировать базовый текст из начального значения. */
   baseline(value: T): string
 
-  /** Сформировать delta-текст при изменении значения. */
+  /** Сформировать текст изменения при изменении значения. */
   update(previous: T, current: T): string
 
   /** Сформировать текст при удалении источника. */
@@ -28,7 +28,7 @@ export interface ContextSource<T = unknown> {
 }
 
 /**
- * Результат согласования источника с предыдущим снимком.
+ * Результат сравнения источника с предыдущим снимком.
  */
 export type SourceReconcileResult =
   | { readonly _tag: "unchanged" }
@@ -37,8 +37,8 @@ export type SourceReconcileResult =
 
 /**
  * Неподвижный снимок всех источников контекста на момент
- * начала хода агента. Используется для согласования при
- * повторных запросах в рамках той же эпохи.
+ * начала хода агента. Используется для сравнения при
+ * повторных запросах в рамках того же этапа.
  */
 export interface ContextSnapshot {
   /** Ключ источника. */
@@ -47,7 +47,7 @@ export interface ContextSnapshot {
   /** Сериализуемое значение. */
   readonly value: unknown
 
-  /** Baseline-текст. */
+  /** Базовый текст. */
   readonly baseline: string
 
   /** Порядковый номер ревизии. */
@@ -56,16 +56,16 @@ export interface ContextSnapshot {
 
 /**
  * Подготовленный контекст для передачи в цикл агента.
- * Содержит baseline системного промпта и метаданные эпохи.
+ * Содержит базовый системный промпт и метаданные этапа.
  */
 export interface PreparedContext {
-  /** Системный промпт (baseline всех источников). */
+  /** Системный промпт (базовый текст всех источников). */
   readonly systemPrompt: string
 
   /** Номер ревизии контекста. */
   readonly revision: number
 
-  /** Снимок источников для согласования. */
+  /** Снимок источников для сравнения. */
   readonly snapshot: ContextSnapshot[]
 
   /** Оценка токенов системного промпта. */
@@ -73,7 +73,7 @@ export interface PreparedContext {
 }
 
 /**
- * Ошибка инициализации контекста: эпоха заблокирована
+ * Ошибка инициализации контекста: этап заблокирован
  * из-за несоответствия агента.
  */
 export class AgentMismatchError extends Error {

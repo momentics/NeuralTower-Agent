@@ -135,7 +135,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
   }
 
   /**
-   * Установить runner подагентов.
+   * Установить исполнитель подагентов.
    */
   setSubagentRunner(runner: SubagentRunner): void {
     this.subagentRunner = runner
@@ -194,6 +194,11 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     this.subagentRunner?.cancelAll()
     for (const d of this.disposables) d.dispose()
     this.disposables = []
+  }
+
+  resetSession(): void {
+    this.sessionContext?.reset()
+    this.currentPlan = null
   }
 
   // ── Регистрация источников контекста ────────────────────
@@ -509,10 +514,10 @@ ${toolList}
     return this.currentPlan
   }
 
-  // ── Подагенты ────────────────────────────────────────────
+  // ── Подагенты ──────────────────────────────────────────────
 
   /**
-   * Запустить подагента для исследования.
+   * Запустить подагент для исследования.
    */
   async spawnExplore(
     task: string,
@@ -619,7 +624,7 @@ ${toolList}
 - Никогда не коммитьте изменения, если пользователь не попросил явно.`
   }
 
-  // ── Вызов бэкенда с определением вызова инструментов ────
+  // ── Вызов бэкенда с определением вызова инструментов ──
 
   private async callBackend(
     conversation: ChatMessage[],

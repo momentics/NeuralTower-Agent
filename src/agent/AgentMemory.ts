@@ -35,7 +35,7 @@ export class AgentMemory {
     notes: [],
   }
 
-  /** Примерное число токенов на сообщение. Используется для расчёта бюджета контекста. */
+  /** Примерное число токенов на сообщение. Используется для расчёта лимита контекста. */
   private static readonly TOKENS_PER_CHAR = 0.25
   private readonly maxTokens: number
 
@@ -54,7 +54,7 @@ export class AgentMemory {
   }
 
   /**
-   * Вернуть последние сообщения в пределах бюджета токенов.
+   * Вернуть последние сообщения в пределах лимита токенов.
    * Закреплённые сообщения всегда включаются.
    */
   getRecent(maxTokens?: number): ChatMessage[] {
@@ -106,7 +106,7 @@ export class AgentMemory {
     return { ...this.project }
   }
 
-  /** Сформировать фрагмент системного запроса из памяти о проекте. */
+  /*  * Сформировать фрагмент системного промпта из памяти о проекте. */
   projectContext(): string {
     const parts: string[] = []
     if (this.project.repo) parts.push(`Проект: ${this.project.repo}`)

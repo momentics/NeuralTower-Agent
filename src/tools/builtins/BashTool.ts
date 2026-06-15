@@ -6,7 +6,7 @@ import { promisify } from "util"
 const execAsync = promisify(exec)
 
 /**
- * Выполнить команду оболочки. Настраиваемый тайм-аут и рабочая директория.
+ * Выполнить команду оболочки. Настраиваемый таймаут и рабочая директория.
  */
 export class BashTool implements ITool {
   name = "bash"
@@ -19,7 +19,7 @@ export class BashTool implements ITool {
     description: "Выполнить команду оболочки",
     parameters: {
       command: { type: "string", description: "Команда оболочки для выполнения" },
-      timeout: { type: "number", description: "Тайм-аут в миллисекундах (по умолчанию 30000)", default: 30000 },
+      timeout: { type: "number", description: "Таймаут в миллисекундах (по умолчанию 30000)", default: 30000 },
       workdir: { type: "string", description: "Рабочая директория" },
     },
     required: ["command"],

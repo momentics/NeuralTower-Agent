@@ -62,6 +62,7 @@ export class ChatProvider implements IProvider {
           break
         case "switchSession":
           this.sessionStore.setActive(msg.sessionId)
+          this.agent.resetSession()
           this.sendActiveMessages()
           this.sendSessionList()
           break

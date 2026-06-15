@@ -40,9 +40,8 @@ export type PlanStatus = "draft" | "running" | "paused" | "completed" | "failed"
 /**
  * План задачи с полным отслеживанием состояния.
  *
- * Вдохновлён kilocode PlanFollowupRuntime и opencode plan_exit:
- * план создаётся, сохраняется в файл, отслеживает прогресс
- * шагов и поддерживает handover между сессиями.
+ * План создаётся, сохраняется в файл, отслеживает прогресс
+ * шагов и поддерживает передачу управления между сессиями.
  */
 export class Plan {
   /** Уникальный идентификатор плана. */
@@ -75,8 +74,8 @@ export class Plan {
   /** Путь к файлу плана (для сохранения). */
   public filePath?: string
 
-  /** Данные для handover между сессиями. */
-  public handover?: PlanHandover
+  /** Данные для передачи управления между сессиями. */
+  public transferData?: PlanHandover
 
   constructor(input: {
     id?: string
@@ -264,7 +263,7 @@ export class Plan {
       maxRetries: this.maxRetries,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
-      handover: this.handover,
+      handover: this.transferData,
     }
   }
 
@@ -283,7 +282,7 @@ export class Plan {
     plan.currentStepIndex = data.currentStepIndex
     // createdAt is read-only, use the one from constructor
     plan.updatedAt = data.updatedAt
-    plan.handover = data.handover
+    plan.transferData = data.handover
     for (const [i, step] of data.steps.entries()) {
       plan.steps[i].status = step.status
       plan.steps[i].attempts = step.attempts

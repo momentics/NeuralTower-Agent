@@ -171,7 +171,7 @@ export class MCPManager {
       }) + "\n"
 
       const timer = setTimeout(() => {
-        reject(new Error(`MCP ${method}: истёк тайм-аут`))
+        reject(new Error(`MCP ${method}: истёк таймаут`))
       }, 10000)
 
       const handler = (data: Buffer) => {

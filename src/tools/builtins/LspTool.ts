@@ -137,9 +137,18 @@ export class LspTool implements ITool {
     }
   }
 
+  private async openDocumentForLsp(uri: vscode.Uri): Promise<void> {
+    try {
+      await vscode.workspace.openTextDocument(uri)
+    } catch {
+      // Документ может быть бинарным или недоступным — LSP обработает ошибку
+    }
+  }
+
   private async executeDocumentSymbol(filePathRaw: string): Promise<ToolResult> {
     const uri = await this.resolveUri(filePathRaw)
     await this.ensureFileExists(uri.fsPath)
+    await this.openDocumentForLsp(uri)
 
     const symbols = await this.withTimeout(
       () => Promise.resolve(vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
@@ -262,6 +271,7 @@ export class LspTool implements ITool {
   ): Promise<ToolResult> {
     const uri = await this.resolveUri(filePathRaw)
     await this.ensureFileExists(uri.fsPath)
+    await this.openDocumentForLsp(uri)
     const position = this.toPosition(line, character)
 
     const definitions = await this.withTimeout(
@@ -291,6 +301,7 @@ export class LspTool implements ITool {
   ): Promise<ToolResult> {
     const uri = await this.resolveUri(filePathRaw)
     await this.ensureFileExists(uri.fsPath)
+    await this.openDocumentForLsp(uri)
     const position = this.toPosition(line, character)
 
     const typeDefs = await this.withTimeout(
@@ -320,6 +331,7 @@ export class LspTool implements ITool {
   ): Promise<ToolResult> {
     const uri = await this.resolveUri(filePathRaw)
     await this.ensureFileExists(uri.fsPath)
+    await this.openDocumentForLsp(uri)
     const position = this.toPosition(line, character)
 
     const implementations = await this.withTimeout(
@@ -349,6 +361,7 @@ export class LspTool implements ITool {
   ): Promise<ToolResult> {
     const uri = await this.resolveUri(filePathRaw)
     await this.ensureFileExists(uri.fsPath)
+    await this.openDocumentForLsp(uri)
     const position = this.toPosition(line, character)
 
     const references = await this.withTimeout(
@@ -387,6 +400,7 @@ export class LspTool implements ITool {
   ): Promise<ToolResult> {
     const uri = await this.resolveUri(filePathRaw)
     await this.ensureFileExists(uri.fsPath)
+    await this.openDocumentForLsp(uri)
     const position = this.toPosition(line, character)
 
     const hovers = await this.withTimeout(
@@ -426,6 +440,7 @@ export class LspTool implements ITool {
   ): Promise<ToolResult> {
     const uri = await this.resolveUri(filePathRaw)
     await this.ensureFileExists(uri.fsPath)
+    await this.openDocumentForLsp(uri)
     const position = this.toPosition(line, character)
 
     const help = await this.withTimeout(

@@ -99,7 +99,7 @@ export class SettingsProvider {
     <label>Адрес сервера <input id="url" type="text"></label>
     <label>Модель <select id="model"><option value="">(нет)</option></select></label>
     <label>Макс. повторов <input id="maxRetries" type="number" value="3" min="0" max="10"></label>
-    <label>Тайм-аут (мс) <input id="timeoutMs" type="number" value="60000" min="1000"></label>
+    <label>Таймаут (мс) <input id="timeoutMs" type="number" value="60000" min="1000"></label>
   </section>
   <section>
     <h2>Разрешения</h2>

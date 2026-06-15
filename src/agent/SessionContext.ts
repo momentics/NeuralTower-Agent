@@ -6,29 +6,28 @@ import type { ContextManager } from "../core/ContextManager"
 import type { ChatMessage } from "../core/IBackend"
 
 /**
- * Состояние эпохи контекста сессии.
+ * Состояние этапа контекста сессии.
  *
- * Вдохновлён opencode SessionContextEpoch:
- * управляет baseline контекста, ревизиями и блокировкой
+ * Управляет базовым контекстом, ревизиями и блокировкой
  * замены агента в рамках одной сессии.
  */
 export interface SessionEpochState {
   /** ID сессии. */
   sessionID: string
 
-  /** Агент, владеющий эпохой. */
+  /** Агент, владеющий этапом. */
   agent: AgentModeName
 
   /** Номер текущей ревизии контекста. */
   revision: number
 
-  /** Baseline системного промпта. */
+  /** Базовый системный промпт. */
   baselinePrompt: string
 
   /** Снимок источников контекста. */
   snapshot: ContextSnapshot[]
 
-  /** Время начала эпохи. */
+  /** Время начала этапа. */
   startedAt: number
 
   /** Время последнего обновления. */
@@ -36,13 +35,13 @@ export interface SessionEpochState {
 }
 
 /**
- * Подготовленный результат эпохи для передачи в runner.
+ * Подготовленный результат этапа для передачи в исполнитель.
  */
 export interface EpochPrepared {
-  /** Baseline системного промпта. */
+  /** Базовый системный промпт. */
   baseline: string
 
-  /** Порядковый номер baseline. */
+  /** Порядковый номер базового текста. */
   baselineSeq: number
 
   /** Номер ревизии. */
@@ -51,9 +50,9 @@ export interface EpochPrepared {
 
 /**
  * SessionContext управляет контекстом одной сессии:
- * эпоха контекста, план, история сообщений, режим агента.
+ * этап контекста, план, история сообщений, режим агента.
  *
- * Аналог opencode SessionContextEpoch + SessionRunState.
+ * Управляет этапом контекста, планом, историей сообщений и режимом агента.
  */
 export class SessionContext {
   private epoch: SessionEpochState | null = null
@@ -66,11 +65,11 @@ export class SessionContext {
     private readonly contextManager: ContextManager,
   ) {}
 
-  /**
-   * Инициализировать эпоху контекста.
-   * Создаёт baseline и фиксирует агента.
+ /**
+   * Инициализировать этап контекста.
+   * Создаёт базовый текст и фиксирует агента.
    *
-   * Если эпоха уже существует и агент не совпадает —
+   * Если этап уже существует и агент не совпадает —
    * бросает AgentMismatchError.
    */
   async initialize(agent: AgentModeName): Promise<EpochPrepared> {
@@ -96,8 +95,8 @@ export class SessionContext {
     return this.toPrepared()
   }
 
-  /**
-   * Подготовить контекст для следующего хода: согласовать
+ /**
+   * Подготовить контекст для следующего хода: сравнить
    * источники с предыдущим снимком.
    *
    * Если агент не совпадает — бросает ошибку.
@@ -136,7 +135,7 @@ export class SessionContext {
   }
 
   /**
-   * Заменить историю (после компакций).
+   * Заменить историю (после сжатия).
    */
   replaceMessages(messages: ChatMessage[]): void {
     this.messageHistory = messages
@@ -165,7 +164,7 @@ export class SessionContext {
   }
 
   /**
-   * Вернуть состояние эпохи.
+   * Вернуть состояние этапа.
    */
   getEpoch(): SessionEpochState | null {
     return this.epoch ? { ...this.epoch } : null
@@ -198,7 +197,7 @@ export class SessionContext {
 
   private toPrepared(): EpochPrepared {
     if (!this.epoch) {
-      throw new Error("Эпоха не инициализирована")
+      throw new Error("Этап не инициализирован")
     }
     return {
       baseline: this.epoch.baselinePrompt,

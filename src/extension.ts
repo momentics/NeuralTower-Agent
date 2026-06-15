@@ -142,6 +142,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
     chatProvider?.broadcastNewChat()
     todoTool?.clear()
     agent?.clearPlan()
+    agent?.resetSession()
   })
 
   app.registerCommand("neuralTowerAgent.focusChatInput", () => {

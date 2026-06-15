@@ -5,10 +5,9 @@ import type { IBackend, BackendConfig, ChatMessage } from "../core/IBackend"
  * Бэкенд Neural Tower. Подключается к локальному серверу
  * SGLang/vLLM на аппаратном узле Neural Tower (4× V100, 128 ГБ HBM2).
  *
- * Использует API-конечные точки, совместимые с OpenAI,
+ * Использует API-эндпоинты, совместимые с OpenAI,
  * предоставляемые SGLang. Можно заменить на llama.cpp или
- * любой другой HTTP-сервер вывода, изменив пути конечных точек
- * и формат запросов.
+ * любой другой HTTP-сервер вывода, изменив API-эндпоинты и формат запросов.
  */
 export class NeuralTowerBackend implements IBackend {
   private static readonly DEFAULT_URL = "http://localhost:30000"
@@ -100,7 +99,7 @@ export class NeuralTowerBackend implements IBackend {
   }
 
   /**
-   * Нестримерный JSON-вызов для структурированных ответов.
+   * Одиночный JSON-вызов для структурированных ответов.
    */
   async chatJson<T>(messages: ChatMessage[]): Promise<T> {
     const cfg = await this.getConfig()

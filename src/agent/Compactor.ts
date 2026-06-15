@@ -1,19 +1,19 @@
 import type { IBackend, ChatMessage } from "../core/IBackend"
 
 /**
- * Настройки компактора.
+ * Настройки сжатия контекста.
  */
 export interface CompactorOptions {
   /** Лимит контекстных токенов модели. */
   contextLimit: number
 
-  /** Буфер токенов до порога компакций. */
+  /** Буфер токенов до порога сжатия. */
   bufferTokens: number
 
   /** Токенов для сохранения хвоста истории. */
   keepTokens: number
 
-  /** Максимальная длина вывода инструмента для компакций. */
+  /** Максимальная длина вывода инструмента для сжатия. */
   maxToolOutputChars: number
 
   /** Целевой размер сводки в токенах. */
@@ -21,7 +21,7 @@ export interface CompactorOptions {
 }
 
 /**
- * Настройки по умолчанию: вдохновлены opencode compaction.ts.
+ * Настройки по умолчанию для сжатия контекста.
  */
 const DEFAULT_OPTIONS: CompactorOptions = {
   contextLimit: 128_000,
@@ -34,8 +34,7 @@ const DEFAULT_OPTIONS: CompactorOptions = {
 const TOKENS_PER_CHAR = 0.25
 
 /**
- * Шаблон для структурированной сводки.
- * Вдохновлён opencode SUMMARY_TEMPLATE.
+ * Шаблон для структурированной сводки при сжатии истории.
  */
 const SUMMARY_TEMPLATE = `Сожми историю разговора в структурированную сводку.
 
@@ -69,22 +68,22 @@ const SUMMARY_TEMPLATE = `Сожми историю разговора в стр
 Ответь ТОЛЬКО содержимым шаблона, без дополнительных слов.`
 
 /**
- * Результат компакций.
+ * Результат сжатия контекста.
  */
 export interface CompactionResult {
-  /** Нужно ли выполнять компакцию. */
+  /** Нужно ли выполнять сжатие. */
   needsCompaction: boolean
 
-  /** Сжатая история (если компакция выполнена). */
+  /** Сжатая история (если сжатие выполнено). */
   compactedHistory?: ChatMessage[]
 
   /** Текст сводки. */
   summary?: string
 
-  /** Оценка токенов до компакций. */
+  /** Оценка токенов до сжатия. */
   tokensBefore: number
 
-  /** Оценка токенов после компакций. */
+  /** Оценка токенов после сжатия. */
   tokensAfter: number
 }
 
@@ -92,9 +91,9 @@ export interface CompactionResult {
  * Compactor управляет сжатием контекста разговора при приближении
  * к лимиту контекстного окна модели.
  *
- * Алгоритм (вдохновлён opencode):
- * 1. Оценивает токены всей истории
- * 2. Если tokens > contextLimit - buffer, запускает компакцию
+ * Алгоритм сжатия:
+* 1. Оценивает токены всей истории
+ * 2. Если tokens > contextLimit - buffer, запускает сжатие
  * 3. Делит историю на head (старые) и recent (новые keepTokens)
  * 4. Просит LLM создать структурированную сводку head
  * 5. Возвращает [system, summary, ...recent]
@@ -117,7 +116,7 @@ export class Compactor {
   }
 
   /**
-   * Проверить, нужна ли компакция, и выполнить при необходимости.
+   * Проверить, нужно ли сжатие, и выполнить при необходимости.
    */
   async compactIfNeeded(
     messages: ChatMessage[],
@@ -138,7 +137,7 @@ export class Compactor {
   }
 
   /**
-   * Выполнить компакцию явно.
+   * Выполнить сжатие явно.
    */
   async compact(
     messages: ChatMessage[],
