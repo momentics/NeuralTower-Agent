@@ -13,28 +13,25 @@ import { RepoAnalyzer } from "../repo/RepoAnalyzer"
 import { FileIndex } from "../repo/FileIndex"
 import { ContextManager } from "../core/ContextManager"
 import {
-  makeEnvironmentSource,
-  makeRepoSource,
-  makeFileIndexSource,
-  makeProjectMemorySource,
-  makeGitDiffSource,
+  makeEnvironmentProvider,
+  makeRepoProvider,
+  makeFileIndexProvider,
+  makeProjectMemoryProvider,
+  makeGitDiffProvider,
 } from "../core/ContextSources"
 import {
-  makeCurrentFileSource,
-  makeOpenFilesSource,
-  makeProblemsSource,
-  makeClipboardSource,
-  makeDebuggerSource,
-  makeTerminalSource,
-  makeOSSource,
-  makeRulesSource,
-  makeRepoMapSource,
+  makeCurrentFileProvider,
+  makeOpenFilesProvider,
+  makeProblemsProvider,
+  makeClipboardProvider,
+  makeDebuggerProvider,
+  makeTerminalProvider,
+  makeOSProvider,
 } from "../core/ContextSources.vscode"
 import {
   ContextProviderRegistry,
   makeUrlProvider,
   makeWebSearchProvider,
-  makeActiveFileProblemsProvider,
   makeFileProvider,
   makeCodeProvider,
   makeTreeProvider,
@@ -90,35 +87,8 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     this.contextManager = contextManager ?? new ContextManager()
     this.compactor = new Compactor(backend)
     this.providerRegistry = new ContextProviderRegistry()
-    this.providerRegistry.register(makeUrlProvider())
-    this.providerRegistry.register(makeWebSearchProvider())
-    this.providerRegistry.register(makeActiveFileProblemsProvider())
-    this.providerRegistry.register(makeFileProvider(() => this.workDir))
-    this.providerRegistry.register(makeCodeProvider(() => this.workDir, () => this.fileIndex))
-    this.providerRegistry.register(makeTreeProvider(() => this.workDir))
-    this.providerRegistry.register(makeRepoMapProvider(
-      () => this.workDir,
-      () => this.fileIndex,
-      () => this.repoAnalyzer.analyze(this.workDir),
-    ))
-    this.providerRegistry.register(makeRulesProvider(() => this.workDir))
-    this.providerRegistry.register(makeLspProvider(() => this.workDir))
-    const mcpListFn: MCPToolListFn = async () => {
-      if (!this.mcpManager) return []
-      try {
-        await this.mcpManager.discover()
-        const result: Array<{ server: string; tool: { name: string; description: string; schema: Record<string, unknown> } }> = []
-        for (const { server, tools } of this.mcpManager.getToolsByServer()) {
-          for (const t of tools) {
-            result.push({ server, tool: t })
-          }
-        }
-        return result
-      } catch {
-        return []
-      }
-    }
-    this.providerRegistry.register(makeMCPProvider(mcpListFn))
+
+    this.registerProviders()
 
     this.contextBuilder = new AgentContextBuilder(
       backend,
@@ -199,6 +169,10 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     return this.providerRegistry
   }
 
+  getContextManager(): ContextManager {
+    return this.contextManager
+  }
+
   getTodoStore(): TodoStore {
     return this.todoStore
   }
@@ -223,7 +197,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
           commands: this.extractCommands(summary.buildSystems),
         })
 
-        this.registerContextSources()
+        this.registerAutoContextProviders()
       } catch {
         // анализ не критичен
       }
@@ -315,9 +289,54 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     return results[0]?.output ?? "Подагент не вернул результат"
   }
 
-  // ── Регистрация источников контекста ────────────────────
+  // ── Регистрация провайдеров ─────────────────────────────
 
-  private registerContextSources(): void {
+  /**
+   * Регистрация on-demand провайдеров (для resolveContextProvider).
+   * Вызывается один раз в конструкторе.
+   */
+  private registerProviders(): void {
+    this.providerRegistry.register(makeUrlProvider())
+    this.providerRegistry.register(makeWebSearchProvider())
+    this.providerRegistry.register(makeFileProvider(() => this.workDir))
+    this.providerRegistry.register(makeCodeProvider(() => this.workDir, () => this.fileIndex))
+    this.providerRegistry.register(makeTreeProvider(() => this.workDir))
+    this.providerRegistry.register(makeRepoMapProvider(
+      () => this.workDir,
+      () => this.fileIndex,
+      () => this.repoAnalyzer.analyze(this.workDir),
+    ))
+    this.providerRegistry.register(makeRulesProvider(() => this.workDir))
+    this.providerRegistry.register(makeLspProvider(() => this.workDir))
+
+    const mcpListFn: MCPToolListFn = async () => {
+      if (!this.mcpManager) return []
+      try {
+        await this.mcpManager.discover()
+        const result: Array<{ server: string; tool: { name: string; description: string; schema: Record<string, unknown> } }> = []
+        for (const { server, tools } of this.mcpManager.getToolsByServer()) {
+          for (const t of tools) {
+            result.push({ server, tool: t })
+          }
+        }
+        return result
+      } catch {
+        return []
+      }
+    }
+    this.providerRegistry.register(makeMCPProvider(mcpListFn))
+  }
+
+  /**
+   * Регистрация провайдеров автоматического контекста.
+   * Вызывается при reload() — после инициализации fileIndex
+   * и repoAnalyzer.
+   *
+   * Все провайдеры регистрируются в единой ContextManager.
+   * On-demand провайдеры (rules, repo-map) также добавляются
+   * сюда для автоматического контекста.
+   */
+  private registerAutoContextProviders(): void {
     this.contextManager.reset()
 
     const workDirFn = () => this.workDir
@@ -329,26 +348,26 @@ export class AgentOrchestrator implements IAgentOrchestrator {
       }
     }
 
-    this.contextManager.register(
-      makeEnvironmentSource(workDirFn, modelFn, this.gitService),
-    )
-    this.contextManager.register(makeRepoSource(workDirFn, this.repoAnalyzer))
-    this.contextManager.register(makeProjectMemorySource(this.memory))
-    this.contextManager.register(makeFileIndexSource(this.fileIndex))
+    this.contextManager.register(makeOSProvider())
+    this.contextManager.register(makeEnvironmentProvider(workDirFn, modelFn, this.gitService))
+    this.contextManager.register(makeCurrentFileProvider())
+    this.contextManager.register(makeOpenFilesProvider())
+    this.contextManager.register(makeRepoProvider(workDirFn, this.repoAnalyzer))
+    this.contextManager.register(makeProjectMemoryProvider(this.memory))
+    this.contextManager.register(makeFileIndexProvider(this.fileIndex))
+    this.contextManager.register(makeProblemsProvider(workDirFn))
+    this.contextManager.register(makeDebuggerProvider())
+    this.contextManager.register(makeClipboardProvider())
+    this.contextManager.register(makeTerminalProvider())
 
     if (this.gitService) {
-      this.contextManager.register(makeGitDiffSource(workDirFn, this.gitService))
+      this.contextManager.register(makeGitDiffProvider(workDirFn, this.gitService))
     }
 
-    this.contextManager.register(makeCurrentFileSource())
-    this.contextManager.register(makeOpenFilesSource())
-    this.contextManager.register(makeProblemsSource(workDirFn))
-    this.contextManager.register(makeClipboardSource())
-    this.contextManager.register(makeDebuggerSource())
-    this.contextManager.register(makeTerminalSource())
-    this.contextManager.register(makeOSSource())
-    this.contextManager.register(makeRulesSource(workDirFn))
-    this.contextManager.register(makeRepoMapSource(workDirFn, () => this.repoAnalyzer.analyze(this.workDir)))
+   const rulesProvider = this.providerRegistry.get("rules")
+    if (rulesProvider) this.contextManager.register(rulesProvider)
+    const repoMapProvider = this.providerRegistry.get("repo-map")
+    if (repoMapProvider) this.contextManager.register(repoMapProvider)
   }
 
   private recreateContextBuilder(): AgentContextBuilder {

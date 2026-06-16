@@ -4,29 +4,26 @@ export type { IAgentOrchestrator } from "./IAgent"
 export { App } from "./App"
 export { ContextManager } from "./ContextManager"
 export type {
-  ContextSource,
   ContextSnapshot,
   PreparedContext,
-  SourceReconcileResult,
+} from "./ContextManager"
+export {
   AgentMismatchError,
   AgentReplacementBlockedError,
 } from "./ContextSource"
 export {
-  makeCurrentFileSource,
-  makeOpenFilesSource,
-  makeProblemsSource,
-  makeClipboardSource,
-  makeDebuggerSource,
-  makeTerminalSource,
-  makeOSSource,
-  makeRulesSource,
-  makeRepoMapSource,
+  makeCurrentFileProvider,
+  makeOpenFilesProvider,
+  makeProblemsProvider,
+  makeClipboardProvider,
+  makeDebuggerProvider,
+  makeTerminalProvider,
+  makeOSProvider,
 } from "./ContextSources.vscode"
 export {
   makeUrlProvider,
   makeWebSearchProvider,
-  makeActiveFileProblemsProvider,
-  makeFileProvider,
+   makeFileProvider,
   makeCodeProvider,
   makeTreeProvider,
   makeRepoMapProvider,

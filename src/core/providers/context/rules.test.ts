@@ -20,7 +20,7 @@ describe("makeRulesProvider", () => {
     const provider = makeRulesProvider(() => "/work")
     const result = await provider.resolve("")
     expect(result).toHaveLength(1)
-    expect(result[0].content).toContain("не найдены")
+    expect(result[0].content).toBe("")
   })
 
   it("returns rules from AGENTS.md", async () => {

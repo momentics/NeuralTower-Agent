@@ -27,6 +27,7 @@ export function makeRepoMapProvider(
       displayTitle: "Repo Map",
       description: "Карта архитектуры репозитория",
       type: "normal",
+      priority: 87,
     },
     async resolve(_query: string): Promise<ContextItem[]> {
       const path = await import("path")

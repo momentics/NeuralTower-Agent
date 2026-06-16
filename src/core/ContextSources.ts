@@ -1,36 +1,26 @@
-import * as path from "path"
-import type { ContextSource } from "../core/ContextSource"
+import type { ContextProvider, ContextItem } from "./providers/context/types"
 import type { GitService } from "../services/git/GitService"
 import type { RepoAnalyzer } from "../repo/RepoAnalyzer"
 import type { FileIndex } from "../repo/FileIndex"
 import type { AgentMemory } from "../agent/AgentMemory"
 
-interface EnvData {
-  model: string
-  workDir: string
-  platform: string
-  date: string
-  branch: string
-}
-
-interface GitDiffData {
-  diff: Awaited<ReturnType<GitService["getDiff"]>> | null
-  status: Awaited<ReturnType<GitService["getStatus"]>> | null
-  dir: string
-}
-
 /**
- * Создать источник контекста: информация об окружении.
+ * Провайдер контекста: информация об окружении.
  */
-export function makeEnvironmentSource(
+export function makeEnvironmentProvider(
   workDir: () => string,
   model: () => Promise<string>,
   gitService?: GitService | null,
-): ContextSource<EnvData> {
+): ContextProvider {
   return {
-    key: "environment",
-    priority: 100,
-    async load(): Promise<EnvData> {
+    description: {
+      name: "environment",
+      displayTitle: "Environment",
+      description: "Информация об окружении",
+      type: "normal",
+      priority: 100,
+    },
+    async resolve(_query: string): Promise<ContextItem[]> {
       const dir = workDir()
       const cfgModel = await model()
       let branch = "unknown"
@@ -42,104 +32,121 @@ export function makeEnvironmentSource(
           // ignore
         }
       }
-      return {
-        model: cfgModel,
-        workDir: dir,
-        platform: process.platform,
-        date: new Date().toISOString(),
-        branch,
-      }
-    },
-    baseline(v: EnvData): string {
-      return `<env>
-  Модель: ${v.model}
-  Рабочая директория: ${v.workDir}
-  Платформа: ${v.platform}
-  Дата: ${v.date}
-  Ветка: ${v.branch}
-</env>`
-    },
-    update(_prev: EnvData, cur: EnvData): string {
-      return `Окружение обновлено: ветка ${cur.branch}, модель ${cur.model}`
+      return [{
+        content: `<env>
+  Модель: ${cfgModel}
+  Рабочая директория: ${dir}
+  Платформа: ${process.platform}
+  Дата: ${new Date().toISOString()}
+  Ветка: ${branch}
+</env>`,
+        name: "Environment",
+        description: `${cfgModel} on ${branch}`,
+      }]
     },
   }
 }
 
 /**
- * Создать источник контекста: анализ репозитория.
+ * Провайдер контекста: анализ репозитория.
  */
-export function makeRepoSource(
+export function makeRepoProvider(
   workDir: () => string,
   analyzer: RepoAnalyzer,
   ttlMs = 5_000,
-): ContextSource<Awaited<ReturnType<RepoAnalyzer["analyze"]>>> {
+): ContextProvider {
   let cached: Awaited<ReturnType<RepoAnalyzer["analyze"]>> | undefined
   let cachedAt = 0
+  let prevContent = ""
 
   return {
-    key: "repository",
-    priority: 90,
-    async load() {
+    description: {
+      name: "repository",
+      displayTitle: "Repository",
+      description: "Анализ репозитория",
+      type: "normal",
+      priority: 90,
+    },
+    async resolve(_query: string): Promise<ContextItem[]> {
       const now = Date.now()
-      if (cached && now - cachedAt < ttlMs) return cached
+      if (cached && now - cachedAt < ttlMs) {
+        return formatRepoItems(cached)
+      }
       cached = await analyzer.analyze(workDir())
       cachedAt = now
-      return cached
+      return formatRepoItems(cached)
     },
-    baseline(v) {
-      const langs = Object.entries(v.languages)
-        .filter(([, count]) => count > 3)
-        .map(([lang]) => lang)
-        .join(", ")
-      const parts: string[] = []
-      parts.push(`Файлов: ${v.fileCount}, Директорий: ${v.dirCount}`)
-      if (langs) parts.push(`Языки: ${langs}`)
-      if (v.buildSystems.length) parts.push(`Системы сборки: ${v.buildSystems.join(", ")}`)
-      if (v.notableFiles.length) parts.push(`Важные файлы: ${v.notableFiles.join(", ")}`)
-      return `## Репозиторий\n${parts.join("\n")}`
-    },
-    update(prev, cur) {
-      const delta = cur.fileCount - prev.fileCount
-      const sign = delta >= 0 ? "+" : ""
-      return `Репозиторий изменён: ${sign}${delta} файлов`
+    changed(_prev: string, curr: string): string {
+      if (prevContent && curr !== prevContent) {
+        prevContent = curr
+        return "Репозиторий изменён"
+      }
+      prevContent = curr
+      return ""
     },
   }
 }
 
+function formatRepoItems(
+  v: Awaited<ReturnType<RepoAnalyzer["analyze"]>>,
+): ContextItem[] {
+  const langs = Object.entries(v.languages)
+    .filter(([, count]) => count > 3)
+    .map(([lang]) => lang)
+    .join(", ")
+  const parts: string[] = []
+  parts.push(`Файлов: ${v.fileCount}, Директорий: ${v.dirCount}`)
+  if (langs) parts.push(`Языки: ${langs}`)
+  if (v.buildSystems.length) parts.push(`Системы сборки: ${v.buildSystems.join(", ")}`)
+  if (v.notableFiles.length) parts.push(`Важные файлы: ${v.notableFiles.join(", ")}`)
+  return [{
+    content: `## Репозиторий\n${parts.join("\n")}`,
+    name: "Repository",
+    description: `${v.fileCount} files, ${v.dirCount} dirs`,
+  }]
+}
+
 /**
- * Создать источник контекста: индекс файлов.
+ * Провайдер контекста: индекс файлов.
  */
-export function makeFileIndexSource(
+export function makeFileIndexProvider(
   index: FileIndex,
-): ContextSource<Awaited<ReturnType<FileIndex["stats"]>>> {
+): ContextProvider {
   return {
-    key: "fileindex",
-    priority: 80,
-    async load() {
-      return index.stats()
+    description: {
+      name: "fileindex",
+      displayTitle: "File Index",
+      description: "Индекс файлов проекта",
+      type: "normal",
+      priority: 80,
     },
-    baseline(v) {
-      return `## Индекс файлов\nВсего: ${v.totalFiles} файлов, ${v.languages} языков, ${(v.totalSize / 1024).toFixed(1)} КБ`
-    },
-    update(prev, cur) {
-      return `Индекс обновлён: ${cur.totalFiles} файлов (было ${prev.totalFiles})`
+    async resolve(_query: string): Promise<ContextItem[]> {
+      const v = index.stats()
+      return [{
+        content: `## Индекс файлов\nВсего: ${v.totalFiles} файлов, ${v.languages} языков, ${(v.totalSize / 1024).toFixed(1)} КБ`,
+        name: "File Index",
+        description: `${v.totalFiles} files`,
+      }]
     },
   }
 }
 
 /**
- * Создать источник контекста: память проекта.
+ * Провайдер контекста: память проекта.
  */
-export function makeProjectMemorySource(
+export function makeProjectMemoryProvider(
   memory: AgentMemory,
-): ContextSource<Awaited<ReturnType<AgentMemory["getProject"]>>> {
+): ContextProvider {
   return {
-    key: "projectmemory",
-    priority: 85,
-    async load() {
-      return memory.getProject()
+    description: {
+      name: "projectmemory",
+      displayTitle: "Project Memory",
+      description: "Контекст проекта из памяти",
+      type: "normal",
+      priority: 85,
     },
-    baseline(v) {
+    async resolve(_query: string): Promise<ContextItem[]> {
+      const v = memory.getProject()
       const parts: string[] = []
       if (v.repo) parts.push(`Проект: ${v.repo}`)
       if (v.languages.length) parts.push(`Языки: ${v.languages.join(", ")}`)
@@ -155,48 +162,42 @@ export function makeProjectMemorySource(
           `Заметки:\n${v.notes.map((n: string) => `  - ${n}`).join("\n")}`,
         )
       }
-      return parts.length > 0 ? `## Контекст проекта\n${parts.join("\n")}` : ""
-    },
-    update(prev, cur) {
-      const newNotes = cur.notes.length - prev.notes.length
-      if (newNotes > 0) return `Добавлено ${newNotes} заметок о проекте`
-      return ""
+      if (parts.length === 0) return []
+      return [{
+        content: `## Контекст проекта\n${parts.join("\n")}`,
+        name: "Project Memory",
+        description: `${v.notes.length} notes`,
+      }]
     },
   }
 }
 
 /**
- * Создать источник контекста: git-различия.
+ * Провайдер контекста: git-различия.
  */
-export function makeGitDiffSource(
+export function makeGitDiffProvider(
   workDir: () => string,
   gitService: GitService,
-): ContextSource<GitDiffData> {
+): ContextProvider {
   return {
-    key: "gitdiff",
-    priority: 70,
-    async load(): Promise<GitDiffData> {
+    description: {
+      name: "gitdiff",
+      displayTitle: "Git Diff",
+      description: "Текущие git-различия",
+      type: "normal",
+      priority: 70,
+    },
+    async resolve(_query: string): Promise<ContextItem[]> {
       const dir = workDir()
-      const [diff, status] = await Promise.all([
-        gitService.getDiff(dir).catch(() => null),
-        gitService.getStatus(dir).catch(() => null),
-      ])
-      return { diff, status, dir }
-    },
-    baseline(v) {
-      if (!v.diff || v.diff.changed.length === 0) return ""
-      return `## Git-различия\n  Файлов: ${v.diff.changed.length}, +${v.diff.additions} -${v.diff.deletions}\n${v.diff.changed
-        .map((f: string) => `  ${f}`)
-        .join("\n")}`
-    },
-    update(prev, cur) {
-      if (!cur.diff) return ""
-      const changed = cur.diff.changed.length
-      const prevChanged = prev.diff?.changed.length ?? 0
-      if (changed !== prevChanged) {
-        return `Git-различия: ${changed} изменённых файлов (было ${prevChanged})`
-      }
-      return ""
+      const diff = await gitService.getDiff(dir).catch(() => null)
+      if (!diff || diff.changed.length === 0) return []
+      return [{
+        content: `## Git-различия\n  Файлов: ${diff.changed.length}, +${diff.additions} -${diff.deletions}\n${diff.changed
+          .map((f: string) => `  ${f}`)
+          .join("\n")}`,
+        name: "Git Diff",
+        description: `${diff.changed.length} changed files`,
+      }]
     },
   }
 }

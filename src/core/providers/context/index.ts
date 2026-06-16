@@ -8,7 +8,6 @@ export type {
 export { ContextProviderRegistry } from "./registry"
 export { makeUrlProvider } from "./url"
 export { makeWebSearchProvider } from "./web-search"
-export { makeActiveFileProblemsProvider } from "./problems"
 export { makeFileProvider } from "./file"
 export { makeCodeProvider } from "./code"
 export type { CodeSearchEntry } from "./code"

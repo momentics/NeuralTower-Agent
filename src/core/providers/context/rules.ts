@@ -44,12 +44,13 @@ export function makeRulesProvider(
       displayTitle: "Rules",
       description: "Правила проекта",
       type: "normal",
+      priority: 99,
     },
     async resolve(_query: string): Promise<ContextItem[]> {
       const rules = await loadRulesFiles(getWorkDir)
 
       if (rules.length === 0) {
-        return [{ content: "Правила проекта не найдены. Создайте .neuraltower/rules/*.md или AGENTS.md", name: "rules", description: "empty" }]
+        return [{ content: "", name: "rules", description: "empty" }]
       }
 
       const parts: string[] = []

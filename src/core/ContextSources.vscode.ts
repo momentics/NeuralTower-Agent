@@ -1,69 +1,27 @@
 import * as vscode from "vscode"
-import type { ContextSource } from "./ContextSource"
-import { loadRulesFiles } from "./providers/context"
+import type { ContextProvider, ContextItem } from "./providers/context/types"
 
 const MAX_CONTENT_LINES = 300
 
-interface CurrentFileData {
-  path: string
-  language: string
-  content: string
-  selection: string | null
-  lineCount: number
-}
-
-interface OpenFileData {
-  path: string
-  language: string
-  lineCount: number
-}
-
-interface ProblemEntry {
-  file: string
-  severity: string
-  message: string
-  line: number
-  code?: string | number
-  source?: string
-  relatedInfo?: string
-}
-
-interface ProblemsData {
-  problems: ProblemEntry[]
-  errorCount: number
-  warningCount: number
-  totalFiles: number
-}
-
-interface ClipboardData {
-  length: number
-  preview: string
-}
-
-interface DebuggerData {
-  active: boolean
-  name: string
-  thread: string
-  stack: string
-}
-
-interface TerminalData {
-  count: number
-  activeName: string
-  state: string
-}
-
-export function makeCurrentFileSource(): ContextSource<CurrentFileData> {
+/**
+ * Провайдер контекста: активный файл.
+ */
+export function makeCurrentFileProvider(): ContextProvider {
   return {
-    key: "currentfile",
-    priority: 95,
-    async load(): Promise<CurrentFileData | undefined> {
+    description: {
+      name: "currentfile",
+      displayTitle: "Current File",
+      description: "Содержимое активного файла",
+      type: "normal",
+      priority: 95,
+    },
+    async resolve(_query: string): Promise<ContextItem[]> {
       const editor = vscode.window.activeTextEditor
-      if (!editor) return
+      if (!editor) return []
 
       const doc = editor.document
       const isBinary = doc.isClosed || doc.uri.scheme !== "file"
-      if (isBinary) return
+      if (isBinary) return []
 
       let content = doc.getText()
       if (doc.lineCount > MAX_CONTENT_LINES) {
@@ -78,78 +36,61 @@ export function makeCurrentFileSource(): ContextSource<CurrentFileData> {
         selection = doc.getText(editor.selection)
       }
 
-      return {
-        path: doc.uri.fsPath,
-        language: doc.languageId,
-        content,
-        selection,
-        lineCount: doc.lineCount,
-      }
-    },
-    baseline(v) {
       const parts: string[] = [
         `## Активный файл`,
-        `Путь: ${v.path}`,
-        `Язык: ${v.language}`,
-        `Строк: ${v.lineCount}`,
+        `Путь: ${doc.uri.fsPath}`,
+        `Язык: ${doc.languageId}`,
+        `Строк: ${doc.lineCount}`,
       ]
-      if (v.selection) {
-        parts.push(`Выделенный текст:\n\`\`\`${v.language}\n${v.selection.slice(0, 2000)}\n\`\`\``)
+      if (selection) {
+        parts.push(`Выделенный текст:\n\`\`\`${doc.languageId}\n${selection.slice(0, 2000)}\n\`\`\``)
       }
-      parts.push(`Содержимое:\n\`\`\`${v.language}\n${v.content.slice(0, 8000)}\n\`\`\``)
-      return parts.join("\n")
-    },
-    update(prev, cur) {
-      if (prev.path !== cur.path) {
-        return `Переключён файл: ${cur.path}`
-      }
-      if (prev.content !== cur.content) {
-        return `Файл изменён: ${cur.path}`
-      }
-      return ""
+      parts.push(`Содержимое:\n\`\`\`${doc.languageId}\n${content.slice(0, 8000)}\n\`\`\``)
+
+      return [{
+        content: parts.join("\n"),
+        name: vscode.workspace.asRelativePath(doc.uri.fsPath),
+        description: `${doc.languageId}, ${doc.lineCount} lines`,
+      }]
     },
   }
 }
 
-export function makeOpenFilesSource(): ContextSource<OpenFileData[]> {
+/**
+ * Провайдер контекста: открытые файлы.
+ */
+export function makeOpenFilesProvider(): ContextProvider {
   return {
-    key: "openfiles",
-    priority: 92,
-    async load(): Promise<OpenFileData[]> {
+    description: {
+      name: "openfiles",
+      displayTitle: "Open Files",
+      description: "Список открытых файлов",
+      type: "normal",
+      priority: 92,
+    },
+    async resolve(_query: string): Promise<ContextItem[]> {
       const editors = vscode.window.visibleTextEditors
-      const result: OpenFileData[] = []
+      const result: string[] = []
       for (const editor of editors) {
         if (editor.document.uri.scheme !== "file") continue
-        result.push({
-          path: editor.document.uri.fsPath,
-          language: editor.document.languageId,
-          lineCount: editor.document.lineCount,
-        })
+        result.push(`  ${editor.document.uri.fsPath} (${editor.document.languageId}, ${editor.document.lineCount} строк)`)
       }
-      return result
-    },
-    baseline(v) {
-      if (v.length === 0) return ""
-      const lines = v.map((f) => `  ${f.path} (${f.language}, ${f.lineCount} строк)`)
-      return `## Открытые файлы\n${lines.join("\n")}`
-    },
-    update(prev: OpenFileData[], cur: OpenFileData[]) {
-      if (prev.length !== cur.length) {
-        return `Открытых файлов: ${cur.length} (было ${prev.length})`
-      }
-      const prevPaths = new Set(prev.map((f) => f.path))
-      const curPaths = new Set(cur.map((f) => f.path))
-      if (prevPaths.size !== curPaths.size || ![...prevPaths].every((p) => curPaths.has(p))) {
-        return "Состав открытых файлов изменён"
-      }
-      return ""
+      if (result.length === 0) return []
+      return [{
+        content: `## Открытые файлы\n${result.join("\n")}`,
+        name: "Open Files",
+        description: `${result.length} files`,
+      }]
     },
   }
 }
 
-export function makeProblemsSource(
+/**
+ * Провайдер контекста: проблемы в коде (все файлы).
+ */
+export function makeProblemsProvider(
   getWorkDir: () => string,
-): ContextSource<ProblemsData> {
+): ContextProvider {
   const severityMap: Record<number, string> = {
     0: "error",
     1: "warning",
@@ -160,18 +101,31 @@ export function makeProblemsSource(
   const pathMod = require("path") as typeof import("path")
 
   return {
-    key: "problems",
-    priority: 88,
-    async load(): Promise<ProblemsData> {
+    description: {
+      name: "problems",
+      displayTitle: "Problems",
+      description: "Проблемы в коде проекта",
+      type: "normal",
+      priority: 88,
+    },
+    async resolve(_query: string): Promise<ContextItem[]> {
       const allDiagnostics = vscode.languages.getDiagnostics()
-      const problems: ProblemEntry[] = []
+      const problems: Array<{
+        file: string
+        severity: string
+        message: string
+        line: number
+        code?: string | number
+        source?: string
+        relatedInfo?: string
+      }> = []
       const affectedFiles = new Set<string>()
 
       for (const [uri, diagnostics] of allDiagnostics) {
         if (diagnostics.length === 0 || uri.scheme !== "file") continue
         affectedFiles.add(uri.fsPath)
         for (const d of diagnostics.slice(0, 10)) {
-          const entry: ProblemEntry = {
+          const entry: (typeof problems)[number] = {
             file: uri.fsPath,
             severity: severityMap[d.severity] ?? "unknown",
             message: d.message.slice(0, 300),
@@ -198,24 +152,17 @@ export function makeProblemsSource(
         }
       }
 
+      if (problems.length === 0) return []
+
       const errors = problems.filter((p) => p.severity === "error")
       const warnings = problems.filter((p) => p.severity === "warning")
 
-      return {
-        problems,
-        errorCount: errors.length,
-        warningCount: warnings.length,
-        totalFiles: affectedFiles.size,
-      }
-    },
-    baseline(v) {
-      if (v.problems.length === 0) return ""
       const lines: string[] = []
-      lines.push(`  Файлов с проблемами: ${v.totalFiles}, Ошибок: ${v.errorCount}, Предупреждений: ${v.warningCount}`)
+      lines.push(`  Файлов с проблемами: ${affectedFiles.size}, Ошибок: ${errors.length}, Предупреждений: ${warnings.length}`)
       lines.push("")
 
-      const grouped = new Map<string, ProblemEntry[]>()
-      for (const p of v.problems) {
+      const grouped = new Map<string, (typeof problems)[number][]>()
+      for (const p of problems) {
         const arr = grouped.get(p.file) ?? []
         arr.push(p)
         grouped.set(p.file, arr)
@@ -238,54 +185,59 @@ export function makeProblemsSource(
         }
       }
 
-      return `## Проблемы в коде\n${lines.join("\n")}`
-    },
-    update(prev, cur) {
-      if (cur.errorCount !== prev.errorCount) {
-        return `Ошибки: ${cur.errorCount} (было ${prev.errorCount})`
-      }
-      if (cur.problems.length !== prev.problems.length) {
-        return `Проблемы: ${cur.problems.length} (было ${prev.problems.length})`
-      }
-      return ""
+      return [{
+        content: `## Проблемы в коде\n${lines.join("\n")}`,
+        name: "Problems",
+        description: `${errors.length} errors, ${warnings.length} warnings`,
+      }]
     },
   }
 }
 
-export function makeClipboardSource(): ContextSource<ClipboardData> {
-  let lastLength = 0
-  let lastPreview = ""
-
+/**
+ * Провайдер контекста: буфер обмена.
+ */
+export function makeClipboardProvider(): ContextProvider {
   return {
-    key: "clipboard",
-    priority: 60,
-    async load(): Promise<ClipboardData> {
+    description: {
+      name: "clipboard",
+      displayTitle: "Clipboard",
+      description: "Содержимое буфера обмена",
+      type: "normal",
+      priority: 60,
+    },
+    async resolve(_query: string): Promise<ContextItem[]> {
       try {
         const text = await vscode.env.clipboard.readText()
-        if (text.length === 0) return { length: 0, preview: "" }
+        if (text.length === 0) return []
         const preview = text.slice(0, 120).replace(/\n/g, " ")
-        return { length: text.length, preview }
+        return [{
+          content: `## Буфер обмена\n  Символов: ${text.length}\n  Начало: "${preview}"`,
+          name: "Clipboard",
+          description: `${text.length} chars`,
+        }]
       } catch {
-        return { length: 0, preview: "" }
+        return []
       }
-    },
-    baseline(v) {
-      if (v.length === 0) return ""
-      return `## Буфер обмена\n  Символов: ${v.length}\n  Начало: "${v.preview}"`
-    },
-    update() {
-      return ""
     },
   }
 }
 
-export function makeDebuggerSource(): ContextSource<DebuggerData> {
+/**
+ * Провайдер контекста: отладчик.
+ */
+export function makeDebuggerProvider(): ContextProvider {
   return {
-    key: "debugger",
-    priority: 82,
-    async load(): Promise<DebuggerData | undefined> {
+    description: {
+      name: "debugger",
+      displayTitle: "Debugger",
+      description: "Состояние отладчика",
+      type: "normal",
+      priority: 82,
+    },
+    async resolve(_query: string): Promise<ContextItem[]> {
       const session = vscode.debug.activeDebugSession
-      if (!session) return
+      if (!session) return []
 
       try {
         const threadsResp = await session.customRequest("threads", {}) as { threads: Array<{ id: number; name: string }> }
@@ -293,7 +245,11 @@ export function makeDebuggerSource(): ContextSource<DebuggerData> {
         const mainThread = threads.find((t: { id: number }) => t.id === 1) ?? threads[0]
 
         if (!mainThread) {
-          return { active: true, name: session.name, thread: "none", stack: "" }
+          return [{
+            content: `## Отладчик\n  Сессия: ${session.name}\n  Поток: none`,
+            name: "Debugger",
+            description: session.name,
+          }]
         }
 
         const stackResp = await session.customRequest("stackTrace", {
@@ -306,195 +262,68 @@ export function makeDebuggerSource(): ContextSource<DebuggerData> {
           return `  ${f.name} at ${loc}`
         }).join("\n")
 
-        return {
-          active: true,
-          name: session.name,
-          thread: mainThread.name,
-          stack,
-        }
+        return [{
+          content: `## Отладчик\n  Сессия: ${session.name}\n  Поток: ${mainThread.name}\n  Стек:\n${stack}`,
+          name: "Debugger",
+          description: `${session.name}: ${mainThread.name}`,
+        }]
       } catch {
-        return { active: true, name: session.name, thread: "error", stack: "" }
+        return [{
+          content: `## Отладчик\n  Сессия: ${session.name}\n  Поток: error`,
+          name: "Debugger",
+          description: session.name,
+        }]
       }
-    },
-    baseline(v) {
-      return `## Отладчик\n  Сессия: ${v.name}\n  Поток: ${v.thread}\n  Стек:\n${v.stack}`
-    },
-    update() {
-      return "Состояние отладчика обновлено"
     },
   }
 }
 
-export function makeTerminalSource(): ContextSource<TerminalData> {
+/**
+ * Провайдер контекста: терминал.
+ */
+export function makeTerminalProvider(): ContextProvider {
   return {
-    key: "terminal",
-    priority: 65,
-    async load(): Promise<TerminalData | undefined> {
+    description: {
+      name: "terminal",
+      displayTitle: "Terminal",
+      description: "Состояние терминалов",
+      type: "normal",
+      priority: 65,
+    },
+    async resolve(_query: string): Promise<ContextItem[]> {
       const terminals = vscode.window.terminals
-      if (terminals.length === 0) return
+      if (terminals.length === 0) return []
 
       const active = vscode.window.activeTerminal
-      return {
-        count: terminals.length,
-        activeName: active?.name ?? "none",
-        state: active ? "active" : "inactive",
-      }
-    },
-    baseline(v) {
-      return `## Терминал\n  Терминалов: ${v.count}\n  Активный: ${v.activeName} (${v.state})`
-    },
-    update(prev, cur) {
-      if (prev.count !== cur.count) {
-        return `Терминалов: ${cur.count} (было ${prev.count})`
-      }
-      return ""
+      return [{
+        content: `## Терминал\n  Терминалов: ${terminals.length}\n  Активный: ${active?.name ?? "none"} (${active ? "active" : "inactive"})`,
+        name: "Terminal",
+        description: `${terminals.length} terminals`,
+      }]
     },
   }
 }
 
-// ── OS источник ────────────────────────────────────────────
-
-interface OSData {
-  platform: string
-  arch: string
-  release: string
-  shell: string
-  memoryTotal: string
-  cpuModel: string
-}
-
-export function makeOSSource(): ContextSource<OSData> {
+/**
+ * Провайдер контекста: информация о системе.
+ */
+export function makeOSProvider(): ContextProvider {
   return {
-    key: "os",
-    priority: 98,
-    async load(): Promise<OSData> {
+    description: {
+      name: "os",
+      displayTitle: "OS",
+      description: "Информация об операционной системе",
+      type: "normal",
+      priority: 98,
+    },
+    async resolve(_query: string): Promise<ContextItem[]> {
       const os = await import("os")
       const shell = process.env.SHELL ?? process.env.COMSPEC ?? "unknown"
-      return {
-        platform: os.platform(),
-        arch: os.arch(),
-        release: os.release(),
-        shell,
-        memoryTotal: `${(os.totalmem() / 1024 / 1024 / 1024).toFixed(1)} ГБ`,
-        cpuModel: os.cpus()[0]?.model ?? "unknown",
-      }
-    },
-    baseline(v) {
-      return `## Система\n  Платформа: ${v.platform} ${v.arch}\n  Релиз: ${v.release}\n  Shell: ${v.shell}\n  Память: ${v.memoryTotal}\n  CPU: ${v.cpuModel}`
-    },
-    update() {
-      return ""
-    },
-  }
-}
-
-// ── Rules источник ─────────────────────────────────────────
-
-interface RulesData {
-  rules: Array<{ name: string; content: string }>
-  totalChars: number
-}
-
-export function makeRulesSource(
-  getWorkDir: () => string,
-): ContextSource<RulesData> {
-  let cached: RulesData | undefined
-  let cachedAt = 0
-  const TTL = 30_000
-
-  return {
-    key: "rules",
-    priority: 99,
-    async load(): Promise<RulesData | undefined> {
-      const now = Date.now()
-      if (cached && now - cachedAt < TTL) return cached
-
-      const rules = await loadRulesFiles(getWorkDir)
-      const totalChars = rules.reduce((s, r) => s + r.content.length, 0)
-      cached = { rules, totalChars }
-      cachedAt = now
-      return cached
-    },
-    baseline(v) {
-      if (v.rules.length === 0) return ""
-      const parts: string[] = []
-      for (const r of v.rules) {
-        parts.push(`## Правила: ${r.name}`)
-        parts.push(r.content)
-        parts.push("")
-      }
-      return parts.join("\n")
-    },
-    update(prev, cur) {
-      if (prev.rules.length !== cur.rules.length) {
-        return `Правила изменены: ${cur.rules.length} файлов`
-      }
-      return ""
-    },
-  }
-}
-
-// ── Repo-map источник (автоматический) ──────────────────────
-
-interface RepoMapData {
-  fileCount: number
-  dirCount: number
-  languages: Record<string, number>
-  buildSystems: string[]
-  topDirs: string[]
-  notableFiles: string[]
-}
-
-export function makeRepoMapSource(
-  getWorkDir: () => string,
-  getRepoSummary: () => Promise<RepoMapData>,
-): ContextSource<RepoMapData> {
-  let cached: RepoMapData | undefined
-  let cachedAt = 0
-  const TTL = 60_000
-
-  return {
-    key: "repomap",
-    priority: 87,
-    async load(): Promise<RepoMapData | undefined> {
-      const now = Date.now()
-      if (cached && now - cachedAt < TTL) return cached
-      cached = await getRepoSummary()
-      cachedAt = now
-      return cached
-    },
-    baseline(v) {
-      const pathMod = require("path") as typeof import("path")
-      const parts: string[] = []
-      parts.push("## Карта репозитория")
-      parts.push(`Файлов: ${v.fileCount}, Директорий: ${v.dirCount}`)
-
-      if (Object.keys(v.languages).length > 0) {
-        const langLines = Object.entries(v.languages)
-          .sort((a: [string, number], b: [string, number]) => b[1] - a[1])
-          .map(([lang, count]) => `  ${lang}: ${count}`)
-        parts.push("Языки:")
-        parts.push(...langLines)
-      }
-
-      if (v.buildSystems.length > 0) {
-        parts.push(`Системы сборки: ${v.buildSystems.join(", ")}`)
-      }
-
-      if (v.notableFiles.length > 0) {
-        parts.push("Заметные файлы:")
-        for (const f of v.notableFiles) {
-          const rel = pathMod.relative(getWorkDir(), f)
-          parts.push(`  ${rel}`)
-        }
-      }
-
-      return parts.join("\n")
-    },
-    update(prev, cur) {
-      const delta = cur.fileCount - prev.fileCount
-      if (delta !== 0) return `Карта репозитория обновлена: ${delta > 0 ? "+" : ""}${delta} файлов`
-      return ""
+      return [{
+        content: `## Система\n  Платформа: ${os.platform()} ${os.arch()}\n  Релиз: ${os.release()}\n  Shell: ${shell}\n  Память: ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(1)} ГБ\n  CPU: ${os.cpus()[0]?.model ?? "unknown"}`,
+        name: "OS",
+        description: `${os.platform()} ${os.arch()}`,
+      }]
     },
   }
 }

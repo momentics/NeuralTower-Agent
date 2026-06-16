@@ -67,15 +67,18 @@ describe("MCPManager", () => {
   it("discover returns tools from ready servers", async () => {
     const { EventEmitter } = await import("events")
     const stdout = new EventEmitter() as NodeJS.ReadableStream
+    let capturedId: number
     const proc = {
       on: vi.fn(),
       stdout,
       stdin: {
         write: vi.fn((data: string) => {
+          const req = JSON.parse(data)
+          capturedId = req.id
           setImmediate(() => {
             stdout.emit("data", Buffer.from(JSON.stringify({
               jsonrpc: "2.0",
-              id: Date.now(),
+              id: capturedId,
               result: { tools: [{ name: "mcp_tool", description: "A tool", schema: {} }] },
             })))
           })

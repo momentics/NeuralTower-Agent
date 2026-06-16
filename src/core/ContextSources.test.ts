@@ -1,31 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import {
-  makeEnvironmentSource,
-  makeRepoSource,
-  makeFileIndexSource,
-  makeProjectMemorySource,
-  makeGitDiffSource,
-} from "../core/ContextSources"
+  makeEnvironmentProvider,
+  makeRepoProvider,
+  makeFileIndexProvider,
+  makeProjectMemoryProvider,
+  makeGitDiffProvider,
+} from "./ContextSources"
 import type { GitService } from "../services/git/GitService"
 import type { RepoAnalyzer } from "../repo/RepoAnalyzer"
 import type { FileIndex } from "../repo/FileIndex"
 import type { AgentMemory } from "../agent/AgentMemory"
 
 describe("ContextSources", () => {
-  describe("makeEnvironmentSource", () => {
-    it("returns source with correct key and priority", () => {
-      const source = makeEnvironmentSource(() => "/test", async () => "model-1", undefined)
-      expect(source.key).toBe("environment")
-      expect(source.priority).toBe(100)
+  describe("makeEnvironmentProvider", () => {
+    it("returns provider with correct name and priority", () => {
+      const provider = makeEnvironmentProvider(() => "/test", async () => "model-1", undefined)
+      expect(provider.description.name).toBe("environment")
+      expect(provider.description.priority).toBe(100)
     })
 
-    it("loads environment data", async () => {
-      const source = makeEnvironmentSource(() => "/test", async () => "model-1", undefined)
-      const data = await source.load()
-      expect(data.model).toBe("model-1")
-      expect(data.workDir).toBe("/test")
-      expect(data.platform).toBe(process.platform)
-      expect(data.branch).toBe("unknown")
+    it("resolves environment data", async () => {
+      const provider = makeEnvironmentProvider(() => "/test", async () => "model-1", undefined)
+      const items = await provider.resolve("")
+      expect(items).toHaveLength(1)
+      expect(items[0].content).toContain("Модель: model-1")
+      expect(items[0].content).toContain("Рабочая директория: /test")
+      expect(items[0].content).toContain("Платформа: win32")
+      expect(items[0].content).toContain("Ветка: unknown")
     })
 
     it("includes branch from git service", async () => {
@@ -35,39 +36,22 @@ describe("ContextSources", () => {
         getStatus: vi.fn(async () => ({})),
         getDiffContext: vi.fn(async () => ""),
       } as unknown as GitService
-      const source = makeEnvironmentSource(() => "/test", async () => "model-1", mockGit)
-      const data = await source.load()
-      expect(data.branch).toBe("main")
+      const provider = makeEnvironmentProvider(() => "/test", async () => "model-1", mockGit)
+      const items = await provider.resolve("")
+      expect(items[0].content).toContain("Ветка: main")
     })
 
     it("handles git service error gracefully", async () => {
       const mockGit: GitService = {
         getBranchInfo: vi.fn(async () => { throw new Error("git error") }),
       } as unknown as GitService
-      const source = makeEnvironmentSource(() => "/test", async () => "model-1", mockGit)
-      const data = await source.load()
-      expect(data.branch).toBe("unknown")
-    })
-
-    it("generates baseline string", async () => {
-      const source = makeEnvironmentSource(() => "/test", async () => "model-1", undefined)
-      const data = await source.load()
-      const baseline = source.baseline(data)
-      expect(baseline).toContain("Модель: model-1")
-      expect(baseline).toContain("Рабочая директория: /test")
-      expect(baseline).toContain("<env>")
-      expect(baseline).toContain("</env>")
-    })
-
-    it("generates update string", async () => {
-      const source = makeEnvironmentSource(() => "/test", async () => "model-1", undefined)
-      const data = await source.load()
-      const update = source.update(data, { ...data, branch: "develop" })
-      expect(update).toContain("develop")
+      const provider = makeEnvironmentProvider(() => "/test", async () => "model-1", mockGit)
+      const items = await provider.resolve("")
+      expect(items[0].content).toContain("Ветка: unknown")
     })
   })
 
-  describe("makeRepoSource", () => {
+  describe("makeRepoProvider", () => {
     let mockAnalyzer: RepoAnalyzer
 
     beforeEach(() => {
@@ -82,51 +66,60 @@ describe("ContextSources", () => {
       } as unknown as RepoAnalyzer
     })
 
-    it("returns source with correct key and priority", () => {
-      const source = makeRepoSource(() => "/test", mockAnalyzer)
-      expect(source.key).toBe("repository")
-      expect(source.priority).toBe(90)
+    it("returns provider with correct name and priority", () => {
+      const provider = makeRepoProvider(() => "/test", mockAnalyzer)
+      expect(provider.description.name).toBe("repository")
+      expect(provider.description.priority).toBe(90)
     })
 
-    it("loads repo data", async () => {
-      const source = makeRepoSource(() => "/test", mockAnalyzer)
-      const data = await source.load()
-      expect(data.fileCount).toBe(100)
-      expect(data.dirCount).toBe(10)
+    it("resolves repo data", async () => {
+      const provider = makeRepoProvider(() => "/test", mockAnalyzer)
+      const items = await provider.resolve("")
+      expect(items).toHaveLength(1)
+      expect(items[0].content).toContain("Файлов: 100")
+      expect(items[0].content).toContain("Директорий: 10")
     })
 
     it("caches results within TTL", async () => {
-      const source = makeRepoSource(() => "/test", mockAnalyzer)
-      await source.load()
-      await source.load()
+      const provider = makeRepoProvider(() => "/test", mockAnalyzer)
+      await provider.resolve("")
+      await provider.resolve("")
       expect(mockAnalyzer.analyze).toHaveBeenCalledTimes(1)
     })
 
     it("refreshes cache after TTL", async () => {
-      const source = makeRepoSource(() => "/test", mockAnalyzer, 0)
-      await source.load()
-      await source.load()
+      const provider = makeRepoProvider(() => "/test", mockAnalyzer, 0)
+      await provider.resolve("")
+      await provider.resolve("")
       expect(mockAnalyzer.analyze).toHaveBeenCalledTimes(2)
     })
 
-    it("generates baseline with languages", async () => {
-      const source = makeRepoSource(() => "/test", mockAnalyzer)
-      const data = await source.load()
-      const baseline = source.baseline(data)
-      expect(baseline).toContain("Файлов: 100")
-      expect(baseline).toContain("TypeScript, JavaScript")
-      expect(baseline).not.toContain("Markdown")
+    it("resolves with languages", async () => {
+      const provider = makeRepoProvider(() => "/test", mockAnalyzer)
+      const items = await provider.resolve("")
+      expect(items[0].content).toContain("TypeScript")
+      expect(items[0].content).toContain("JavaScript")
+      expect(items[0].content).not.toContain("Markdown")
     })
 
-    it("generates update with file delta", async () => {
-      const source = makeRepoSource(() => "/test", mockAnalyzer)
-      const data = await source.load()
-      const update = source.update(data, { ...data, fileCount: 110 })
-      expect(update).toContain("+10")
+    it("returns empty when no significant data", async () => {
+      const mockEmpty = {
+        analyze: vi.fn(async () => ({
+          fileCount: 0,
+          dirCount: 0,
+          languages: {},
+          buildSystems: [],
+          notableFiles: [],
+        })),
+      } as unknown as RepoAnalyzer
+      const provider = makeRepoProvider(() => "/test", mockEmpty)
+      const items = await provider.resolve("")
+      expect(items).toHaveLength(1)
+      expect(items[0].content).toContain("Файлов: 0")
     })
   })
 
-  describe("makeFileIndexSource", () => {
+  describe("makeFileIndexProvider", () => {
     let mockIndex: FileIndex
 
     beforeEach(() => {
@@ -137,37 +130,23 @@ describe("ContextSources", () => {
       } as unknown as FileIndex
     })
 
-    it("returns source with correct key and priority", () => {
-      const source = makeFileIndexSource(mockIndex)
-      expect(source.key).toBe("fileindex")
-      expect(source.priority).toBe(80)
+    it("returns provider with correct name and priority", () => {
+      const provider = makeFileIndexProvider(mockIndex)
+      expect(provider.description.name).toBe("fileindex")
+      expect(provider.description.priority).toBe(80)
     })
 
-    it("loads index stats", async () => {
-      const source = makeFileIndexSource(mockIndex)
-      const data = await source.load()
-      expect(data.totalFiles).toBe(50)
-    })
-
-    it("generates baseline with stats", async () => {
-      const source = makeFileIndexSource(mockIndex)
-      const data = await source.load()
-      const baseline = source.baseline(data)
-      expect(baseline).toContain("Всего: 50 файлов")
-      expect(baseline).toContain("3 языков")
-      expect(baseline).toContain("10.0 КБ")
-    })
-
-    it("generates update with file count change", async () => {
-      const source = makeFileIndexSource(mockIndex)
-      const data = await source.load()
-      const update = source.update(data, { totalFiles: 60, languages: 3, totalSize: 10240 })
-      expect(update).toContain("60 файлов")
-      expect(update).toContain("было 50")
+    it("resolves index stats", async () => {
+      const provider = makeFileIndexProvider(mockIndex)
+      const items = await provider.resolve("")
+      expect(items).toHaveLength(1)
+      expect(items[0].content).toContain("Всего: 50 файлов")
+      expect(items[0].content).toContain("3 языков")
+      expect(items[0].content).toContain("10.0 КБ")
     })
   })
 
-  describe("makeProjectMemorySource", () => {
+  describe("makeProjectMemoryProvider", () => {
     let mockMemory: AgentMemory
 
     beforeEach(() => {
@@ -186,51 +165,30 @@ describe("ContextSources", () => {
       } as unknown as AgentMemory
     })
 
-    it("returns source with correct key and priority", () => {
-      const source = makeProjectMemorySource(mockMemory)
-      expect(source.key).toBe("projectmemory")
-      expect(source.priority).toBe(85)
+    it("returns provider with correct name and priority", () => {
+      const provider = makeProjectMemoryProvider(mockMemory)
+      expect(provider.description.name).toBe("projectmemory")
+      expect(provider.description.priority).toBe(85)
     })
 
-    it("loads project data", async () => {
-      const source = makeProjectMemorySource(mockMemory)
-      const data = await source.load()
-      expect(data.repo).toBe("test-repo")
+    it("resolves project data", async () => {
+      const provider = makeProjectMemoryProvider(mockMemory)
+      const items = await provider.resolve("")
+      expect(items).toHaveLength(1)
+      expect(items[0].content).toContain("Проект: test-repo")
+      expect(items[0].content).toContain("TypeScript")
+      expect(items[0].content).toContain("npm run build")
     })
 
-    it("generates baseline with project info", async () => {
-      const source = makeProjectMemorySource(mockMemory)
-      const data = await source.load()
-      const baseline = source.baseline(data)
-      expect(baseline).toContain("Проект: test-repo")
-      expect(baseline).toContain("TypeScript")
-      expect(baseline).toContain("npm run build")
-    })
-
-    it("generates empty baseline for empty project", async () => {
+    it("returns empty for empty project", async () => {
       mockMemory.getProject = vi.fn(() => ({ repo: "", languages: [], commands: {}, notes: [] }))
-      const source = makeProjectMemorySource(mockMemory)
-      const data = await source.load()
-      const baseline = source.baseline(data)
-      expect(baseline).toBe("")
-    })
-
-    it("generates update for new notes", async () => {
-      const source = makeProjectMemorySource(mockMemory)
-      const data = await source.load()
-      const update = source.update(data, { ...data, notes: ["Note 1", "Note 2"] })
-      expect(update).toContain("1 заметок")
-    })
-
-    it("generates empty update for no changes", async () => {
-      const source = makeProjectMemorySource(mockMemory)
-      const data = await source.load()
-      const update = source.update(data, data)
-      expect(update).toBe("")
+      const provider = makeProjectMemoryProvider(mockMemory)
+      const items = await provider.resolve("")
+      expect(items).toHaveLength(0)
     })
   })
 
-  describe("makeGitDiffSource", () => {
+  describe("makeGitDiffProvider", () => {
     let mockGit: GitService
 
     beforeEach(() => {
@@ -249,69 +207,34 @@ describe("ContextSources", () => {
       } as unknown as GitService
     })
 
-    it("returns source with correct key and priority", () => {
-      const source = makeGitDiffSource(() => "/test", mockGit)
-      expect(source.key).toBe("gitdiff")
-      expect(source.priority).toBe(70)
+    it("returns provider with correct name and priority", () => {
+      const provider = makeGitDiffProvider(() => "/test", mockGit)
+      expect(provider.description.name).toBe("gitdiff")
+      expect(provider.description.priority).toBe(70)
     })
 
-    it("loads git diff data", async () => {
-      const source = makeGitDiffSource(() => "/test", mockGit)
-      const data = await source.load()
-      expect(data.diff).toBeDefined()
-      expect(data.diff!.changed.length).toBe(2)
+    it("resolves git diff data", async () => {
+      const provider = makeGitDiffProvider(() => "/test", mockGit)
+      const items = await provider.resolve("")
+      expect(items).toHaveLength(1)
+      expect(items[0].content).toContain("Файлов: 2")
+      expect(items[0].content).toContain("+10")
+      expect(items[0].content).toContain("-5")
     })
 
     it("handles git errors gracefully", async () => {
       mockGit.getDiff = vi.fn(async () => { throw new Error("git error") })
       mockGit.getStatus = vi.fn(async () => { throw new Error("git error") })
-      const source = makeGitDiffSource(() => "/test", mockGit)
-      const data = await source.load()
-      expect(data.diff).toBeNull()
-      expect(data.status).toBeNull()
+      const provider = makeGitDiffProvider(() => "/test", mockGit)
+      const items = await provider.resolve("")
+      expect(items).toHaveLength(0)
     })
 
-    it("generates baseline with diff info", async () => {
-      const source = makeGitDiffSource(() => "/test", mockGit)
-      const data = await source.load()
-      const baseline = source.baseline(data)
-      expect(baseline).toContain("Файлов: 2")
-      expect(baseline).toContain("+10")
-      expect(baseline).toContain("-5")
-    })
-
-    it("generates empty baseline for no changes", async () => {
+    it("returns empty for no changes", async () => {
       mockGit.getDiff = vi.fn(async () => ({ changed: [], additions: 0, deletions: 0 }))
-      const source = makeGitDiffSource(() => "/test", mockGit)
-      const data = await source.load()
-      const baseline = source.baseline(data)
-      expect(baseline).toBe("")
-    })
-
-    it("generates update for changed file count", async () => {
-      const source = makeGitDiffSource(() => "/test", mockGit)
-      const data = await source.load()
-      const update = source.update(data, {
-        diff: { changed: ["f1", "f2", "f3"], additions: 15, deletions: 3 },
-        status: null,
-        dir: "/test",
-      })
-      expect(update).toContain("3 изменённых")
-      expect(update).toContain("было 2")
-    })
-
-    it("generates empty update for no changes", async () => {
-      const source = makeGitDiffSource(() => "/test", mockGit)
-      const data = await source.load()
-      const update = source.update(data, data)
-      expect(update).toBe("")
-    })
-
-    it("generates empty update when diff is null", async () => {
-      const source = makeGitDiffSource(() => "/test", mockGit)
-      const data = await source.load()
-      const update = source.update(data, { diff: null, status: null, dir: "/test" })
-      expect(update).toBe("")
+      const provider = makeGitDiffProvider(() => "/test", mockGit)
+      const items = await provider.resolve("")
+      expect(items).toHaveLength(0)
     })
   })
 })

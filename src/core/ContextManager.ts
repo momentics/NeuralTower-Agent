@@ -1,112 +1,138 @@
-import type {
-  ContextSource,
-  ContextSnapshot,
-  PreparedContext,
-  SourceReconcileResult,
-} from "./ContextSource"
+import type { ContextProvider, ContextItem } from "./providers/context/types"
 
 const TOKENS_PER_CHAR = 0.25
 const DEFAULT_TOKEN_BUDGET = 16000
 
 /**
- * ContextManager управляет источниками контекста, строит
+ * Неподвижный снимок провайдера контекста на момент
+ * начала хода агента. Используется для сравнения при
+ * повторных запросах в рамках того же этапа.
+ */
+export interface ContextSnapshot {
+  /** Имя провайдера. */
+  readonly name: string
+
+  /** Содержимое (объединённый content всех ContextItem). */
+  readonly content: string
+
+  /** Порядковый номер ревизии. */
+  readonly revision: number
+}
+
+/**
+ * Подготовленный контекст для передачи в цикл агента.
+ * Содержит базовый системный промпт и метаданные этапа.
+ */
+export interface PreparedContext {
+  /** Системный промпт (базовый текст всех провайдеров + дельты). */
+  readonly systemPrompt: string
+
+  /** Номер ревизии контекста. */
+  readonly revision: number
+
+  /** Снимок провайдеров для сравнения. */
+  readonly snapshot: ContextSnapshot[]
+
+  /** Оценка токенов системного промпта. */
+  readonly systemTokens: number
+}
+
+/**
+ * ContextManager управляет провайдерами контекста, строит
  * базовый системный промпт, сравнивает изменения между
  * ходами агента и отслеживает потребление токенов.
  *
- * Каждый источник — это типизированный блок с load/baseline/update.
- * ContextManager объединяет источники, создаёт снимок на
- * начало этапа и сравнивает изменения при повторных запросах.
+ * Консумирует ContextProvider: для автоматического контекста
+ * вызывается resolve('') на каждом провайдере, результат
+ * сравнивается с предыдущим снимком для обнаружения дельт.
  *
- * Лимит токенов: источники сортируются по приоритету и
+ * Лимит токенов: провайдеры сортируются по приоритету и
  * добавляются, пока сумма токенов не превысит лимит.
- * Это защищает от переполнения контекста при огромных
- * файлах и правилах.
  */
 export class ContextManager {
-  private sources: ContextSource[] = []
+  private providers: ContextProvider[] = []
   private snapshot: ContextSnapshot[] = []
   private revision = 0
-  private previousValues: Map<string, unknown> = new Map()
+  private previousContent: Map<string, string> = new Map()
   private tokenBudget = DEFAULT_TOKEN_BUDGET
 
   /**
-   * Зарегистрировать источник контекста.
+   * Зарегистрировать провайдер контекста.
    */
-  register(source: ContextSource): void {
-    this.sources.push(source)
+  register(provider: ContextProvider): void {
+    this.providers.push(provider)
   }
 
   /**
-   * Удалить источник по ключу.
+   * Удалить провайдер по имени.
    */
-  unregister(key: string): void {
-    this.sources = this.sources.filter((s) => s.key !== key)
+  unregister(name: string): void {
+    this.providers = this.providers.filter(
+      (p) => p.description.name !== name,
+    )
   }
 
   /**
-    * Установить лимит токенов для системного промпта.
-    * Источники с низким приоритетом будут отброшены,
-    * если общая сумма токенов превышает лимит.
-    */
+   * Установить лимит токенов для системного промпта.
+   */
   setTokenBudget(budget: number): void {
     this.tokenBudget = budget
   }
 
   /**
-    * Вернуть текущий лимит токенов.
-    */
+   * Вернуть текущий лимит токенов.
+   */
   getTokenBudget(): number {
     return this.tokenBudget
   }
 
   /**
-   * Вернуть все зарегистрированные источники.
+   * Вернуть все зарегистрированные провайдеры.
    */
-  list(): ContextSource[] {
-    return [...this.sources]
+  list(): ContextProvider[] {
+    return [...this.providers]
   }
 
   /**
-   * Инициализировать контекст: загрузить все источники,
+   * Инициализировать контекст: загрузить все провайдеры,
    * создать базовый текст и сохранить снимок.
-    *
-    * Вызывается один раз на начало этапа сессии.
+   *
+   * Вызывается один раз на начало этапа сессии.
    */
   async initialize(): Promise<PreparedContext> {
     const snapshots: ContextSnapshot[] = []
     const baselineParts: string[] = []
-    this.previousValues.clear()
+    this.previousContent.clear()
     this.revision = 1
     let usedTokens = 0
 
-    const sorted = [...this.sources].sort(
-      (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
+    const sorted = [...this.providers].sort(
+      (a, b) => (b.description.priority ?? 0) - (a.description.priority ?? 0),
     )
 
-    for (const source of sorted) {
+    for (const provider of sorted) {
       try {
-        const value = await source.load()
-        if (value === undefined) continue
+        const items = await provider.resolve("")
+        const content = extractContent(items)
+        if (!content) continue
 
-        const baseline = source.baseline(value)
-        const tokens = estimateTokens(baseline)
+        const tokens = estimateTokens(content)
 
         if (usedTokens + tokens > this.tokenBudget && baselineParts.length > 0) {
           continue
         }
 
         usedTokens += tokens
-        this.previousValues.set(source.key, value)
-        baselineParts.push(baseline)
+        this.previousContent.set(provider.description.name, content)
+        baselineParts.push(content)
 
         snapshots.push({
-          key: source.key,
-          value: serializeValue(value),
-          baseline,
+          name: provider.description.name,
+          content,
           revision: this.revision,
         })
       } catch {
-        // Источник недоступен — пропускаем
+        // Провайдер недоступен — пропускаем
       }
     }
 
@@ -124,60 +150,62 @@ export class ContextManager {
 
   /**
    * Подготовить контекст для следующего хода: сравнить
-    * источники с предыдущим снимком, вернуть обновлённый
-    * системный промпт и изменения.
-    *
-    * Если источники не изменились — возвращает базовый текст без изменений.
+   * провайдеры с предыдущим снимком, вернуть обновлённый
+   * системный промпт и изменения.
+   *
+   * Если провайдеры не изменились — возвращает базовый текст без изменений.
    */
   async prepare(): Promise<PreparedContext> {
     const deltas: string[] = []
     const newSnapshots: ContextSnapshot[] = []
+    const newContent: Map<string, string> = new Map()
     this.revision++
 
-    const sorted = [...this.sources].sort(
-      (a, b) => (b.priority ?? 0) - (a.priority ?? 0),
+    const sorted = [...this.providers].sort(
+      (a, b) => (b.description.priority ?? 0) - (a.description.priority ?? 0),
     )
 
-    for (const source of sorted) {
+    for (const provider of sorted) {
       try {
-        const current = await source.load()
-        const previous = this.previousValues.get(source.key)
+        const items = await provider.resolve("")
+        const current = extractContent(items)
+        const previous = this.previousContent.get(provider.description.name)
 
-        const reconcile = this.reconcile(source, previous, current)
-
-        if (reconcile._tag === "updated") {
-          deltas.push(reconcile.text)
-        } else if (reconcile._tag === "removed") {
-          deltas.push(reconcile.text)
+        if (current !== previous) {
+          const deltaText =
+            provider.changed?.(previous ?? "", current ?? "") ??
+            `Источник "${provider.description.name}" изменён`
+          if (deltaText) {
+            deltas.push(deltaText)
+          }
         }
 
-        if (current !== undefined) {
-          this.previousValues.set(source.key, current)
-          const baseline = source.baseline(current)
+        if (current) {
+          newContent.set(provider.description.name, current)
           newSnapshots.push({
-            key: source.key,
-            value: serializeValue(current),
-            baseline,
+            name: provider.description.name,
+            content: current,
             revision: this.revision,
           })
         } else {
-          this.previousValues.delete(source.key)
+          newContent.delete(provider.description.name)
         }
       } catch {
-        // Источник недоступен
+        // Провайдер недоступен
       }
     }
 
+    this.previousContent = newContent
     this.snapshot = newSnapshots
+
+    const basePrompt = this.snapshot
+      .map((s) => s.content)
+      .join("\n\n")
 
     const deltaBlock =
       deltas.length > 0
         ? `\n## Изменения контекста (ревизия ${this.revision})\n${deltas.join("\n\n")}`
         : ""
-
-    const basePrompt = this.snapshot
-      .map((s) => s.baseline)
-      .join("\n\n")
 
     const systemPrompt = `${basePrompt}${deltaBlock}`
     const systemTokens = estimateTokens(systemPrompt)
@@ -209,7 +237,7 @@ export class ContextManager {
    */
   estimateSystemTokens(): number {
     return this.snapshot.reduce(
-      (sum, s) => sum + estimateTokens(s.baseline),
+      (sum, s) => sum + estimateTokens(s.content),
       0,
     )
   }
@@ -218,32 +246,10 @@ export class ContextManager {
    * Сбросить состояние (новый сеанс).
    */
   reset(): void {
-    this.sources = []
+    this.providers = []
     this.snapshot = []
     this.revision = 0
-    this.previousValues.clear()
-  }
-
-  private reconcile(
-    source: ContextSource,
-    previous: unknown,
-    current: unknown,
-  ): SourceReconcileResult {
-    if (current === undefined && previous !== undefined) {
-      const text = source.removed?.(previous) ?? `Источник "${source.key}" удалён`
-      return { _tag: "removed", text }
-    }
-
-    if (current === undefined || previous === undefined) {
-      return { _tag: "unchanged" }
-    }
-
-    if (!valuesEqual(previous, current)) {
-      const text = source.update(previous, current)
-      return { _tag: "updated", text }
-    }
-
-    return { _tag: "unchanged" }
+    this.previousContent.clear()
   }
 }
 
@@ -253,18 +259,7 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length * TOKENS_PER_CHAR)
 }
 
-function serializeValue(value: unknown): unknown {
-  try {
-    return JSON.parse(JSON.stringify(value))
-  } catch {
-    return String(value)
-  }
-}
-
-function valuesEqual(a: unknown, b: unknown): boolean {
-  try {
-    return JSON.stringify(a) === JSON.stringify(b)
-  } catch {
-    return a === b
-  }
+function extractContent(items: ContextItem[]): string {
+  if (items.length === 0) return ""
+  return items.map((i) => i.content).join("\n\n")
 }

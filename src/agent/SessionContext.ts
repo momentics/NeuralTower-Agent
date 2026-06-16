@@ -1,6 +1,6 @@
 import type { AgentModeName } from "./AgentMode"
 import type { Plan } from "./Plan"
-import type { PreparedContext, ContextSnapshot } from "../core/ContextSource"
+import type { PreparedContext, ContextSnapshot } from "../core/ContextManager"
 import { AgentMismatchError } from "../core/ContextSource"
 import type { ContextManager } from "../core/ContextManager"
 import type { ChatMessage } from "../core/IBackend"
@@ -24,7 +24,7 @@ export interface SessionEpochState {
   /** Базовый системный промпт. */
   baselinePrompt: string
 
-  /** Снимок источников контекста. */
+  /** Снимок провайдеров контекста. */
   snapshot: ContextSnapshot[]
 
   /** Время начала этапа. */
@@ -66,12 +66,12 @@ export class SessionContext {
   ) {}
 
  /**
-   * Инициализировать этап контекста.
-   * Создаёт базовый текст и фиксирует агента.
-   *
-   * Если этап уже существует и агент не совпадает —
-   * бросает AgentMismatchError.
-   */
+    * Инициализировать этап контекста.
+    * Создаёт базовый текст и фиксирует агента.
+    *
+    * Если этап уже существует и агент не совпадает —
+    * бросает AgentMismatchError.
+    */
   async initialize(agent: AgentModeName): Promise<EpochPrepared> {
     if (this.epoch) {
       if (this.epoch.agent !== agent) {
@@ -96,11 +96,11 @@ export class SessionContext {
   }
 
  /**
-   * Подготовить контекст для следующего хода: сравнить
-   * источники с предыдущим снимком.
-   *
-   * Если агент не совпадает — бросает ошибку.
-   */
+    * Подготовить контекст для следующего хода: сравнить
+    * провайдеры с предыдущим снимком.
+    *
+    * Если агент не совпадает — бросает ошибку.
+    */
   async prepare(agent: AgentModeName): Promise<EpochPrepared> {
     if (!this.epoch) {
       return await this.initialize(agent)

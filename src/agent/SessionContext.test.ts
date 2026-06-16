@@ -2,20 +2,26 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { SessionContext } from "./SessionContext"
 import { ContextManager } from "../core/ContextManager"
 import { AgentMismatchError } from "../core/ContextSource"
+import type { ContextProvider } from "../core/providers/context/types"
 
 describe("SessionContext", () => {
   let cm: ContextManager
   let sc: SessionContext
+  let provider: ContextProvider
 
   beforeEach(() => {
     cm = new ContextManager()
-    cm.register({
-      key: "test",
-      priority: 50,
-      load: vi.fn().mockResolvedValue("v1"),
-      baseline: vi.fn().mockReturnValue("baseline test"),
-      update: vi.fn().mockReturnValue("updated"),
-    })
+    provider = {
+      description: {
+        name: "test",
+        displayTitle: "Test",
+        description: "Test provider",
+        type: "normal",
+        priority: 50,
+      },
+      resolve: vi.fn().mockResolvedValue([{ content: "baseline test", name: "test" }]),
+    }
+    cm.register(provider)
     sc = new SessionContext("sess-1", cm)
   })
 

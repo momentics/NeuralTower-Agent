@@ -1,15 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { ContextManager } from "./ContextManager"
-import type { ContextSource } from "./ContextSource"
+import type { ContextProvider, ContextItem } from "./providers/context/types"
 
-function makeSource(key: string, priority: number, loadValue: unknown, baselineText: string): ContextSource {
+function makeProvider(
+  name: string,
+  priority: number,
+  resolveFn: () => Promise<ContextItem[]>,
+): ContextProvider {
   return {
-    key,
-    priority,
-    load: vi.fn().mockResolvedValue(loadValue),
-    baseline: vi.fn().mockReturnValue(baselineText),
-    update: vi.fn().mockReturnValue(`updated: ${key}`),
-    removed: vi.fn().mockReturnValue(`removed: ${key}`),
+    description: {
+      name,
+      displayTitle: name,
+      description: name,
+      type: "normal",
+      priority,
+    },
+    resolve: vi.fn(async (_query: string) => resolveFn()),
   }
 }
 
@@ -20,19 +26,19 @@ describe("ContextManager", () => {
     cm = new ContextManager()
   })
 
-  it("registers and lists sources", () => {
-    const src = makeSource("a", 50, "v1", "baseline a")
-    cm.register(src)
+  it("registers and lists providers", () => {
+    const p = makeProvider("a", 50, async () => [{ content: "v1", name: "A" }])
+    cm.register(p)
     expect(cm.list()).toHaveLength(1)
-    expect(cm.list()[0].key).toBe("a")
+    expect(cm.list()[0].description.name).toBe("a")
   })
 
-  it("unregisters source by key", () => {
-    cm.register(makeSource("a", 50, "v1", "baseline a"))
-    cm.register(makeSource("b", 40, "v2", "baseline b"))
+  it("unregisters provider by name", () => {
+    cm.register(makeProvider("a", 50, async () => [{ content: "v1", name: "A" }]))
+    cm.register(makeProvider("b", 40, async () => [{ content: "v2", name: "B" }]))
     cm.unregister("a")
     expect(cm.list()).toHaveLength(1)
-    expect(cm.list()[0].key).toBe("b")
+    expect(cm.list()[0].description.name).toBe("b")
   })
 
   it("sets and gets token budget", () => {
@@ -41,37 +47,31 @@ describe("ContextManager", () => {
     expect(cm.getTokenBudget()).toBe(8000)
   })
 
-  it("initialize loads sources sorted by priority", async () => {
-    const s1 = makeSource("low", 10, "v1", "low baseline")
-    const s2 = makeSource("high", 90, "v2", "high baseline")
+  it("initialize loads providers sorted by priority", async () => {
+    const s1 = makeProvider("low", 10, async () => [{ content: "low content", name: "L" }])
+    const s2 = makeProvider("high", 90, async () => [{ content: "high content", name: "H" }])
     cm.register(s1)
     cm.register(s2)
 
     const result = await cm.initialize()
 
-    expect(result.systemPrompt).toBe("high baseline\n\nlow baseline")
+    expect(result.systemPrompt).toBe("high content\n\nlow content")
     expect(result.revision).toBe(1)
     expect(result.snapshot).toHaveLength(2)
     expect(result.systemTokens).toBeGreaterThan(0)
   })
 
-  it("initialize skips undefined load results", async () => {
-    const src: ContextSource = {
-      key: "skip",
-      priority: 50,
-      load: vi.fn().mockResolvedValue(undefined),
-      baseline: vi.fn(),
-      update: vi.fn(),
-    }
-    cm.register(src)
+  it("initialize skips providers returning empty items", async () => {
+    const p = makeProvider("empty", 50, async () => [])
+    cm.register(p)
     const result = await cm.initialize()
     expect(result.snapshot).toHaveLength(0)
     expect(result.systemPrompt).toBe("")
   })
 
   it("initialize respects token budget", async () => {
-    const s1 = makeSource("first", 90, "v1", "A".repeat(100000))
-    const s2 = makeSource("second", 80, "v2", "B".repeat(100000))
+    const s1 = makeProvider("first", 90, async () => [{ content: "A".repeat(100000), name: "A" }])
+    const s2 = makeProvider("second", 80, async () => [{ content: "B".repeat(100000), name: "B" }])
     cm.register(s1)
     cm.register(s2)
     cm.setTokenBudget(5000)
@@ -79,61 +79,53 @@ describe("ContextManager", () => {
     const result = await cm.initialize()
 
     expect(result.snapshot).toHaveLength(1)
-    expect(result.snapshot[0].key).toBe("first")
+    expect(result.snapshot[0].name).toBe("first")
   })
 
-  it("initialize catches source load errors", async () => {
-    const src: ContextSource = {
-      key: "fail",
-      priority: 50,
-      load: vi.fn().mockRejectedValue(new Error("fail")),
-      baseline: vi.fn(),
-      update: vi.fn(),
+  it("initialize catches provider resolve errors", async () => {
+    const p: ContextProvider = {
+      description: { name: "fail", displayTitle: "fail", description: "fail", type: "normal" },
+      resolve: vi.fn(async () => { throw new Error("fail") }),
     }
-    cm.register(src)
+    cm.register(p)
     const result = await cm.initialize()
     expect(result.snapshot).toHaveLength(0)
   })
 
-  it("prepare detects unchanged sources", async () => {
-    const src = makeSource("a", 50, "v1", "baseline a")
-    cm.register(src)
+  it("prepare detects unchanged providers", async () => {
+    const p = makeProvider("a", 50, async () => [{ content: "v1", name: "A" }])
+    cm.register(p)
     await cm.initialize()
 
     const result = await cm.prepare()
 
     expect(result.revision).toBe(2)
-    expect(result.systemPrompt).toBe("baseline a")
+    expect(result.systemPrompt).toBe("v1")
   })
 
-  it("prepare detects updated sources", async () => {
-    const src = makeSource("a", 50, "v1", "baseline a")
-    cm.register(src)
+  it("prepare detects content changes", async () => {
+    const p = makeProvider("a", 50, async () => [{ content: "v1", name: "A" }])
+    cm.register(p)
     await cm.initialize()
 
-    ;(src.load as ReturnType<typeof vi.fn>).mockResolvedValue("v2")
+    ;(p.resolve as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => [{ content: "v2", name: "A" }])
 
     const result = await cm.prepare()
 
     expect(result.systemPrompt).toContain("Изменения контекста")
-    expect(result.systemPrompt).toContain("updated: a")
+    expect(result.systemPrompt).toContain('Источник "a" изменён')
   })
 
-  it("prepare detects removed sources", async () => {
-    const src: ContextSource = {
-      key: "a",
-      priority: 50,
-      load: vi.fn().mockResolvedValue("v1").mockResolvedValueOnce("v1").mockResolvedValue(undefined),
-      baseline: vi.fn().mockReturnValue("baseline a"),
-      update: vi.fn(),
-      removed: vi.fn().mockReturnValue("removed: a"),
-    }
-    cm.register(src)
+  it("prepare detects removed content", async () => {
+    const p = makeProvider("a", 50, async () => [{ content: "v1", name: "A" }])
+    cm.register(p)
     await cm.initialize()
+
+    ;(p.resolve as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => [])
 
     const result = await cm.prepare()
 
-    expect(result.systemPrompt).toContain("removed: a")
+    expect(result.systemPrompt).toContain('Источник "a" изменён')
   })
 
   it("getSnapshot returns copy", () => {
@@ -146,15 +138,15 @@ describe("ContextManager", () => {
   })
 
   it("estimateSystemTokens returns sum", async () => {
-    cm.register(makeSource("a", 50, "v1", "hello"))
-    cm.register(makeSource("b", 40, "v2", "world"))
+    cm.register(makeProvider("a", 50, async () => [{ content: "hello", name: "A" }]))
+    cm.register(makeProvider("b", 40, async () => [{ content: "world", name: "B" }]))
     await cm.initialize()
     const tokens = cm.estimateSystemTokens()
     expect(tokens).toBeGreaterThan(0)
   })
 
   it("reset clears state", async () => {
-    cm.register(makeSource("a", 50, "v1", "baseline a"))
+    cm.register(makeProvider("a", 50, async () => [{ content: "v1", name: "A" }]))
     await cm.initialize()
     cm.reset()
     expect(cm.list()).toHaveLength(0)
@@ -162,32 +154,25 @@ describe("ContextManager", () => {
     expect(cm.getRevision()).toBe(0)
   })
 
-  it("uses custom removed text", async () => {
-    const src: ContextSource = {
-      key: "a",
-      priority: 50,
-      load: vi.fn().mockResolvedValue("v1").mockResolvedValueOnce("v1").mockResolvedValue(undefined),
-      baseline: vi.fn().mockReturnValue("baseline a"),
-      update: vi.fn(),
-      removed: vi.fn().mockReturnValue("custom removed"),
+  it("uses custom changed text", async () => {
+    const p: ContextProvider = {
+      description: { name: "a", displayTitle: "a", description: "a", type: "normal" },
+      resolve: vi.fn(async () => [{ content: "v1", name: "A" }]),
+      changed: vi.fn(() => "custom changed"),
     }
-    cm.register(src)
+    cm.register(p)
     await cm.initialize()
+    ;(p.resolve as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => [{ content: "v2", name: "A" }])
     const result = await cm.prepare()
-    expect(result.systemPrompt).toContain("custom removed")
+    expect(result.systemPrompt).toContain("custom changed")
   })
 
-  it("uses default removed text when no custom removed", async () => {
-    const src: ContextSource = {
-      key: "a",
-      priority: 50,
-      load: vi.fn().mockResolvedValue("v1").mockResolvedValueOnce("v1").mockResolvedValue(undefined),
-      baseline: vi.fn().mockReturnValue("baseline a"),
-      update: vi.fn(),
-    }
-    cm.register(src)
+  it("uses default changed text when no custom changed", async () => {
+    const p = makeProvider("a", 50, async () => [{ content: "v1", name: "A" }])
+    cm.register(p)
     await cm.initialize()
+    ;(p.resolve as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => [{ content: "v2", name: "A" }])
     const result = await cm.prepare()
-    expect(result.systemPrompt).toContain('Источник "a" удалён')
+    expect(result.systemPrompt).toContain('Источник "a" изменён')
   })
 })
