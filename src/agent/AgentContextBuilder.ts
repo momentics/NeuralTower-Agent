@@ -1,0 +1,99 @@
+import * as vscode from "vscode"
+import type { IBackend } from "../core/IBackend"
+import type { ISkill } from "../skills/ISkill"
+import type { ToolRegistry } from "../tools/ToolRegistry"
+import type { SkillManager } from "../skills/SkillManager"
+import type { GitService } from "../services/git/GitService"
+import { AgentMemory } from "./AgentMemory"
+import { FileIndex } from "../repo/FileIndex"
+
+export class AgentContextBuilder {
+  constructor(
+    private readonly backend: IBackend,
+    private readonly toolRegistry: ToolRegistry,
+    private readonly skillManager: SkillManager,
+    private readonly memory: AgentMemory,
+    private readonly fileIndex: FileIndex,
+    private readonly gitService: GitService | null,
+    private readonly workDir: () => string,
+  ) {}
+
+  async buildSystemPrompt(skills: ISkill[]): Promise<string> {
+    const base = this.baseSystemPrompt()
+    const envBlock = await this.buildEnvironmentBlock()
+    const skillCtx = this.skillManager.buildContext(skills)
+    const toolCtx = this.toolRegistry.toSchemaList()
+    const projectCtx = this.memory.projectContext()
+    const indexStats = this.fileIndex.stats()
+    const indexInfo =
+      indexStats.totalFiles > 0
+        ? `\nИндекс файлов: ${indexStats.totalFiles} файлов, ${indexStats.languages} языков`
+        : ""
+
+    let gitContext = ""
+    if (
+      this.gitService &&
+      vscode.workspace.getConfiguration("neuralTowerAgent").get<boolean>("git.injectDiffContext", true)
+    ) {
+      gitContext = await this.gitService.getDiffContext(this.workDir())
+    }
+
+    const parts = [envBlock, base, projectCtx, skillCtx, toolCtx, indexInfo, gitContext].filter(Boolean)
+    return parts.join("\n\n")
+  }
+
+  private async buildEnvironmentBlock(): Promise<string> {
+    try {
+      const cfg = await this.backend.getConfig()
+      const branchInfo = this.gitService
+        ? await this.gitService.getBranchInfo(this.workDir())
+        : null
+      return `<env>
+  Модель: ${cfg.model}
+  Рабочая директория: ${this.workDir()}
+  Платформа: ${process.platform}
+  Дата: ${new Date().toISOString()}
+  Ветка: ${branchInfo?.name ?? "неизвестно"}
+</env>`
+    } catch {
+      return `<env>
+  Рабочая директория: ${this.workDir()}
+  Платформа: ${process.platform}
+  Дата: ${new Date().toISOString()}
+</env>`
+    }
+  }
+
+  private baseSystemPrompt(): string {
+    return `Вы — агент Neural Tower, высококвалифицированный ИИ-помощник для разработки программного обеспечения.
+
+# Личность
+
+- Ваша цель — выполнить задачу пользователя, а не вести беседу.
+- Вы выполняете задачи итеративно, разбивая их на чёткие шаги.
+- Не запрашивайте лишнюю информацию. Используйте доступные инструменты эффективно.
+- НЕ начинайте ответы с "Отлично", "Конечно", "Хорошо". Будьте прямолинейны и технически точны.
+- НИКОГДА не заканчивайте ответ вопросом или предложением дальнейшей помощи.
+- Минимизируйте токены вывода. Отвечайте кратко: 1-3 строки, если пользователь не просит подробности.
+
+# Инструменты
+
+У вас есть доступ к инструментам для работы с файлами, выполнения команд и поиска кода.
+Когда нужно вызвать инструмент, ответите JSON-блоком:
+\{"tool": "имя_инструмента", "args": \{"ключ": "значение"\}\}
+Когда у вас есть окончательный ответ, ответите обычным текстом.
+Вы можете вызывать несколько инструментов в одном ответе, разместив несколько JSON-блоков.
+
+# Стиль кода
+
+- При изменении кода сначала изучите conventions файла.
+- НЕ добавляйте комментарии, если пользователь не попросил явно.
+- Следуйте best practices безопасности. Не логируйте секреты.
+
+# Выполнение задач
+
+- Используйте инструменты поиска для понимания кодовой базы.
+- Реализуйте решение с использованием всех доступных инструментов.
+- Никогда не коммитьте изменения, если пользователь не попросил явно.`
+  }
+}

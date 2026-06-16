@@ -4,7 +4,7 @@ import type { IBackend } from "../core/IBackend"
 import type { ISkill } from "../skills/ISkill"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
-import type { AgentTurnResult, ToolResult } from "./AgentTypes"
+import type { ToolResult } from "./AgentTypes"
 import type { PermissionManager } from "../services/permission/PermissionManager"
 import type { GitService } from "../services/git/GitService"
 import type { MCPManager } from "../mcp/MCPManager"
@@ -40,8 +40,8 @@ import {
   makeTreeProvider,
   makeRepoMapProvider,
   makeRulesProvider,
-  makeMCPProvider,
   makeLspProvider,
+  makeMCPProvider,
   type ContextProvider,
   type ContextItem,
   type MCPToolListFn,
@@ -51,6 +51,10 @@ import { AgentModeManager, builtInModes, type AgentModeName } from "./AgentMode"
 import { Compactor } from "./Compactor"
 import { SessionContext } from "./SessionContext"
 import { SubagentRunner } from "./SubagentRunner"
+import { AgentContextBuilder } from "./AgentContextBuilder"
+import { AgentToolExecutor } from "./AgentToolExecutor"
+import { AgentPlanner } from "./AgentPlanner"
+import { AgentLoop } from "./AgentLoop"
 
 export class AgentOrchestrator implements IAgentOrchestrator {
   private workDir = "."
@@ -69,7 +73,11 @@ export class AgentOrchestrator implements IAgentOrchestrator {
   private providerRegistry: ContextProviderRegistry
   private sessionContext: SessionContext | null = null
   private subagentRunner: SubagentRunner | null = null
-  private currentPlan: Plan | null = null
+
+  private contextBuilder: AgentContextBuilder
+  private toolExecutor: AgentToolExecutor
+  private planner: AgentPlanner
+  private loop: AgentLoop
 
   constructor(
     private readonly backend: IBackend,
@@ -109,6 +117,42 @@ export class AgentOrchestrator implements IAgentOrchestrator {
       }
     }
     this.providerRegistry.register(makeMCPProvider(mcpListFn))
+
+    this.contextBuilder = new AgentContextBuilder(
+      backend,
+      toolRegistry,
+      skillManager,
+      this.memory,
+      this.fileIndex,
+      this.gitService,
+      () => this.workDir,
+    )
+
+    this.toolExecutor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      this.permissionManager,
+      this.modeManager,
+      this.memory,
+      this.sessionContext,
+    )
+
+    this.planner = new AgentPlanner(
+      backend,
+      toolRegistry,
+      this.sessionContext,
+    )
+
+    this.loop = new AgentLoop(
+      backend,
+      this.memory,
+      this.compactor,
+      this.modeManager,
+      this.sessionContext,
+      this.contextBuilder,
+      this.toolExecutor,
+      this.planner,
+    )
   }
 
   setWorkingDir(dir: string): void {
@@ -117,40 +161,33 @@ export class AgentOrchestrator implements IAgentOrchestrator {
 
   setPermissionManager(pm: PermissionManager): void {
     this.permissionManager = pm
+    this.toolExecutor = this.recreateToolExecutor()
   }
 
   setGitService(git: GitService): void {
     this.gitService = git
+    this.contextBuilder = this.recreateContextBuilder()
   }
 
   setMCPManager(mcp: MCPManager): void {
     this.mcpManager = mcp
   }
 
-  /**
-   * Установить контекст сессии.
-   */
   setSessionContext(sc: SessionContext): void {
     this.sessionContext = sc
+    this.toolExecutor = this.recreateToolExecutor()
+    this.planner = this.recreatePlanner()
+    this.loop = this.recreateLoop()
   }
 
-  /**
-   * Установить исполнитель подагентов.
-   */
   setSubagentRunner(runner: SubagentRunner): void {
     this.subagentRunner = runner
   }
 
-  /**
-   * Переключить режим агента.
-   */
   switchMode(mode: AgentModeName): boolean {
     return this.modeManager.switchMode(mode)
   }
 
-  /**
-   * Вернуть текущий режим.
-   */
   getMode(): AgentModeName {
     return this.modeManager.getModeName()
   }
@@ -198,7 +235,76 @@ export class AgentOrchestrator implements IAgentOrchestrator {
 
   resetSession(): void {
     this.sessionContext?.reset()
-    this.currentPlan = null
+    this.planner.clearPlan()
+  }
+
+  // ── Цикл агента ──────────────────────────────────────────
+
+  async run(
+    query: string,
+    onChunk: (text: string) => void,
+    onToolUse?: (name: string, args: Record<string, unknown>) => void,
+    onToolResult?: (name: string, result: { output: string; success: boolean }) => void,
+    signal?: AbortSignal,
+  ): Promise<ChatMessage> {
+    if (this.disposed) throw new Error("Агент освобождён")
+
+    const currentMode = this.modeManager.getModeName()
+    const activeSkills = this.skillManager.match(query)
+
+    return this.loop.run(
+      query,
+      activeSkills,
+      onChunk,
+      onToolUse,
+      onToolResult,
+      signal,
+    )
+  }
+
+  // ── Планирование ─────────────────────────────────────────
+
+  async createPlan(
+    query: string,
+    onChunk: (text: string) => void,
+    signal?: AbortSignal,
+  ): Promise<Plan> {
+    const plan = await this.planner.createPlan(query)
+    return plan
+  }
+
+  clearPlan(): void {
+    this.planner.clearPlan()
+  }
+
+  getPlan(): Plan | null {
+    return this.planner.getPlan()
+  }
+
+  // ── Подагенты ──────────────────────────────────────────────
+
+  async spawnExplore(
+    task: string,
+    onChunk?: (text: string) => void,
+  ): Promise<string> {
+    if (!this.subagentRunner) {
+      return "SubagentRunner не настроен"
+    }
+
+    const results = await this.subagentRunner.spawnAll(
+      [
+        {
+          name: "explore",
+          task,
+          mode: "explore",
+          workDir: this.workDir,
+          maxIterations: 10,
+        },
+      ],
+      (_id, text) => onChunk?.(text),
+    )
+
+    return results[0]?.output ?? "Подагент не вернул результат"
   }
 
   // ── Регистрация источников контекста ────────────────────
@@ -237,478 +343,48 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     this.contextManager.register(makeRepoMapSource(workDirFn, () => this.repoAnalyzer.analyze(this.workDir)))
   }
 
-  // ── Цикл агента ──────────────────────────────────────────
-
-  async run(
-    query: string,
-    onChunk: (text: string) => void,
-    onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: { output: string; success: boolean }) => void,
-    signal?: AbortSignal,
-  ): Promise<ChatMessage> {
-    if (this.disposed) throw new Error("Агент освобождён")
-
-    const currentMode = this.modeManager.getModeName()
-    const activeSkills = this.skillManager.match(query)
-
-    let systemPrompt = ""
-
-    if (this.sessionContext) {
-      try {
-        const epoch = await this.sessionContext.prepare(currentMode)
-        systemPrompt = epoch.baseline
-      } catch {
-        systemPrompt = await this.buildLegacySystemPrompt(activeSkills)
-      }
-    } else {
-      systemPrompt = await this.buildLegacySystemPrompt(activeSkills)
-    }
-
-    systemPrompt += "\n\n" + this.modeManager.getSystemPromptAddon()
-
-    const conversation: ChatMessage[] = [
-      { role: "system", content: systemPrompt, timestamp: Date.now() },
-      ...this.memory.getRecent(),
-      { role: "user", content: query, timestamp: Date.now() },
-    ]
-
-    this.memory.add(conversation[conversation.length - 1])
-
-    if (this.sessionContext) {
-      this.sessionContext.pushMessage(conversation[conversation.length - 1])
-    }
-
-    const compactionResult = await this.compactor.compactIfNeeded(
-      conversation.slice(1),
-      systemPrompt,
+  private recreateContextBuilder(): AgentContextBuilder {
+    return new AgentContextBuilder(
+      this.backend,
+      this.toolRegistry,
+      this.skillManager,
+      this.memory,
+      this.fileIndex,
+      this.gitService,
+      () => this.workDir,
     )
-
-    let workingConversation: ChatMessage[]
-    if (compactionResult.needsCompaction && compactionResult.compactedHistory) {
-      workingConversation = [
-        { role: "system", content: systemPrompt, timestamp: Date.now() },
-        ...compactionResult.compactedHistory,
-      ]
-    } else {
-      workingConversation = conversation
-    }
-
-    const maxIter = vscode.workspace.getConfiguration("neuralTowerAgent").get<number>("agent.maxIterations", 20)
-
-    let iterations = 0
-
-    while (iterations < maxIter) {
-      iterations++
-
-      if (signal?.aborted) {
-        throw new DOMException("Task aborted", "AbortError")
-      }
-
-      if (this.currentPlan && this.currentPlan.status === "running") {
-        const step = this.currentPlan.currentStep
-        if (step && step.status === "pending") {
-          workingConversation.push({
-            role: "user",
-            content: `Выполнить шаг ${this.currentPlan.currentStepIndex + 1}: ${step.description}${
-              step.suggestedTools.length ? ` (предлагаемые инструменты: ${step.suggestedTools.join(", ")})` : ""
-            }`,
-            timestamp: Date.now(),
-          })
-        }
-      }
-
-      const result = await this.callBackend(workingConversation, onChunk, signal)
-
-      if (result.type === "text") {
-        if (result.content) {
-          workingConversation.push({
-            role: "assistant",
-            content: result.content,
-            timestamp: Date.now(),
-          })
-          this.memory.add(workingConversation[workingConversation.length - 1])
-
-          if (this.sessionContext) {
-            this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
-          }
-
-          if (this.currentPlan && this.currentPlan.status === "running") {
-            this.currentPlan.markDone(result.content.slice(0, 500))
-            if (this.currentPlan.status === "running") {
-              continue
-            }
-          }
-
-          return workingConversation[workingConversation.length - 1] as ChatMessage
-        }
-      }
-
-      if (result.type === "tool_calls" && result.toolCalls) {
-        let anyFailed = false
-
-        if (this.currentPlan && this.currentPlan.status === "running") {
-          this.currentPlan.markRunning()
-        }
-
-        for (const tc of result.toolCalls) {
-          if (signal?.aborted) {
-            throw new DOMException("Task aborted", "AbortError")
-          }
-
-          const modePerm = this.modeManager.checkToolPermission(tc.toolName)
-
-          if (modePerm === "deny") {
-            onToolUse?.(tc.toolName, { ...tc.arguments, _blocked: `mode ${currentMode} denies ${tc.toolName}` })
-            workingConversation.push({
-              role: "assistant",
-              content: `Вызов инструмента: ${tc.toolName} — ЗАБЛОКИРОВАНО режимом ${currentMode}`,
-              timestamp: Date.now(),
-            })
-            anyFailed = true
-            continue
-          }
-
-          const tool = this.toolRegistry.get(tc.toolName)
-
-          if (this.permissionManager && tool && modePerm !== "allow") {
-            const allowed = await this.permissionManager.checkPermission(tool, tc.arguments)
-            if (!allowed) {
-              onToolUse?.(tc.toolName, { ...tc.arguments, _blocked: "permission denied" })
-              workingConversation.push({
-                role: "assistant",
-                content: `Вызов инструмента: ${tc.toolName} — ЗАБЛОКИРОВАНО политикой разрешений`,
-                timestamp: Date.now(),
-              })
-              anyFailed = true
-              continue
-            }
-          }
-
-          onToolUse?.(tc.toolName, tc.arguments)
-
-          const toolResult = await this.toolRegistry.invoke(tc.toolName, tc.arguments)
-          onToolResult?.(tc.toolName, toolResult)
-
-          workingConversation.push({
-            role: "assistant",
-            content: `Вызов инструмента: ${tc.toolName}(${JSON.stringify(tc.arguments)})`,
-            timestamp: Date.now(),
-          })
-          workingConversation.push({
-            role: "user",
-            content: `Результат инструмента:\n${toolResult.output}`,
-            timestamp: Date.now(),
-          })
-
-          this.memory.add(workingConversation[workingConversation.length - 1])
-
-          if (this.sessionContext) {
-            this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
-          }
-
-          if (!toolResult.success) anyFailed = true
-        }
-
-        if (this.currentPlan) {
-          if (anyFailed) {
-            this.currentPlan.markFailed("Инструмент вернул ошибку")
-          } else {
-            this.currentPlan.markDone()
-          }
-        }
-      } else {
-        break
-      }
-    }
-
-    return {
-      role: "assistant",
-      content: "Достигнуто максимальное число итераций. Операция может быть незавершённой.",
-      timestamp: Date.now(),
-    }
   }
 
-  // ── Планирование ─────────────────────────────────────────
-
-  /**
-   * Создать и запустить план для задачи.
-   */
-  async createPlan(
-    query: string,
-    onChunk: (text: string) => void,
-    signal?: AbortSignal,
-  ): Promise<Plan> {
-    const toolList = this.toolRegistry
-      .list()
-      .map((t) => `- ${t.name}: ${t.description}`)
-      .join("\n")
-
-    const planningPrompt = `Вы — планировщик задач. Получив пользовательский запрос и доступные инструменты,
-разбейте задачу на последовательные шаги. Каждый шаг должен быть конкретным и выполнимым.
-Доступные инструменты:
-${toolList}
-
-Ответьте корректным объектом JSON:
-{
-  "reasoning": "краткое обоснование вашего плана",
-  "steps": [
-    {
-      "description": "что выполнить на этом шаге",
-      "suggestedTools": ["имя_инструмента"],
-      "dependsOn": []
-    }
-  ]
-}
-
-Держите план лаконичным. Обычно достаточно 3-7 шагов. Если шаг не требует конкретных инструментов, оставьте suggestedTools пустым.`
-
-    try {
-      const result = await this.backend.chatJson<{
-        reasoning: string
-        steps: { description: string; suggestedTools: string[]; dependsOn?: number[] }[]
-      }>([
-        { role: "system", content: planningPrompt, timestamp: Date.now() },
-        { role: "user", content: query, timestamp: Date.now() },
-      ])
-
-      const plan = new Plan({
-        title: query.slice(0, 80),
-        reasoning: result.reasoning,
-        steps: result.steps,
-      })
-
-      this.currentPlan = plan
-      plan.start()
-
-      if (this.sessionContext) {
-        this.sessionContext.setPlan(plan)
-      }
-
-      return plan
-    } catch {
-      const plan = new Plan({
-        title: query.slice(0, 80),
-        reasoning: "Простой одношаговый план",
-        steps: [{ description: query, suggestedTools: [] }],
-      })
-      this.currentPlan = plan
-      plan.start()
-      return plan
-    }
-  }
-
-  /**
-   * Сбросить текущий план.
-   */
-  clearPlan(): void {
-    this.currentPlan = null
-    if (this.sessionContext) {
-      this.sessionContext.clearPlan()
-    }
-  }
-
-  /**
-   * Вернуть текущий план.
-   */
-  getPlan(): Plan | null {
-    return this.currentPlan
-  }
-
-  // ── Подагенты ──────────────────────────────────────────────
-
-  /**
-   * Запустить подагент для исследования.
-   */
-  async spawnExplore(
-    task: string,
-    onChunk?: (text: string) => void,
-  ): Promise<string> {
-    if (!this.subagentRunner) {
-      return "SubagentRunner не настроен"
-    }
-
-    const results = await this.subagentRunner.spawnAll(
-      [
-        {
-          name: "explore",
-          task,
-          mode: "explore",
-          workDir: this.workDir,
-          maxIterations: 10,
-        },
-      ],
-      (_id, text) => onChunk?.(text),
+  private recreateToolExecutor(): AgentToolExecutor {
+    return new AgentToolExecutor(
+      this.backend,
+      this.toolRegistry,
+      this.permissionManager,
+      this.modeManager,
+      this.memory,
+      this.sessionContext,
     )
-
-    return results[0]?.output ?? "Подагент не вернул результат"
   }
 
-  // ── Формирование контекста (legacy) ──────────────────────
-
-  private async buildLegacySystemPrompt(skills: ISkill[]): Promise<string> {
-    const base = this.baseSystemPrompt()
-    const envBlock = await this.buildEnvironmentBlock()
-    const skillCtx = this.skillManager.buildContext(skills)
-    const toolCtx = this.toolRegistry.toSchemaList()
-    const projectCtx = this.memory.projectContext()
-    const indexStats = this.fileIndex.stats()
-    const indexInfo =
-      indexStats.totalFiles > 0
-        ? `\nИндекс файлов: ${indexStats.totalFiles} файлов, ${indexStats.languages} языков`
-        : ""
-
-    let gitContext = ""
-    if (
-      this.gitService &&
-      vscode.workspace.getConfiguration("neuralTowerAgent").get<boolean>("git.injectDiffContext", true)
-    ) {
-      gitContext = await this.gitService.getDiffContext(this.workDir)
-    }
-
-    const parts = [envBlock, base, projectCtx, skillCtx, toolCtx, indexInfo, gitContext].filter(Boolean)
-    return parts.join("\n\n")
+  private recreatePlanner(): AgentPlanner {
+    return new AgentPlanner(
+      this.backend,
+      this.toolRegistry,
+      this.sessionContext,
+    )
   }
 
-  private async buildEnvironmentBlock(): Promise<string> {
-    try {
-      const cfg = await this.backend.getConfig()
-      const branchInfo = this.gitService
-        ? await this.gitService.getBranchInfo(this.workDir)
-        : null
-      return `<env>
-  Модель: ${cfg.model}
-  Рабочая директория: ${this.workDir}
-  Платформа: ${process.platform}
-  Дата: ${new Date().toISOString()}
-  Ветка: ${branchInfo?.name ?? "неизвестно"}
-</env>`
-    } catch {
-      return `<env>
-  Рабочая директория: ${this.workDir}
-  Платформа: ${process.platform}
-  Дата: ${new Date().toISOString()}
-</env>`
-    }
-  }
-
-  private baseSystemPrompt(): string {
-    return `Вы — агент Neural Tower, высококвалифицированный ИИ-помощник для разработки программного обеспечения.
-
-# Личность
-
-- Ваша цель — выполнить задачу пользователя, а не вести беседу.
-- Вы выполняете задачи итеративно, разбивая их на чёткие шаги.
-- Не запрашивайте лишнюю информацию. Используйте доступные инструменты эффективно.
-- НЕ начинайте ответы с "Отлично", "Конечно", "Хорошо". Будьте прямолинейны и технически точны.
-- НИКОГДА не заканчивайте ответ вопросом или предложением дальнейшей помощи.
-- Минимизируйте токены вывода. Отвечайте кратко: 1-3 строки, если пользователь не просит подробности.
-
-# Инструменты
-
-У вас есть доступ к инструментам для работы с файлами, выполнения команд и поиска кода.
-Когда нужно вызвать инструмент, ответите JSON-блоком:
-\{"tool": "имя_инструмента", "args": \{"ключ": "значение"\}\}
-Когда у вас есть окончательный ответ, ответите обычным текстом.
-Вы можете вызывать несколько инструментов в одном ответе, разместив несколько JSON-блоков.
-
-# Стиль кода
-
-- При изменении кода сначала изучите conventions файла.
-- НЕ добавляйте комментарии, если пользователь не попросил явно.
-- Следуйте best practices безопасности. Не логируйте секреты.
-
-# Выполнение задач
-
-- Используйте инструменты поиска для понимания кодовой базы.
-- Реализуйте решение с использованием всех доступных инструментов.
-- Никогда не коммитьте изменения, если пользователь не попросил явно.`
-  }
-
-  // ── Вызов бэкенда с определением вызова инструментов ──
-
-  private async callBackend(
-    conversation: ChatMessage[],
-    onChunk: (text: string) => void,
-    signal?: AbortSignal,
-  ): Promise<AgentTurnResult> {
-    if (signal?.aborted) {
-      throw new DOMException("Task aborted", "AbortError")
-    }
-
-    const wrappedChunk = (text: string) => {
-      if (signal?.aborted) return
-      onChunk(text)
-    }
-
-    const msg = await this.backend.chat(conversation, wrappedChunk)
-    const content = msg.content
-
-    const toolCalls = this.extractToolCalls(content)
-    if (toolCalls && toolCalls.length > 0) {
-      return { type: "tool_calls", toolCalls }
-    }
-
-    return { type: "text", content }
-  }
-
-  private extractToolCalls(content: string): import("./AgentTypes").ToolCall[] | null {
-    const calls: import("./AgentTypes").ToolCall[] = []
-
-    const jsonBlocks = this.extractJsonBlocks(content)
-
-    for (const block of jsonBlocks) {
-      try {
-        const parsed = JSON.parse(block) as Record<string, unknown>
-        if (
-          parsed.tool &&
-          typeof parsed.tool === "string" &&
-          parsed.args &&
-          typeof parsed.args === "object"
-        ) {
-          calls.push({
-            toolName: parsed.tool,
-            arguments: parsed.args as Record<string, unknown>,
-          })
-        }
-      } catch {
-        // пропустить некорректные данные
-      }
-    }
-
-    return calls.length > 0 ? calls : null
-  }
-
-  private extractJsonBlocks(content: string): string[] {
-    const blocks: string[] = []
-
-    const cleaned = content
-      .replace(/```(?:json)?\s*\n?/g, "")
-      .replace(/```\s*\n?/g, "")
-
-    let depth = 0
-    let start = -1
-    for (let i = 0; i < cleaned.length; i++) {
-      const ch = cleaned[i]
-      if (ch === "{") {
-        if (depth === 0) start = i
-        depth++
-      } else if (ch === "}") {
-        depth--
-        if (depth === 0 && start !== -1) {
-          blocks.push(cleaned.slice(start, i + 1))
-          start = -1
-        }
-      } else if (ch === '"') {
-        i++
-        while (i < cleaned.length && cleaned[i] !== '"') {
-          if (cleaned[i] === "\\") i++
-          i++
-        }
-      }
-      if (depth < 0) depth = 0
-    }
-
-    return blocks
+  private recreateLoop(): AgentLoop {
+    return new AgentLoop(
+      this.backend,
+      this.memory,
+      this.compactor,
+      this.modeManager,
+      this.sessionContext,
+      this.contextBuilder,
+      this.toolExecutor,
+      this.planner,
+    )
   }
 
   private extractCommands(buildSystems: string[]): Record<string, string> {
