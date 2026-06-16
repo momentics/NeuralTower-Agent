@@ -426,7 +426,13 @@ async function buildTree(
   if (depth > maxDepth) return `${prefix}${isLast ? "" : ""}...\n`
 
   let result = ""
-  const entries = await fs.readdir(current, { withFileTypes: true }).catch(() => [])
+  let entries: { name: string; isDirectory(): boolean }[]
+  try {
+    entries = await fs.readdir(current, { withFileTypes: true })
+  } catch (err) {
+    if (current === root) throw err
+    entries = []
+  }
   const dirs: { name: string; full: string }[] = []
   const files: { name: string; full: string }[] = []
 

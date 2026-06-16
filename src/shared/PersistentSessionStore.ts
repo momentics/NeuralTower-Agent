@@ -95,6 +95,15 @@ export class PersistentSessionStore {
       updatedAt: Date.now(),
       messageCount: 0,
     })
+    while (this.data.sessions.length > this.maxSessions) {
+      const oldest = this.data.sessions.find((s) => !s.pinned)
+      if (oldest) {
+        this.data.sessions = this.data.sessions.filter((s) => s.id !== oldest.id)
+        this.data.messages = this.data.messages.filter((m) => m.sessionId !== oldest.id)
+      } else {
+        break
+      }
+    }
     this.data.activeId = id
     await this.save()
     return id

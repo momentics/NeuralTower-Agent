@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { PersistentSessionStore } from "../../shared/PersistentSessionStore"
+import { PersistentSessionStore } from "./PersistentSessionStore"
 import * as fs from "fs/promises"
 import * as os from "os"
 import * as path from "path"
@@ -11,7 +11,7 @@ describe("PersistentSessionStore", () => {
   beforeAll(async () => {
     tmpDir = path.join(os.tmpdir(), `persistent-session-test-${Date.now()}`)
     await fs.mkdir(tmpDir, { recursive: true })
-    store = new PersistentSessionStore(tmpDir, 5)
+    store = new PersistentSessionStore({ fsPath: tmpDir } as any, 5)
   })
 
   afterAll(async () => {
@@ -56,7 +56,10 @@ describe("PersistentSessionStore", () => {
   })
 
   it("respects max sessions limit", async () => {
-    const smallStore = new PersistentSessionStore(path.join(tmpDir, "small"), 2)
+    const smallDir = path.join(tmpDir, "small")
+    await fs.mkdir(smallDir, { recursive: true })
+    const smallStore = new PersistentSessionStore({ fsPath: smallDir } as any, 2)
+    await smallStore.init()
     await smallStore.newSession()
     await smallStore.newSession()
     await smallStore.newSession()

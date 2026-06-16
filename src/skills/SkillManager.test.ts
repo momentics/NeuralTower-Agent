@@ -1,26 +1,31 @@
 import { describe, it, expect } from "vitest"
-import { SkillManager } from "../../skills/SkillManager"
-import type { ISkill } from "../../skills/ISkill"
+import { SkillManager } from "./SkillManager"
+import type { ISkill } from "./ISkill"
 
-const createMockSkill = (name: string, triggers: string[] = []): ISkill => ({
+const createMockSkill = (name: string, triggers: string[] = [], priority = 1): ISkill => ({
   name,
   description: `Mock ${name}`,
   triggers,
   instructions: `Instructions for ${name}`,
-  priority: 1,
+  priority,
 })
 
 describe("SkillManager", () => {
-  it("registers and retrieves a skill", () => {
+  it("registers a skill", () => {
     const mgr = new SkillManager()
     const skill = createMockSkill("test_skill", ["trigger1"])
     mgr.register(skill)
-    expect(mgr.get("test_skill")).toBe(skill)
+    expect(mgr.list()).toContain(skill)
   })
 
-  it("returns undefined for unknown skill", () => {
+  it("registers many skills at once", () => {
     const mgr = new SkillManager()
-    expect(mgr.get("nonexistent")).toBeUndefined()
+    const skills = [
+      createMockSkill("a", ["trigger_a"]),
+      createMockSkill("b", ["trigger_b"]),
+    ]
+    mgr.registerMany(skills)
+    expect(mgr.list()).toHaveLength(2)
   })
 
   it("matches skills by trigger", () => {
@@ -57,24 +62,37 @@ describe("SkillManager", () => {
 
   it("sorts matched skills by priority", () => {
     const mgr = new SkillManager()
-    mgr.register({ ...createMockSkill("low", ["shared"]), priority: 1 })
-    mgr.register({ ...createMockSkill("high", ["shared"]), priority: 10 })
+    mgr.register(createMockSkill("low", ["shared"], 1))
+    mgr.register(createMockSkill("high", ["shared"], 10))
     const matched = mgr.match("shared")
     expect(matched[0].name).toBe("high")
     expect(matched[1].name).toBe("low")
   })
 
-  it("unregisters a skill", () => {
+  it("limits matched skills to 5", () => {
     const mgr = new SkillManager()
-    mgr.register(createMockSkill("removable", ["trigger"]))
-    expect(mgr.get("removable")).toBeDefined()
-    mgr.unregister("removable")
-    expect(mgr.get("removable")).toBeUndefined()
+    for (let i = 0; i < 10; i++) {
+      mgr.register(createMockSkill(`skill_${i}`, ["shared"]))
+    }
+    expect(mgr.match("shared").length).toBe(5)
   })
 
-  it("unregistering unknown skill does not throw", () => {
+  it("builds context from matched skills", () => {
     const mgr = new SkillManager()
-    expect(() => mgr.unregister("nonexistent")).not.toThrow()
+    const skills = [
+      createMockSkill("skill_a", ["a"]),
+      createMockSkill("skill_b", ["b"]),
+    ]
+    mgr.registerMany(skills)
+    const ctx = mgr.buildContext(skills)
+    expect(ctx).toContain("## Активные навыки")
+    expect(ctx).toContain("## skill_a")
+    expect(ctx).toContain("## skill_b")
+  })
+
+  it("buildContext returns empty for no skills", () => {
+    const mgr = new SkillManager()
+    expect(mgr.buildContext([])).toBe("")
   })
 
   it("clears all skills", () => {
@@ -82,7 +100,7 @@ describe("SkillManager", () => {
     mgr.register(createMockSkill("clear_a", ["a"]))
     mgr.register(createMockSkill("clear_b", ["b"]))
     mgr.clear()
+    expect(mgr.list()).toHaveLength(0)
     expect(mgr.match("a").length).toBe(0)
-    expect(mgr.match("b").length).toBe(0)
   })
 })

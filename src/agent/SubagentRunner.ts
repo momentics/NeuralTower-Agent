@@ -2,7 +2,7 @@ import type { IBackend, ChatMessage } from "../core/IBackend"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
 import type { AgentModeName } from "./AgentMode"
-import type { AgentOrchestrator } from "./AgentOrchestrator"
+import { AgentOrchestrator } from "./AgentOrchestrator"
 import type { ContextManager } from "../core/ContextManager"
 import type { PermissionManager } from "../services/permission/PermissionManager"
 import type { GitService } from "../services/git/GitService"
@@ -213,9 +213,7 @@ export class SubagentRunner {
   }
 
   private createOrchestrator(config: SubagentConfig): AgentOrchestrator {
-    const OrchestratorClass =
-      require("./AgentOrchestrator").AgentOrchestrator
-    const orchestrator = new OrchestratorClass(
+    const orchestrator = new AgentOrchestrator(
       this.backend,
       this.toolRegistry,
       this.skillManager,

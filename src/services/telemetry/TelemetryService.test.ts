@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { TelemetryService } from "../../services/telemetry/TelemetryService"
+import { TelemetryService } from "./TelemetryService"
 
 describe("TelemetryService", () => {
   it("implements Plugin interface", () => {

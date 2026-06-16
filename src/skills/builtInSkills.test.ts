@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { builtInSkills } from "../../skills/builtInSkills"
+import { builtInSkills } from "./builtInSkills"
 
 describe("builtInSkills", () => {
   it("exports an array of skills", () => {

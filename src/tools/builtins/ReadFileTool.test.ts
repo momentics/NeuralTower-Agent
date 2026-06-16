@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { ReadFileTool } from "../../tools/builtins/ReadFileTool"
+import { ReadFileTool } from "./ReadFileTool"
 import * as fs from "fs/promises"
 import * as os from "os"
 import * as path from "path"

@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest"
-import { ToolRegistry } from "../../tools/ToolRegistry"
-import type { ITool, ToolSchema } from "../../tools/ITool"
+import { describe, it, expect, vi } from "vitest"
+import { ToolRegistry } from "./ToolRegistry"
+import type { ITool } from "./ITool"
 
 const createMockTool = (name: string, isSafe = false): ITool => ({
   name,
@@ -16,8 +16,7 @@ describe("ToolRegistry", () => {
     const registry = new ToolRegistry()
     const tool = createMockTool("test_tool")
     registry.register(tool)
-    const found = registry.get("test_tool")
-    expect(found).toBe(tool)
+    expect(registry.get("test_tool")).toBe(tool)
   })
 
   it("returns undefined for unknown tool", () => {
@@ -55,23 +54,6 @@ describe("ToolRegistry", () => {
     expect(list.map((t) => t.name)).toContain("list_b")
   })
 
-  it("filters tools by category", () => {
-    const registry = new ToolRegistry()
-    registry.register(createMockTool("cat_a"))
-    registry.register(createMockTool("cat_b"))
-    const filtered = registry.byCategory("test")
-    expect(filtered.length).toBe(2)
-  })
-
-  it("filters tools by safety", () => {
-    const registry = new ToolRegistry()
-    registry.register(createMockTool("safe_tool", true))
-    registry.register(createMockTool("unsafe_tool", false))
-    const safe = registry.safeOnly()
-    expect(safe.length).toBe(1)
-    expect(safe[0].name).toBe("safe_tool")
-  })
-
   it("unregisters a tool", () => {
     const registry = new ToolRegistry()
     registry.register(createMockTool("removable"))
@@ -91,5 +73,58 @@ describe("ToolRegistry", () => {
     registry.register(createMockTool("clear_b"))
     registry.clear()
     expect(registry.list().length).toBe(0)
+  })
+
+  it("invoke executes tool and returns result", async () => {
+    const registry = new ToolRegistry()
+    registry.register(createMockTool("mytool"))
+    const result = await registry.invoke("mytool", {})
+    expect(result.success).toBe(true)
+    expect(result.output).toBe("mytool")
+  })
+
+  it("invoke returns error for unknown tool", async () => {
+    const registry = new ToolRegistry()
+    const result = await registry.invoke("unknown", {})
+    expect(result.success).toBe(false)
+    expect(result.output).toContain("не найден")
+  })
+
+  it("invoke catches execution errors", async () => {
+    const registry = new ToolRegistry()
+    registry.register({
+      name: "failing",
+      description: "Fails",
+      category: "test",
+      isSafe: false,
+      schema: { name: "failing", description: "Fails", parameters: {}, required: [] },
+      execute: async () => { throw new Error("boom") },
+    })
+    const result = await registry.invoke("failing", {})
+    expect(result.success).toBe(false)
+    expect(result.output).toContain("boom")
+  })
+
+  it("toSchemaList returns formatted list", () => {
+    const registry = new ToolRegistry()
+    registry.register(createMockTool("tool_a"))
+    const schema = registry.toSchemaList()
+    expect(schema).toContain("tool_a")
+    expect(schema).toContain("Доступные инструменты")
+  })
+
+  it("toSchemaList returns message when empty", () => {
+    const registry = new ToolRegistry()
+    expect(registry.toSchemaList()).toContain("Инструменты не доступны")
+  })
+
+  it("toToolDefinitions returns array of definitions", () => {
+    const registry = new ToolRegistry()
+    registry.register(createMockTool("tool_a"))
+    registry.register(createMockTool("tool_b"))
+    const defs = registry.toToolDefinitions()
+    expect(defs.length).toBe(2)
+    expect(defs[0].name).toBe("tool_a")
+    expect(defs[0].parameters).toBeDefined()
   })
 })

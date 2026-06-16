@@ -158,14 +158,21 @@ export class Plan {
   start(): void {
     this.status = "running"
     this.updatedAt = Date.now()
-    this.advanceToNextPending()
+    const step = this.currentStep
+    if (step) {
+      step.status = "running"
+    }
   }
 
   /**
    * Отметить текущий шаг как выполняющийся.
    */
   markRunning(): PlanStep | null {
-    const step = this.currentStep
+    let step = this.currentStep
+    if (!step || step.status === "done" || step.status === "failed") {
+      this.advanceToNextPending()
+      step = this.currentStep
+    }
     if (!step) return null
     step.status = "running"
     step.attempts++
@@ -310,9 +317,14 @@ export class Plan {
    */
   static async load(filePath: string): Promise<Plan> {
     const raw = await fs.readFile(filePath, "utf-8")
-    const data = JSON.parse(raw)
+    let data: unknown
+    try {
+      data = JSON.parse(raw)
+    } catch {
+      throw new Error(`Невалидный файл плана: ${filePath}`)
+    }
 
-    if (!data || typeof data !== "object" || !Array.isArray(data.steps)) {
+    if (!data || typeof data !== "object" || !Array.isArray((data as any).steps)) {
       throw new Error(`Невалидный файл плана: ${filePath}`)
     }
 

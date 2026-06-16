@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { FileIndex } from "../../repo/FileIndex"
+import { FileIndex } from "./FileIndex"
 import * as fs from "fs/promises"
 import * as os from "os"
 import * as path from "path"

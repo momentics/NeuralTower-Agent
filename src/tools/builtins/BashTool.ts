@@ -36,7 +36,8 @@ export class BashTool implements ITool {
         maxBuffer: 1024 * 1024,
         cwd: workdir,
       })
-      const out = stdout + (stderr ? `\nВЫВОД ОШИБОК:\n${stderr}` : "")
+      const outTrimmed = stdout.trim()
+      const out = (outTrimmed ? stdout : "") + (stderr ? `\nВЫВОД ОШИБОК:\n${stderr}` : "")
       return { output: out || "(нет вывода)", success: true }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
