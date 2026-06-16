@@ -185,7 +185,7 @@ describe("ContextSources.vscode", () => {
       const data = await source.load()
       const baseline = source.baseline(data!)
 
-      expect(baseline).toContain("Выделение:")
+      expect(baseline).toContain("Выделенный текст:")
       expect(baseline).toContain("x = 1")
     })
 
@@ -323,7 +323,7 @@ describe("ContextSources.vscode", () => {
       const prev = [{ path: "/a.ts", language: "ts", lineCount: 1 }]
       const cur = [{ path: "/a.ts", language: "ts", lineCount: 1 }, { path: "/b.ts", language: "ts", lineCount: 2 }]
       const update = source.update(prev, cur)
-      expect(update).toContain("Открытые файлы: 2")
+      expect(update).toContain("Открытых файлов: 2")
       expect(update).toContain("было 1")
     })
 

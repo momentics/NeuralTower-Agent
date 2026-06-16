@@ -94,7 +94,7 @@ export function makeCurrentFileSource(): ContextSource<CurrentFileData> {
         `Строк: ${v.lineCount}`,
       ]
       if (v.selection) {
-        parts.push(`Выделение:\n\`\`\`${v.language}\n${v.selection.slice(0, 2000)}\n\`\`\``)
+        parts.push(`Выделенный текст:\n\`\`\`${v.language}\n${v.selection.slice(0, 2000)}\n\`\`\``)
       }
       parts.push(`Содержимое:\n\`\`\`${v.language}\n${v.content.slice(0, 8000)}\n\`\`\``)
       return parts.join("\n")
@@ -135,7 +135,7 @@ export function makeOpenFilesSource(): ContextSource<OpenFileData[]> {
     },
     update(prev: OpenFileData[], cur: OpenFileData[]) {
       if (prev.length !== cur.length) {
-        return `Открытые файлы: ${cur.length} (было ${prev.length})`
+        return `Открытых файлов: ${cur.length} (было ${prev.length})`
       }
       const prevPaths = new Set(prev.map((f) => f.path))
       const curPaths = new Set(cur.map((f) => f.path))

@@ -181,7 +181,7 @@
           "type": "number",
           "default": 60000,
           "minimum": 1000,
-          "description": "Тайм-аут запроса в миллисекундах"
+          "description": "Таймаут запроса в миллисекундах"
         },
         "neuralTowerAgent.maxSessions": {
           "type": "number",

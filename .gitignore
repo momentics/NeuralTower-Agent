@@ -35,3 +35,5 @@ NeuralTower-Agent-*.vsix
 # ref
 ref/
 .*
+*.md 
+!README.md

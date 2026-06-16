@@ -55,6 +55,6 @@ export class CommitMessageService implements Plugin {
       .filter((l) => l.startsWith("diff --git"))
       .map((l) => l.replace(/diff --git a\/.*? b\//, ""))
     const count = files.length
-    return count > 0 ? `chore: изменить ${count} файл(ов)` : "chore: обновления"
+    return count > 0 ? `chore: изменить ${count} файл${count > 1 ? (count < 5 ? 'а' : 'ов') : ''}` : "chore: обновления"
   }
 }

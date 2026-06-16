@@ -7,3 +7,5 @@ src/
 bump-version.js
 .github/
 .*
+*.md 
+!README.md

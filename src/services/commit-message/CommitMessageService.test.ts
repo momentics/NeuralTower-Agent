@@ -40,7 +40,7 @@ describe("CommitMessageService", () => {
     vi.mocked(gitService.getCachedDiff).mockResolvedValue("diff --git a/file.ts b/file.ts\ndiff --git a/other.ts b/other.ts")
     backend.chat = vi.fn().mockRejectedValue(new Error("fail"))
     const result = await service.generate("/work")
-    expect(result).toBe("chore: изменить 2 файл(ов)")
+    expect(result).toBe("chore: изменить 2 файла")
   })
 
   it("fallback with no files", async () => {
