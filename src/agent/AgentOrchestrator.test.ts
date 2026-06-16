@@ -173,4 +173,19 @@ describe("AgentOrchestrator", () => {
     const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager)
     await expect(orchestrator.reload()).resolves.not.toThrow()
   })
+
+  it("getTodoStore returns a TodoStore instance", () => {
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager)
+    const store = orchestrator.getTodoStore()
+    expect(store).toBeDefined()
+    expect(store.getItems()).toEqual([])
+  })
+
+  it("resetSession clears TodoStore", () => {
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager)
+    const store = orchestrator.getTodoStore()
+    store.setItems([{ content: "A", status: "pending" as const, priority: "high" as const }])
+    orchestrator.resetSession()
+    expect(store.getItems()).toEqual([])
+  })
 })

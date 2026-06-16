@@ -6,6 +6,7 @@ import type { AgentModeName } from "./AgentMode"
 import type { AgentTurnResult, ToolCall, ToolResult } from "./AgentTypes"
 import { AgentMemory } from "./AgentMemory"
 import type { SessionContext } from "./SessionContext"
+import type { TodoStore } from "./TodoStore"
 
 export class AgentToolExecutor {
   constructor(
@@ -15,6 +16,7 @@ export class AgentToolExecutor {
     private readonly modeManager: AgentModeManager,
     private readonly memory: AgentMemory,
     private readonly sessionContext: SessionContext | null,
+    private readonly todoStore: TodoStore | null = null,
   ) {}
 
   async callBackend(
@@ -82,9 +84,11 @@ export class AgentToolExecutor {
         }
       }
 
-      onToolUse?.(tc.toolName, tc.arguments)
+      const resolvedArgs = this.resolveArgs(tc.toolName, tc.arguments)
 
-      const toolResult = await this.toolRegistry.invoke(tc.toolName, tc.arguments)
+      onToolUse?.(tc.toolName, resolvedArgs)
+
+      const toolResult = await this.toolRegistry.invoke(tc.toolName, resolvedArgs)
       onToolResult?.(tc.toolName, toolResult)
 
       workingConversation.push({
@@ -108,6 +112,13 @@ export class AgentToolExecutor {
     }
 
     return { anyFailed }
+  }
+
+  private resolveArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
+    if (toolName === "todowrite" && this.todoStore) {
+      return { ...args, _todoStore: this.todoStore }
+    }
+    return args
   }
 
   private extractToolCalls(content: string): ToolCall[] | null {

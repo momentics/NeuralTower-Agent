@@ -8,6 +8,7 @@ import { AgentModeManager } from "./AgentMode"
 import { AgentMemory } from "./AgentMemory"
 import type { SessionContext } from "./SessionContext"
 import type { ToolResult } from "./AgentTypes"
+import { TodoStore } from "./TodoStore"
 
 const createMockBackend = (): IBackend => ({
   chat: vi.fn(async () => ({ role: "assistant", content: "Test response", timestamp: Date.now() })),
@@ -64,6 +65,7 @@ describe("AgentToolExecutor", () => {
   let modeManager: AgentModeManager
   let memory: AgentMemory
   let sessionContext: SessionContext
+  let todoStore: TodoStore
 
   beforeEach(() => {
     backend = createMockBackend()
@@ -72,6 +74,7 @@ describe("AgentToolExecutor", () => {
     modeManager = new AgentModeManager()
     memory = new AgentMemory()
     sessionContext = createMockSessionContext()
+    todoStore = new TodoStore()
   })
 
   it("creates instance with all dependencies", () => {
@@ -82,6 +85,19 @@ describe("AgentToolExecutor", () => {
       modeManager,
       memory,
       sessionContext,
+      todoStore,
+    )
+    expect(executor).toBeDefined()
+  })
+
+  it("creates instance without todoStore", () => {
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      null,
+      modeManager,
+      memory,
+      null,
     )
     expect(executor).toBeDefined()
   })
@@ -157,6 +173,44 @@ describe("AgentToolExecutor", () => {
     expect(conversation).toHaveLength(2)
     expect(conversation[0].role).toBe("assistant")
     expect(conversation[1].role).toBe("user")
+  })
+
+  it("executeToolCalls injects TodoStore into todowrite args", async () => {
+    const mockTool = createMockTool("todowrite")
+    toolRegistry.register(mockTool)
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      null,
+      modeManager,
+      memory,
+      null,
+      todoStore,
+    )
+    const conversation: ChatMessage[] = []
+    const toolCalls = [{ toolName: "todowrite", arguments: { todos: [] } }]
+    await executor.executeToolCalls(toolCalls, "build", conversation)
+    expect(mockTool.execute).toHaveBeenCalledWith(
+      expect.objectContaining({ todos: [], _todoStore: todoStore }),
+    )
+  })
+
+  it("executeToolCalls does not inject TodoStore for non-todowrite tools", async () => {
+    const mockTool = createMockTool("read")
+    toolRegistry.register(mockTool)
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      null,
+      modeManager,
+      memory,
+      null,
+      todoStore,
+    )
+    const conversation: ChatMessage[] = []
+    const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
+    await executor.executeToolCalls(toolCalls, "build", conversation)
+    expect(mockTool.execute).toHaveBeenCalledWith({ path: "/test" })
   })
 
   it("executeToolCalls blocks denied tools by mode", async () => {

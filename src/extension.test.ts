@@ -43,6 +43,10 @@ vi.mock("./agent/AgentOrchestrator", () => ({
     resetSession: vi.fn(),
     run: vi.fn().mockResolvedValue({ role: "assistant", content: "ok" }),
     dispose: vi.fn(),
+    getTodoStore: vi.fn().mockReturnValue({
+      clear: vi.fn(),
+      getItems: vi.fn(() => []),
+    }),
   })),
 }))
 
@@ -184,9 +188,7 @@ vi.mock("./tools/builtins/WebFetchTool", () => ({
 }))
 
 vi.mock("./tools/builtins/TodoWriteTool", () => ({
-  TodoWriteTool: vi.fn().mockImplementation(() => ({
-    clear: vi.fn(),
-  })),
+  TodoWriteTool: vi.fn().mockImplementation(() => ({})),
 }))
 
 vi.mock("./tools/builtins/LspTool", () => ({

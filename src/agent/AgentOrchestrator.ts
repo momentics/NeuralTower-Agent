@@ -55,6 +55,7 @@ import { AgentContextBuilder } from "./AgentContextBuilder"
 import { AgentToolExecutor } from "./AgentToolExecutor"
 import { AgentPlanner } from "./AgentPlanner"
 import { AgentLoop } from "./AgentLoop"
+import { TodoStore } from "./TodoStore"
 
 export class AgentOrchestrator implements IAgentOrchestrator {
   private workDir = "."
@@ -73,6 +74,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
   private providerRegistry: ContextProviderRegistry
   private sessionContext: SessionContext | null = null
   private subagentRunner: SubagentRunner | null = null
+  private todoStore: TodoStore = new TodoStore()
 
   private contextBuilder: AgentContextBuilder
   private toolExecutor: AgentToolExecutor
@@ -135,6 +137,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
       this.modeManager,
       this.memory,
       this.sessionContext,
+      this.todoStore,
     )
 
     this.planner = new AgentPlanner(
@@ -196,6 +199,10 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     return this.providerRegistry
   }
 
+  getTodoStore(): TodoStore {
+    return this.todoStore
+  }
+
   async resolveContextProvider(name: string, query: string): Promise<ContextItem[]> {
     const provider = this.providerRegistry.get(name)
     if (!provider) return []
@@ -236,6 +243,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
   resetSession(): void {
     this.sessionContext?.reset()
     this.planner.clearPlan()
+    this.todoStore.clear()
   }
 
   // ── Цикл агента ──────────────────────────────────────────
@@ -363,6 +371,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
       this.modeManager,
       this.memory,
       this.sessionContext,
+      this.todoStore,
     )
   }
 

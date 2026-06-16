@@ -1,15 +1,11 @@
 import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
-
-export interface TodoItem {
-  content: string
-  status: "pending" | "in_progress" | "completed" | "cancelled"
-  priority: "high" | "medium" | "low"
-}
+import type { TodoStore, TodoItem } from "../../agent/TodoStore"
 
 /**
  * Инструмент управления списком задач.
- * Позволяет агенту отслеживать прогресс выполнения многоступенчатых задач.
+ * Состояние хранится в TodoStore, который инжектируется через аргументы.
+ * Это сохраняет контракт ITool — инструмент не хранит состояние.
  */
 export class TodoWriteTool implements ITool {
   name = "todowrite"
@@ -17,7 +13,7 @@ export class TodoWriteTool implements ITool {
   category = "agent"
   isSafe = true
 
- schema: ToolSchema = {
+  schema: ToolSchema = {
     name: "todowrite",
     description: this.description,
     parameters: {
@@ -45,8 +41,6 @@ export class TodoWriteTool implements ITool {
     required: ["todos"],
   }
 
-  private items: TodoItem[] = []
-
   async execute(args: Record<string, unknown>): Promise<ToolResult> {
     const todos = args.todos as TodoItem[] | undefined
     if (!todos || !Array.isArray(todos)) {
@@ -56,12 +50,24 @@ export class TodoWriteTool implements ITool {
       }
     }
 
-    this.items = todos
+    const store = args._todoStore as TodoStore | undefined
+    if (store) {
+      store.setItems(todos)
+    }
 
-    const active = this.items.filter((t) => t.status !== "completed" && t.status !== "cancelled")
-    const completed = this.items.filter((t) => t.status === "completed")
+    const output = store ? store.formatItems() : this.formatItems(todos)
 
-    const lines = this.items.map((t, i) => {
+    return {
+      output,
+      success: true,
+    }
+  }
+
+  private formatItems(items: TodoItem[]): string {
+    const active = items.filter((t) => t.status !== "completed" && t.status !== "cancelled")
+    const completed = items.filter((t) => t.status === "completed")
+
+    const lines = items.map((t, i) => {
       const icon =
         t.status === "completed"
           ? "[x]"
@@ -73,17 +79,6 @@ export class TodoWriteTool implements ITool {
       return `${icon} [${i + 1}] ${t.content} (${t.priority})`
     })
 
-    return {
-      output: `Список задач обновлён: ${active.length} активных, ${completed.length} завершено\n\n${lines.join("\n")}`,
-      success: true,
-    }
-  }
-
-  getItems(): TodoItem[] {
-    return [...this.items]
-  }
-
-  clear(): void {
-    this.items = []
+    return `Список задач обновлён: ${active.length} активных, ${completed.length} завершено\n\n${lines.join("\n")}`
   }
 }

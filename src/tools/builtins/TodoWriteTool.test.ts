@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { TodoWriteTool } from "./TodoWriteTool"
+import { TodoStore } from "../../agent/TodoStore"
 
 describe("TodoWriteTool", () => {
   it("has correct metadata", () => {
@@ -61,21 +62,37 @@ describe("TodoWriteTool", () => {
     expect(result.output).toContain("[-]")
   })
 
-  it("returns items via getItems", async () => {
+  it("writes to TodoStore when injected via args", async () => {
+    const store = new TodoStore()
     const tool = new TodoWriteTool()
-    await tool.execute({
-      todos: [
-        { content: "A", status: "pending", priority: "high" },
-      ],
-    })
-    expect(tool.getItems()).toHaveLength(1)
-    expect(tool.getItems()[0].content).toBe("A")
+    const items = [
+      { content: "A", status: "pending", priority: "high" },
+    ]
+    await tool.execute({ todos: items, _todoStore: store })
+    expect(store.getItems()).toHaveLength(1)
+    expect(store.getItems()[0].content).toBe("A")
   })
 
-  it("clear removes items", () => {
+  it("uses TodoStore formatItems when store is injected", async () => {
+    const store = new TodoStore()
     const tool = new TodoWriteTool()
-    ;(tool as any).items = [{ content: "A", status: "pending" as const, priority: "high" as const }]
-    tool.clear()
-    expect(tool.getItems()).toHaveLength(0)
+    const items = [
+      { content: "A", status: "pending", priority: "high" },
+      { content: "B", status: "completed", priority: "low" },
+    ]
+    const result = await tool.execute({ todos: items, _todoStore: store })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain("1 активных")
+    expect(result.output).toContain("1 завершено")
+  })
+
+  it("works without TodoStore (standalone mode)", async () => {
+    const tool = new TodoWriteTool()
+    const items = [
+      { content: "A", status: "pending", priority: "high" },
+    ]
+    const result = await tool.execute({ todos: items })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain("A")
   })
 })

@@ -25,6 +25,7 @@ import { GlobTool } from "./tools/builtins/GlobTool"
 import { GrepTool } from "./tools/builtins/GrepTool"
 import { WebFetchTool } from "./tools/builtins/WebFetchTool"
 import { TodoWriteTool } from "./tools/builtins/TodoWriteTool"
+import type { TodoStore } from "./agent/TodoStore"
 import { LspTool } from "./tools/builtins/LspTool"
 import { ContextManager } from "./core/ContextManager"
 import { SessionContext } from "./agent/SessionContext"
@@ -33,7 +34,7 @@ import { SubagentRunner } from "./agent/SubagentRunner"
 let app: App | undefined
 let backend: NeuralTowerBackend | undefined
 let agent: AgentOrchestrator | undefined
-let todoTool: TodoWriteTool | undefined
+let todoStore: TodoStore | undefined
 let chatProvider: ChatProvider | undefined
 let diffViewer: DiffViewerProvider | undefined
 let healthMonitor: BackendHealthMonitor | undefined
@@ -70,7 +71,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 
   // ── Реестр инструментов ─────────────────────────────────
   const tools = new ToolRegistry()
-  todoTool = new TodoWriteTool()
   tools.register(new ReadFileTool())
   tools.register(new WriteFileTool())
   tools.register(new BashTool())
@@ -79,7 +79,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   tools.register(new GrepTool())
   tools.register(new WebFetchTool())
   tools.register(new LspTool())
-  tools.register(todoTool)
+  tools.register(new TodoWriteTool())
 
   // ── MCP-менеджер ────────────────────────────────────────
   const mcpManager = new MCPManager()
@@ -95,6 +95,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 
   // ── Оркестратор агента ──────────────────────────────────
   agent = new AgentOrchestrator(backend, tools, skills, contextManager)
+  todoStore = agent.getTodoStore()
   agent.setPermissionManager(permissionManager)
   agent.setGitService(gitService)
   agent.setMCPManager(mcpManager)
@@ -140,7 +141,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   // Команды чата
   app.registerCommand("neuralTowerAgent.newChat", () => {
     chatProvider?.broadcastNewChat()
-    todoTool?.clear()
+    todoStore?.clear()
     agent?.clearPlan()
     agent?.resetSession()
   })
