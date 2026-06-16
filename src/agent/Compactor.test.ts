@@ -159,7 +159,7 @@ describe("Compactor", () => {
       keepTokens: 1,
     })
 
-    // Use only assistant messages so last user message is undefined
+    // Использовать только сообщения ассистента, чтобы последнее сообщение пользователя было undefined
     const msgs: ChatMessage[] = [
       { role: "assistant", content: "some response" },
       { role: "assistant", content: "another response" },

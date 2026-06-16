@@ -65,11 +65,11 @@ describe("AgentMemory", () => {
 
   it("keeps pinned messages when trimming", () => {
     const smallMemory = new AgentMemory(10)
-    // Add many messages to force trimming
+    // Добавить множество сообщений для принудительного обрезания
     for (let i = 0; i < 100; i++) {
       smallMemory.add({ role: "user", content: `msg ${i}` })
     }
-    // The pinned check is internal; just verify trimming works
+    // Проверка закрепления — внутренняя; достаточно проверить, что обрезание работает
     expect(smallMemory.getRecent().length).toBeGreaterThan(0)
   })
 

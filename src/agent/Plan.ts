@@ -287,7 +287,7 @@ export class Plan {
     })
     plan.status = data.status
     plan.currentStepIndex = data.currentStepIndex
-    // createdAt is read-only, use the one from constructor
+    // createdAt — только для чтения, используется значение из конструктора
     plan.updatedAt = data.updatedAt
     plan.transferData = data.handover
     for (const [i, step] of data.steps.entries()) {

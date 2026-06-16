@@ -4,7 +4,7 @@ import type { IBackend, ChatMessage } from "../core/IBackend"
 vi.mock("./AgentOrchestrator", () => ({
   AgentOrchestrator: vi.fn().mockImplementation(() => ({
     run: vi.fn().mockImplementation(() => {
-      // Return a deferred promise so tests can inspect running state before completion
+      // Вернуть отложенный обещание, чтобы тесты могли проверить состояние выполнения до завершения
       return new Promise((resolve) => {
         setTimeout(() => resolve({ role: "assistant", content: "done" }), 0)
       })

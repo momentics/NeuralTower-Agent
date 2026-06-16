@@ -25,7 +25,7 @@ describe("App", () => {
       dispose: vi.fn(),
     } as unknown as IProvider
     app.registerProvider(provider)
-    // Access private providers array to verify
+    // Доступ к приватному массиву providers для проверки
     expect((app as any).providers).toHaveLength(1)
   })
 

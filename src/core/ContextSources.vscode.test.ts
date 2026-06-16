@@ -948,7 +948,7 @@ describe("ContextSources.vscode", () => {
       const source = makeRulesSource(() => "/work")
       await source.load()
 
-      // Second load should use cache (within TTL)
+      // Вторая загрузка должна использовать кэш (в пределах TTL)
       await source.load()
 
       expect(fs.readdir).toHaveBeenCalledTimes(2)
@@ -973,7 +973,7 @@ describe("ContextSources.vscode", () => {
       const source = makeRulesSource(() => "/work")
       await source.load()
 
-      // Advance time past TTL (30s)
+      // Пропустить время за пределами TTL (30 с)
       vi.advanceTimersByTime(31000)
 
       await source.load()
@@ -1090,7 +1090,7 @@ describe("ContextSources.vscode", () => {
       const source = makeRepoMapSource(() => "/work", mockFn)
       await source.load()
 
-      // Advance time past TTL (60s)
+      // Пропустить время за пределами TTL (60 с)
       vi.advanceTimersByTime(61000)
 
       await source.load()

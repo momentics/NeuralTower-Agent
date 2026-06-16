@@ -108,7 +108,7 @@ describe("GrepTool", () => {
     expect(result.success).toBe(true)
     const lines = result.output.split("\n")
     for (const line of lines) {
-      // Find the line number part: after "path:LINE:" the content is truncated to 200
+      // Найти часть с номером строки: после "path:LINE:" содержимое обрезается до 200 символов
       const lineNumMatch = line.match(/:(\d+): (.*)$/)
       if (lineNumMatch) {
         expect(lineNumMatch[2].length).toBeLessThanOrEqual(200)

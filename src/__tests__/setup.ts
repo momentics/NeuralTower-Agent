@@ -1,6 +1,6 @@
 import { vi } from "vitest"
 
-// Mock crypto.randomBytes for webview HTML generation
+// Заглушка для crypto.randomBytes при генерации HTML вебвью
 vi.mock("crypto", () => ({
   default: {
     randomBytes: (n: number) => Buffer.alloc(n),
@@ -8,5 +8,5 @@ vi.mock("crypto", () => ({
   randomBytes: (n: number) => Buffer.alloc(n),
 }))
 
-// Mock fetch for network tests
+// Заглушка для fetch в сетевых тестах
 vi.stubGlobal("fetch", vi.fn())

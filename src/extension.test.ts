@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import * as vscode from "vscode"
 
-// Mock all dependencies
+// Заглушки для всех зависимостей
 const registeredCommands: Array<{ id: string; handler: (...args: unknown[]) => void }> = []
 
 vi.mock("./core/App", () => ({
@@ -241,7 +241,7 @@ describe("extension", () => {
   })
 
   afterEach(async () => {
-    // Reload the module to reset module-level state
+    // Перезагрузить модуль для сброса состояния на уровне модуля
     vi.resetModules()
   })
 
@@ -424,7 +424,7 @@ describe("extension", () => {
     it("handles activation without workspace folders", async () => {
       ;(vscode.workspace as any).workspaceFolders = undefined
       await activate(ctx)
-      // Should not throw
+      // Не должно выбрасывать исключение
     })
 
     it("handles activation failure gracefully", async () => {
@@ -450,18 +450,18 @@ describe("extension", () => {
     })
 
     it("handles deactivate without prior activate", () => {
-      // Should not throw
+      // Не должно выбрасывать исключение
       deactivate()
     })
   })
 
   describe("getLang", () => {
-    // Import getLang indirectly through the extension module
-    // Since getLang is a private function, we test it through command handlers
+    // Импорт getLang косвенно через модуль расширения
+    // Так как getLang — приватная функция, тестируем её через обработчики команд
 
     it("returns typescript for .ts files", async () => {
       await activate(ctx)
-      // Test through explainCode command which uses getLang
+      // Тестирование через команду explainCode, которая использует getLang
       const calls = registeredCommands
       const explainCmd = calls.find((c: any) => c.id === "neuralTowerAgent.explainCode")
       expect(explainCmd).toBeDefined()
@@ -481,7 +481,7 @@ describe("extension", () => {
       const calls = registeredCommands
       const newChatCmd = calls.find((c: any) => c.id === "neuralTowerAgent.newChat")
       expect(newChatCmd).toBeDefined()
-      // Execute the handler
+      // Выполнить обработчик
       await newChatCmd.handler()
     })
 
@@ -570,7 +570,7 @@ describe("extension", () => {
       const calls = registeredCommands
       const fixCmd = calls.find((c: any) => c.id === "neuralTowerAgent.codeAction.fix")
       await fixCmd.handler("", "", "")
-      // Should not throw, just return early
+      // Не должно выбрасывать исключение, просто ранний выход
     })
 
     it("codeAction.explain skips when no text or filePath", async () => {
@@ -578,7 +578,7 @@ describe("extension", () => {
       const calls = registeredCommands
       const explainCmd = calls.find((c: any) => c.id === "neuralTowerAgent.codeAction.explain")
       await explainCmd.handler("", "")
-      // Should not throw, just return early
+      // Не должно выбрасывать исключение, просто ранний выход
     })
 
     it("codeAction.improve skips when no text or filePath", async () => {
@@ -586,7 +586,7 @@ describe("extension", () => {
       const calls = registeredCommands
       const improveCmd = calls.find((c: any) => c.id === "neuralTowerAgent.codeAction.improve")
       await improveCmd.handler("", "")
-      // Should not throw, just return early
+      // Не должно выбрасывать исключение, просто ранний выход
     })
 
     it("codeAction.addToContext skips when no text or filePath", async () => {
@@ -594,7 +594,7 @@ describe("extension", () => {
       const calls = registeredCommands
       const addCtxCmd = calls.find((c: any) => c.id === "neuralTowerAgent.codeAction.addToContext")
       await addCtxCmd.handler("", "")
-      // Should not throw, just return early
+      // Не должно выбрасывать исключение, просто ранний выход
     })
 
     it("generateCommitMessage skips when no workspace folder", async () => {
@@ -603,7 +603,7 @@ describe("extension", () => {
       const calls = registeredCommands
       const commitCmd = calls.find((c: any) => c.id === "neuralTowerAgent.generateCommitMessage")
       await commitCmd.handler()
-      // Should not throw, just return early
+      // Не должно выбрасывать исключение, просто ранний выход
     })
 
     it("generateCommitMessage copies message to clipboard", async () => {
@@ -649,7 +649,7 @@ describe("extension", () => {
       const calls = registeredCommands
       const diffCmd = calls.find((c: any) => c.id === "neuralTowerAgent.openDiffViewer")
       await diffCmd.handler()
-      // Should not throw, just return early
+      // Не должно выбрасывать исключение, просто ранний выход
     })
   })
 })

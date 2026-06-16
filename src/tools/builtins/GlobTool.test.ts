@@ -78,7 +78,7 @@ describe("GlobTool", () => {
       pattern: "**/*.ts",
       path: "/nonexistent/path/that/does/not/exist",
     })
-    // On some platforms glob returns empty, on others it throws
+    // На некоторых платформах glob возвращает пустой результат, на других — выбрасывает исключение
     if (result.success) {
       expect(result.output).toContain("Совпадений не найдено")
     } else {
