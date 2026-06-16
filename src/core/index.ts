@@ -33,7 +33,8 @@ export {
   makeRulesProvider,
   makeMCPProvider,
   makeLspProvider,
-} from "./ContextProvider"
+  loadRulesFiles,
+} from "./providers/context"
 export type {
   ContextItem,
   ProviderType,
@@ -42,5 +43,7 @@ export type {
   ContextProvider,
   CodeSearchEntry,
   MCPToolListFn,
-} from "./ContextProvider"
-export { ContextProviderRegistry } from "./ContextProvider"
+  RepoSummary,
+  FileIndexStats,
+} from "./providers/context"
+export { ContextProviderRegistry } from "./providers/context"

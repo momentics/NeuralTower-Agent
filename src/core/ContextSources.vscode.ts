@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import type { ContextSource } from "./ContextSource"
-import { loadRulesFiles } from "./ContextProvider"
+import { loadRulesFiles } from "./providers/context"
 
 const MAX_CONTENT_LINES = 300
 

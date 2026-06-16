@@ -45,7 +45,7 @@ import {
   type ContextProvider,
   type ContextItem,
   type MCPToolListFn,
-} from "../core/ContextProvider"
+} from "../core/providers/context"
 import { Plan } from "./Plan"
 import { AgentModeManager, builtInModes, type AgentModeName } from "./AgentMode"
 import { Compactor } from "./Compactor"
