@@ -12,6 +12,7 @@ vi.mock("./AgentOrchestrator", () => ({
     setWorkingDir: vi.fn(),
     setPermissionManager: vi.fn(),
     setGitService: vi.fn(),
+    dispose: vi.fn(),
   })),
 }))
 

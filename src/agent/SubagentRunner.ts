@@ -145,6 +145,7 @@ export class SubagentRunner {
         onDone?.(result)
         return result
       } finally {
+        orchestrator.dispose()
         this.running.delete(id)
       }
     })()
