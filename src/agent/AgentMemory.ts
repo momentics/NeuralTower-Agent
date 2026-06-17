@@ -8,6 +8,8 @@
  */
 
 import type { ChatMessage } from "../core/IBackend"
+import { TOKENS_PER_CHAR } from "../core/token-utils"
+import { loadDefaultAgentConfig } from "../core/config"
 
 export interface MemoryEntry {
   message: ChatMessage
@@ -35,11 +37,9 @@ export class AgentMemory {
     notes: [],
   }
 
-  /** Примерное число токенов на сообщение. Используется для расчёта лимита контекста. */
-  private static readonly TOKENS_PER_CHAR = 0.25
   private readonly maxTokens: number
 
-  constructor(maxTokens = 60_000) {
+  constructor(maxTokens = loadDefaultAgentConfig().maxTokens) {
     this.maxTokens = maxTokens
   }
 
@@ -47,7 +47,7 @@ export class AgentMemory {
   add(message: ChatMessage): void {
     this.shortTerm.push({
       message,
-      tokenCount: Math.ceil((message.content.length * AgentMemory.TOKENS_PER_CHAR)),
+      tokenCount: Math.ceil(message.content.length * TOKENS_PER_CHAR),
       pinned: false,
     })
     this.trim()

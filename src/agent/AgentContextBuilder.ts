@@ -1,4 +1,3 @@
-import * as vscode from "vscode"
 import type { IBackend } from "../core/IBackend"
 import type { ISkill } from "../skills/ISkill"
 import type { ToolRegistry } from "../tools/ToolRegistry"
@@ -16,6 +15,7 @@ export class AgentContextBuilder {
     private readonly fileIndex: FileIndex,
     private readonly gitService: GitService | null,
     private readonly workDir: () => string,
+    private readonly injectDiffContext: boolean,
   ) {}
 
   async buildSystemPrompt(skills: ISkill[]): Promise<string> {
@@ -31,10 +31,7 @@ export class AgentContextBuilder {
         : ""
 
     let gitContext = ""
-    if (
-      this.gitService &&
-      vscode.workspace.getConfiguration("neuralTowerAgent").get<boolean>("git.injectDiffContext", true)
-    ) {
+    if (this.gitService && this.injectDiffContext) {
       gitContext = await this.gitService.getDiffContext(this.workDir())
     }
 

@@ -174,6 +174,7 @@ describe("AgentContextBuilder", () => {
       fileIndex,
       gitService,
       () => "/test/dir",
+      true,
     )
     const prompt = await builder.buildSystemPrompt([])
     expect(prompt).toContain("Изменения Git")

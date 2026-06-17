@@ -1,4 +1,6 @@
 import type { IBackend, ChatMessage } from "../core/IBackend"
+import { estimateTokens } from "../core/token-utils"
+import { loadDefaultCompactorConfig } from "../core/config"
 
 /**
  * Настройки сжатия контекста.
@@ -23,15 +25,7 @@ export interface CompactorOptions {
 /**
  * Настройки по умолчанию для сжатия контекста.
  */
-const DEFAULT_OPTIONS: CompactorOptions = {
-  contextLimit: 128_000,
-  bufferTokens: 20_000,
-  keepTokens: 8_000,
-  maxToolOutputChars: 2_000,
-  summaryMaxTokens: 4_096,
-}
-
-const TOKENS_PER_CHAR = 0.25
+const DEFAULT_OPTIONS: CompactorOptions = loadDefaultCompactorConfig()
 
 /**
  * Шаблон для структурированной сводки при сжатии истории.
@@ -237,14 +231,14 @@ export class Compactor {
 // ── Утилиты ───────────────────────────────────────────────
 
 function estimateMessageTokens(message: ChatMessage): number {
-  return Math.ceil(message.content.length * TOKENS_PER_CHAR)
+  return estimateTokens(message.content)
 }
 
 function estimateConversationTokens(
   messages: ChatMessage[],
   systemPrompt: string,
 ): number {
-  let total = Math.ceil(systemPrompt.length * TOKENS_PER_CHAR)
+  let total = estimateTokens(systemPrompt)
   for (const msg of messages) {
     total += estimateMessageTokens(msg)
   }

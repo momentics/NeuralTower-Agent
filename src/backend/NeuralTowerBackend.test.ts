@@ -65,15 +65,14 @@ describe("NeuralTowerBackend", () => {
   })
 
   it("healthCheck returns false on error", async () => {
-    configMock.mockReturnValue({
-      get: vi.fn().mockImplementation((_key: string, fallback: any) => {
-        if (_key === "maxRetries") return 0
-        return fallback
-      }),
-      update: vi.fn().mockResolvedValue(undefined),
-    })
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("fail")))
-    const result = await backend.healthCheck()
+    const errorBackend = new NeuralTowerBackend({
+      url: "http://localhost:30000",
+      model: "test-model",
+      maxRetries: 0,
+      timeoutMs: 60000,
+    })
+    const result = await errorBackend.healthCheck()
     expect(result).toBe(false)
     vi.unstubAllGlobals()
   })

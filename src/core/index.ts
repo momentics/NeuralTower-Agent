@@ -57,3 +57,20 @@ export type {
   FileIndexStats,
 } from "./providers/context"
 export { ContextProviderRegistry } from "./providers/context"
+export { TOKENS_PER_CHAR, estimateTokens } from "./token-utils"
+export {
+  loadAppConfig,
+  loadDefaultBackendConfig,
+  loadDefaultAgentConfig,
+  loadDefaultContextConfig,
+  loadDefaultCompactorConfig,
+  loadDefaultSessionConfig,
+} from "./config"
+export type {
+  AppConfig,
+  BackendConfig as AppConfigBackendConfig,
+  AgentConfig,
+  ContextConfig,
+  CompactorConfig,
+  SessionConfig,
+} from "./config"

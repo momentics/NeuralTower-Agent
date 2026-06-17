@@ -1,6 +1,7 @@
 import * as vscode from "vscode"
 import type { IBackend, BackendConfig, ChatMessage } from "../core/IBackend"
 import { BackendError, ConnectionError, TimeoutError } from "../core/errors"
+import { loadDefaultBackendConfig } from "../core/config"
 
 /**
  * Бэкенд Neural Tower. Подключается к локальному серверу
@@ -11,23 +12,25 @@ import { BackendError, ConnectionError, TimeoutError } from "../core/errors"
  * любой другой HTTP-сервер вывода, изменив API-эндпоинты и формат запросов.
  */
 export class NeuralTowerBackend implements IBackend {
-  private static readonly DEFAULT_URL = "http://localhost:30000"
-  private static readonly DEFAULT_MODEL = "qwen3.6-27b"
+  private config: BackendConfig
+
+  constructor(config?: BackendConfig) {
+    this.config = config ?? loadDefaultBackendConfig()
+  }
 
   async getConfig(): Promise<BackendConfig> {
-    const cfg = vscode.workspace.getConfiguration("neuralTowerAgent")
-    return {
-      url: cfg.get<string>("neuralTowerUrl", NeuralTowerBackend.DEFAULT_URL)!,
-      model: cfg.get<string>("model", NeuralTowerBackend.DEFAULT_MODEL)!,
-      maxRetries: cfg.get<number>("maxRetries", 3)!,
-      timeoutMs: cfg.get<number>("timeoutMs", 60000)!,
-    }
+    return { ...this.config }
   }
 
   async updateConfig(partial: Partial<BackendConfig>): Promise<void> {
+    if (partial.url !== undefined) this.config.url = partial.url
+    if (partial.model !== undefined) this.config.model = partial.model
+    if (partial.maxRetries !== undefined) this.config.maxRetries = partial.maxRetries
+    if (partial.timeoutMs !== undefined) this.config.timeoutMs = partial.timeoutMs
+
     const cfg = vscode.workspace.getConfiguration("neuralTowerAgent")
-    if (partial.url) await cfg.update("neuralTowerUrl", partial.url, true)
-    if (partial.model) await cfg.update("model", partial.model, true)
+    if (partial.url !== undefined) await cfg.update("neuralTowerUrl", partial.url, true)
+    if (partial.model !== undefined) await cfg.update("model", partial.model, true)
     if (partial.maxRetries !== undefined) await cfg.update("maxRetries", partial.maxRetries, true)
     if (partial.timeoutMs !== undefined) await cfg.update("timeoutMs", partial.timeoutMs, true)
   }

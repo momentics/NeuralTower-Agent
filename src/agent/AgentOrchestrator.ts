@@ -54,13 +54,15 @@ import { AgentToolExecutor } from "./AgentToolExecutor"
 import { AgentPlanner } from "./AgentPlanner"
 import { AgentLoop } from "./AgentLoop"
 import { TodoStore } from "./TodoStore"
+import type { AgentConfig, CompactorConfig } from "../core/config"
+import { loadDefaultAgentConfig, loadDefaultCompactorConfig } from "../core/config"
 
 export class AgentOrchestrator implements IAgentOrchestrator {
   private workDir = "."
   private permissionManager: PermissionManager | null = null
   private gitService: GitService | null = null
   private mcpManager: MCPManager | null = null
-  private memory: AgentMemory = new AgentMemory()
+  private memory: AgentMemory
   private repoAnalyzer: RepoAnalyzer = new RepoAnalyzer()
   private fileIndex: FileIndex = new FileIndex()
   private disposables: vscode.Disposable[] = []
@@ -79,14 +81,22 @@ export class AgentOrchestrator implements IAgentOrchestrator {
   private planner: AgentPlanner
   private loop: AgentLoop
 
+  private readonly agentConfig: AgentConfig
+  private readonly compactorConfig: CompactorConfig
+
   constructor(
     private readonly backend: IBackend,
     private readonly toolRegistry: ToolRegistry,
     private readonly skillManager: SkillManager,
     contextManager?: ContextManager,
+    agentConfig?: AgentConfig,
+    compactorConfig?: CompactorConfig,
   ) {
+    this.agentConfig = agentConfig ?? loadDefaultAgentConfig()
+    this.compactorConfig = compactorConfig ?? loadDefaultCompactorConfig()
+    this.memory = new AgentMemory(this.agentConfig.maxTokens)
     this.contextManager = contextManager ?? new ContextManager()
-    this.compactor = new Compactor(backend)
+    this.compactor = new Compactor(backend, this.compactorConfig)
     this.providerRegistry = new ContextProviderRegistry()
 
     this.registerProviders()
@@ -99,6 +109,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
       this.fileIndex,
       this.gitService,
       () => this.workDir,
+      this.agentConfig.injectDiffContext,
     )
 
     this.toolExecutor = new AgentToolExecutor(
@@ -126,6 +137,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
       this.contextBuilder,
       this.toolExecutor,
       this.planner,
+      this.agentConfig.maxIterations,
     )
   }
 
@@ -380,6 +392,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
       this.fileIndex,
       this.gitService,
       () => this.workDir,
+      this.agentConfig.injectDiffContext,
     )
   }
 

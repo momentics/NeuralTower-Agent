@@ -263,7 +263,7 @@ describe("extension", () => {
     it("creates and initializes session store", async () => {
       await activate(ctx)
       const { PersistentSessionStore } = await import("./shared/PersistentSessionStore")
-      expect(PersistentSessionStore).toHaveBeenCalledWith(ctx.globalStorageUri)
+      expect(PersistentSessionStore).toHaveBeenCalledWith(ctx.globalStorageUri, expect.any(Number))
     })
 
     it("creates and configures permission manager", async () => {

@@ -31,6 +31,7 @@ import { ContextManager } from "./core/ContextManager"
 import { SessionContext } from "./agent/SessionContext"
 import { SubagentRunner } from "./agent/SubagentRunner"
 import { AbortError, BackendError, NeuralTowerError } from "./core/errors"
+import { loadAppConfig } from "./core/config"
 
 let app: App | undefined
 let backend: NeuralTowerBackend | undefined
@@ -48,11 +49,14 @@ let subagentRunner: SubagentRunner | undefined
 export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   app = new App(ctx)
 
+  // ── Конфигурация ────────────────────────────────────────
+  const config = loadAppConfig()
+
   // ── Бэкенд ──────────────────────────────────────────────
-  backend = new NeuralTowerBackend()
+  backend = new NeuralTowerBackend(config.backend)
 
   // ── Постоянное хранилище сессий ─────────────────────────
-  const sessionStore = new PersistentSessionStore(ctx.globalStorageUri)
+  const sessionStore = new PersistentSessionStore(ctx.globalStorageUri, config.session.maxSessions)
   await sessionStore.init()
 
   // ── Менеджер разрешений ─────────────────────────────────
@@ -95,7 +99,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   contextManager = new ContextManager()
 
   // ── Оркестратор агента ──────────────────────────────────
-  agent = new AgentOrchestrator(backend, tools, skills, contextManager)
+  agent = new AgentOrchestrator(backend, tools, skills, contextManager, config.agent, config.compactor)
   todoStore = agent.getTodoStore()
   agent.setPermissionManager(permissionManager)
   agent.setGitService(gitService)

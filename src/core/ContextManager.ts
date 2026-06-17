@@ -1,7 +1,8 @@
 import type { ContextProvider, ContextItem } from "./providers/context/types"
+import { estimateTokens } from "./token-utils"
+import { loadDefaultContextConfig } from "./config"
 
-const TOKENS_PER_CHAR = 0.25
-const DEFAULT_TOKEN_BUDGET = 16000
+const DEFAULT_TOKEN_BUDGET = loadDefaultContextConfig().tokenBudget
 
 /**
  * Неподвижный снимок провайдера контекста на момент
@@ -254,10 +255,6 @@ export class ContextManager {
 }
 
 // ── Утилиты ───────────────────────────────────────────────
-
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length * TOKENS_PER_CHAR)
-}
 
 function extractContent(items: ContextItem[]): string {
   if (items.length === 0) return ""

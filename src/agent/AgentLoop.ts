@@ -11,8 +11,11 @@ import type { AgentContextBuilder } from "./AgentContextBuilder"
 import type { AgentToolExecutor } from "./AgentToolExecutor"
 import type { AgentPlanner } from "./AgentPlanner"
 import { AbortError } from "../core/errors"
+import { loadDefaultAgentConfig } from "../core/config"
 
 export class AgentLoop {
+  private readonly maxIterations: number
+
   constructor(
     private readonly backend: IBackend,
     private readonly memory: AgentMemory,
@@ -22,7 +25,10 @@ export class AgentLoop {
     private readonly contextBuilder: AgentContextBuilder,
     private readonly toolExecutor: AgentToolExecutor,
     private readonly planner: AgentPlanner,
-  ) {}
+    maxIterations?: number,
+  ) {
+    this.maxIterations = maxIterations ?? loadDefaultAgentConfig().maxIterations
+  }
 
   async run(
     query: string,
@@ -77,9 +83,8 @@ export class AgentLoop {
     }
 
     let iterations = 0
-    const maxIter = 20
 
-    while (iterations < maxIter) {
+    while (iterations < this.maxIterations) {
       iterations++
 
       if (signal?.aborted) {
