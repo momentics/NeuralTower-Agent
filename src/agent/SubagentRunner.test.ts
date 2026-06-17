@@ -4,7 +4,6 @@ import type { IBackend, ChatMessage } from "../core/IBackend"
 vi.mock("./AgentOrchestrator", () => ({
   AgentOrchestrator: vi.fn().mockImplementation(() => ({
     run: vi.fn().mockImplementation(() => {
-      // Вернуть отложенный обещание, чтобы тесты могли проверить состояние выполнения до завершения
       return new Promise((resolve) => {
         setTimeout(() => resolve({ role: "assistant", content: "done" }), 0)
       })
@@ -64,6 +63,8 @@ describe("SubagentRunner", () => {
       backend,
       {} as any,
       {} as any,
+      null,
+      null,
     )
   })
 

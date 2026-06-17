@@ -3,7 +3,7 @@ import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
 import type { AgentModeName } from "./AgentMode"
 import { AgentOrchestrator } from "./AgentOrchestrator"
-import type { ContextManager } from "../core/ContextManager"
+import type { AgentEnvironment } from "./AgentEnvironment"
 import type { PermissionManager } from "../services/permission/PermissionManager"
 import type { GitService } from "../services/git/GitService"
 
@@ -51,7 +51,7 @@ export interface SubagentConfig {
   /** Задача для выполнения. */
   task: string
 
-  /** Режим агента. */
+  /** Режим подагента. */
   mode: AgentModeName
 
   /** Рабочая директория. */
@@ -79,9 +79,9 @@ export class SubagentRunner {
     private readonly backend: IBackend,
     private readonly toolRegistry: ToolRegistry,
     private readonly skillManager: SkillManager,
-    private readonly contextManager?: ContextManager,
-    private readonly permissionManager?: PermissionManager,
-    private readonly gitService?: GitService,
+    private readonly env: AgentEnvironment,
+    private readonly permissionManager: PermissionManager | null,
+    private readonly gitService: GitService | null,
   ) {}
 
   /**
@@ -218,11 +218,12 @@ export class SubagentRunner {
       this.backend,
       this.toolRegistry,
       this.skillManager,
-      this.contextManager,
+      this.env,
     )
-    orchestrator.setWorkingDir(config.workDir)
+
     if (this.permissionManager) orchestrator.setPermissionManager(this.permissionManager)
     if (this.gitService) orchestrator.setGitService(this.gitService)
+
     return orchestrator
   }
 }

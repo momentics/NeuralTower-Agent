@@ -1,6 +1,7 @@
 import * as vscode from "vscode"
 import { NeuralTowerBackend } from "../backend/NeuralTowerBackend"
 import { AgentOrchestrator } from "../agent/AgentOrchestrator"
+import { AgentEnvironment } from "../agent/AgentEnvironment"
 import { ToolRegistry } from "../tools/ToolRegistry"
 import { SkillManager } from "../skills/SkillManager"
 import { builtInSkills } from "../skills/builtInSkills"
@@ -23,6 +24,8 @@ import { WebFetchTool } from "../tools/builtins/WebFetchTool"
 import { TodoWriteTool } from "../tools/builtins/TodoWriteTool"
 import { LspTool } from "../tools/builtins/LspTool"
 import { ContextManager } from "../core/ContextManager"
+import { ContextProviderRegistry } from "../core/providers/context/registry"
+import { FileIndex } from "../repo/FileIndex"
 import { SessionContext } from "../agent/SessionContext"
 import { SubagentRunner } from "../agent/SubagentRunner"
 import { loadAppConfig } from "../core/config"
@@ -97,8 +100,23 @@ export async function createDeps(
   // ── Менеджер контекста ──────────────────────────────────
   const contextManager = new ContextManager()
 
+  // ── Реестр провайдеров контекста ─────────────────────────
+  const contextProviderRegistry = new ContextProviderRegistry()
+
+  // ── Файловый индекс ─────────────────────────────────────
+  const fileIndex = new FileIndex()
+
+  // ── Окружение агента ────────────────────────────────────
+  const agentEnv = new AgentEnvironment(
+    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "",
+    config,
+    contextProviderRegistry,
+    contextManager,
+    fileIndex,
+  )
+
   // ── Оркестратор агента ──────────────────────────────────
-  const agent = new AgentOrchestrator(backend, tools, skills, contextManager, config.agent, config.compactor)
+  const agent = new AgentOrchestrator(backend, tools, skills, agentEnv)
   const todoStore = agent.getTodoStore()
   agent.setPermissionManager(permissionManager)
   agent.setGitService(gitService)
@@ -109,7 +127,7 @@ export async function createDeps(
   agent.setSessionContext(sessionContext)
 
   // ── Runner подагентов ───────────────────────────────────
-  const subagentRunner = new SubagentRunner(backend, tools, skills, contextManager, permissionManager, gitService)
+  const subagentRunner = new SubagentRunner(backend, tools, skills, agentEnv, permissionManager, gitService)
   agent.setSubagentRunner(subagentRunner)
 
   if (vscode.workspace.workspaceFolders?.[0]) {
