@@ -33,4 +33,7 @@ export interface IAgentOrchestrator {
 
   /** Сбросить контекст сессии (новый чат / переключение сессии). */
   resetSession(): void
+
+  /** Очистить текущий план. */
+  clearPlan(): void
 }
