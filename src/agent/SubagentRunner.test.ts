@@ -1,18 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import type { IBackend, ChatMessage } from "../core/IBackend"
 
+const MockOrchestrator = {
+  run: vi.fn().mockImplementation(() => {
+    return new Promise((resolve) => {
+      setTimeout(() => resolve({ role: "assistant", content: "done" }), 0)
+    })
+  }),
+  dispose: vi.fn(),
+}
+
 vi.mock("./AgentOrchestrator", () => ({
-  AgentOrchestrator: vi.fn().mockImplementation(() => ({
-    run: vi.fn().mockImplementation(() => {
-      return new Promise((resolve) => {
-        setTimeout(() => resolve({ role: "assistant", content: "done" }), 0)
-      })
-    }),
-    setWorkingDir: vi.fn(),
-    setPermissionManager: vi.fn(),
-    setGitService: vi.fn(),
-    dispose: vi.fn(),
-  })),
+  AgentOrchestrator: vi.fn().mockImplementation(() => ({ ...MockOrchestrator })),
 }))
 
 import { SubagentRunner, SubagentHandle } from "./SubagentRunner"
@@ -63,8 +62,8 @@ describe("SubagentRunner", () => {
       backend,
       {} as any,
       {} as any,
-      null,
-      null,
+      {} as any,
+      vi.fn(),
     )
   })
 

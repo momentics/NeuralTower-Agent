@@ -3,6 +3,7 @@ import type { ISkill } from "../skills/ISkill"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
 import type { GitService } from "../services/git/GitService"
+import type { ContextManager } from "../core/ContextManager"
 import { AgentMemory } from "./AgentMemory"
 import { FileIndex } from "../repo/FileIndex"
 
@@ -14,8 +15,9 @@ export class AgentContextBuilder {
     private readonly memory: AgentMemory,
     private readonly fileIndex: FileIndex,
     private readonly gitService: GitService | null,
-    private readonly workDir: () => string,
+    private readonly getWorkDir: () => string,
     private readonly injectDiffContext: boolean,
+    private readonly contextManager: ContextManager | null = null,
   ) {}
 
   async buildSystemPrompt(skills: ISkill[]): Promise<string> {
@@ -32,10 +34,22 @@ export class AgentContextBuilder {
 
     let gitContext = ""
     if (this.gitService && this.injectDiffContext) {
-      gitContext = await this.gitService.getDiffContext(this.workDir())
+      gitContext = await this.gitService.getDiffContext(this.getWorkDir())
     }
 
-    const parts = [envBlock, base, projectCtx, skillCtx, toolCtx, indexInfo, gitContext].filter(Boolean)
+    let contextManagerContent = ""
+    if (this.contextManager) {
+      try {
+        const prepared = await this.contextManager.prepare()
+        if (prepared.systemPrompt) {
+          contextManagerContent = prepared.systemPrompt
+        }
+      } catch {
+        // ContextManager недоступен — пропускаем
+      }
+    }
+
+    const parts = [contextManagerContent, envBlock, base, projectCtx, skillCtx, toolCtx, indexInfo, gitContext].filter(Boolean)
     return parts.join("\n\n")
   }
 
@@ -43,18 +57,18 @@ export class AgentContextBuilder {
     try {
       const cfg = await this.backend.getConfig()
       const branchInfo = this.gitService
-        ? await this.gitService.getBranchInfo(this.workDir())
+        ? await this.gitService.getBranchInfo(this.getWorkDir())
         : null
       return `<env>
   Модель: ${cfg.model}
-  Рабочая директория: ${this.workDir()}
+  Рабочая директория: ${this.getWorkDir()}
   Платформа: ${process.platform}
   Дата: ${new Date().toISOString()}
   Ветка: ${branchInfo?.name ?? "неизвестно"}
 </env>`
     } catch {
       return `<env>
-  Рабочая директория: ${this.workDir()}
+  Рабочая директория: ${this.getWorkDir()}
   Платформа: ${process.platform}
   Дата: ${new Date().toISOString()}
 </env>`
@@ -76,9 +90,9 @@ export class AgentContextBuilder {
 # Инструменты
 
 У вас есть доступ к инструментам для работы с файлами, выполнения команд и поиска кода.
-Когда нужно вызвать инструмент, ответите JSON-блоком:
+Когда нужно вызвать инструмент, ответьте JSON-блоком:
 \{"tool": "имя_инструмента", "args": \{"ключ": "значение"\}\}
-Когда у вас есть окончательный ответ, ответите обычным текстом.
+Когда у вас есть окончательный ответ, ответьте обычным текстом.
 Вы можете вызывать несколько инструментов в одном ответе, разместив несколько JSON-блоков.
 
 # Стиль кода

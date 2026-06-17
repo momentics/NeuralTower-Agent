@@ -8,6 +8,7 @@ import type { ISkill } from "../skills/ISkill"
 import type { GitService } from "../services/git/GitService"
 import { AgentMemory } from "./AgentMemory"
 import { FileIndex } from "../repo/FileIndex"
+import { ContextManager } from "../core/ContextManager"
 
 const createMockBackend = (): IBackend => ({
   chat: vi.fn(async () => ({ role: "assistant", content: "Test response", timestamp: Date.now() })),
@@ -130,7 +131,7 @@ describe("AgentContextBuilder", () => {
       () => "/test/dir",
     )
     const prompt = await builder.buildSystemPrompt([])
-    expect(prompt).toContain("Инструменты не доступны.")
+    expect(prompt).toContain("Инструменты недоступны.")
   })
 
   it("buildSystemPrompt includes project context from memory", async () => {
@@ -235,5 +236,40 @@ describe("AgentContextBuilder", () => {
     const prompt = await builder.buildSystemPrompt([skill])
     expect(prompt).toContain("Навык: testing")
     expect(skillManagerWithCtx.buildContext).toHaveBeenCalledWith([skill])
+  })
+
+  it("buildSystemPrompt includes contextManager content when set", async () => {
+    const contextManager = new ContextManager()
+    const builder = new AgentContextBuilder(
+      backend,
+      toolRegistry,
+      skillManager,
+      memory,
+      fileIndex,
+      gitService,
+      () => "/test/dir",
+      false,
+      contextManager,
+    )
+    const prompt = await builder.buildSystemPrompt([])
+    expect(prompt).toContain("Вы — агент Neural Tower")
+  })
+
+  it("buildSystemPrompt handles contextManager error gracefully", async () => {
+    const contextManager = new ContextManager()
+    vi.spyOn(contextManager, "prepare").mockRejectedValue(new Error("ContextManager error"))
+    const builder = new AgentContextBuilder(
+      backend,
+      toolRegistry,
+      skillManager,
+      memory,
+      fileIndex,
+      gitService,
+      () => "/test/dir",
+      false,
+      contextManager,
+    )
+    const prompt = await builder.buildSystemPrompt([])
+    expect(prompt).toContain("Вы — агент Neural Tower")
   })
 })

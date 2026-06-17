@@ -22,9 +22,6 @@ export interface IAgentOrchestrator {
     signal?: AbortSignal,
   ): Promise<ChatMessage>
 
-  /** Контекст текущей рабочей директории. */
-  setWorkingDir(dir: string): void
-
   /** Перезагрузить навыки и инструменты с диска/конфигурации. */
   reload(): Promise<void>
 

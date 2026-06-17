@@ -3,7 +3,7 @@ import { AgentOrchestrator } from "./AgentOrchestrator"
 import type { IBackend } from "../core/IBackend"
 import { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
-import { AgentEnvironment } from "./AgentEnvironment"
+import type { AgentDependencies } from "./AgentDependencies"
 import { ContextManager } from "../core/ContextManager"
 import { ContextProviderRegistry } from "../core/providers/context/registry"
 import { FileIndex } from "../repo/FileIndex"
@@ -25,75 +25,72 @@ const createMockSkillManager = (): SkillManager => ({
   list: vi.fn(() => []),
 } as unknown as SkillManager)
 
-const createEnvironment = (): AgentEnvironment => {
+const createDeps = (): AgentDependencies => {
   const contextManager = new ContextManager()
   const registry = new ContextProviderRegistry()
   const fileIndex = new FileIndex()
-  return new AgentEnvironment(
-    "",
-    {
+  return {
+    getWorkDir: () => "",
+    config: {
       backend: { url: "http://localhost:30000", model: "test-model", maxRetries: 3, timeoutMs: 60000 },
       agent: loadDefaultAgentConfig(),
       context: loadDefaultContextConfig(),
       compactor: loadDefaultCompactorConfig(),
       session: loadDefaultSessionConfig(),
     },
-    registry,
+    contextProviderRegistry: registry,
     contextManager,
     fileIndex,
-  )
+    gitService: null,
+    permissionManager: null,
+    mcpManager: null,
+  }
 }
 
 describe("AgentOrchestrator", () => {
   let backend: IBackend
   let toolRegistry: ToolRegistry
   let skillManager: SkillManager
-  let env: AgentEnvironment
+  let deps: AgentDependencies
 
   beforeEach(() => {
     backend = createMockBackend()
     toolRegistry = new ToolRegistry()
     skillManager = createMockSkillManager()
-    env = createEnvironment()
+    deps = createDeps()
   })
 
   it("creates instance with defaults", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     expect(orchestrator).toBeDefined()
   })
 
-  it("sets working directory", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
-    orchestrator.setWorkingDir("/some/path")
-    expect(() => orchestrator.getMode()).not.toThrow()
-  })
-
   it("returns default mode", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const mode = orchestrator.getMode()
     expect(mode).toBeDefined()
   })
 
   it("switches mode to valid mode", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const result = orchestrator.switchMode("plan")
     expect(result).toBe(true)
   })
 
   it("switchMode returns false for invalid mode", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const result = orchestrator.switchMode("invalid_mode_xyz" as any)
     expect(result).toBe(false)
   })
 
   it("throws when running after dispose", async () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     orchestrator.dispose()
     await expect(orchestrator.run("test", () => {})).rejects.toThrow("Агент освобождён")
   })
 
   it("runs and returns assistant message", async () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const chunks: string[] = []
     const result = await orchestrator.run("test query", (chunk) => chunks.push(chunk))
     expect(result.role).toBe("assistant")
@@ -101,87 +98,59 @@ describe("AgentOrchestrator", () => {
   })
 
   it("calls backend chat with conversation", async () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     await orchestrator.run("test query", () => {})
     expect(backend.chat).toHaveBeenCalled()
   })
 
   it("handles abort signal", async () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const ac = new AbortController()
     ac.abort()
     await expect(orchestrator.run("test", () => {}, undefined, undefined, ac.signal)).rejects.toThrow("Task aborted")
   })
 
   it("resets session", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     expect(() => orchestrator.resetSession()).not.toThrow()
   })
 
   it("disposes without error", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     expect(() => orchestrator.dispose()).not.toThrow()
   })
 
   it("clearPlan resets plan", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     orchestrator.clearPlan()
     expect(orchestrator.getPlan()).toBeNull()
   })
 
   it("getPlan returns null initially", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     expect(orchestrator.getPlan()).toBeNull()
   })
 
   it("resolveContextProvider returns empty for unknown provider", async () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const result = await orchestrator.resolveContextProvider("nonexistent", "query")
     expect(result).toEqual([])
   })
 
   it("getProviderRegistry returns registry", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const registry = orchestrator.getProviderRegistry()
     expect(registry).toBeDefined()
   })
 
-  it("spawnExplore returns message when subagentRunner not set", async () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+  it("spawnExplore returns message when spawnFactory not set", async () => {
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const result = await orchestrator.spawnExplore("test task")
     expect(result).toBe("SubagentRunner не настроен")
   })
 
-  it("setPermissionManager sets the manager", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
-    const mockPM = {} as any
-    orchestrator.setPermissionManager(mockPM)
-    expect(() => orchestrator.getMode()).not.toThrow()
-  })
-
-  it("setGitService sets the service", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
-    const mockGit = {} as any
-    orchestrator.setGitService(mockGit)
-    expect(() => orchestrator.getMode()).not.toThrow()
-  })
-
-  it("setMCPManager sets the manager", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
-    const mockMCP = {} as any
-    orchestrator.setMCPManager(mockMCP)
-    expect(() => orchestrator.getMode()).not.toThrow()
-  })
-
-  it("setSubagentRunner sets the runner", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
-    const mockRunner = {} as any
-    orchestrator.setSubagentRunner(mockRunner)
-    expect(() => orchestrator.getMode()).not.toThrow()
-  })
-
   it("createPlan creates a plan", async () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const plan = await orchestrator.createPlan("test task")
     expect(plan).toBeDefined()
     expect(plan.title).toBeDefined()
@@ -189,26 +158,26 @@ describe("AgentOrchestrator", () => {
 
   it("createPlan falls back to single step on error", async () => {
     vi.mocked(backend.chatJson).mockRejectedValueOnce(new Error("Backend error"))
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const plan = await orchestrator.createPlan("test task")
     expect(plan).toBeDefined()
     expect(plan.steps.length).toBe(1)
   })
 
-  it("reload does not throw when workDir is empty", async () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+  it("reload does not throw", async () => {
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     await expect(orchestrator.reload()).resolves.not.toThrow()
   })
 
   it("getTodoStore returns a TodoStore instance", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const store = orchestrator.getTodoStore()
     expect(store).toBeDefined()
     expect(store.getItems()).toEqual([])
   })
 
   it("resetSession clears TodoStore", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, env)
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const store = orchestrator.getTodoStore()
     store.setItems([{ content: "A", status: "pending" as const, priority: "high" as const }])
     orchestrator.resetSession()

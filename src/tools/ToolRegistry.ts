@@ -73,7 +73,7 @@ export class ToolRegistry {
     })
     return entries.length > 0
       ? `Доступные инструменты (вызывайте через JSON \{"tool": "...", "args": {...}\}):\n${entries.join("\n\n")}`
-      : "Инструменты не доступны."
+      : "Инструменты недоступны."
   }
 
   /**

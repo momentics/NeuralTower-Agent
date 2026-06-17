@@ -10,7 +10,7 @@ import { AgentContextBuilder } from "./AgentContextBuilder"
 import { AgentToolExecutor } from "./AgentToolExecutor"
 import { AgentPlanner } from "./AgentPlanner"
 import { SessionContext } from "./SessionContext"
-import type { AgentEnvironment } from "./AgentEnvironment"
+import type { AgentDependencies } from "./AgentDependencies"
 import { TodoStore } from "./TodoStore"
 import type { Plan } from "./Plan"
 import { AbortError } from "../core/errors"
@@ -36,13 +36,13 @@ export class AgentCore {
     private readonly backend: IBackend,
     private readonly toolRegistry: ToolRegistry,
     private readonly skillManager: SkillManager,
-    private readonly env: AgentEnvironment,
+    private readonly deps: AgentDependencies,
   ) {
-    this.memory = new AgentMemory(env.config.agent.maxTokens)
+    this.memory = new AgentMemory(deps.config.agent.maxTokens)
     this.modeManager = new AgentModeManager()
     this.sessionContext = new SessionContext(
       `session-${Date.now()}`,
-      env.contextManager,
+      deps.contextManager,
     )
     this.todoStore = new TodoStore()
 
@@ -51,16 +51,17 @@ export class AgentCore {
       toolRegistry,
       skillManager,
       this.memory,
-      env.fileIndex,
-      env.gitService,
-      () => env.workDir,
-      env.config.agent.injectDiffContext,
+      deps.fileIndex,
+      deps.gitService,
+      deps.getWorkDir,
+      deps.config.agent.injectDiffContext,
+      deps.contextManager,
     )
 
     this.toolExecutor = new AgentToolExecutor(
       backend,
       toolRegistry,
-      env.permissionManager,
+      deps.permissionManager,
       this.modeManager,
       this.memory,
       this.sessionContext,
@@ -73,7 +74,7 @@ export class AgentCore {
       this.sessionContext,
     )
 
-    const compactor = new Compactor(backend, env.config.compactor)
+    const compactor = new Compactor(backend, deps.config.compactor)
 
     this.agentLoop = new AgentLoop(
       backend,
@@ -89,8 +90,6 @@ export class AgentCore {
 
   /**
    * Выполнить запрос агента.
-   *
-   * Подписано согласно IAgentOrchestrator.run.
    */
   async run(
     query: string,
@@ -169,7 +168,7 @@ export class AgentCore {
     this.sessionContext.reset()
     this.planner.clearPlan()
     this.todoStore.clear()
-    this.env.contextManager.reset()
+    this.deps.contextManager.reset()
   }
 
   /**

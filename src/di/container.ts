@@ -1,7 +1,6 @@
 import * as vscode from "vscode"
 import { NeuralTowerBackend } from "../backend/NeuralTowerBackend"
 import { AgentOrchestrator } from "../agent/AgentOrchestrator"
-import { AgentEnvironment } from "../agent/AgentEnvironment"
 import { ToolRegistry } from "../tools/ToolRegistry"
 import { SkillManager } from "../skills/SkillManager"
 import { builtInSkills } from "../skills/builtInSkills"
@@ -26,10 +25,10 @@ import { LspTool } from "../tools/builtins/LspTool"
 import { ContextManager } from "../core/ContextManager"
 import { ContextProviderRegistry } from "../core/providers/context/registry"
 import { FileIndex } from "../repo/FileIndex"
-import { SessionContext } from "../agent/SessionContext"
 import { SubagentRunner } from "../agent/SubagentRunner"
 import { loadAppConfig } from "../core/config"
 import type { AppConfig } from "../core/config"
+import type { AgentDependencies } from "../agent/AgentDependencies"
 
 export interface ExtensionDeps {
   backend: NeuralTowerBackend
@@ -47,6 +46,8 @@ export interface ExtensionDeps {
   contextManager: ContextManager
   subagentRunner: SubagentRunner
   config: AppConfig
+  agentDeps: AgentDependencies
+  setWorkDir: (dir: string) => void
 }
 
 export async function createDeps(
@@ -106,34 +107,41 @@ export async function createDeps(
   // ── Файловый индекс ─────────────────────────────────────
   const fileIndex = new FileIndex()
 
-  // ── Окружение агента ────────────────────────────────────
-  const agentEnv = new AgentEnvironment(
-    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "",
+  // ── Mutable workDir (для шага 8) ────────────────────────
+  const workDirRef = {
+    current: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "",
+  }
+
+  // ── Immutable deps, собраны ДО создания агента ──────────
+  const agentDeps: AgentDependencies = {
+    getWorkDir: () => workDirRef.current,
     config,
     contextProviderRegistry,
     contextManager,
     fileIndex,
-  )
+    gitService,
+    permissionManager,
+    mcpManager,
+  }
+
+  // ── Фабрика для создания AgentOrchestrator ──────────────
+  const spawnFactory: import("../agent/AgentDependencies").AgentSpawnFactory = (
+    deps,
+    b,
+    t,
+    s,
+  ) => new AgentOrchestrator(b, t, s, deps)
 
   // ── Оркестратор агента ──────────────────────────────────
-  const agent = new AgentOrchestrator(backend, tools, skills, agentEnv)
+  const agent = new AgentOrchestrator(backend, tools, skills, agentDeps, spawnFactory)
   const todoStore = agent.getTodoStore()
-  agent.setPermissionManager(permissionManager)
-  agent.setGitService(gitService)
-  agent.setMCPManager(mcpManager)
-
-  // ── Контекст сессии ─────────────────────────────────────
-  const sessionContext = new SessionContext(sessionStore.activeId, contextManager)
-  agent.setSessionContext(sessionContext)
 
   // ── Runner подагентов ───────────────────────────────────
-  const subagentRunner = new SubagentRunner(backend, tools, skills, agentEnv, permissionManager, gitService)
-  agent.setSubagentRunner(subagentRunner)
+  const subagentRunner = new SubagentRunner(backend, tools, skills, agentDeps, spawnFactory)
 
   if (vscode.workspace.workspaceFolders?.[0]) {
-    agent.setWorkingDir(vscode.workspace.workspaceFolders[0].uri.fsPath)
+    workDirRef.current = vscode.workspace.workspaceFolders[0].uri.fsPath
     await gitService.findRoot(vscode.workspace.workspaceFolders[0].uri.fsPath)
-    await agent.reload()
   }
 
   // ── Провайдеры ──────────────────────────────────────────
@@ -164,5 +172,7 @@ export async function createDeps(
     contextManager,
     subagentRunner,
     config,
+    agentDeps,
+    setWorkDir: (dir: string) => { workDirRef.current = dir },
   }
 }

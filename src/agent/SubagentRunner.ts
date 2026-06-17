@@ -2,10 +2,8 @@ import type { IBackend, ChatMessage } from "../core/IBackend"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
 import type { AgentModeName } from "./AgentMode"
-import { AgentOrchestrator } from "./AgentOrchestrator"
-import type { AgentEnvironment } from "./AgentEnvironment"
-import type { PermissionManager } from "../services/permission/PermissionManager"
-import type { GitService } from "../services/git/GitService"
+import type { AgentOrchestrator } from "./AgentOrchestrator"
+import type { AgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
 
 /**
  * Состояние подагента.
@@ -70,6 +68,9 @@ export interface SubagentConfig {
  *
  * Каждый подагент — это изолированный экземпляр
  * AgentOrchestrator с собственным контекстом и ограничениями.
+ *
+ * Циклическая зависимость с AgentOrchestrator разорвана
+ * через фабрику (AgentSpawnFactory).
  */
 export class SubagentRunner {
   private running: Map<string, SubagentHandle> = new Map()
@@ -79,9 +80,8 @@ export class SubagentRunner {
     private readonly backend: IBackend,
     private readonly toolRegistry: ToolRegistry,
     private readonly skillManager: SkillManager,
-    private readonly env: AgentEnvironment,
-    private readonly permissionManager: PermissionManager | null,
-    private readonly gitService: GitService | null,
+    private readonly deps: AgentDependencies,
+    private readonly spawnFactory: AgentSpawnFactory,
   ) {}
 
   /**
@@ -95,7 +95,7 @@ export class SubagentRunner {
     const id = `subagent-${Date.now()}-${this.nextId++}`
     const startTime = Date.now()
 
-    const orchestrator = this.createOrchestrator(config)
+    const orchestrator = this.createOrchestrator()
     const abortController = new AbortController()
 
     const handle = new SubagentHandle(
@@ -213,18 +213,13 @@ export class SubagentRunner {
     return Promise.all(handles.map((h) => h.wait()))
   }
 
-  private createOrchestrator(config: SubagentConfig): AgentOrchestrator {
-    const orchestrator = new AgentOrchestrator(
+  private createOrchestrator(): AgentOrchestrator {
+    return this.spawnFactory(
+      this.deps,
       this.backend,
       this.toolRegistry,
       this.skillManager,
-      this.env,
     )
-
-    if (this.permissionManager) orchestrator.setPermissionManager(this.permissionManager)
-    if (this.gitService) orchestrator.setGitService(this.gitService)
-
-    return orchestrator
   }
 }
 

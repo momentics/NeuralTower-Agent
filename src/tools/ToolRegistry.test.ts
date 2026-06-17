@@ -115,7 +115,7 @@ describe("ToolRegistry", () => {
 
   it("toSchemaList returns message when empty", () => {
     const registry = new ToolRegistry()
-    expect(registry.toSchemaList()).toContain("Инструменты не доступны")
+    expect(registry.toSchemaList()).toContain("Инструменты недоступны")
   })
 
   it("toToolDefinitions returns array of definitions", () => {
