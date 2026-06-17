@@ -16,7 +16,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   // ── Провайдеры ──────────────────────────────────────────
   app.registerProvider(deps.chatProvider)
 
-  // ── Code Actions ────────────────────────────────────────
+  // ── Действия кода ────────────────────────────────────────
   const codeActionProvider = new AgentCodeActionProvider(deps.chatProvider)
   vscode.languages.registerCodeActionsProvider("*", codeActionProvider, codeActionProviderMetadata)
 
@@ -33,7 +33,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
     extUri: ctx.extensionUri,
   })
 
-  // ── Webview Panel Serializers ───────────────────────────
+  // ── Сериализаторы панелей Webview ─────────────────────────────
   vscode.window.registerWebviewPanelSerializer(
     DiffViewerProvider.viewType,
     {
