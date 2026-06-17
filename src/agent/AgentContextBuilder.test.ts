@@ -5,10 +5,11 @@ import type { IBackend } from "../core/IBackend"
 import { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
 import type { ISkill } from "../skills/ISkill"
-import type { GitService } from "../services/git/GitService"
-import { AgentMemory } from "./AgentMemory"
-import { FileIndex } from "../repo/FileIndex"
+import type { IGitService } from "../services/git/GitService"
+import type { IFileIndex } from "../repo/FileIndex"
+import type { IContextManager } from "../core/ContextManager"
 import { ContextManager } from "../core/ContextManager"
+import { AgentMemory } from "./AgentMemory"
 
 const createMockBackend = (): IBackend => ({
   chat: vi.fn(async () => ({ role: "assistant", content: "Test response", timestamp: Date.now() })),
@@ -26,36 +27,22 @@ const createMockSkillManager = (buildContextReturn = ""): SkillManager => ({
   list: vi.fn(() => []),
 } as unknown as SkillManager)
 
-const createMockGitService = (): GitService => ({
+const createMockGitService = (): IGitService => ({
   getBranchInfo: vi.fn(async () => ({ name: "main", ahead: 0, behind: 0 })),
   getDiffContext: vi.fn(async () => "## Изменения Git (не добавленные)\n```diff\n+added line\n```"),
-  getDiff: vi.fn(async () => ({ changed: [], additions: 0, deletions: 0 })),
-  getStatus: vi.fn(async () => ({ staged: [], unstaged: [], untracked: [] })),
-  findRoot: vi.fn(async () => "/test/dir"),
-  generateCommitMessage: vi.fn(async () => ""),
-  getCachedDiff: vi.fn(async () => ""),
-  init: vi.fn(async () => {}),
-  dispose: vi.fn(),
-  name: "git",
-  version: "0.1.0",
-} as unknown as GitService)
+})
 
-const createMockFileIndex = (totalFiles = 0, languages = 0): FileIndex => ({
+const createMockFileIndex = (totalFiles = 0, languages = 0): IFileIndex => ({
   stats: vi.fn(() => ({ totalFiles, languages, totalSize: 0 })),
-  build: vi.fn(async () => {}),
-  findByPattern: vi.fn(() => []),
-  findByLanguage: vi.fn(() => []),
-  findByName: vi.fn(() => []),
-  clear: vi.fn(),
-} as unknown as FileIndex)
+})
 
 describe("AgentContextBuilder", () => {
   let backend: IBackend
   let toolRegistry: ToolRegistry
   let skillManager: SkillManager
   let memory: AgentMemory
-  let fileIndex: FileIndex
-  let gitService: GitService
+  let fileIndex: IFileIndex
+  let gitService: IGitService
   let configMock: ReturnType<typeof vi.fn>
 
   beforeEach(() => {

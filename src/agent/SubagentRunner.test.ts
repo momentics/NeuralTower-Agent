@@ -63,7 +63,7 @@ describe("SubagentRunner", () => {
       {} as any,
       {} as any,
       {} as any,
-      vi.fn(),
+      vi.fn().mockReturnValue(MockOrchestrator),
     )
   })
 

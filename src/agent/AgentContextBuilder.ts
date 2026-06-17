@@ -2,10 +2,10 @@ import type { IBackend } from "../core/IBackend"
 import type { ISkill } from "../skills/ISkill"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
-import type { GitService } from "../services/git/GitService"
-import type { ContextManager } from "../core/ContextManager"
+import type { IGitService } from "../services/git/GitService"
+import type { IContextManager } from "../core/ContextManager"
+import type { IFileIndex } from "../repo/FileIndex"
 import { AgentMemory } from "./AgentMemory"
-import { FileIndex } from "../repo/FileIndex"
 
 export class AgentContextBuilder {
   constructor(
@@ -13,11 +13,11 @@ export class AgentContextBuilder {
     private readonly toolRegistry: ToolRegistry,
     private readonly skillManager: SkillManager,
     private readonly memory: AgentMemory,
-    private readonly fileIndex: FileIndex,
-    private readonly gitService: GitService | null,
+    private readonly fileIndex: IFileIndex,
+    private readonly gitService: IGitService | null,
     private readonly getWorkDir: () => string,
     private readonly injectDiffContext: boolean,
-    private readonly contextManager: ContextManager | null = null,
+    private readonly contextManager: IContextManager | null = null,
   ) {}
 
   async buildSystemPrompt(skills: ISkill[]): Promise<string> {

@@ -18,7 +18,14 @@ export interface IndexEntry {
   size: number
 }
 
-export class FileIndex {
+/**
+ * Интерфейс FileIndex — методы, используемые через AgentDependencies.
+ */
+export interface IFileIndex {
+  stats(): { totalFiles: number; languages: number; totalSize: number }
+}
+
+export class FileIndex implements IFileIndex {
   private entries: IndexEntry[] = []
   private nameMap = new Map<string, string[]>()
   private langMap = new Map<string, string[]>()

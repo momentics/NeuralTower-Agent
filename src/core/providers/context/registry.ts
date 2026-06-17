@@ -1,6 +1,13 @@
 import type { ContextProvider } from "./types"
 
-export class ContextProviderRegistry {
+/**
+ * Интерфейс ContextProviderRegistry — методы, используемые через AgentDependencies.
+ */
+export interface IContextProviderRegistry {
+  get(name: string): ContextProvider | undefined
+}
+
+export class ContextProviderRegistry implements IContextProviderRegistry {
   private providers = new Map<string, ContextProvider>()
 
   register(provider: ContextProvider): void {

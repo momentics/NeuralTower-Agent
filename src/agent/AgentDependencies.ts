@@ -1,13 +1,13 @@
 import type { IBackend } from "../core/IBackend"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
-import type { ContextProviderRegistry } from "../core/providers/context/registry"
-import type { ContextManager } from "../core/ContextManager"
-import type { GitService } from "../services/git/GitService"
-import type { PermissionManager } from "../services/permission/PermissionManager"
-import type { MCPManager } from "../mcp/MCPManager"
+import type { IContextProviderRegistry } from "../core/providers/context/registry"
+import type { IContextManager } from "../core/ContextManager"
+import type { IGitService } from "../services/git/GitService"
+import type { IPermissionManager } from "../services/permission/PermissionManager"
+import type { IMCPManager } from "../mcp/MCPManager"
 import type { AppConfig } from "../core/config"
-import type { FileIndex } from "../repo/FileIndex"
+import type { IFileIndex } from "../repo/FileIndex"
 
 /**
  * Фабрика для создания экземпляров AgentOrchestrator.
@@ -39,20 +39,20 @@ export interface AgentDependencies {
   readonly config: AppConfig
 
   /** Реестр провайдеров контекста. */
-  readonly contextProviderRegistry: ContextProviderRegistry
+  readonly contextProviderRegistry: IContextProviderRegistry
 
   /** Менеджер контекста. */
-  readonly contextManager: ContextManager
+  readonly contextManager: IContextManager
 
   /** Файловый индекс. */
-  readonly fileIndex: FileIndex
+  readonly fileIndex: IFileIndex
 
   /** Сервис git (null если не доступен). */
-  readonly gitService: GitService | null
+  readonly gitService: IGitService | null
 
   /** Менеджер разрешений (null если не настроен). */
-  readonly permissionManager: PermissionManager | null
+  readonly permissionManager: IPermissionManager | null
 
   /** Менеджер MCP (null если не подключен). */
-  readonly mcpManager: MCPManager | null
+  readonly mcpManager: IMCPManager | null
 }

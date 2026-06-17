@@ -1,6 +1,6 @@
 import type { IBackend, ChatMessage } from "../core/IBackend"
 import type { ToolRegistry } from "../tools/ToolRegistry"
-import type { PermissionManager } from "../services/permission/PermissionManager"
+import type { IPermissionManager } from "../services/permission/PermissionManager"
 import type { AgentModeManager } from "./AgentMode"
 import type { AgentModeName } from "./AgentMode"
 import type { AgentTurnResult, ToolCall, ToolResult } from "./AgentTypes"
@@ -13,7 +13,7 @@ export class AgentToolExecutor {
   constructor(
     private readonly backend: IBackend,
     private readonly toolRegistry: ToolRegistry,
-    private readonly permissionManager: PermissionManager | null,
+    private readonly permissionManager: IPermissionManager | null,
     private readonly modeManager: AgentModeManager,
     private readonly memory: AgentMemory,
     private readonly sessionContext: SessionContext | null,

@@ -2,7 +2,7 @@ import type { AgentModeName } from "./AgentMode"
 import type { Plan } from "./Plan"
 import type { PreparedContext, ContextSnapshot } from "../core/ContextManager"
 import { AgentMismatchError, ContextError } from "../core/errors"
-import type { ContextManager } from "../core/ContextManager"
+import type { IContextManager } from "../core/ContextManager"
 import type { ChatMessage } from "../core/IBackend"
 
 /**
@@ -62,7 +62,7 @@ export class SessionContext {
 
   constructor(
     public readonly sessionID: string,
-    private readonly contextManager: ContextManager,
+    private readonly contextManager: IContextManager,
   ) {}
 
  /**

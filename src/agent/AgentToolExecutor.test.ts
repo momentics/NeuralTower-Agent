@@ -3,7 +3,7 @@ import { AgentToolExecutor } from "./AgentToolExecutor"
 import type { IBackend, ChatMessage } from "../core/IBackend"
 import { ToolRegistry } from "../tools/ToolRegistry"
 import type { ITool } from "../tools/ITool"
-import type { PermissionManager } from "../services/permission/PermissionManager"
+import type { IPermissionManager } from "../services/permission/PermissionManager"
 import { AgentModeManager } from "./AgentMode"
 import { AgentMemory } from "./AgentMemory"
 import type { SessionContext } from "./SessionContext"
@@ -28,18 +28,10 @@ const createMockTool = (name: string, isSafe = true, result: ToolResult = { outp
   isSafe,
 })
 
-const createMockPermissionManager = (): PermissionManager =>
+const createMockPermissionManager = (): IPermissionManager =>
   ({
     checkPermission: vi.fn(async () => true),
-    setPermission: vi.fn(),
-    getPermissionLevel: vi.fn(() => "ask"),
-    setAutoApprove: vi.fn(),
-    getAutoApprove: vi.fn(() => ({ enabled: false, tools: [], maxCost: 0 })),
-    listPermissions: vi.fn(() => []),
-    clear: vi.fn(),
-    dispose: vi.fn(),
-    onDidRequestPermission: vi.fn(() => ({ dispose: vi.fn() })),
-  }) as unknown as PermissionManager
+  })
 
 const createMockSessionContext = (): SessionContext =>
   ({
@@ -61,7 +53,7 @@ const createMockSessionContext = (): SessionContext =>
 describe("AgentToolExecutor", () => {
   let backend: IBackend
   let toolRegistry: ToolRegistry
-  let permissionManager: PermissionManager
+  let permissionManager: IPermissionManager
   let modeManager: AgentModeManager
   let memory: AgentMemory
   let sessionContext: SessionContext

@@ -1,10 +1,10 @@
-import type { ContextProviderRegistry } from "../core/providers/context/registry"
-import type { ContextManager } from "../core/ContextManager"
-import type { GitService } from "../services/git/GitService"
-import type { PermissionManager } from "../services/permission/PermissionManager"
-import type { MCPManager } from "../mcp/MCPManager"
+import type { IContextProviderRegistry } from "../core/providers/context/registry"
+import type { IContextManager } from "../core/ContextManager"
+import type { IGitService } from "../services/git/GitService"
+import type { IPermissionManager } from "../services/permission/PermissionManager"
+import type { IMCPManager } from "../mcp/MCPManager"
 import type { AppConfig } from "../core/config"
-import type { FileIndex } from "../repo/FileIndex"
+import type { IFileIndex } from "../repo/FileIndex"
 
 /**
  * AgentEnvironment — контейнер внешних зависимостей агента.
@@ -22,29 +22,29 @@ export class AgentEnvironment {
   public config: AppConfig
 
   /** Реестр провайдеров контекста. */
-  public readonly contextProviderRegistry: ContextProviderRegistry
+  public readonly contextProviderRegistry: IContextProviderRegistry
 
   /** Менеджер контекста. */
-  public readonly contextManager: ContextManager
+  public readonly contextManager: IContextManager
 
   /** Файловый индекс. */
-  public readonly fileIndex: FileIndex
+  public readonly fileIndex: IFileIndex
 
   /** Сервис git (опционально, может быть установлен позже). */
-  public gitService: GitService | null
+  public gitService: IGitService | null
 
   /** Менеджер разрешений (опционально, может быть установлен позже). */
-  public permissionManager: PermissionManager | null
+  public permissionManager: IPermissionManager | null
 
   /** Менеджер MCP (опционально, может быть установлен позже). */
-  public mcpManager: MCPManager | null
+  public mcpManager: IMCPManager | null
 
   constructor(
     workDir: string,
     config: AppConfig,
-    contextProviderRegistry: ContextProviderRegistry,
-    contextManager: ContextManager,
-    fileIndex: FileIndex,
+    contextProviderRegistry: IContextProviderRegistry,
+    contextManager: IContextManager,
+    fileIndex: IFileIndex,
   ) {
     this.workDir = workDir
     this.config = config

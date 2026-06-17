@@ -39,6 +39,15 @@ export interface PreparedContext {
 }
 
 /**
+ * Интерфейс ContextManager — методы, используемые через AgentDependencies.
+ */
+export interface IContextManager {
+  initialize(): Promise<PreparedContext>
+  prepare(): Promise<PreparedContext>
+  reset(): void
+}
+
+/**
  * ContextManager управляет провайдерами контекста, строит
  * базовый системный промпт, сравнивает изменения между
  * ходами агента и отслеживает потребление токенов.
@@ -50,7 +59,7 @@ export interface PreparedContext {
  * Лимит токенов: провайдеры сортируются по приоритету и
  * добавляются, пока сумма токенов не превысит лимит.
  */
-export class ContextManager {
+export class ContextManager implements IContextManager {
   private providers: ContextProvider[] = []
   private snapshot: ContextSnapshot[] = []
   private revision = 0

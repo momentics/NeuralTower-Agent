@@ -409,8 +409,13 @@ describe("extension", () => {
       expect(AgentOrchestrator).toHaveBeenCalled()
     })
 
-    it("reloads agent when workspace folder exists", async () => {
+    it("sets up workspace folders change listener that reloads agent", async () => {
       await activate(ctx)
+      const listenerSpy = vscode.workspace.onDidChangeWorkspaceFolders as any
+      expect(listenerSpy).toHaveBeenCalled()
+      const callback = listenerSpy.mock.calls[0][0]
+      ;(vscode.workspace as any).workspaceFolders = [{ uri: { fsPath: "/work" } }]
+      await callback()
       const { AgentOrchestrator } = await import("./agent/AgentOrchestrator")
       const agent = AgentOrchestrator.mock.results[0].value
       expect(agent.reload).toHaveBeenCalled()

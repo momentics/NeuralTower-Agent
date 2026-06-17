@@ -2,7 +2,14 @@ import * as vscode from "vscode"
 import type { ITool } from "../../tools/ITool"
 import type { PermissionLevel, ToolPermission, PermissionRequest, AutoApproveConfig } from "../../shared/PermissionTypes"
 
-export class PermissionManager {
+/**
+ * Интерфейс PermissionManager — только методы, используемые через AgentDependencies.
+ */
+export interface IPermissionManager {
+  checkPermission(tool: ITool, args: Record<string, unknown>, timeoutMs?: number): Promise<boolean>
+}
+
+export class PermissionManager implements IPermissionManager {
   private permissions: Map<string, PermissionLevel> = new Map()
   private autoApprove: AutoApproveConfig = {
     enabled: false,

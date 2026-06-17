@@ -23,10 +23,18 @@ export interface GitBranchInfo {
 }
 
 /**
+ * Интерфейс Git-сервиса — только методы, используемые через AgentDependencies.
+ */
+export interface IGitService {
+  getDiffContext(dir: string): Promise<string>
+  getBranchInfo(dir: string): Promise<GitBranchInfo | null>
+}
+
+/**
  * Git-сервис. Предоставляет различия, статус, информацию о ветке
  * и внедрение контекста различий для агента.
  */
-export class GitService implements Plugin {
+export class GitService implements Plugin, IGitService {
   name = "git"
   version = "0.1.0"
   private root: string | null = null

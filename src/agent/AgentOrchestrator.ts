@@ -5,7 +5,7 @@ import { AgentCore } from "./AgentCore"
 import type { AgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
 import type { Plan } from "./Plan"
 import type { TodoStore } from "./TodoStore"
-import type { ContextProviderRegistry } from "../core/providers/context/registry"
+import type { IContextProviderRegistry } from "../core/providers/context/registry"
 
 /**
  * AgentOrchestrator — тонкий фасад над AgentCore.
@@ -90,7 +90,7 @@ export class AgentOrchestrator {
     return provider.resolve(query)
   }
 
-  getProviderRegistry(): ContextProviderRegistry {
+  getProviderRegistry(): IContextProviderRegistry {
     return this.deps.contextProviderRegistry
   }
 

@@ -25,7 +25,22 @@ interface MCPServer {
   tools: MCPTool[]
 }
 
-export class MCPManager {
+/**
+ * Интерфейс MCPManager — методы, используемые через AgentDependencies.
+ */
+export interface IMCPManager {
+  register(config: MCPServerConfig): void
+  connect(): Promise<void>
+  discover(): Promise<MCPTool[]>
+  callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<{ output: string; success: boolean }>
+  syncWithRegistry(registry: ToolRegistry): Promise<void>
+  listServers(): MCPServerConfig[]
+  getReadyServers(): string[]
+  getToolsByServer(): Array<{ server: string; tools: MCPTool[] }>
+  disconnect(): Promise<void>
+}
+
+export class MCPManager implements IMCPManager {
   private servers: MCPServer[] = []
   private toolAdapter = new MCPToolAdapter()
 
