@@ -115,6 +115,10 @@ export class AgentOrchestrator {
 
   async reload(): Promise<void> {
     this.core.dispose()
+    const workDir = this.deps.getWorkDir()
+    if (workDir) {
+      await this.deps.fileIndex.build(workDir)
+    }
   }
 
   dispose(): void {

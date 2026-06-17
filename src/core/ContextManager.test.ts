@@ -145,11 +145,11 @@ describe("ContextManager", () => {
     expect(tokens).toBeGreaterThan(0)
   })
 
-  it("reset clears state", async () => {
+  it("reset clears state but keeps providers", async () => {
     cm.register(makeProvider("a", 50, async () => [{ content: "v1", name: "A" }]))
     await cm.initialize()
     cm.reset()
-    expect(cm.list()).toHaveLength(0)
+    expect(cm.list()).toHaveLength(1)
     expect(cm.getSnapshot()).toHaveLength(0)
     expect(cm.getRevision()).toBe(0)
   })

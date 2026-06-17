@@ -1,5 +1,6 @@
 import * as vscode from "vscode"
 import type { IBackend } from "../../core/IBackend"
+import type { IContextManager } from "../../core/ContextManager"
 import type { Plugin } from "../../shared/types"
 
 export class BackendHealthMonitor implements Plugin {
@@ -11,7 +12,10 @@ export class BackendHealthMonitor implements Plugin {
   private connected = false
   private checking = false
 
-  constructor(private readonly backend: IBackend) {
+  constructor(
+    private readonly backend: IBackend,
+    private readonly contextManager: IContextManager | null = null,
+  ) {
     this.statusBar = vscode.window.createStatusBarItem(
       vscode.StatusBarAlignment.Right,
       99,
@@ -22,6 +26,12 @@ export class BackendHealthMonitor implements Plugin {
 
   async init(): Promise<void> {
     await this.check()
+    if (this.contextManager) {
+      const providers = this.contextManager.list()
+      if (providers.length === 0) {
+        console.warn("[NeuralTower] ContextManager: провайдеры контекста не зарегистрированы. Агент будет работать без контекста проекта.")
+      }
+    }
     this.healthTimer = setInterval(async () => {
       await this.check()
     }, 15000)

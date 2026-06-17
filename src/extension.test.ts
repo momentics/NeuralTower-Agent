@@ -190,7 +190,16 @@ vi.mock("./tools/builtins/LspTool", () => ({
 }))
 
 vi.mock("./core/ContextManager", () => ({
-  ContextManager: vi.fn().mockImplementation(() => ({})),
+  ContextManager: vi.fn().mockImplementation(() => ({
+    register: vi.fn(),
+    list: vi.fn(() => []),
+    initialize: vi.fn().mockResolvedValue(undefined),
+    prepare: vi.fn().mockResolvedValue({ systemPrompt: "", contextItems: [] }),
+    getSnapshot: vi.fn(() => []),
+    getRevision: vi.fn(() => 0),
+    reset: vi.fn(),
+    estimateSystemTokens: vi.fn(() => 0),
+  })),
 }))
 
 vi.mock("./agent/SessionContext", () => ({

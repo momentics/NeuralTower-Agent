@@ -23,6 +23,11 @@ export interface IndexEntry {
  */
 export interface IFileIndex {
   stats(): { totalFiles: number; languages: number; totalSize: number }
+  findByPattern(pattern: string): IndexEntry[]
+  findByLanguage(lang: string): IndexEntry[]
+  findByName(name: string): string[]
+  build(dir: string, maxFiles?: number): Promise<void>
+  clear(): void
 }
 
 export class FileIndex implements IFileIndex {

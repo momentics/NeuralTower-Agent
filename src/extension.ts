@@ -47,8 +47,10 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   // ── Слушатель изменений рабочей директории ──────────────
   vscode.workspace.onDidChangeWorkspaceFolders(async () => {
     if (vscode.workspace.workspaceFolders?.[0]) {
-      deps.setWorkDir(vscode.workspace.workspaceFolders[0].uri.fsPath)
-      await deps.gitService.findRoot(vscode.workspace.workspaceFolders[0].uri.fsPath)
+      const newDir = vscode.workspace.workspaceFolders[0].uri.fsPath
+      deps.setWorkDir(newDir)
+      await deps.gitService.findRoot(newDir)
+      await deps.fileIndex.build(newDir)
       await deps.agent.reload()
     }
   })

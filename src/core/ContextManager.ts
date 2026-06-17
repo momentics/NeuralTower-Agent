@@ -45,6 +45,7 @@ export interface IContextManager {
   initialize(): Promise<PreparedContext>
   prepare(): Promise<PreparedContext>
   reset(): void
+  list(): ContextProvider[]
 }
 
 /**
@@ -256,7 +257,6 @@ export class ContextManager implements IContextManager {
    * Сбросить состояние (новый сеанс).
    */
   reset(): void {
-    this.providers = []
     this.snapshot = []
     this.revision = 0
     this.previousContent.clear()

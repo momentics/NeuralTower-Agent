@@ -25,10 +25,38 @@ import { LspTool } from "../tools/builtins/LspTool"
 import { ContextManager } from "../core/ContextManager"
 import { ContextProviderRegistry } from "../core/providers/context/registry"
 import { FileIndex } from "../repo/FileIndex"
+import { RepoAnalyzer } from "../repo/RepoAnalyzer"
 import { SubagentRunner } from "../agent/SubagentRunner"
 import { loadAppConfig } from "../core/config"
 import type { AppConfig } from "../core/config"
 import type { AgentDependencies } from "../agent/AgentDependencies"
+import type { ContextProvider } from "../core/providers/context/types"
+import {
+  makeUrlProvider,
+  makeWebSearchProvider,
+  makeFileProvider,
+  makeCodeProvider,
+  makeTreeProvider,
+  makeRepoMapProvider,
+  makeRulesProvider,
+  makeMCPProvider,
+  makeLspProvider,
+} from "../core/providers/context"
+import {
+  makeCurrentFileProvider,
+  makeOpenFilesProvider,
+  makeProblemsProvider,
+  makeClipboardProvider,
+  makeDebuggerProvider,
+  makeTerminalProvider,
+  makeOSProvider,
+} from "../core/ContextSources.vscode"
+import {
+  makeEnvironmentProvider,
+  makeRepoProvider,
+  makeFileIndexProvider,
+  makeGitDiffProvider,
+} from "../core/ContextSources"
 
 export interface ExtensionDeps {
   backend: NeuralTowerBackend
@@ -47,7 +75,79 @@ export interface ExtensionDeps {
   subagentRunner: SubagentRunner
   config: AppConfig
   agentDeps: AgentDependencies
+  fileIndex: FileIndex
   setWorkDir: (dir: string) => void
+}
+
+/**
+ * Зарегистрировать все провайдеры контекста в ContextManager
+ * и ContextProviderRegistry.
+ */
+function registerContextProviders(
+  contextManager: ContextManager,
+  contextProviderRegistry: ContextProviderRegistry,
+  backend: NeuralTowerBackend,
+  gitService: GitService,
+  mcpManager: MCPManager,
+  fileIndex: FileIndex,
+  repoAnalyzer: RepoAnalyzer,
+  getWorkDir: () => string,
+): ContextProvider[] {
+  const register = (p: ContextProvider) => {
+    contextManager.register(p)
+    contextProviderRegistry.register(p)
+    return p
+  }
+
+  const providers: ContextProvider[] = []
+
+  // ── VS Code провайдеры ──────────────────────────────────
+  providers.push(register(makeCurrentFileProvider()))
+  providers.push(register(makeOpenFilesProvider()))
+  providers.push(register(makeProblemsProvider(getWorkDir)))
+  providers.push(register(makeClipboardProvider()))
+  providers.push(register(makeDebuggerProvider()))
+  providers.push(register(makeTerminalProvider()))
+  providers.push(register(makeOSProvider()))
+
+  // ── Платформенно-независимые провайдеры ─────────────────
+  providers.push(register(makeEnvironmentProvider(
+    getWorkDir,
+    () => backend.getConfig().then((c) => c.model),
+    gitService,
+  )))
+  providers.push(register(makeRepoProvider(getWorkDir, repoAnalyzer)))
+  providers.push(register(makeFileIndexProvider(fileIndex)))
+  providers.push(register(makeGitDiffProvider(getWorkDir, gitService)))
+
+  // ── Специализированные провайдеры ───────────────────────
+  providers.push(register(makeUrlProvider()))
+  providers.push(register(makeWebSearchProvider()))
+  providers.push(register(makeFileProvider(getWorkDir)))
+  providers.push(register(makeCodeProvider(getWorkDir, () => fileIndex)))
+  providers.push(register(makeTreeProvider(getWorkDir)))
+  providers.push(register(makeRepoMapProvider(
+    getWorkDir,
+    () => fileIndex,
+    () => repoAnalyzer.analyze(getWorkDir()),
+  )))
+  providers.push(register(makeRulesProvider(getWorkDir)))
+  providers.push(register(makeMCPProvider(async () => {
+    const servers = mcpManager.getToolsByServer()
+    return servers.flatMap((s) =>
+      s.tools.map((t) => ({
+        server: s.server,
+        tool: {
+          name: t.name,
+          description: t.description ?? "",
+          schema: (t as any).inputSchema ?? {},
+        },
+      })),
+    )
+  })))
+  providers.push(register(makeLspProvider(getWorkDir)))
+
+  return providers
 }
 
 export async function createDeps(
@@ -107,6 +207,9 @@ export async function createDeps(
   // ── Файловый индекс ─────────────────────────────────────
   const fileIndex = new FileIndex()
 
+  // ── Анализатор репозитория ──────────────────────────────
+  const repoAnalyzer = new RepoAnalyzer()
+
   // ── Mutable workDir (для шага 8) ────────────────────────
   const workDirRef = {
     current: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "",
@@ -144,12 +247,29 @@ export async function createDeps(
     await gitService.findRoot(vscode.workspace.workspaceFolders[0].uri.fsPath)
   }
 
+  // ── Построение файлового индекса ────────────────────────
+  if (workDirRef.current) {
+    await fileIndex.build(workDirRef.current)
+  }
+
+  // ── Регистрация провайдеров контекста ───────────────────
+  registerContextProviders(
+    contextManager,
+    contextProviderRegistry,
+    backend,
+    gitService,
+    mcpManager,
+    fileIndex,
+    repoAnalyzer,
+    () => workDirRef.current,
+  )
+
   // ── Провайдеры ──────────────────────────────────────────
   const chatProvider = new ChatProvider(ctx.extensionUri, agent, sessionStore, notificationService, permissionManager)
   const diffViewer = new DiffViewerProvider(ctx.extensionUri)
 
   // ── Мониторинг здоровья бэкенда ─────────────────────────
-  const healthMonitor = new BackendHealthMonitor(backend)
+  const healthMonitor = new BackendHealthMonitor(backend, contextManager)
   await healthMonitor.init()
 
   // ── Сервис коммит-сообщений ─────────────────────────────
@@ -173,6 +293,7 @@ export async function createDeps(
     subagentRunner,
     config,
     agentDeps,
+    fileIndex,
     setWorkDir: (dir: string) => { workDirRef.current = dir },
   }
 }
