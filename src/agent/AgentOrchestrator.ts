@@ -12,6 +12,7 @@ import { AgentMemory } from "./AgentMemory"
 import { RepoAnalyzer } from "../repo/RepoAnalyzer"
 import { FileIndex } from "../repo/FileIndex"
 import { ContextManager } from "../core/ContextManager"
+import { AgentError } from "../core/errors"
 import {
   makeEnvironmentProvider,
   makeRepoProvider,
@@ -229,7 +230,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     onToolResult?: (name: string, result: { output: string; success: boolean }) => void,
     signal?: AbortSignal,
   ): Promise<ChatMessage> {
-    if (this.disposed) throw new Error("Агент освобождён")
+    if (this.disposed) throw new AgentError("Агент освобождён")
 
     const currentMode = this.modeManager.getModeName()
     const activeSkills = this.skillManager.match(query)

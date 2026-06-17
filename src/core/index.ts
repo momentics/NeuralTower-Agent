@@ -12,6 +12,19 @@ export {
   AgentReplacementBlockedError,
 } from "./ContextSource"
 export {
+  NeuralTowerError,
+  BackendError,
+  ConnectionError,
+  TimeoutError,
+  ToolError,
+  ValidationError,
+  ExecutionError,
+  ContextError,
+  PlanError,
+  AgentError,
+  AbortError,
+} from "./errors"
+export {
   makeCurrentFileProvider,
   makeOpenFilesProvider,
   makeProblemsProvider,

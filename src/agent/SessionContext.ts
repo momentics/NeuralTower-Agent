@@ -1,7 +1,7 @@
 import type { AgentModeName } from "./AgentMode"
 import type { Plan } from "./Plan"
 import type { PreparedContext, ContextSnapshot } from "../core/ContextManager"
-import { AgentMismatchError } from "../core/ContextSource"
+import { AgentMismatchError, ContextError } from "../core/errors"
 import type { ContextManager } from "../core/ContextManager"
 import type { ChatMessage } from "../core/IBackend"
 
@@ -197,7 +197,7 @@ export class SessionContext {
 
   private toPrepared(): EpochPrepared {
     if (!this.epoch) {
-      throw new Error("Этап не инициализирован")
+      throw new ContextError("Этап не инициализирован")
     }
     return {
       baseline: this.epoch.baselinePrompt,

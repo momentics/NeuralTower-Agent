@@ -10,6 +10,7 @@ import type { Plan } from "./Plan"
 import type { AgentContextBuilder } from "./AgentContextBuilder"
 import type { AgentToolExecutor } from "./AgentToolExecutor"
 import type { AgentPlanner } from "./AgentPlanner"
+import { AbortError } from "../core/errors"
 
 export class AgentLoop {
   constructor(
@@ -82,7 +83,7 @@ export class AgentLoop {
       iterations++
 
       if (signal?.aborted) {
-        throw new DOMException("Task aborted", "AbortError")
+        throw new AbortError("Task aborted")
       }
 
       if (this.planner.getPlan()?.status === "running") {

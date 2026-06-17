@@ -2,6 +2,7 @@ import type { IBackend } from "../core/IBackend"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import { Plan } from "./Plan"
 import type { SessionContext } from "./SessionContext"
+import { PlanError } from "../core/errors"
 
 export class AgentPlanner {
   private currentPlan: Plan | null = null
@@ -62,10 +63,11 @@ ${toolList}
       }
 
       return plan
-    } catch {
+    } catch (err) {
+      // BackendError или PlanError — деградация к простому плану
       const plan = new Plan({
         title: query.slice(0, 80),
-        reasoning: "Простой одношаговый план",
+        reasoning: err instanceof PlanError ? `Ошибка планирования: ${err.message}` : "Простой одношаговый план",
         steps: [{ description: query, suggestedTools: [] }],
       })
       this.currentPlan = plan

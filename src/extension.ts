@@ -30,6 +30,7 @@ import { LspTool } from "./tools/builtins/LspTool"
 import { ContextManager } from "./core/ContextManager"
 import { SessionContext } from "./agent/SessionContext"
 import { SubagentRunner } from "./agent/SubagentRunner"
+import { AbortError, BackendError, NeuralTowerError } from "./core/errors"
 
 let app: App | undefined
 let backend: NeuralTowerBackend | undefined
@@ -341,7 +342,15 @@ async function sendAgentQuery(query: string, workDir: string): Promise<void> {
       diffViewer?.openPanel(diff)
     }
   } catch (err) {
-    agentOutputChannel.appendLine(`\nОшибка: ${err instanceof Error ? err.message : String(err)}`)
+    if (err instanceof AbortError) {
+      agentOutputChannel.appendLine("\nЗадача остановлена пользователем")
+    } else if (err instanceof BackendError) {
+      agentOutputChannel.appendLine(`\nОшибка бэкенда: ${err.message}`)
+    } else if (err instanceof NeuralTowerError) {
+      agentOutputChannel.appendLine(`\n${err.name}: ${err.message}`)
+    } else {
+      agentOutputChannel.appendLine(`\nОшибка: ${err instanceof Error ? err.message : String(err)}`)
+    }
   }
 }
 

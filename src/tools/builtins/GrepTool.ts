@@ -4,6 +4,7 @@ import { execFile } from "child_process"
 import { promisify } from "util"
 import * as fs from "fs/promises"
 import * as path from "path"
+import { ExecutionError } from "../../core/errors"
 
 const execFileAsync = promisify(execFile)
 
@@ -65,7 +66,7 @@ export class GrepTool implements ITool {
       "-n", "--no-heading", "--color=never", pattern, ...fileArg,
     ], { timeout: 15000, maxBuffer: 512 * 1024 })
     if (stderr && !stdout) {
-      throw new Error(stderr)
+      throw new ExecutionError(stderr)
     }
     return { output: stdout || "Совпадений не найдено", success: true }
   }

@@ -4,6 +4,7 @@ import type { ToolResult } from "../../agent/AgentTypes"
 import * as path from "path"
 import * as fs from "fs/promises"
 import { pathToFileURL } from "url"
+import { ExecutionError, TimeoutError, ValidationError } from "../../core/errors"
 
 const LSP_TIMEOUT_MS = 10_000
 const MAX_SYMBOL_RESULTS = 50
@@ -109,7 +110,7 @@ export class LspTool implements ITool {
   private async withTimeout<T>(fn: () => Promise<T>, label: string): Promise<T> {
     let timer: ReturnType<typeof setTimeout> | undefined
     const timeoutPromise = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`LSP ${label}: таймаут ${LSP_TIMEOUT_MS}ms`)), LSP_TIMEOUT_MS)
+      timer = setTimeout(() => reject(new TimeoutError(`LSP ${label}: таймаут ${LSP_TIMEOUT_MS}ms`)), LSP_TIMEOUT_MS)
     })
     try {
       return await Promise.race([fn(), timeoutPromise])
@@ -133,7 +134,7 @@ export class LspTool implements ITool {
     try {
       await fs.access(filePath)
     } catch {
-      throw new Error(`Файл не найден: ${filePath}`)
+      throw new ValidationError(`Файл не найден: ${filePath}`)
     }
   }
 

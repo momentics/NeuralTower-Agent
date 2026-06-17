@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from "child_process"
 import type { ITool } from "../tools/ITool"
 import { ToolRegistry } from "../tools/ToolRegistry"
 import { MCPToolAdapter } from "./MCPToolAdapter"
+import { ExecutionError, TimeoutError } from "../core/errors"
 
 export interface MCPServerConfig {
   name: string
@@ -158,7 +159,7 @@ export class MCPManager {
     return new Promise<T>((resolve, reject) => {
       const proc = server.process
       if (!proc) {
-        reject(new Error("Сервер не подключён"))
+        reject(new ExecutionError("Сервер не подключён"))
         return
       }
 
@@ -171,7 +172,7 @@ export class MCPManager {
       }) + "\n"
 
       const timer = setTimeout(() => {
-        reject(new Error(`MCP ${method}: истёк таймаут`))
+        reject(new TimeoutError(`MCP ${method}: истёк таймаут`))
       }, 10000)
 
       const handler = (data: Buffer) => {
@@ -180,7 +181,7 @@ export class MCPManager {
           if (resp.id === id) {
             clearTimeout(timer)
             if (resp.error) {
-              reject(new Error(resp.error.message))
+              reject(new ExecutionError(resp.error.message))
             } else {
               resolve(resp.result as T)
             }

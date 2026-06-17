@@ -7,6 +7,7 @@ import type { PersistentSessionStore } from "../shared/PersistentSessionStore"
 import type { NotificationService } from "../services/notification/NotificationService"
 import type { PermissionManager } from "../services/permission/PermissionManager"
 import type { WebviewToExt, ExtToWebview } from "../shared/messages"
+import { AbortError, BackendError, NeuralTowerError } from "../core/errors"
 
 export class ChatProvider implements IProvider {
   public readonly viewType = "neuralTowerAgent.chat"
@@ -154,11 +155,25 @@ export class ChatProvider implements IProvider {
       this.panel!.webview.postMessage({ type: "agentDone" } as ExtToWebview)
       this.notificationService.show("agentDone", "Агент завершил задачу")
     } catch (err) {
-      if (err instanceof Error && err.name === "AbortError") {
+      if (err instanceof AbortError) {
         this.panel!.webview.postMessage({
           type: "streamError",
           error: "Задача остановлена пользователем",
         } as ExtToWebview)
+      } else if (err instanceof BackendError) {
+        const errorMsg = `Ошибка бэкенда: ${err.message}`
+        this.panel!.webview.postMessage({
+          type: "streamError",
+          error: errorMsg,
+        } as ExtToWebview)
+        this.notificationService.show("error", errorMsg)
+      } else if (err instanceof NeuralTowerError) {
+        const errorMsg = `${err.name}: ${err.message}`
+        this.panel!.webview.postMessage({
+          type: "streamError",
+          error: errorMsg,
+        } as ExtToWebview)
+        this.notificationService.show("error", errorMsg)
       } else {
         const errorMsg = err instanceof Error ? err.message : "Неизвестная ошибка"
         this.panel!.webview.postMessage({

@@ -1,5 +1,6 @@
 import type { ITool } from "./ITool"
 import type { ToolResult } from "../agent/AgentTypes"
+import { ToolError } from "../core/errors"
 
 /**
  * Центральный реестр всех доступных инструментов.
@@ -49,8 +50,9 @@ export class ToolRegistry {
       if (result.durationMs === undefined) result.durationMs = Date.now() - start
       return result
     } catch (err) {
+      const msg = err instanceof ToolError ? `${err.name}: ${err.message}` : err instanceof Error ? err.message : String(err)
       return {
-        output: `Инструмент "${name}" не выполнен: ${err instanceof Error ? err.message : String(err)}`,
+        output: `Инструмент "${name}" не выполнен: ${msg}`,
         success: false,
         durationMs: Date.now() - start,
       }

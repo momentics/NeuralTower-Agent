@@ -7,6 +7,7 @@ import type { AgentTurnResult, ToolCall, ToolResult } from "./AgentTypes"
 import { AgentMemory } from "./AgentMemory"
 import type { SessionContext } from "./SessionContext"
 import type { TodoStore } from "./TodoStore"
+import { AbortError } from "../core/errors"
 
 export class AgentToolExecutor {
   constructor(
@@ -25,7 +26,7 @@ export class AgentToolExecutor {
     signal?: AbortSignal,
   ): Promise<AgentTurnResult> {
     if (signal?.aborted) {
-      throw new DOMException("Task aborted", "AbortError")
+      throw new AbortError("Task aborted")
     }
 
     const wrappedChunk = (text: string) => {

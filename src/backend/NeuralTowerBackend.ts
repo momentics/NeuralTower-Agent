@@ -1,5 +1,6 @@
 import * as vscode from "vscode"
 import type { IBackend, BackendConfig, ChatMessage } from "../core/IBackend"
+import { BackendError, ConnectionError, TimeoutError } from "../core/errors"
 
 /**
  * Бэкенд Neural Tower. Подключается к локальному серверу
@@ -63,7 +64,7 @@ export class NeuralTowerBackend implements IBackend {
       }),
     })
 
-    if (!res.body) throw new Error("Пустой ответ от Neural Tower")
+    if (!res.body) throw new BackendError("Пустой ответ от Neural Tower")
 
     let full = ""
     const reader = res.body.getReader()
@@ -121,7 +122,7 @@ export class NeuralTowerBackend implements IBackend {
     try {
       return JSON.parse(content) as T
     } catch {
-      throw new Error(`Бэкенд вернул не-JSON: ${content.slice(0, 200)}`)
+      throw new BackendError(`Бэкенд вернул не-JSON: ${content.slice(0, 200)}`)
     }
   }
 
@@ -143,14 +144,26 @@ export class NeuralTowerBackend implements IBackend {
         const res = await fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer))
         if (!res.ok) {
           const body = await res.text()
-          throw new Error(`HTTP ${res.status}: ${body}`)
+          if (res.status === 408) {
+            throw new TimeoutError(`HTTP ${res.status}: ${body}`)
+          }
+          throw new BackendError(`HTTP ${res.status}: ${body}`)
         }
         return res
       } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err))
+        if (err instanceof BackendError) {
+          lastError = err
+        } else if (err instanceof DOMException && err.name === "AbortError") {
+          lastError = new TimeoutError("Запрос прерван по таймауту")
+        } else {
+          const e = err instanceof Error ? err : new Error(String(err))
+          lastError = e.cause instanceof Error
+            ? new ConnectionError(`${e.message}`)
+            : new ConnectionError(`${e.message}`)
+        }
       }
     }
 
-    throw lastError ?? new Error("Неизвестная ошибка")
+    throw lastError ?? new BackendError("Неизвестная ошибка")
   }
 }

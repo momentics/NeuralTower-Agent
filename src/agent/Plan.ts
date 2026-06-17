@@ -1,5 +1,6 @@
 import * as fs from "fs/promises"
 import * as path from "path"
+import { PlanError } from "../core/errors"
 
 /**
  * Состояние шага плана.
@@ -318,14 +319,14 @@ export class Plan {
   static async load(filePath: string): Promise<Plan> {
     const raw = await fs.readFile(filePath, "utf-8")
     let data: unknown
-    try {
+  try {
       data = JSON.parse(raw)
     } catch {
-      throw new Error(`Невалидный файл плана: ${filePath}`)
+      throw new PlanError(`Невалидный файл плана: ${filePath}`)
     }
 
     if (!data || typeof data !== "object" || !Array.isArray((data as any).steps)) {
-      throw new Error(`Невалидный файл плана: ${filePath}`)
+      throw new PlanError(`Невалидный файл плана: ${filePath}`)
     }
 
     const plan = Plan.fromJSON(data as PlanSerialized)
