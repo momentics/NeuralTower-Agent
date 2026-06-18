@@ -109,7 +109,32 @@ describe("AgentToolExecutor", () => {
     expect(result.content).toBe("Test response")
   })
 
-  it("callBackend returns tool_calls result when JSON tool blocks found", async () => {
+  it("callBackend returns native tool_calls from backend response", async () => {
+    vi.mocked(backend.chat).mockResolvedValue({
+      role: "assistant",
+      content: "",
+      toolCalls: [
+        { id: "call_1", toolName: "read", arguments: '{"path":"/test"}' },
+      ],
+      timestamp: Date.now(),
+    })
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      null,
+      modeManager,
+      memory,
+      null,
+    )
+    const conversation: ChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
+    const result = await executor.callBackend(conversation, () => {})
+    expect(result.type).toBe("tool_calls")
+    expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolCalls![0].toolName).toBe("read")
+    expect(result.toolCalls![0].arguments).toEqual({ path: "/test" })
+  })
+
+  it("callBackend falls back to text parsing when no native tool_calls", async () => {
     vi.mocked(backend.chat).mockResolvedValue({
       role: "assistant",
       content: 'Some text\n```json\n{"tool": "read", "args": {"path": "/test"}}\n```',
