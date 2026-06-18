@@ -3,7 +3,7 @@ import * as crypto from "crypto"
 import type { ChatMessage } from "../core/IBackend"
 import type { IProvider } from "../core/IProvider"
 import type { IAgentOrchestrator } from "../core/IAgent"
-import type { PersistentSessionStore } from "../shared/PersistentSessionStore"
+import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { NotificationService } from "../services/notification/NotificationService"
 import type { PermissionManager } from "../services/permission/PermissionManager"
 import type { WebviewToExt, ExtToWebview } from "../shared/messages"
@@ -18,7 +18,7 @@ export class ChatProvider implements IProvider {
   constructor(
     private readonly extUri: vscode.Uri,
     private readonly agent: IAgentOrchestrator,
-    private readonly sessionStore: PersistentSessionStore,
+    private readonly sessionStore: ISessionStore,
     private readonly notificationService: NotificationService,
     private readonly permissionManager: PermissionManager,
   ) {}

@@ -8,6 +8,20 @@ import type {
   PersistedMessage,
 } from "./SessionTypes"
 
+export interface ISessionStore {
+  init(): Promise<void>
+  push(message: ChatMessage): Promise<void>
+  newSession(): Promise<string>
+  deleteSession(id: string): Promise<boolean>
+  togglePin(id: string): Promise<void>
+  rename(id: string, title: string): Promise<void>
+  list(): PersistedSession[]
+  setActive(id: string): void
+  getActiveMessages(): ChatMessage[]
+  get activeId(): string
+  dispose(): void
+}
+
 const DEFAULT_DATA: SessionData = {
   sessions: [],
   messages: [],
@@ -37,7 +51,7 @@ class Mutex {
   }
 }
 
-export class PersistentSessionStore {
+export class PersistentSessionStore implements ISessionStore {
   private data: SessionData = { ...DEFAULT_DATA }
   private readonly storagePath: string
   private readonly maxSessions: number

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { ChatProvider } from "./ChatProvider"
 import type { IAgentOrchestrator } from "../core/IAgent"
-import type { PersistentSessionStore } from "../shared/PersistentSessionStore"
+import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { NotificationService } from "../services/notification/NotificationService"
 import type { PermissionManager } from "../services/permission/PermissionManager"
 
@@ -20,7 +20,7 @@ const createMockAgent = (): IAgentOrchestrator => ({
   spawnExplore: vi.fn(async () => ""),
 })
 
-const createMockSessionStore = (): PersistentSessionStore => ({
+const createMockSessionStore = (): ISessionStore => ({
   newSession: vi.fn(async () => "sess-1"),
   setActive: vi.fn(),
   push: vi.fn(async () => {}),
@@ -47,7 +47,7 @@ const createMockPermissionManager = (): PermissionManager => ({
 describe("ChatProvider", () => {
   let provider: ChatProvider
   let agent: IAgentOrchestrator
-  let sessionStore: PersistentSessionStore
+  let sessionStore: ISessionStore
   let notificationService: NotificationService
   let permissionManager: PermissionManager
 

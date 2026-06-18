@@ -28,8 +28,12 @@ import { FileIndex } from "../repo/FileIndex"
 import { RepoAnalyzer } from "../repo/RepoAnalyzer"
 import { SubagentRunner } from "../agent/SubagentRunner"
 import { loadAppConfig } from "../core/config"
-import type { AppConfig } from "../core/config"
-import type { AgentDependencies } from "../agent/AgentDependencies"
+import type { AppConfig, SessionConfig } from "../core/config"
+import type { AgentDependencies, AgentSpawnFactory } from "../agent/AgentDependencies"
+import type { IBackend } from "../core/IBackend"
+import type { IAgentOrchestrator } from "../core/IAgent"
+import type { IProvider } from "../core/IProvider"
+import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { ContextProvider } from "../core/providers/context/types"
 import {
   makeUrlProvider,
@@ -58,16 +62,18 @@ import {
   makeGitDiffProvider,
 } from "../core/ContextSources"
 
+// ── Публичные типы ────────────────────────────────────────
+
 export interface ExtensionDeps {
-  backend: NeuralTowerBackend
-  agent: AgentOrchestrator
+  backend: IBackend
+  agent: IAgentOrchestrator
   todoStore: ReturnType<AgentOrchestrator["getTodoStore"]>
-  chatProvider: ChatProvider
+  chatProvider: IProvider
   diffViewer: DiffViewerProvider
   healthMonitor: BackendHealthMonitor
   commitMessageService: CommitMessageService
   gitService: GitService
-  sessionStore: PersistentSessionStore
+  sessionStore: ISessionStore
   notificationService: NotificationService
   permissionManager: PermissionManager
   mcpManager: MCPManager
@@ -77,6 +83,81 @@ export interface ExtensionDeps {
   agentDeps: AgentDependencies
   fileIndex: FileIndex
   setWorkDir: (dir: string) => void
+}
+
+// ── Фабричные функции ─────────────────────────────────────
+
+export function createBackend(config: AppConfig): IBackend {
+  return new NeuralTowerBackend(config.backend)
+}
+
+export async function createSessionStore(
+  ctx: vscode.ExtensionContext,
+  sessionConfig: SessionConfig,
+): Promise<ISessionStore> {
+  const store = new PersistentSessionStore(ctx.globalStorageUri, sessionConfig.maxSessions)
+  await store.init()
+  return store
+}
+
+export function createPermissionManager(
+  vsCfg: vscode.WorkspaceConfiguration,
+): PermissionManager {
+  const pm = new PermissionManager()
+  const autoApproveEnabled = vsCfg.get<boolean>("autoApprove.enabled", false) ?? false
+  const autoApproveTools = vsCfg.get<string[]>("autoApprove.tools", []) ?? []
+  pm.setAutoApprove({ enabled: autoApproveEnabled, tools: autoApproveTools, maxCost: 0 })
+  return pm
+}
+
+export async function createServices(): Promise<{
+  gitService: GitService
+  notificationService: NotificationService
+}> {
+  const gitService = new GitService()
+  await gitService.init()
+  const notificationService = new NotificationService()
+  await notificationService.init()
+  return { gitService, notificationService }
+}
+
+export function createToolRegistry(workspaceRoot: string | undefined): ToolRegistry {
+  const tools = new ToolRegistry()
+  tools.register(new ReadFileTool(workspaceRoot))
+  tools.register(new WriteFileTool(workspaceRoot))
+  tools.register(new BashTool())
+  tools.register(new EditFileTool(workspaceRoot))
+  tools.register(new GlobTool())
+  tools.register(new GrepTool())
+  tools.register(new WebFetchTool())
+  tools.register(new LspTool())
+  tools.register(new TodoWriteTool())
+  return tools
+}
+
+export async function createMCPChain(
+  tools: ToolRegistry,
+): Promise<MCPManager> {
+  const mcpManager = new MCPManager()
+  await mcpManager.connect()
+  await mcpManager.syncWithRegistry(tools)
+  return mcpManager
+}
+
+export function createSkillManager(): SkillManager {
+  const skills = new SkillManager()
+  skills.registerMany(builtInSkills)
+  return skills
+}
+
+export function createRepoInfrastructure(): {
+  fileIndex: FileIndex
+  repoAnalyzer: RepoAnalyzer
+} {
+  return {
+    fileIndex: new FileIndex(),
+    repoAnalyzer: new RepoAnalyzer(),
+  }
 }
 
 /**
@@ -150,73 +231,93 @@ function registerContextProviders(
   return providers
 }
 
+export function createContextChain(
+  contextManager: ContextManager,
+  contextProviderRegistry: ContextProviderRegistry,
+  backend: NeuralTowerBackend,
+  gitService: GitService,
+  mcpManager: MCPManager,
+  fileIndex: FileIndex,
+  repoAnalyzer: RepoAnalyzer,
+  getWorkDir: () => string,
+): ContextProvider[] {
+  return registerContextProviders(
+    contextManager,
+    contextProviderRegistry,
+    backend,
+    gitService,
+    mcpManager,
+    fileIndex,
+    repoAnalyzer,
+    getWorkDir,
+  )
+}
+
+export function createAgentChain(
+  backend: IBackend,
+  tools: ToolRegistry,
+  skills: SkillManager,
+  agentDeps: AgentDependencies,
+  spawnFactory: AgentSpawnFactory,
+): { agent: AgentOrchestrator; todoStore: ReturnType<AgentOrchestrator["getTodoStore"]> } {
+  const agent = new AgentOrchestrator(backend, tools, skills, agentDeps, spawnFactory)
+  const todoStore = agent.getTodoStore()
+  return { agent, todoStore }
+}
+
+export function createUIProviders(
+  extUri: vscode.Uri,
+  agent: IAgentOrchestrator,
+  sessionStore: ISessionStore,
+  notificationService: NotificationService,
+  permissionManager: PermissionManager,
+): { chatProvider: IProvider; diffViewer: DiffViewerProvider } {
+  const chatProvider = new ChatProvider(extUri, agent, sessionStore, notificationService, permissionManager)
+  const diffViewer = new DiffViewerProvider(extUri)
+  return { chatProvider, diffViewer }
+}
+
+export async function createMonitoringChain(
+  backend: IBackend,
+  contextManager: ContextManager,
+): Promise<BackendHealthMonitor> {
+  const healthMonitor = new BackendHealthMonitor(backend, contextManager)
+  await healthMonitor.init()
+  return healthMonitor
+}
+
+export async function createCommitService(
+  backend: IBackend,
+  gitService: GitService,
+): Promise<CommitMessageService> {
+  const commitMessageService = new CommitMessageService(backend, gitService)
+  await commitMessageService.init()
+  return commitMessageService
+}
+
+// ── Главный оркестратор ───────────────────────────────────
+
 export async function createDeps(
   ctx: vscode.ExtensionContext,
 ): Promise<ExtensionDeps> {
   const config = loadAppConfig()
-
-  // ── Бэкенд ──────────────────────────────────────────────
-  const backend = new NeuralTowerBackend(config.backend)
-
-  // ── Постоянное хранилище сессий ─────────────────────────
-  const sessionStore = new PersistentSessionStore(ctx.globalStorageUri, config.session.maxSessions)
-  await sessionStore.init()
-
-  // ── Менеджер разрешений ─────────────────────────────────
-  const permissionManager = new PermissionManager()
+  const backend = createBackend(config)
+  const sessionStore = await createSessionStore(ctx, config.session)
   const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
-  const autoApproveEnabled = vsCfg.get<boolean>("autoApprove.enabled", false) ?? false
-  const autoApproveTools = vsCfg.get<string[]>("autoApprove.tools", []) ?? []
-  permissionManager.setAutoApprove({ enabled: autoApproveEnabled, tools: autoApproveTools, maxCost: 0 })
+  const permissionManager = createPermissionManager(vsCfg)
+  const { gitService, notificationService } = await createServices()
+  const tools = createToolRegistry(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath)
+  const mcpManager = await createMCPChain(tools)
+  const skills = createSkillManager()
 
-  // ── Git-сервис ──────────────────────────────────────────
-  const gitService = new GitService()
-  await gitService.init()
-
-  // ── Сервис уведомлений ──────────────────────────────────
-  const notificationService = new NotificationService()
-  await notificationService.init()
-
-  // ── Реестр инструментов ─────────────────────────────────
-  const tools = new ToolRegistry()
-  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
-  tools.register(new ReadFileTool(workspaceRoot))
-  tools.register(new WriteFileTool(workspaceRoot))
-  tools.register(new BashTool())
-  tools.register(new EditFileTool(workspaceRoot))
-  tools.register(new GlobTool())
-  tools.register(new GrepTool())
-  tools.register(new WebFetchTool())
-  tools.register(new LspTool())
-  tools.register(new TodoWriteTool())
-
-  // ── MCP-менеджер ────────────────────────────────────────
-  const mcpManager = new MCPManager()
-  await mcpManager.connect()
-  await mcpManager.syncWithRegistry(tools)
-
-  // ── Менеджер навыков ────────────────────────────────────
-  const skills = new SkillManager()
-  skills.registerMany(builtInSkills)
-
-  // ── Менеджер контекста ──────────────────────────────────
+  const { fileIndex, repoAnalyzer } = createRepoInfrastructure()
   const contextManager = new ContextManager()
-
-  // ── Реестр провайдеров контекста ─────────────────────────
   const contextProviderRegistry = new ContextProviderRegistry()
 
-  // ── Файловый индекс ─────────────────────────────────────
-  const fileIndex = new FileIndex()
-
-  // ── Анализатор репозитория ──────────────────────────────
-  const repoAnalyzer = new RepoAnalyzer()
-
-  // ── Mutable workDir (для шага 8) ────────────────────────
   const workDirRef = {
     current: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "",
   }
 
-  // ── Immutable deps, собраны ДО создания агента ──────────
   const agentDeps: AgentDependencies = {
     getWorkDir: () => workDirRef.current,
     config,
@@ -228,19 +329,10 @@ export async function createDeps(
     mcpManager,
   }
 
-  // ── Фабрика для создания AgentOrchestrator ──────────────
-  const spawnFactory: import("../agent/AgentDependencies").AgentSpawnFactory = (
-    deps,
-    b,
-    t,
-    s,
-  ) => new AgentOrchestrator(b, t, s, deps)
+  const spawnFactory: AgentSpawnFactory = (deps, b, t, s) =>
+    new AgentOrchestrator(b, t, s, deps)
 
-  // ── Оркестратор агента ──────────────────────────────────
-  const agent = new AgentOrchestrator(backend, tools, skills, agentDeps, spawnFactory)
-  const todoStore = agent.getTodoStore()
-
-  // ── Runner подагентов ───────────────────────────────────
+  const { agent, todoStore } = createAgentChain(backend, tools, skills, agentDeps, spawnFactory)
   const subagentRunner = new SubagentRunner(backend, tools, skills, agentDeps, spawnFactory)
 
   if (vscode.workspace.workspaceFolders?.[0]) {
@@ -248,16 +340,14 @@ export async function createDeps(
     await gitService.findRoot(vscode.workspace.workspaceFolders[0].uri.fsPath)
   }
 
-  // ── Построение файлового индекса ────────────────────────
   if (workDirRef.current) {
     await fileIndex.build(workDirRef.current)
   }
 
-  // ── Регистрация провайдеров контекста ───────────────────
-  registerContextProviders(
+  createContextChain(
     contextManager,
     contextProviderRegistry,
-    backend,
+    backend as NeuralTowerBackend,
     gitService,
     mcpManager,
     fileIndex,
@@ -265,17 +355,16 @@ export async function createDeps(
     () => workDirRef.current,
   )
 
-  // ── Провайдеры ──────────────────────────────────────────
-  const chatProvider = new ChatProvider(ctx.extensionUri, agent, sessionStore, notificationService, permissionManager)
-  const diffViewer = new DiffViewerProvider(ctx.extensionUri)
+  const { chatProvider, diffViewer } = createUIProviders(
+    ctx.extensionUri,
+    agent,
+    sessionStore,
+    notificationService,
+    permissionManager,
+  )
 
-  // ── Мониторинг здоровья бэкенда ─────────────────────────
-  const healthMonitor = new BackendHealthMonitor(backend, contextManager)
-  await healthMonitor.init()
-
-  // ── Сервис коммит-сообщений ─────────────────────────────
-  const commitMessageService = new CommitMessageService(backend, gitService)
-  await commitMessageService.init()
+  const healthMonitor = await createMonitoringChain(backend, contextManager)
+  const commitMessageService = await createCommitService(backend, gitService)
 
   return {
     backend,

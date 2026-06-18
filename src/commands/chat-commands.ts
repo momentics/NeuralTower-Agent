@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import type { App } from "../core/App"
-import type { ChatProvider } from "../providers/ChatProvider"
+import type { IProvider } from "../core/IProvider"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { TodoStore } from "../agent/TodoStore"
 import type { IBackend } from "../core/IBackend"
@@ -10,7 +10,7 @@ import { SettingsProvider } from "../providers/SettingsProvider"
 
 export function registerChatCommands(
   app: App,
-  chatProvider: ChatProvider,
+  chatProvider: IProvider,
   todoStore: TodoStore,
   agent: IAgentOrchestrator,
   backend: IBackend,
@@ -19,7 +19,7 @@ export function registerChatCommands(
   extUri: vscode.Uri,
 ): void {
   app.registerCommand("neuralTowerAgent.newChat", () => {
-    chatProvider.broadcastNewChat()
+    chatProvider.broadcastNewChat?.()
     todoStore.clear()
     agent.clearPlan()
     agent.resetSession()

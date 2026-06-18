@@ -64,17 +64,32 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   // ── Сохранить объекты для освобождения ──────────────────
   ctx.subscriptions.push({
     dispose: () => {
-      deps.agent.dispose()
-      deps.sessionStore.dispose()
-      telemetry.dispose()
-      deps.notificationService.dispose()
-      deps.permissionManager.dispose()
-      deps.gitService.dispose()
-      deps.healthMonitor.dispose()
-      deps.commitMessageService.dispose()
-      deps.diffViewer.dispose()
-      void deps.mcpManager.disconnect()
-      disposeOutputChannel()
+      const toDispose: (() => void | Promise<void>)[] = [
+        // Агенты (созданы последними)
+        () => deps.agent.dispose(),
+        // UI-провайдеры
+        () => deps.diffViewer.dispose(),
+        // Мониторинг
+        () => deps.healthMonitor.dispose(),
+        () => deps.commitMessageService.dispose(),
+        // Сервисы
+        () => deps.notificationService.dispose(),
+        () => deps.permissionManager.dispose(),
+        () => deps.sessionStore.dispose(),
+        () => deps.gitService.dispose(),
+        // Инфраструктура
+        () => deps.mcpManager.disconnect(),
+        () => telemetry.dispose(),
+        () => disposeOutputChannel(),
+      ]
+
+      for (const fn of toDispose) {
+        try {
+          fn()
+        } catch {
+          // Продолжить освобождение остальных ресурсов
+        }
+      }
     },
   })
 }

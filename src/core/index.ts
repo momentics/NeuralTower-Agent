@@ -68,7 +68,6 @@ export {
 } from "./config"
 export type {
   AppConfig,
-  BackendConfig as AppConfigBackendConfig,
   AgentConfig,
   ContextConfig,
   CompactorConfig,

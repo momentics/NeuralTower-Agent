@@ -4,7 +4,7 @@ import { registerGitCommands } from "./git-commands"
 import { registerChatCommands } from "./chat-commands"
 import { registerCodeActionCommands } from "./code-action-commands"
 import type { IAgentOrchestrator } from "../core/IAgent"
-import type { ChatProvider } from "../providers/ChatProvider"
+import type { IProvider } from "../core/IProvider"
 import type { TodoStore } from "../agent/TodoStore"
 import type { IBackend } from "../core/IBackend"
 import type { GitService } from "../services/git/GitService"
@@ -15,7 +15,7 @@ import * as vscode from "vscode"
 export interface CommandDeps {
   app: App
   agent: IAgentOrchestrator
-  chatProvider: ChatProvider
+  chatProvider: IProvider
   todoStore: TodoStore
   backend: IBackend
   gitService: GitService

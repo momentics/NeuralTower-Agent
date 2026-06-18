@@ -1,13 +1,7 @@
 import * as vscode from "vscode"
+import type { BackendConfig } from "./IBackend"
 
 // ── Backend ───────────────────────────────────────────────
-
-export interface BackendConfig {
-  url: string
-  model: string
-  maxRetries: number
-  timeoutMs: number
-}
 
 export function loadDefaultBackendConfig(): BackendConfig {
   return {

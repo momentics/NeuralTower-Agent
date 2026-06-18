@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import type { IAgentOrchestrator } from "../../core/IAgent"
-import type { ChatProvider } from "../../providers/ChatProvider"
+import type { IProvider } from "../../core/IProvider"
 
 export const codeActionProviderMetadata: vscode.CodeActionProviderMetadata = {
   providedCodeActionKinds: [
@@ -11,7 +11,7 @@ export const codeActionProviderMetadata: vscode.CodeActionProviderMetadata = {
 
 export class AgentCodeActionProvider implements vscode.CodeActionProvider {
   constructor(
-    private readonly chatProvider: ChatProvider,
+    private readonly chatProvider: IProvider,
   ) {}
 
   provideCodeActions(
