@@ -47,7 +47,6 @@ export class AgentCore {
     this.todoStore = new TodoStore()
 
     const contextBuilder = new AgentContextBuilder(
-      backend,
       toolRegistry,
       skillManager,
       this.memory,

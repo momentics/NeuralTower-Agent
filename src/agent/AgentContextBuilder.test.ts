@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import * as vscode from "vscode"
 import { AgentContextBuilder } from "./AgentContextBuilder"
-import type { IBackend } from "../core/IBackend"
 import { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
 import type { ISkill } from "../skills/ISkill"
@@ -10,15 +9,6 @@ import type { IFileIndex } from "../repo/FileIndex"
 import type { IContextManager } from "../core/ContextManager"
 import { ContextManager } from "../core/ContextManager"
 import { AgentMemory } from "./AgentMemory"
-
-const createMockBackend = (): IBackend => ({
-  chat: vi.fn(async () => ({ role: "assistant", content: "Test response", timestamp: Date.now() })),
-  chatJson: vi.fn(async () => ({})),
-  getConfig: vi.fn(async () => ({ url: "http://localhost:30000", model: "test-model", maxRetries: 3, timeoutMs: 60000 })),
-  updateConfig: vi.fn(async () => {}),
-  listModels: vi.fn(async () => ["test-model"]),
-  healthCheck: vi.fn(async () => true),
-})
 
 const createMockSkillManager = (buildContextReturn = ""): SkillManager => ({
   match: vi.fn(() => []),
@@ -37,7 +27,6 @@ const createMockFileIndex = (totalFiles = 0, languages = 0): IFileIndex => ({
 })
 
 describe("AgentContextBuilder", () => {
-  let backend: IBackend
   let toolRegistry: ToolRegistry
   let skillManager: SkillManager
   let memory: AgentMemory
@@ -47,7 +36,6 @@ describe("AgentContextBuilder", () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    backend = createMockBackend()
     toolRegistry = new ToolRegistry()
     skillManager = createMockSkillManager()
     memory = new AgentMemory()
@@ -62,7 +50,6 @@ describe("AgentContextBuilder", () => {
 
   it("creates instance with all dependencies", () => {
     const builder = new AgentContextBuilder(
-      backend,
       toolRegistry,
       skillManager,
       memory,
@@ -75,7 +62,6 @@ describe("AgentContextBuilder", () => {
 
   it("buildSystemPrompt includes base system prompt text", async () => {
     const builder = new AgentContextBuilder(
-      backend,
       toolRegistry,
       skillManager,
       memory,
@@ -88,28 +74,8 @@ describe("AgentContextBuilder", () => {
     expect(prompt).toContain("Ваша цель — выполнить задачу пользователя")
   })
 
-  it("buildSystemPrompt includes environment block with model info", async () => {
-    const builder = new AgentContextBuilder(
-      backend,
-      toolRegistry,
-      skillManager,
-      memory,
-      fileIndex,
-      gitService,
-      () => "/test/dir",
-    )
-    const prompt = await builder.buildSystemPrompt([])
-    expect(prompt).toContain("<env>")
-    expect(prompt).toContain("Модель: test-model")
-    expect(prompt).toContain("Рабочая директория: /test/dir")
-    expect(prompt).toContain("Платформа: win32")
-    expect(prompt).toContain("Ветка: main")
-    expect(prompt).toContain("</env>")
-  })
-
   it("buildSystemPrompt includes tool schema list", async () => {
     const builder = new AgentContextBuilder(
-      backend,
       toolRegistry,
       skillManager,
       memory,
@@ -124,7 +90,6 @@ describe("AgentContextBuilder", () => {
   it("buildSystemPrompt includes project context from memory", async () => {
     memory.setProject({ repo: "my-repo", languages: ["ts", "js"] })
     const builder = new AgentContextBuilder(
-      backend,
       toolRegistry,
       skillManager,
       memory,
@@ -141,7 +106,6 @@ describe("AgentContextBuilder", () => {
   it("buildSystemPrompt includes file index info when files exist", async () => {
     fileIndex = createMockFileIndex(42, 3)
     const builder = new AgentContextBuilder(
-      backend,
       toolRegistry,
       skillManager,
       memory,
@@ -155,7 +119,6 @@ describe("AgentContextBuilder", () => {
 
   it("buildSystemPrompt includes git diff context when gitService is set and config allows", async () => {
     const builder = new AgentContextBuilder(
-      backend,
       toolRegistry,
       skillManager,
       memory,
@@ -171,7 +134,6 @@ describe("AgentContextBuilder", () => {
 
   it("buildSystemPrompt omits git diff context when gitService is null", async () => {
     const builder = new AgentContextBuilder(
-      backend,
       toolRegistry,
       skillManager,
       memory,
@@ -181,26 +143,6 @@ describe("AgentContextBuilder", () => {
     )
     const prompt = await builder.buildSystemPrompt([])
     expect(prompt).not.toContain("Изменения Git")
-    expect(prompt).toContain("Ветка: неизвестно")
-  })
-
-  it("buildEnvironmentBlock falls back gracefully when backend fails", async () => {
-    vi.mocked(backend.getConfig).mockRejectedValueOnce(new Error("Backend error"))
-    const builder = new AgentContextBuilder(
-      backend,
-      toolRegistry,
-      skillManager,
-      memory,
-      fileIndex,
-      null,
-      () => "/test/dir",
-    )
-    const prompt = await builder.buildSystemPrompt([])
-    expect(prompt).toContain("<env>")
-    expect(prompt).toContain("Рабочая директория: /test/dir")
-    expect(prompt).toContain("Платформа: win32")
-    expect(prompt).not.toContain("Модель:")
-    expect(prompt).toContain("</env>")
   })
 
   it("buildSystemPrompt includes skill context when skills are active", async () => {
@@ -212,7 +154,6 @@ describe("AgentContextBuilder", () => {
       instructions: "Инструкции для тестирования",
     }
     const builder = new AgentContextBuilder(
-      backend,
       toolRegistry,
       skillManagerWithCtx,
       memory,
@@ -228,7 +169,6 @@ describe("AgentContextBuilder", () => {
   it("buildSystemPrompt includes contextManager content when set", async () => {
     const contextManager = new ContextManager()
     const builder = new AgentContextBuilder(
-      backend,
       toolRegistry,
       skillManager,
       memory,
@@ -246,7 +186,6 @@ describe("AgentContextBuilder", () => {
     const contextManager = new ContextManager()
     vi.spyOn(contextManager, "prepare").mockRejectedValue(new Error("ContextManager error"))
     const builder = new AgentContextBuilder(
-      backend,
       toolRegistry,
       skillManager,
       memory,
@@ -258,5 +197,25 @@ describe("AgentContextBuilder", () => {
     )
     const prompt = await builder.buildSystemPrompt([])
     expect(prompt).toContain("Вы — агент Neural Tower")
+  })
+
+  it("buildSystemPrompt contains baseSystemPrompt in normal execution path", async () => {
+    const builder = new AgentContextBuilder(
+      toolRegistry,
+      skillManager,
+      memory,
+      fileIndex,
+      gitService,
+      () => "/test/dir",
+    )
+    const prompt = await builder.buildSystemPrompt([])
+    expect(prompt).toContain("Вы — агент Neural Tower")
+    expect(prompt).toContain("Ваша цель — выполнить задачу пользователя")
+    expect(prompt).toContain("НЕ начинайте ответы с")
+    expect(prompt).toContain("НИКОГДА не заканчивайте ответ вопросом")
+    expect(prompt).toContain("Минимизируйте токены вывода")
+    expect(prompt).toContain("Когда нужно вызвать инструмент")
+    expect(prompt).toContain("НЕ добавляйте комментарии")
+    expect(prompt).toContain("Никогда не коммитьте изменения")
   })
 })

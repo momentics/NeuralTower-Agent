@@ -1,4 +1,3 @@
-import type { IBackend } from "../core/IBackend"
 import type { ISkill } from "../skills/ISkill"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
@@ -9,7 +8,6 @@ import { AgentMemory } from "./AgentMemory"
 
 export class AgentContextBuilder {
   constructor(
-    private readonly backend: IBackend,
     private readonly toolRegistry: ToolRegistry,
     private readonly skillManager: SkillManager,
     private readonly memory: AgentMemory,
@@ -22,7 +20,6 @@ export class AgentContextBuilder {
 
   async buildSystemPrompt(skills: ISkill[]): Promise<string> {
     const base = this.baseSystemPrompt()
-    const envBlock = await this.buildEnvironmentBlock()
     const skillCtx = this.skillManager.buildContext(skills)
     const toolCtx = this.toolRegistry.toSchemaList()
     const projectCtx = this.memory.projectContext()
@@ -49,30 +46,8 @@ export class AgentContextBuilder {
       }
     }
 
-    const parts = [contextManagerContent, envBlock, base, projectCtx, skillCtx, toolCtx, indexInfo, gitContext].filter(Boolean)
+    const parts = [contextManagerContent, base, projectCtx, skillCtx, toolCtx, indexInfo, gitContext].filter(Boolean)
     return parts.join("\n\n")
-  }
-
-  private async buildEnvironmentBlock(): Promise<string> {
-    try {
-      const cfg = await this.backend.getConfig()
-      const branchInfo = this.gitService
-        ? await this.gitService.getBranchInfo(this.getWorkDir())
-        : null
-      return `<env>
-  Модель: ${cfg.model}
-  Рабочая директория: ${this.getWorkDir()}
-  Платформа: ${process.platform}
-  Дата: ${new Date().toISOString()}
-  Ветка: ${branchInfo?.name ?? "неизвестно"}
-</env>`
-    } catch {
-      return `<env>
-  Рабочая директория: ${this.getWorkDir()}
-  Платформа: ${process.platform}
-  Дата: ${new Date().toISOString()}
-</env>`
-    }
   }
 
   private baseSystemPrompt(): string {

@@ -40,20 +40,8 @@ export class AgentLoop {
   ): Promise<ChatMessage> {
     const currentMode = this.modeManager.getModeName()
 
-    let systemPrompt = ""
-
-    if (this.sessionContext) {
-      try {
-        const epoch = await this.sessionContext.prepare(currentMode)
-        systemPrompt = epoch.baseline
-      } catch {
-        systemPrompt = await this.contextBuilder.buildSystemPrompt(activeSkills)
-      }
-    } else {
-      systemPrompt = await this.contextBuilder.buildSystemPrompt(activeSkills)
-    }
-
-    systemPrompt += "\n\n" + this.modeManager.getSystemPromptAddon()
+    const systemPrompt = (await this.contextBuilder.buildSystemPrompt(activeSkills))
+      + "\n\n" + this.modeManager.getSystemPromptAddon()
 
     const conversation: ChatMessage[] = [
       { role: "system", content: systemPrompt, timestamp: Date.now() },
