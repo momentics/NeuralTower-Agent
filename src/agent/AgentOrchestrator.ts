@@ -18,6 +18,7 @@ import type { IContextProviderRegistry } from "../core/providers/context/registr
 export class AgentOrchestrator {
   private core: AgentCore
   private disposed = false
+  private abortController: AbortController = new AbortController()
 
   constructor(
     private readonly backend: IBackend,
@@ -43,7 +44,8 @@ export class AgentOrchestrator {
     onToolResult?: (name: string, result: { output: string; success: boolean }) => void,
     signal?: AbortSignal,
   ): Promise<ChatMessage> {
-    return this.core.run(query, onChunk, onToolUse, onToolResult, signal)
+    const combined = AbortSignal.any([this.abortController.signal, signal].filter((s): s is AbortSignal => !!s))
+    return this.core.run(query, onChunk, onToolUse, onToolResult, combined)
   }
 
   // ── Планирование ───────────────────────────────────────
@@ -114,11 +116,13 @@ export class AgentOrchestrator {
   // ── Жизненный цикл ─────────────────────────────────────
 
   async reload(): Promise<void> {
+    this.abortController.abort()
     this.core.dispose()
     const workDir = this.deps.getWorkDir()
     if (workDir) {
       await this.deps.fileIndex.build(workDir)
     }
+    this.abortController = new AbortController()
     this.core = new AgentCore(
       this.backend,
       this.toolRegistry,
@@ -129,6 +133,7 @@ export class AgentOrchestrator {
 
   dispose(): void {
     this.disposed = true
+    this.abortController.abort()
     this.core.dispose()
   }
 }

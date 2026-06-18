@@ -169,6 +169,42 @@ describe("AgentOrchestrator", () => {
     await expect(orchestrator.reload()).resolves.not.toThrow()
   })
 
+  it("reload aborts running task", async () => {
+    const slowBackend: IBackend = {
+      chat: vi.fn(async () => {
+        await new Promise((r) => setTimeout(r, 500))
+        return { role: "assistant", content: "slow", timestamp: Date.now() }
+      }),
+      chatJson: vi.fn(async () => ({})),
+      getConfig: vi.fn(async () => ({ url: "http://localhost:30000", model: "test-model", maxRetries: 3, timeoutMs: 60000 })),
+      updateConfig: vi.fn(async () => {}),
+      listModels: vi.fn(async () => ["test-model"]),
+      healthCheck: vi.fn(async () => true),
+    }
+    const orchestrator = new AgentOrchestrator(slowBackend, toolRegistry, skillManager, deps)
+    const runPromise = orchestrator.run("test", () => {})
+    await orchestrator.reload()
+    await expect(runPromise).rejects.toThrow("Task aborted")
+  })
+
+  it("dispose aborts running task", async () => {
+    const slowBackend: IBackend = {
+      chat: vi.fn(async () => {
+        await new Promise((r) => setTimeout(r, 500))
+        return { role: "assistant", content: "slow", timestamp: Date.now() }
+      }),
+      chatJson: vi.fn(async () => ({})),
+      getConfig: vi.fn(async () => ({ url: "http://localhost:30000", model: "test-model", maxRetries: 3, timeoutMs: 60000 })),
+      updateConfig: vi.fn(async () => {}),
+      listModels: vi.fn(async () => ["test-model"]),
+      healthCheck: vi.fn(async () => true),
+    }
+    const orchestrator = new AgentOrchestrator(slowBackend, toolRegistry, skillManager, deps)
+    const runPromise = orchestrator.run("test", () => {})
+    orchestrator.dispose()
+    await expect(runPromise).rejects.toThrow("Task aborted")
+  })
+
   it("getTodoStore returns a TodoStore instance", () => {
     const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const store = orchestrator.getTodoStore()
