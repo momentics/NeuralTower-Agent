@@ -21,7 +21,6 @@ export class AgentContextBuilder {
   async buildSystemPrompt(skills: ISkill[]): Promise<string> {
     const base = this.baseSystemPrompt()
     const skillCtx = this.skillManager.buildContext(skills)
-    const toolCtx = this.toolRegistry.toSchemaList()
     const projectCtx = this.memory.projectContext()
     const indexStats = this.fileIndex.stats()
     const indexInfo =
@@ -46,7 +45,7 @@ export class AgentContextBuilder {
       }
     }
 
-    const parts = [contextManagerContent, base, projectCtx, skillCtx, toolCtx, indexInfo, gitContext].filter(Boolean)
+    const parts = [contextManagerContent, base, projectCtx, skillCtx, indexInfo, gitContext].filter(Boolean)
     return parts.join("\n\n")
   }
 
@@ -61,14 +60,6 @@ export class AgentContextBuilder {
 - НЕ начинайте ответы с "Отлично", "Конечно", "Хорошо". Будьте прямолинейны и технически точны.
 - НИКОГДА не заканчивайте ответ вопросом или предложением дальнейшей помощи.
 - Минимизируйте токены вывода. Отвечайте кратко: 1-3 строки, если пользователь не просит подробности.
-
-# Инструменты
-
-У вас есть доступ к инструментам для работы с файлами, выполнения команд и поиска кода.
-Когда нужно вызвать инструмент, ответьте JSON-блоком:
-\{"tool": "имя_инструмента", "args": \{"ключ": "значение"\}\}
-Когда у вас есть окончательный ответ, ответьте обычным текстом.
-Вы можете вызывать несколько инструментов в одном ответе, разместив несколько JSON-блоков.
 
 # Стиль кода
 

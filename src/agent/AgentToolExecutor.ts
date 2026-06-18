@@ -1,4 +1,4 @@
-import type { IBackend, ChatMessage } from "../core/IBackend"
+import type { IBackend, ChatMessage, ToolCall as BackendToolCall } from "../core/IBackend"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import type { AgentModeManager } from "./AgentMode"
@@ -34,8 +34,17 @@ export class AgentToolExecutor {
       onChunk(text)
     }
 
-    const msg = await this.backend.chat(conversation, wrappedChunk)
+    const tools = this.toolRegistry.toToolDefinitions()
+
+    const msg = await this.backend.chat(conversation, wrappedChunk, tools)
     const content = msg.content
+
+    if (msg.toolCalls && msg.toolCalls.length > 0) {
+      const parsed = parseBackendToolCalls(msg.toolCalls)
+      if (parsed && parsed.length > 0) {
+        return { type: "tool_calls", toolCalls: parsed }
+      }
+    }
 
     const toolCalls = this.extractToolCalls(content)
     if (toolCalls && toolCalls.length > 0) {
@@ -181,4 +190,25 @@ export class AgentToolExecutor {
 
     return blocks
   }
+}
+
+/**
+ * Преобразовать нативные tool_calls из бэкенда в формат AgentToolExecutor.
+ */
+function parseBackendToolCalls(backendCalls: BackendToolCall[]): ToolCall[] | null {
+  const calls: ToolCall[] = []
+  for (const bc of backendCalls) {
+    let args: Record<string, unknown> = {}
+    try {
+      args = JSON.parse(bc.arguments) as Record<string, unknown>
+    } catch {
+      // невалидный JSON — пропустить
+      continue
+    }
+    calls.push({
+      toolName: bc.toolName,
+      arguments: args,
+    })
+  }
+  return calls.length > 0 ? calls : null
 }

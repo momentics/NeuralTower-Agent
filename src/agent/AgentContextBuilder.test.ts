@@ -74,19 +74,6 @@ describe("AgentContextBuilder", () => {
     expect(prompt).toContain("Ваша цель — выполнить задачу пользователя")
   })
 
-  it("buildSystemPrompt includes tool schema list", async () => {
-    const builder = new AgentContextBuilder(
-      toolRegistry,
-      skillManager,
-      memory,
-      fileIndex,
-      gitService,
-      () => "/test/dir",
-    )
-    const prompt = await builder.buildSystemPrompt([])
-    expect(prompt).toContain("Инструменты недоступны.")
-  })
-
   it("buildSystemPrompt includes project context from memory", async () => {
     memory.setProject({ repo: "my-repo", languages: ["ts", "js"] })
     const builder = new AgentContextBuilder(
@@ -214,7 +201,6 @@ describe("AgentContextBuilder", () => {
     expect(prompt).toContain("НЕ начинайте ответы с")
     expect(prompt).toContain("НИКОГДА не заканчивайте ответ вопросом")
     expect(prompt).toContain("Минимизируйте токены вывода")
-    expect(prompt).toContain("Когда нужно вызвать инструмент")
     expect(prompt).toContain("НЕ добавляйте комментарии")
     expect(prompt).toContain("Никогда не коммитьте изменения")
   })

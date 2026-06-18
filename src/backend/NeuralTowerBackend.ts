@@ -1,5 +1,5 @@
 import * as vscode from "vscode"
-import type { IBackend, BackendConfig, ChatMessage } from "../core/IBackend"
+import type { IBackend, BackendConfig, ChatMessage, ToolCall, ToolDefinition } from "../core/IBackend"
 import { BackendError, ConnectionError, TimeoutError } from "../core/errors"
 import { loadDefaultBackendConfig } from "../core/config"
 
@@ -55,21 +55,37 @@ export class NeuralTowerBackend implements IBackend {
   async chat(
     messages: ChatMessage[],
     onChunk: (text: string) => void,
+    tools?: ToolDefinition[],
   ): Promise<ChatMessage> {
     const cfg = await this.getConfig()
+
+    const body: Record<string, unknown> = {
+      model: cfg.model,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      stream: true,
+    }
+
+    if (tools && tools.length > 0) {
+      body.tools = tools.map((t) => ({
+        type: "function",
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: toOpenAIParameters(t.parameters),
+        },
+      }))
+    }
+
     const res = await this.request(`${cfg.url}/v1/chat/completions`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: cfg.model,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
-        stream: true,
-      }),
+      body: JSON.stringify(body),
     })
 
     if (!res.body) throw new BackendError("Пустой ответ от Neural Tower")
 
     let full = ""
+    const toolCalls = new Map<number, ToolCall>()
     const reader = res.body.getReader()
     const dec = new TextDecoder()
 
@@ -84,12 +100,46 @@ export class NeuralTowerBackend implements IBackend {
             if (payload === "[DONE]") continue
             try {
               const p = JSON.parse(payload) as {
-                choices?: Array<{ delta?: { content?: string } }>
+                choices?: Array<{
+                  delta?: {
+                    content?: string
+                    tool_calls?: Array<{
+                      index: number
+                      id?: string
+                      type?: string
+                      function?: {
+                        name?: string
+                        arguments?: string
+                      }
+                    }>
+                  }
+                }>
               }
-              const content = p.choices?.[0]?.delta?.content
+              const delta = p.choices?.[0]?.delta
+              if (!delta) continue
+
+              const content = delta.content
               if (content) {
                 full += content
                 onChunk(content)
+              }
+
+              if (delta.tool_calls) {
+                for (const tc of delta.tool_calls) {
+                  const idx = tc.index
+                  let existing = toolCalls.get(idx)
+                  if (!existing) {
+                    existing = {
+                      id: tc.id ?? "",
+                      toolName: tc.function?.name ?? "",
+                      arguments: "",
+                    }
+                    toolCalls.set(idx, existing)
+                  }
+                  if (tc.id) existing.id = tc.id
+                  if (tc.function?.name) existing.toolName = tc.function.name
+                  if (tc.function?.arguments) existing.arguments += tc.function.arguments
+                }
               }
             } catch { /* пропустить некорректные данные SSE */ }
           }
@@ -99,7 +149,11 @@ export class NeuralTowerBackend implements IBackend {
       reader.releaseLock()
     }
 
-    return { role: "assistant", content: full, timestamp: Date.now() }
+    const result: ChatMessage = { role: "assistant", content: full, timestamp: Date.now() }
+    if (toolCalls.size > 0) {
+      result.toolCalls = Array.from(toolCalls.values())
+    }
+    return result
   }
 
   /**
@@ -169,4 +223,20 @@ export class NeuralTowerBackend implements IBackend {
 
     throw lastError ?? new BackendError("Неизвестная ошибка")
   }
+}
+
+/**
+ * Преобразовать параметры ToolDefinition в формат OpenAI JSON Schema.
+ */
+function toOpenAIParameters(parameters: object): object {
+  const schema = parameters as { parameters?: Record<string, unknown>; required?: string[]; type?: string }
+  const result: Record<string, unknown> = {}
+  if (schema.parameters) {
+    result.properties = schema.parameters
+  }
+  if (schema.required) {
+    result.required = schema.required
+  }
+  result.type = schema.type ?? "object"
+  return result
 }

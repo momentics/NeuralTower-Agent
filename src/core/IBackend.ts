@@ -13,8 +13,9 @@ export interface IBackend {
    * Отправить чат-запрос с потоковой передачей ответа.
    * Обработчик `onChunk` вызывается для каждого токена.
    * По завершении возвращается полное сообщение помощника.
+   * Параметр `tools` передаёт определения инструментов для нативного function calling.
    */
-  chat(messages: ChatMessage[], onChunk: (text: string) => void): Promise<ChatMessage>
+  chat(messages: ChatMessage[], onChunk: (text: string) => void, tools?: ToolDefinition[]): Promise<ChatMessage>
 
   /**
    * Отправить чат-запрос с ожиданием структурированного JSON-ответа.
@@ -39,5 +40,18 @@ export interface BackendConfig {
 export interface ChatMessage {
   role: "system" | "user" | "assistant"
   content: string
+  toolCalls?: ToolCall[]
   timestamp?: number
+}
+
+export interface ToolCall {
+  id: string
+  toolName: string
+  arguments: string
+}
+
+export interface ToolDefinition {
+  name: string
+  description: string
+  parameters: object
 }
