@@ -1,6 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { PermissionManager } from "./PermissionManager"
 
+const createMockMemento = (preloaded?: Record<string, unknown>) => {
+  const store: Record<string, unknown> = { ...preloaded }
+  return {
+    get: vi.fn(<T>(key: string, defaultValue?: T): T => (key in store ? store[key] : defaultValue!)),
+    update: vi.fn((key: string, value: unknown) => { store[key] = value; return Promise.resolve() }),
+    keys: vi.fn(() => Object.keys(store)),
+  }
+}
+
 describe("PermissionManager", () => {
   let pm: PermissionManager
 
@@ -101,5 +110,116 @@ describe("PermissionManager", () => {
     pm.dispose()
     const result = await checkPromise
     expect(result).toBe(false)
+  })
+})
+
+describe("PermissionManager — persistence", () => {
+  it("persists permissions to Memento on setPermission", () => {
+    const memento = createMockMemento()
+    const pm2 = new PermissionManager(memento)
+    pm2.setPermission("bash", "allow")
+    expect(memento.update).toHaveBeenCalledWith("neuralTowerAgent.permissions", { bash: "allow" })
+  })
+
+  it("persists permissions to Memento on resolveRequest with always=true", async () => {
+    const memento = createMockMemento()
+    const pm2 = new PermissionManager(memento)
+    const checkPromise = pm2.checkPermission({ name: "bash", isSafe: false, execute: vi.fn() } as any, {}, 5000)
+    const reqs = (pm2 as any).pendingRequests
+    const req = reqs[0]
+    pm2.resolveRequest(req.id, true, true)
+    await checkPromise
+    expect(memento.update).toHaveBeenCalledWith("neuralTowerAgent.permissions", { bash: "allow" })
+  })
+
+  it("does not persist permissions on resolveRequest with always=false", async () => {
+    const memento = createMockMemento()
+    const pm2 = new PermissionManager(memento)
+    const checkPromise = pm2.checkPermission({ name: "bash", isSafe: false, execute: vi.fn() } as any, {}, 5000)
+    const reqs = (pm2 as any).pendingRequests
+    const req = reqs[0]
+    pm2.resolveRequest(req.id, true, false)
+    await checkPromise
+    expect(memento.update).not.toHaveBeenCalled()
+  })
+
+  it("persists autoApprove to Memento on setAutoApprove", () => {
+    const memento = createMockMemento()
+    const pm2 = new PermissionManager(memento)
+    pm2.setAutoApprove({ enabled: true, tools: ["bash"], maxCost: 100 })
+    expect(memento.update).toHaveBeenCalledWith("neuralTowerAgent.autoApprove", {
+      enabled: true,
+      tools: ["bash"],
+      maxCost: 100,
+    })
+  })
+
+  it("persists empty object on clear", () => {
+    const memento = createMockMemento()
+    const pm2 = new PermissionManager(memento)
+    pm2.setPermission("bash", "allow")
+    memento.update.mockClear()
+    pm2.clear()
+    expect(memento.update).toHaveBeenCalledWith("neuralTowerAgent.permissions", {})
+  })
+
+  it("loads permissions from Memento on init", () => {
+    const memento = createMockMemento({
+      "neuralTowerAgent.permissions": { bash: "allow", read: "deny" },
+    })
+    const pm2 = new PermissionManager(memento)
+    pm2.init()
+    expect(pm2.getPermissionLevel("bash")).toBe("allow")
+    expect(pm2.getPermissionLevel("read")).toBe("deny")
+    expect(pm2.getPermissionLevel("unknown")).toBe("ask")
+  })
+
+  it("loads autoApprove from Memento on init", () => {
+    const memento = createMockMemento({
+      "neuralTowerAgent.autoApprove": { enabled: true, tools: ["bash"], maxCost: 50 },
+    })
+    const pm2 = new PermissionManager(memento)
+    pm2.init()
+    const cfg = pm2.getAutoApprove()
+    expect(cfg.enabled).toBe(true)
+    expect(cfg.tools).toContain("bash")
+    expect(cfg.maxCost).toBe(50)
+  })
+
+  it("skips invalid levels when loading from Memento", () => {
+    const memento = createMockMemento({
+      "neuralTowerAgent.permissions": { bash: "allow", read: "invalid" as any },
+    })
+    const pm2 = new PermissionManager(memento)
+    pm2.init()
+    expect(pm2.getPermissionLevel("bash")).toBe("allow")
+    expect(pm2.getPermissionLevel("read")).toBe("ask")
+  })
+
+  it("does not persist without Memento", () => {
+    const pm2 = new PermissionManager()
+    pm2.setPermission("bash", "allow")
+    pm2.setAutoApprove({ enabled: true, tools: ["bash"], maxCost: 0 })
+    pm2.clear()
+    expect(pm2.getPermissionLevel("bash")).toBe("ask")
+  })
+
+  it("does not load without Memento on init", () => {
+    const pm2 = new PermissionManager()
+    pm2.init()
+    expect(pm2.getPermissionLevel("bash")).toBe("ask")
+  })
+
+  it("permissions survive across new instance", () => {
+    const memento = createMockMemento()
+    const pm1 = new PermissionManager(memento)
+    pm1.setPermission("bash", "allow")
+    pm1.setPermission("read", "deny")
+
+    const pm2 = new PermissionManager(memento)
+    pm2.init()
+
+    expect(pm2.getPermissionLevel("bash")).toBe("allow")
+    expect(pm2.getPermissionLevel("read")).toBe("deny")
   })
 })

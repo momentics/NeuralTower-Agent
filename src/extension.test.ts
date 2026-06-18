@@ -104,6 +104,7 @@ vi.mock("./shared/PersistentSessionStore", () => ({
 
 vi.mock("./services/permission/PermissionManager", () => ({
   PermissionManager: vi.fn().mockImplementation(() => ({
+    init: vi.fn(),
     setAutoApprove: vi.fn(),
     dispose: vi.fn(),
   })),

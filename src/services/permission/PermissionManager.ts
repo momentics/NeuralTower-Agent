@@ -10,6 +10,9 @@ export interface IPermissionManager {
 }
 
 export class PermissionManager implements IPermissionManager {
+  private static readonly KEY_PERMISSIONS = "neuralTowerAgent.permissions"
+  private static readonly KEY_AUTO_APPROVE = "neuralTowerAgent.autoApprove"
+
   private permissions: Map<string, PermissionLevel> = new Map()
   private autoApprove: AutoApproveConfig = {
     enabled: false,
@@ -18,8 +21,38 @@ export class PermissionManager implements IPermissionManager {
   }
   private pendingRequests: PermissionRequest[] = []
   private requestEmitter: vscode.EventEmitter<PermissionRequest> | null = null
+  private memento: vscode.Memento | null = null
 
-  constructor() {}
+  constructor(memento?: vscode.Memento) {
+    this.memento = memento ?? null
+  }
+
+  /**
+   * Инициализировать менеджер разрешений — загрузить сохранённые данные из Memento.
+   */
+  init(): void {
+    if (!this.memento) return
+
+    const stored = this.memento.get<Record<string, PermissionLevel>>(
+      PermissionManager.KEY_PERMISSIONS,
+      {},
+    )
+    if (stored) {
+      for (const [toolName, level] of Object.entries(stored)) {
+        if (level === "allow" || level === "deny" || level === "ask") {
+          this.permissions.set(toolName, level)
+        }
+      }
+    }
+
+    const storedAuto = this.memento.get<AutoApproveConfig | undefined>(
+      PermissionManager.KEY_AUTO_APPROVE,
+      undefined,
+    )
+    if (storedAuto) {
+      this.autoApprove = { ...this.autoApprove, ...storedAuto }
+    }
+  }
 
   onDidRequestPermission(handler: (req: PermissionRequest) => void): vscode.Disposable {
     if (!this.requestEmitter) {
@@ -47,6 +80,7 @@ export class PermissionManager implements IPermissionManager {
 
   setPermission(toolName: string, level: PermissionLevel): void {
     this.permissions.set(toolName, level)
+    this.persist()
   }
 
   getPermissionLevel(toolName: string): PermissionLevel {
@@ -55,6 +89,7 @@ export class PermissionManager implements IPermissionManager {
 
   setAutoApprove(config: Partial<AutoApproveConfig>): void {
     Object.assign(this.autoApprove, config)
+    this.persistAutoApprove()
   }
 
   getAutoApprove(): AutoApproveConfig {
@@ -71,9 +106,30 @@ export class PermissionManager implements IPermissionManager {
   clear(): void {
     this.permissions.clear()
     this.pendingRequests = []
+    this.persist()
   }
 
   // ── Приватные методы ────────────────────────────────────
+
+  /**
+   * Сохранить текущие разрешения в Memento.
+   */
+  private persist(): void {
+    if (!this.memento) return
+    const entries: Record<string, PermissionLevel> = {}
+    for (const [toolName, level] of this.permissions.entries()) {
+      entries[toolName] = level
+    }
+    this.memento.update(PermissionManager.KEY_PERMISSIONS, entries)
+  }
+
+  /**
+   * Сохранить конфигурацию автоодобрения в Memento.
+   */
+  private persistAutoApprove(): void {
+    if (!this.memento) return
+    this.memento.update(PermissionManager.KEY_AUTO_APPROVE, { ...this.autoApprove })
+  }
 
   private askPermission(
     toolName: string,
@@ -110,6 +166,7 @@ export class PermissionManager implements IPermissionManager {
     }
     if (always) {
       this.permissions.set(req.toolName, allowed ? "allow" : "deny")
+      this.persist()
     }
     this.pendingRequests = this.pendingRequests.filter((r) => r.id !== requestId)
     req.resolve(allowed)

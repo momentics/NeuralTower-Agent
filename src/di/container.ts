@@ -102,8 +102,10 @@ export async function createSessionStore(
 
 export function createPermissionManager(
   vsCfg: vscode.WorkspaceConfiguration,
+  globalState: vscode.Memento,
 ): PermissionManager {
-  const pm = new PermissionManager()
+  const pm = new PermissionManager(globalState)
+  pm.init()
   const autoApproveEnabled = vsCfg.get<boolean>("autoApprove.enabled", false) ?? false
   const autoApproveTools = vsCfg.get<string[]>("autoApprove.tools", []) ?? []
   pm.setAutoApprove({ enabled: autoApproveEnabled, tools: autoApproveTools, maxCost: 0 })
@@ -304,7 +306,7 @@ export async function createDeps(
   const backend = createBackend(config)
   const sessionStore = await createSessionStore(ctx, config.session)
   const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
-  const permissionManager = createPermissionManager(vsCfg)
+  const permissionManager = createPermissionManager(vsCfg, ctx.globalState)
   const { gitService, notificationService } = await createServices()
   const tools = createToolRegistry(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath)
   const mcpManager = await createMCPChain(tools)
