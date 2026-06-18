@@ -10,6 +10,7 @@ export interface PermissionRequest {
   args: Record<string, unknown>
   resolve: (allowed: boolean) => void
   id?: string
+  timer?: ReturnType<typeof setTimeout>
 }
 
 export interface AutoApproveConfig {

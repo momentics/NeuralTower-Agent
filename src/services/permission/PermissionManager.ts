@@ -88,7 +88,7 @@ export class PermissionManager implements IPermissionManager {
         this.requestEmitter.fire(req)
       }
 
-      setTimeout(() => {
+      req.timer = setTimeout(() => {
         const idx = this.pendingRequests.indexOf(req)
         if (idx !== -1) {
           this.pendingRequests.splice(idx, 1)
@@ -105,6 +105,9 @@ export class PermissionManager implements IPermissionManager {
   resolveRequest(requestId: string, allowed: boolean, always: boolean): boolean {
     const req = this.pendingRequests.find((r) => r.id === requestId)
     if (!req) return false
+    if (req.timer) {
+      clearTimeout(req.timer)
+    }
     if (always) {
       this.permissions.set(req.toolName, allowed ? "allow" : "deny")
     }
@@ -114,7 +117,12 @@ export class PermissionManager implements IPermissionManager {
   }
 
   dispose(): void {
-    for (const req of this.pendingRequests) req.resolve(false)
+    for (const req of this.pendingRequests) {
+      if (req.timer) {
+        clearTimeout(req.timer)
+      }
+      req.resolve(false)
+    }
     this.pendingRequests = []
     this.permissions.clear()
     if (this.requestEmitter) {

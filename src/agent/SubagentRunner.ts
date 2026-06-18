@@ -145,13 +145,17 @@ export class SubagentRunner {
         onDone?.(result)
         return result
       } finally {
+        if (handle._timeout) {
+          clearTimeout(handle._timeout)
+          handle._timeout = undefined
+        }
         orchestrator.dispose()
         this.running.delete(id)
       }
     })()
 
     if (config.timeoutMs) {
-      setTimeout(() => handle.cancel(), config.timeoutMs)
+      handle._timeout = setTimeout(() => handle.cancel(), config.timeoutMs)
     }
 
     handle._result = resultPromise
@@ -230,6 +234,7 @@ export class SubagentHandle {
   public readonly id: string
   public readonly config: SubagentConfig
   public _result: Promise<SubagentResult> | null = null
+  public _timeout: ReturnType<typeof setTimeout> | undefined
 
   constructor(
     id: string,
@@ -252,6 +257,10 @@ export class SubagentHandle {
    * Отменить выполнение.
    */
   cancel(): void {
+    if (this._timeout) {
+      clearTimeout(this._timeout)
+      this._timeout = undefined
+    }
     this.abortController.abort()
   }
 

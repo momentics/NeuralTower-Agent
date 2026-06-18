@@ -178,6 +178,10 @@ export class MCPManager implements IMCPManager {
         return
       }
 
+      let settled = false
+      let timer: ReturnType<typeof setTimeout> | undefined
+      let handler: ((data: Buffer) => void) | undefined
+
       const id = Date.now()
       const request = JSON.stringify({
         jsonrpc: "2.0",
@@ -186,15 +190,30 @@ export class MCPManager implements IMCPManager {
         params,
       }) + "\n"
 
-      const timer = setTimeout(() => {
-        reject(new TimeoutError(`MCP ${method}: истёк таймаут`))
+      const cleanup = () => {
+        if (timer !== undefined) {
+          clearTimeout(timer)
+          timer = undefined
+        }
+        if (proc.stdout && handler) {
+          proc.stdout.removeListener("data", handler)
+        }
+      }
+
+      timer = setTimeout(() => {
+        if (!settled) {
+          settled = true
+          cleanup()
+          reject(new TimeoutError(`MCP ${method}: истёк таймаут`))
+        }
       }, 10000)
 
-      const handler = (data: Buffer) => {
+      handler = (data: Buffer) => {
         try {
           const resp = JSON.parse(data.toString()) as { id: number; result?: T; error?: { message: string } }
-          if (resp.id === id) {
-            clearTimeout(timer)
+          if (resp.id === id && !settled) {
+            settled = true
+            cleanup()
             if (resp.error) {
               reject(new ExecutionError(resp.error.message))
             } else {
