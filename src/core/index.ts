@@ -65,6 +65,7 @@ export {
   loadDefaultContextConfig,
   loadDefaultCompactorConfig,
   loadDefaultSessionConfig,
+  loadDefaultAutocompleteConfig,
 } from "./config"
 export type {
   AppConfig,
@@ -72,4 +73,5 @@ export type {
   ContextConfig,
   CompactorConfig,
   SessionConfig,
+  AutocompleteConfig,
 } from "./config"

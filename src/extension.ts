@@ -16,6 +16,12 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   // ── Провайдеры ──────────────────────────────────────────
   app.registerProvider(deps.chatProvider)
 
+  // ── Автодополнение ──────────────────────────────────────
+  vscode.languages.registerInlineCompletionItemProvider(
+    { pattern: "**/*" },
+    deps.autocompleteService,
+  )
+
   // ── Действия кода ────────────────────────────────────────
   const codeActionProvider = new AgentCodeActionProvider(deps.chatProvider)
   vscode.languages.registerCodeActionsProvider("*", codeActionProvider, codeActionProviderMetadata)
@@ -72,6 +78,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
         // Мониторинг
         () => deps.healthMonitor.dispose(),
         () => deps.commitMessageService.dispose(),
+        () => deps.autocompleteService.dispose(),
         // Сервисы
         () => deps.notificationService.dispose(),
         () => deps.permissionManager.dispose(),

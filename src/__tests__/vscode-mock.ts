@@ -112,6 +112,7 @@ const workspace = {
   }),
   getDiagnostics: () => [],
   onDidChangeWorkspaceFolders: () => ({ dispose: () => {} }),
+  onDidChangeTextDocument: () => ({ dispose: () => {} }),
 }
 
 const commands = {
@@ -123,9 +124,24 @@ const commands = {
   executeCommand: async () => undefined,
 }
 
+const InlineCompletionItem = class {
+  constructor(public insertText: string, public range?: any) {}
+}
+
+const InlineCompletionTriggerKind = { Invoked: 0, Automatic: 1 }
+
+const InlineCompletionContext = class {
+  constructor(public triggerKind: number, public selectedCompletionInfo?: any) {}
+}
+
+const InlineCompletionList = class {
+  constructor(public items: any[], public incomplete?: boolean) {}
+}
+
 const languages = {
   getDiagnostics: () => [],
   registerCodeActionsProvider: () => ({ dispose: () => {} }),
+  registerInlineCompletionItemProvider: () => ({ dispose: () => {} }),
 }
 
 const debug = {
@@ -204,6 +220,10 @@ export {
   Diagnostic,
   DiagnosticSeverity,
   ViewColumn,
+  InlineCompletionItem,
+  InlineCompletionTriggerKind,
+  InlineCompletionContext,
+  InlineCompletionList,
 }
 
 export default {
@@ -235,4 +255,8 @@ export default {
   Diagnostic,
   DiagnosticSeverity,
   ViewColumn,
+  InlineCompletionItem,
+  InlineCompletionTriggerKind,
+  InlineCompletionContext,
+  InlineCompletionList,
 }

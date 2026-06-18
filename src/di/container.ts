@@ -12,6 +12,7 @@ import { GitService } from "../services/git/GitService"
 import { NotificationService } from "../services/notification/NotificationService"
 import { BackendHealthMonitor } from "../services/health/BackendHealthMonitor"
 import { CommitMessageService } from "../services/commit-message/CommitMessageService"
+import { AutocompleteService } from "../services/autocomplete/AutocompleteService"
 import { MCPManager } from "../mcp/MCPManager"
 import { ReadFileTool } from "../tools/builtins/ReadFileTool"
 import { WriteFileTool } from "../tools/builtins/WriteFileTool"
@@ -72,6 +73,7 @@ export interface ExtensionDeps {
   diffViewer: DiffViewerProvider
   healthMonitor: BackendHealthMonitor
   commitMessageService: CommitMessageService
+  autocompleteService: AutocompleteService
   gitService: GitService
   sessionStore: ISessionStore
   notificationService: NotificationService
@@ -297,6 +299,14 @@ export async function createCommitService(
   return commitMessageService
 }
 
+export async function createAutocompleteService(
+  backend: IBackend,
+): Promise<AutocompleteService> {
+  const autocompleteService = new AutocompleteService(backend)
+  await autocompleteService.init()
+  return autocompleteService
+}
+
 // ── Главный оркестратор ───────────────────────────────────
 
 export async function createDeps(
@@ -367,6 +377,7 @@ export async function createDeps(
 
   const healthMonitor = await createMonitoringChain(backend, contextManager)
   const commitMessageService = await createCommitService(backend, gitService)
+  const autocompleteService = await createAutocompleteService(backend)
 
   return {
     backend,
@@ -376,6 +387,7 @@ export async function createDeps(
     diffViewer,
     healthMonitor,
     commitMessageService,
+    autocompleteService,
     gitService,
     sessionStore,
     notificationService,

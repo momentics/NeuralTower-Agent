@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import type { BackendConfig } from "./IBackend"
 
-// ── Backend ───────────────────────────────────────────────
+// ── Бэкенд ────────────────────────────────────────────────
 
 export function loadDefaultBackendConfig(): BackendConfig {
   return {
@@ -12,7 +12,7 @@ export function loadDefaultBackendConfig(): BackendConfig {
   }
 }
 
-// ── Agent ─────────────────────────────────────────────────
+// ── Агент ─────────────────────────────────────────────────
 
 export interface AgentConfig {
   /** Максимальное число итераций вызова инструментов за один ход агента. */
@@ -33,7 +33,7 @@ export function loadDefaultAgentConfig(): AgentConfig {
   }
 }
 
-// ── Context ───────────────────────────────────────────────
+// ── Контекст ──────────────────────────────────────────────
 
 export interface ContextConfig {
   /** Лимит токенов для системного промпта. */
@@ -46,7 +46,7 @@ export function loadDefaultContextConfig(): ContextConfig {
   }
 }
 
-// ── Compactor ─────────────────────────────────────────────
+// ── Компактор ─────────────────────────────────────────────
 
 export interface CompactorConfig {
   /** Лимит контекстных токенов модели. */
@@ -75,7 +75,7 @@ export function loadDefaultCompactorConfig(): CompactorConfig {
   }
 }
 
-// ── Session ───────────────────────────────────────────────
+// ── Сессия ────────────────────────────────────────────────
 
 export interface SessionConfig {
   /** Максимальное число сохраняемых сессий. */
@@ -88,7 +88,28 @@ export function loadDefaultSessionConfig(): SessionConfig {
   }
 }
 
-// ── Unified AppConfig ─────────────────────────────────────
+// ── Автодополнение ────────────────────────────────────────
+
+export interface AutocompleteConfig {
+  /** Включить автодополнение кода. */
+  enabled: boolean
+
+  /** Интервал дебаунса в миллисекундах. */
+  debounceMs: number
+
+  /** Максимальное число токенов в промпте автодополнения. */
+  maxPromptTokens: number
+}
+
+export function loadDefaultAutocompleteConfig(): AutocompleteConfig {
+  return {
+    enabled: true,
+    debounceMs: 150,
+    maxPromptTokens: 2048,
+  }
+}
+
+// ── Единая конфигурация приложения ────────────────────────
 
 export interface AppConfig {
   backend: BackendConfig
@@ -96,6 +117,7 @@ export interface AppConfig {
   context: ContextConfig
   compactor: CompactorConfig
   session: SessionConfig
+  autocomplete: AutocompleteConfig
 }
 
 /**
@@ -125,6 +147,11 @@ export function loadAppConfig(): AppConfig {
     },
     session: {
       maxSessions: cfg.get<number>("maxSessions", loadDefaultSessionConfig().maxSessions)!,
+    },
+    autocomplete: {
+      enabled: cfg.get<boolean>("autocomplete.enabled", loadDefaultAutocompleteConfig().enabled)!,
+      debounceMs: cfg.get<number>("autocomplete.debounceMs", loadDefaultAutocompleteConfig().debounceMs)!,
+      maxPromptTokens: cfg.get<number>("autocomplete.maxPromptTokens", loadDefaultAutocompleteConfig().maxPromptTokens)!,
     },
   }
 }

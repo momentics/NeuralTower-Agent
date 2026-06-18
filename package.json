@@ -229,6 +229,23 @@
           "type": "boolean",
           "default": true,
           "description": "Добавлять контекст git-различий в системный запрос агента"
+        },
+        "neuralTowerAgent.autocomplete.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Включить автодополнение кода (Inline Completion)"
+        },
+        "neuralTowerAgent.autocomplete.debounceMs": {
+          "type": "number",
+          "default": 150,
+          "minimum": 10,
+          "description": "Интервал дебаунса автодополнения в миллисекундах"
+        },
+        "neuralTowerAgent.autocomplete.maxPromptTokens": {
+          "type": "number",
+          "default": 2048,
+          "minimum": 128,
+          "description": "Максимальное число токенов в промпте автодополнения"
         }
       }
     }
