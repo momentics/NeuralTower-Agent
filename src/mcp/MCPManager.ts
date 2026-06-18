@@ -18,11 +18,18 @@ export interface MCPTool {
   schema: Record<string, unknown>
 }
 
+interface PendingRequest {
+  resolve: (value: unknown) => void
+  reject: (reason: Error) => void
+}
+
 interface MCPServer {
   config: MCPServerConfig
   ready: boolean
   process: ChildProcess | null
   tools: MCPTool[]
+  nextRequestId: number
+  pendingRequests: Map<number, PendingRequest> | null
 }
 
 /**
@@ -50,6 +57,8 @@ export class MCPManager implements IMCPManager {
       ready: false,
       process: null,
       tools: [],
+      nextRequestId: 0,
+      pendingRequests: null,
     })
   }
 
@@ -67,6 +76,29 @@ export class MCPManager implements IMCPManager {
         })
         server.process = proc
         server.ready = true
+        server.nextRequestId = 0
+        server.pendingRequests = new Map()
+
+        if (proc.stdout) {
+          proc.stdout.on("data", (data: Buffer) => {
+            const pending = server.pendingRequests
+            if (!pending) return
+            try {
+              const resp = JSON.parse(data.toString()) as { id: number; result?: unknown; error?: { message: string } }
+              const req = pending.get(resp.id)
+              if (req) {
+                pending.delete(resp.id)
+                if (resp.error) {
+                  req.reject(new ExecutionError(resp.error.message))
+                } else {
+                  req.resolve(resp.result)
+                }
+              }
+            } catch {
+              // Игнорировать ошибки разбора для несвязанных данных
+            }
+          })
+        }
 
         proc.on("error", () => {
           server.ready = false
@@ -74,6 +106,14 @@ export class MCPManager implements IMCPManager {
         proc.on("exit", () => {
           server.ready = false
           server.process = null
+          const pending = server.pendingRequests
+          if (pending) {
+            for (const req of pending.values()) {
+              req.reject(new ExecutionError("MCP-процесс завершил работу"))
+            }
+            pending.clear()
+          }
+          server.pendingRequests = null
         })
       } catch {
         server.ready = false
@@ -161,6 +201,13 @@ export class MCPManager implements IMCPManager {
       }
       server.ready = false
       server.tools = []
+      if (server.pendingRequests) {
+        for (const req of server.pendingRequests.values()) {
+          req.reject(new ExecutionError("MCP-сервер отключён"))
+        }
+        server.pendingRequests.clear()
+        server.pendingRequests = null
+      }
     }
   }
 
@@ -178,11 +225,18 @@ export class MCPManager implements IMCPManager {
         return
       }
 
-      let settled = false
-      let timer: ReturnType<typeof setTimeout> | undefined
-      let handler: ((data: Buffer) => void) | undefined
+      if (!proc.stdout) {
+        reject(new ExecutionError("stdout недоступен"))
+        return
+      }
 
-      const id = Date.now()
+      const pending = server.pendingRequests
+      if (!pending) {
+        reject(new ExecutionError("Сервер не инициализирован"))
+        return
+      }
+
+      const id = ++server.nextRequestId
       const request = JSON.stringify({
         jsonrpc: "2.0",
         id,
@@ -190,44 +244,33 @@ export class MCPManager implements IMCPManager {
         params,
       }) + "\n"
 
-      const cleanup = () => {
-        if (timer !== undefined) {
-          clearTimeout(timer)
-          timer = undefined
-        }
-        if (proc.stdout && handler) {
-          proc.stdout.removeListener("data", handler)
-        }
-      }
+      let timer: ReturnType<typeof setTimeout> | undefined
+
+      pending.set(id, {
+        resolve: (value: unknown) => {
+          if (timer !== undefined) {
+            clearTimeout(timer)
+            timer = undefined
+          }
+          resolve(value as T)
+        },
+        reject: (reason: Error) => {
+          if (timer !== undefined) {
+            clearTimeout(timer)
+            timer = undefined
+          }
+          reject(reason)
+        },
+      })
 
       timer = setTimeout(() => {
-        if (!settled) {
-          settled = true
-          cleanup()
-          reject(new TimeoutError(`MCP ${method}: истёк таймаут`))
+        const req = pending.get(id)
+        if (req) {
+          pending.delete(id)
+          req.reject(new TimeoutError(`MCP ${method}: истёк таймаут`))
         }
       }, 10000)
 
-      handler = (data: Buffer) => {
-        try {
-          const resp = JSON.parse(data.toString()) as { id: number; result?: T; error?: { message: string } }
-          if (resp.id === id && !settled) {
-            settled = true
-            cleanup()
-            if (resp.error) {
-              reject(new ExecutionError(resp.error.message))
-            } else {
-              resolve(resp.result as T)
-            }
-          }
-        } catch {
-          // Игнорировать ошибки разбора для несвязанных данных
-        }
-      }
-
-      if (proc.stdout) {
-        proc.stdout.on("data", handler)
-      }
       if (proc.stdin) {
         proc.stdin.write(request)
       }

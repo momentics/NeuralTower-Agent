@@ -155,4 +155,79 @@ describe("MCPManager", () => {
     expect(proc.kill).toHaveBeenCalled()
     expect(mgr.getReadyServers()).toHaveLength(0)
   })
+
+  it("uses monotonic request IDs", async () => {
+    const { EventEmitter } = await import("events")
+    const stdout = new EventEmitter() as NodeJS.ReadableStream
+    const ids: number[] = []
+    const proc = {
+      on: vi.fn(),
+      stdout,
+      stdin: {
+        write: vi.fn((data: string) => {
+          const req = JSON.parse(data)
+          ids.push(req.id)
+          setImmediate(() => {
+            stdout.emit("data", Buffer.from(JSON.stringify({
+              jsonrpc: "2.0",
+              id: req.id,
+              result: { tools: [] },
+            })))
+          })
+        }),
+      },
+      kill: vi.fn(),
+    }
+    mockSpawn.mockReturnValue(proc)
+
+    const mgr = new MCPManager()
+    mgr.register({
+      name: "test",
+      transport: "stdio",
+      command: "node",
+    })
+    await mgr.connect()
+
+    await mgr.discover()
+    await mgr.discover()
+    await mgr.discover()
+
+    expect(ids).toEqual([1, 2, 3])
+  })
+
+  it("rejects pending requests on process exit", async () => {
+    const { EventEmitter } = await import("events")
+    const stdout = new EventEmitter() as NodeJS.ReadableStream
+    const exitListeners: ((code: number | null, signal: string | null) => void)[] = []
+    const proc = {
+      on: vi.fn((event: string, handler: (...args: unknown[]) => void) => {
+        if (event === "exit") {
+          exitListeners.push(handler as (code: number | null, signal: string | null) => void)
+        }
+        return proc
+      }),
+      stdout,
+      stdin: {
+        write: vi.fn(),
+      },
+      kill: vi.fn(),
+    }
+    mockSpawn.mockReturnValue(proc)
+
+    const mgr = new MCPManager()
+    mgr.register({
+      name: "test",
+      transport: "stdio",
+      command: "node",
+    })
+    await mgr.connect()
+
+    const callPromise = mgr.callTool("test", "some_tool", {})
+
+    exitListeners[0](0, null)
+
+    const result = await callPromise
+    expect(result.success).toBe(false)
+    expect(result.output).toContain("MCP-процесс завершил работу")
+  })
 })
