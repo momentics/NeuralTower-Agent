@@ -71,4 +71,29 @@ describe("ReadFileTool", () => {
     expect(lines[0]).toContain("line2")
     expect(lines[1]).toContain("line3")
   })
+
+  it("allows read when workDir is not set", async () => {
+    const unrestrictedTool = new ReadFileTool()
+    const result = await unrestrictedTool.execute({ filepath: path.join(tmpDir, "test.txt") })
+    expect(result.success).toBe(true)
+  })
+
+  it("blocks read outside workspace when workDir is set", async () => {
+    const outsideDir = path.join(os.tmpdir(), `outside-${Date.now()}`)
+    await fs.mkdir(outsideDir, { recursive: true })
+    const outsideFile = path.join(outsideDir, "secret.txt")
+    await fs.writeFile(outsideFile, "secret")
+    const restrictedTool = new ReadFileTool(tmpDir)
+    const result = await restrictedTool.execute({ filepath: outsideFile })
+    expect(result.success).toBe(false)
+    expect(result.output).toContain("Доступ запрещён")
+    await fs.rm(outsideDir, { recursive: true, force: true })
+  })
+
+  it("allows read inside workspace when workDir is set", async () => {
+    const restrictedTool = new ReadFileTool(tmpDir)
+    const result = await restrictedTool.execute({ filepath: path.join(tmpDir, "test.txt") })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain("line1")
+  })
 })

@@ -179,10 +179,11 @@ export async function createDeps(
 
   // ── Реестр инструментов ─────────────────────────────────
   const tools = new ToolRegistry()
-  tools.register(new ReadFileTool())
-  tools.register(new WriteFileTool())
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+  tools.register(new ReadFileTool(workspaceRoot))
+  tools.register(new WriteFileTool(workspaceRoot))
   tools.register(new BashTool())
-  tools.register(new EditFileTool())
+  tools.register(new EditFileTool(workspaceRoot))
   tools.register(new GlobTool())
   tools.register(new GrepTool())
   tools.register(new WebFetchTool())

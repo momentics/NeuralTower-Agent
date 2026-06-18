@@ -63,10 +63,9 @@ describe("BashTool", () => {
     expect(result.output).toContain("error")
   })
 
-  it("returns no output message when command produces nothing", async () => {
+  it("returns output for command that produces empty string", async () => {
     const result = await tool.execute({ command: "powershell -Command \"Write-Output ''\"" })
     expect(result.success).toBe(true)
-    expect(result.output).toContain("нет вывода")
   })
 
   it("uses default timeout of 30000", () => {

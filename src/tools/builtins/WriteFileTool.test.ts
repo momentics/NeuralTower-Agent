@@ -48,4 +48,24 @@ describe("WriteFileTool", () => {
     const content = await fs.readFile(filePath, "utf-8")
     expect(content).toBe("new")
   })
+
+  it("blocks write outside workspace when workDir is set", async () => {
+    const outsideDir = path.join(os.tmpdir(), `outside-write-${Date.now()}`)
+    await fs.mkdir(outsideDir, { recursive: true })
+    const outsideFile = path.join(outsideDir, "secret.txt")
+    const restrictedTool = new WriteFileTool(tmpDir)
+    const result = await restrictedTool.execute({ filepath: outsideFile, content: "hacked" })
+    expect(result.success).toBe(false)
+    expect(result.output).toContain("Доступ запрещён")
+    await fs.rm(outsideDir, { recursive: true, force: true })
+  })
+
+  it("allows write inside workspace when workDir is set", async () => {
+    const restrictedTool = new WriteFileTool(tmpDir)
+    const filePath = path.join(tmpDir, "inside.txt")
+    const result = await restrictedTool.execute({ filepath: filePath, content: "ok" })
+    expect(result.success).toBe(true)
+    const content = await fs.readFile(filePath, "utf-8")
+    expect(content).toBe("ok")
+  })
 })

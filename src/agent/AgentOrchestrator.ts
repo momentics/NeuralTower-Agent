@@ -16,7 +16,7 @@ import type { IContextProviderRegistry } from "../core/providers/context/registr
  * разрывает циклическую зависимость.
  */
 export class AgentOrchestrator {
-  private readonly core: AgentCore
+  private core: AgentCore
   private disposed = false
 
   constructor(
@@ -119,6 +119,12 @@ export class AgentOrchestrator {
     if (workDir) {
       await this.deps.fileIndex.build(workDir)
     }
+    this.core = new AgentCore(
+      this.backend,
+      this.toolRegistry,
+      this.skillManager,
+      this.deps,
+    )
   }
 
   dispose(): void {
