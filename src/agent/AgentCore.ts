@@ -160,6 +160,19 @@ export class AgentCore {
   }
 
   /**
+   * Восстановить сессию из истории сообщений.
+   */
+  async restoreSession(messages: ChatMessage[]): Promise<void> {
+    this.memory.clear()
+    this.sessionContext.reset()
+    this.planner.clearPlan()
+    this.todoStore.clear()
+    this.deps.contextManager.reset()
+    this.memory.restoreFromMessages(messages)
+    this.sessionContext.restoreMessages(messages)
+  }
+
+  /**
    * Сбросить сессию.
    */
   resetSession(): void {

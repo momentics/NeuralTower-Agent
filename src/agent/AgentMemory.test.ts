@@ -101,4 +101,36 @@ describe("AgentMemory", () => {
     expect(project.languages).toEqual([])
     expect(memory.getRecent()).toEqual([])
   })
+
+  it("restoreFromMessages loads messages into memory", () => {
+    const messages = [
+      { role: "user" as const, content: "hello", timestamp: 1 },
+      { role: "assistant" as const, content: "hi", timestamp: 2 },
+    ]
+    memory.restoreFromMessages(messages)
+    const recent = memory.getRecent()
+    expect(recent).toHaveLength(2)
+    expect(recent[0].content).toBe("hello")
+    expect(recent[1].content).toBe("hi")
+  })
+
+  it("restoreFromMessages trims when exceeding max tokens", () => {
+    const smallMemory = new AgentMemory(10)
+    const messages = Array.from({ length: 100 }, (_, i) => ({
+      role: "user" as const,
+      content: `msg ${i}`,
+      timestamp: i,
+    }))
+    smallMemory.restoreFromMessages(messages)
+    const recent = smallMemory.getRecent()
+    expect(recent.length).toBeLessThan(100)
+  })
+
+  it("restoreFromMessages replaces existing memory", () => {
+    memory.add({ role: "user", content: "old" })
+    memory.restoreFromMessages([{ role: "user", content: "new", timestamp: 1 }])
+    const recent = memory.getRecent()
+    expect(recent).toHaveLength(1)
+    expect(recent[0].content).toBe("new")
+  })
 })

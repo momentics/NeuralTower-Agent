@@ -28,6 +28,9 @@ export interface IAgentOrchestrator {
   /** Освободить ресурсы. */
   dispose(): void
 
+  /** Восстановить контекст сессии из истории сообщений. */
+  restoreSession(messages: ChatMessage[]): Promise<void>
+
   /** Сбросить контекст сессии (новый чат / переключение сессии). */
   resetSession(): void
 

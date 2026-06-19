@@ -34,6 +34,7 @@ vi.mock("./agent/AgentOrchestrator", () => ({
     reload: vi.fn().mockResolvedValue(undefined),
     broadcastNewChat: vi.fn(),
     clearPlan: vi.fn(),
+    restoreSession: vi.fn().mockResolvedValue(undefined),
     resetSession: vi.fn(),
     run: vi.fn().mockResolvedValue({ role: "assistant", content: "ok" }),
     dispose: vi.fn(),

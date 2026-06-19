@@ -133,4 +133,23 @@ describe("AgentCore", () => {
     core.dispose()
     expect(core).toBeDefined()
   })
+
+  it("restoreSession loads messages into memory", async () => {
+    const core = new AgentCore(backend, toolRegistry, skillManager, deps)
+    const messages = [
+      { role: "user" as const, content: "hello", timestamp: 1 },
+      { role: "assistant" as const, content: "hi", timestamp: 2 },
+    ]
+    await core.restoreSession(messages)
+    const recent = core.getTodoStore().getItems()
+    expect(recent).toEqual([])
+  })
+
+  it("restoreSession clears plan and todo store", async () => {
+    const core = new AgentCore(backend, toolRegistry, skillManager, deps)
+    core.getTodoStore().setItems([{ content: "A", status: "pending", priority: "high" }])
+    await core.restoreSession([])
+    expect(core.getTodoStore().getItems()).toEqual([])
+    expect(core.getPlan()).toBeNull()
+  })
 })

@@ -120,6 +120,16 @@ export class AgentMemory {
     return parts.length > 0 ? `\n## Контекст проекта\n${parts.join("\n")}` : ""
   }
 
+  /** Восстановить память из истории сообщений. */
+  restoreFromMessages(messages: ChatMessage[]): void {
+    this.shortTerm = messages.map((m) => ({
+      message: m,
+      tokenCount: Math.ceil(m.content.length * TOKENS_PER_CHAR),
+      pinned: false,
+    }))
+    this.trim()
+  }
+
   /** Очистить всю память. */
   clear(): void {
     this.shortTerm = []

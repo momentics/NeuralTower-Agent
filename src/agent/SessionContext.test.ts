@@ -125,4 +125,22 @@ describe("SessionContext", () => {
   it("toPrepared throws when not initialized", () => {
     expect(() => (sc as any).toPrepared()).toThrow("Этап не инициализирован")
   })
+
+  it("restoreMessages replaces history", () => {
+    sc.pushMessage({ role: "user", content: "old" })
+    sc.restoreMessages([
+      { role: "user", content: "new1", timestamp: 1 },
+      { role: "assistant", content: "new2", timestamp: 2 },
+    ])
+    expect(sc.getMessages()).toHaveLength(2)
+    expect(sc.getMessages()[0].content).toBe("new1")
+    expect(sc.getMessages()[1].content).toBe("new2")
+  })
+
+  it("restoreMessages resets compacted flag", () => {
+    sc.replaceMessages([{ role: "user", content: "compact" }])
+    expect(sc.isCompacted()).toBe(true)
+    sc.restoreMessages([{ role: "user", content: "restored" }])
+    expect(sc.isCompacted()).toBe(false)
+  })
 })

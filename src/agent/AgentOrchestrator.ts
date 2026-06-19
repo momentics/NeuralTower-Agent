@@ -80,6 +80,19 @@ export class AgentOrchestrator {
 
   // ── Сессия ─────────────────────────────────────────────
 
+  async restoreSession(messages: import("../core/IBackend").ChatMessage[]): Promise<void> {
+    this.abortController.abort()
+    this.core.dispose()
+    this.abortController = new AbortController()
+    this.core = new AgentCore(
+      this.backend,
+      this.toolRegistry,
+      this.skillManager,
+      this.deps,
+    )
+    await this.core.restoreSession(messages)
+  }
+
   resetSession(): void {
     this.core.resetSession()
   }

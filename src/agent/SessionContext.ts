@@ -185,6 +185,14 @@ export class SessionContext {
   }
 
   /**
+   * Восстановить историю сообщений из данных сессии.
+   */
+  restoreMessages(messages: ChatMessage[]): void {
+    this.messageHistory = messages
+    this.compacted = false
+  }
+
+  /**
    * Сбросить контекст сессии.
    */
   reset(): void {

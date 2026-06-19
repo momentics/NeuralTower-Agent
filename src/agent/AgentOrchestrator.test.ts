@@ -219,4 +219,21 @@ describe("AgentOrchestrator", () => {
     orchestrator.resetSession()
     expect(store.getItems()).toEqual([])
   })
+
+  it("restoreSession restores messages", async () => {
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
+    const messages = [
+      { role: "user" as const, content: "hello", timestamp: 1 },
+      { role: "assistant" as const, content: "hi", timestamp: 2 },
+    ]
+    await orchestrator.restoreSession(messages)
+    expect(orchestrator.getPlan()).toBeNull()
+  })
+
+  it("restoreSession clears TodoStore", async () => {
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
+    orchestrator.getTodoStore().setItems([{ content: "A", status: "pending" as const, priority: "high" as const }])
+    await orchestrator.restoreSession([])
+    expect(orchestrator.getTodoStore().getItems()).toEqual([])
+  })
 })

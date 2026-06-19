@@ -9,6 +9,7 @@ const createMockAgent = (): IAgentOrchestrator => ({
   run: vi.fn(async () => ({ role: "assistant", content: "Response", timestamp: Date.now() })),
   reload: vi.fn(async () => {}),
   dispose: vi.fn(),
+  restoreSession: vi.fn(async () => {}),
   resetSession: vi.fn(),
   switchMode: vi.fn(() => true),
   getMode: vi.fn(() => "agent"),
