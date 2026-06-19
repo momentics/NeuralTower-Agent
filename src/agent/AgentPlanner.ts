@@ -1,5 +1,6 @@
 import type { IBackend, ChatMessage } from "../core/IBackend"
 import type { ToolRegistry } from "../tools/ToolRegistry"
+import type { ISkill } from "../skills/ISkill"
 import { Plan } from "./Plan"
 import type { SessionContext } from "./SessionContext"
 import { PlanError } from "../core/errors"
@@ -60,18 +61,51 @@ export class AgentPlanner {
     return null
   }
 
+  /**
+   * Восстановить план из файла на диске.
+   * Ищет план в директории .neuraltower/plans/.
+   */
+  async restorePlanFromFile(workDir: string): Promise<Plan | null> {
+    try {
+      const fs = await import("fs/promises")
+      const path = await import("path")
+      const planDir = path.join(workDir, ".neuraltower", "plans")
+      const entries = await fs.readdir(planDir)
+      const jsonFiles = entries.filter((e) => e.endsWith(".json")).sort().reverse()
+      if (jsonFiles.length === 0) return null
+      const latest = path.join(planDir, jsonFiles[0])
+      const plan = await Plan.load(latest)
+      if (plan && (plan.status === "running" || plan.status === "paused")) {
+        this.currentPlan = plan
+        if (this.sessionContext) {
+          this.sessionContext.setPlan(plan)
+        }
+        return plan
+      }
+    } catch {
+      // Файл плана не найден или повреждён — игнорируем
+    }
+    return null
+  }
+
   async createPlan(
     query: string,
+    activeSkills?: ISkill[],
   ): Promise<Plan> {
     const toolList = this.toolRegistry
       .list()
       .map((t) => `- ${t.name}: ${t.description}`)
       .join("\n")
 
-    const planningPrompt = `Вы — планировщик задач. Получив пользовательский запрос и доступные инструменты,
+    let skillsSection = ""
+    if (activeSkills && activeSkills.length > 0) {
+      skillsSection = `\nАктивные навыки:\n${activeSkills.map((s) => `- ${s.name}: ${s.description}`).join("\n")}`
+    }
+
+    const planningPrompt = `Вы — планировщик задач. Получив пользовательский запрос, доступные инструменты и навыки,
 разбейте задачу на последовательные шаги. Каждый шаг должен быть конкретным и выполнимым.
 Доступные инструменты:
-${toolList}
+${toolList}${skillsSection}
 
 Ответьте корректным объектом JSON:
 {

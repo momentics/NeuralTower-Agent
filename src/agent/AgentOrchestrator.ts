@@ -1,6 +1,7 @@
 import type { IBackend, ChatMessage } from "../core/IBackend"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
+import type { ISkill } from "../skills/ISkill"
 import { AgentCore } from "./AgentCore"
 import type { AgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
 import type { Plan } from "./Plan"
@@ -50,8 +51,8 @@ export class AgentOrchestrator {
 
   // ── Планирование ───────────────────────────────────────
 
-  async createPlan(_task: string, _onChunk?: (chunk: string) => void): Promise<Plan> {
-    return this.core.createPlan(_task)
+  async createPlan(task: string, activeSkills?: ISkill[]): Promise<Plan> {
+    return this.core.createPlan(task, activeSkills)
   }
 
   getPlan(): Plan | null {

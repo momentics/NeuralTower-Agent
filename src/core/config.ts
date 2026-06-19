@@ -26,6 +26,9 @@ export interface AgentConfig {
 
   /** Максимальное число попыток восстановления после сбоя инструмента. */
   maxRecoveryAttempts: number
+
+  /** Автоматически создавать план задачи перед выполнением. */
+  autoPlan: boolean
 }
 
 export function loadDefaultAgentConfig(): AgentConfig {
@@ -34,6 +37,7 @@ export function loadDefaultAgentConfig(): AgentConfig {
     maxTokens: 60_000,
     injectDiffContext: true,
     maxRecoveryAttempts: 3,
+    autoPlan: true,
   }
 }
 
@@ -143,6 +147,7 @@ export function loadAppConfig(): AppConfig {
       maxTokens: loadDefaultAgentConfig().maxTokens,
       injectDiffContext: cfg.get<boolean>("git.injectDiffContext", loadDefaultAgentConfig().injectDiffContext)!,
       maxRecoveryAttempts: cfg.get<number>("agent.maxRecoveryAttempts", loadDefaultAgentConfig().maxRecoveryAttempts)!,
+      autoPlan: cfg.get<boolean>("agent.autoPlan", loadDefaultAgentConfig().autoPlan)!,
     },
     context: {
       tokenBudget: loadDefaultContextConfig().tokenBudget,
