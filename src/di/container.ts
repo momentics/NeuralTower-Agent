@@ -1,4 +1,4 @@
-import * as vscode from "vscode"
+﻿import * as vscode from "vscode"
 import { NeuralTowerBackend } from "../backend/NeuralTowerBackend"
 import { AgentOrchestrator } from "../agent/AgentOrchestrator"
 import { ToolRegistry } from "../tools/ToolRegistry"
@@ -23,6 +23,7 @@ import { GrepTool } from "../tools/builtins/GrepTool"
 import { WebFetchTool } from "../tools/builtins/WebFetchTool"
 import { TodoWriteTool } from "../tools/builtins/TodoWriteTool"
 import { LspTool } from "../tools/builtins/LspTool"
+import { CodebaseSearchTool } from "../tools/builtins/CodebaseSearchTool"
 import { ContextManager } from "../core/ContextManager"
 import { ContextProviderRegistry } from "../core/providers/context/registry"
 import { FileIndex } from "../repo/FileIndex"
@@ -62,6 +63,13 @@ import {
   makeFileIndexProvider,
   makeGitDiffProvider,
 } from "../core/ContextSources"
+import { makeCodebaseProvider } from "../core/providers/context/codebase"
+import { NeuralTowerEmbeddingProvider } from "../backend/NeuralTowerEmbeddingProvider"
+import { InMemoryVectorStore } from "../repo/InMemoryVectorStore"
+import { FullTextSearch } from "../repo/FullTextSearch"
+import { CodebaseSearch } from "../repo/CodebaseSearch"
+import { CodebaseChunker, createDefaultChunkerConfig } from "../repo/CodebaseChunker"
+import { CodebaseIndexer } from "../services/indexing/CodebaseIndexer"
 
 // ── Публичные типы ────────────────────────────────────────
 
@@ -84,6 +92,8 @@ export interface ExtensionDeps {
   config: AppConfig
   agentDeps: AgentDependencies
   fileIndex: FileIndex
+  codebaseSearch: CodebaseSearch
+  codebaseIndexer: CodebaseIndexer
   setWorkDir: (dir: string) => void
 }
 
@@ -91,6 +101,42 @@ export interface ExtensionDeps {
 
 export function createBackend(config: AppConfig): IBackend {
   return new NeuralTowerBackend(config.backend)
+}
+
+export function createEmbeddingProvider(config: AppConfig): NeuralTowerEmbeddingProvider {
+  return new NeuralTowerEmbeddingProvider({
+    baseUrl: config.backend.url,
+    timeoutMs: config.backend.timeoutMs,
+  })
+}
+
+export function createVectorStore(): InMemoryVectorStore {
+  return new InMemoryVectorStore()
+}
+
+export function createFullTextSearch(): FullTextSearch {
+  return new FullTextSearch()
+}
+
+export function createCodebaseSearch(
+  vectorStore: InMemoryVectorStore,
+  embeddingProvider: NeuralTowerEmbeddingProvider,
+  fts: FullTextSearch,
+): CodebaseSearch {
+  return new CodebaseSearch(vectorStore, embeddingProvider, fts)
+}
+
+export function createCodebaseChunker(fileIndex: FileIndex): CodebaseChunker {
+  return new CodebaseChunker(fileIndex, createDefaultChunkerConfig())
+}
+
+export function createCodebaseIndexer(
+  fileIndex: FileIndex,
+  chunker: CodebaseChunker,
+  search: CodebaseSearch,
+  embeddingProvider: NeuralTowerEmbeddingProvider,
+): CodebaseIndexer {
+  return new CodebaseIndexer(fileIndex, chunker, search, embeddingProvider)
 }
 
 export async function createSessionStore(
@@ -125,7 +171,10 @@ export async function createServices(): Promise<{
   return { gitService, notificationService }
 }
 
-export function createToolRegistry(workspaceRoot: string | undefined): ToolRegistry {
+export function createToolRegistry(
+  workspaceRoot: string | undefined,
+  codebaseSearch: CodebaseSearch | null,
+): ToolRegistry {
   const tools = new ToolRegistry()
   tools.register(new ReadFileTool(workspaceRoot))
   tools.register(new WriteFileTool(workspaceRoot))
@@ -136,6 +185,12 @@ export function createToolRegistry(workspaceRoot: string | undefined): ToolRegis
   tools.register(new WebFetchTool())
   tools.register(new LspTool())
   tools.register(new TodoWriteTool())
+
+  // Добавить инструмент семантического поиска (если доступен)
+  if (codebaseSearch) {
+    tools.register(new CodebaseSearchTool(codebaseSearch))
+  }
+
   return tools
 }
 
@@ -176,6 +231,7 @@ function registerContextProviders(
   mcpManager: MCPManager,
   fileIndex: FileIndex,
   repoAnalyzer: RepoAnalyzer,
+  codebaseSearch: CodebaseSearch,
   getWorkDir: () => string,
 ): ContextProvider[] {
   const register = (p: ContextProvider) => {
@@ -232,6 +288,9 @@ function registerContextProviders(
   })))
   providers.push(register(makeLspProvider(getWorkDir)))
 
+  // ── Семантический поиск по коду ────────────────────────
+  providers.push(register(makeCodebaseProvider(codebaseSearch)))
+
   return providers
 }
 
@@ -243,6 +302,7 @@ export function createContextChain(
   mcpManager: MCPManager,
   fileIndex: FileIndex,
   repoAnalyzer: RepoAnalyzer,
+  codebaseSearch: CodebaseSearch,
   getWorkDir: () => string,
 ): ContextProvider[] {
   return registerContextProviders(
@@ -253,6 +313,7 @@ export function createContextChain(
     mcpManager,
     fileIndex,
     repoAnalyzer,
+    codebaseSearch,
     getWorkDir,
   )
 }
@@ -318,11 +379,24 @@ export async function createDeps(
   const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
   const permissionManager = createPermissionManager(vsCfg, ctx.globalState)
   const { gitService, notificationService } = await createServices()
-  const tools = createToolRegistry(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath)
+
+  const { fileIndex, repoAnalyzer } = createRepoInfrastructure()
+
+  // ── Инфраструктура семантического поиска ────────────────
+  const embeddingProvider = createEmbeddingProvider(config)
+  const vectorStore = createVectorStore()
+  const fts = createFullTextSearch()
+  const codebaseSearch = createCodebaseSearch(vectorStore, embeddingProvider, fts)
+  const chunker = createCodebaseChunker(fileIndex)
+
+  // ── Инструменты (после создания codebaseSearch) ────────
+  const tools = createToolRegistry(
+    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+    codebaseSearch,
+  )
   const mcpManager = await createMCPChain(tools)
   const skills = createSkillManager()
 
-  const { fileIndex, repoAnalyzer } = createRepoInfrastructure()
   const contextManager = new ContextManager()
   const contextProviderRegistry = new ContextProviderRegistry()
 
@@ -364,6 +438,7 @@ export async function createDeps(
     mcpManager,
     fileIndex,
     repoAnalyzer,
+    codebaseSearch,
     () => workDirRef.current,
   )
 
@@ -378,6 +453,19 @@ export async function createDeps(
   const healthMonitor = await createMonitoringChain(backend, contextManager)
   const commitMessageService = await createCommitService(backend, gitService)
   const autocompleteService = await createAutocompleteService(backend)
+
+  // ── Индексация репозитория ─────────────────────────────
+  const codebaseIndexer = createCodebaseIndexer(
+    fileIndex,
+    chunker,
+    codebaseSearch,
+    embeddingProvider,
+  )
+
+  // Запустить индексацию (если есть рабочая область)
+  if (vscode.workspace.workspaceFolders?.[0]) {
+    await codebaseIndexer.start(vscode.workspace.workspaceFolders[0].uri)
+  }
 
   return {
     backend,
@@ -398,6 +486,8 @@ export async function createDeps(
     config,
     agentDeps,
     fileIndex,
+    codebaseSearch,
+    codebaseIndexer,
     setWorkDir: (dir: string) => { workDirRef.current = dir },
   }
 }

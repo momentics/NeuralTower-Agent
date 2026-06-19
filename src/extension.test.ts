@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+﻿import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import * as vscode from "vscode"
 
 // Заглушки для всех зависимостей
@@ -235,6 +235,9 @@ describe("extension", () => {
     ;(vscode.window as any).clipboard = {
       writeText: vi.fn().mockResolvedValue(undefined),
     }
+    ;(vscode.workspace as any).onDidSaveTextDocument = vi.fn().mockReturnValue({ dispose: vi.fn() })
+    ;(vscode.workspace as any).onDidDeleteFiles = vi.fn().mockReturnValue({ dispose: vi.fn() })
+    ;(vscode.workspace as any).onDidCreateFiles = vi.fn().mockReturnValue({ dispose: vi.fn() })
 
     ctx = {
       extensionUri: { fsPath: "/extension" },
