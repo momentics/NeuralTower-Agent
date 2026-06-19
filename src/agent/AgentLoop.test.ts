@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { AgentLoop } from "./AgentLoop"
 import type { IBackend, ChatMessage } from "../core/IBackend"
 import { AgentMemory } from "./AgentMemory"
-import { Compactor } from "./Compactor"
+import { Compactor, type CompactionResult } from "./Compactor"
 import { AgentModeManager } from "./AgentMode"
 import type { SessionContext } from "./SessionContext"
 import type { AgentContextBuilder } from "./AgentContextBuilder"
@@ -10,6 +10,32 @@ import type { AgentToolExecutor } from "./AgentToolExecutor"
 import type { AgentPlanner } from "./AgentPlanner"
 import { Plan } from "./Plan"
 import type { AgentTurnResult } from "./AgentTypes"
+
+class MockCompactor extends Compactor {
+  private _shouldCompact = false
+  private _compactionResult: CompactionResult | null = null
+
+  enableCompaction(): void {
+    this._shouldCompact = true
+  }
+
+  setCompactionResult(result: CompactionResult): void {
+    this._compactionResult = result
+  }
+
+  async compactIfNeeded(
+    messages: ChatMessage[],
+    systemPrompt: string,
+  ): Promise<CompactionResult> {
+    if (!this._shouldCompact) {
+      return { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
+    }
+    if (this._compactionResult) {
+      return this._compactionResult
+    }
+    return super.compactIfNeeded(messages, systemPrompt)
+  }
+}
 
 const createMockBackend = (): IBackend => ({
   chat: vi.fn(async () => ({ role: "assistant", content: "Test response", timestamp: Date.now() })),
@@ -464,5 +490,217 @@ describe("AgentLoop", () => {
     expect(result.role).toBe("assistant")
     expect(result.content).toBe("After fallback")
     expect((mockPlanner as any).attemptReplan).toHaveBeenCalled()
+  })
+
+  it("run compacts mid-loop when context grows large", async () => {
+    const mockCompactor = new Compactor(null, {
+      contextLimit: 100,
+      bufferTokens: 0,
+      keepTokens: 10,
+    })
+
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ toolName: "read", arguments: { path: "test.ts" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "After compaction" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValue({
+      anyFailed: false,
+    })
+
+    const loop = new AgentLoop(
+      backend, memory, mockCompactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    const result = await loop.run("test query", [], () => {})
+
+    expect(result.role).toBe("assistant")
+    expect(result.content).toBe("After compaction")
+  })
+
+  it("run calls onCompaction callback when compaction occurs", async () => {
+    const mockCompactor = new MockCompactor(null)
+    mockCompactor.enableCompaction()
+    mockCompactor.setCompactionResult({
+      needsCompaction: true,
+      compactedHistory: [{ role: "user", content: "Summary", timestamp: Date.now() }],
+      summary: "Summary",
+      tokensBefore: 500,
+      tokensAfter: 100,
+    })
+
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ toolName: "read", arguments: { path: "test.ts" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "Done" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValue({
+      anyFailed: false,
+    })
+
+    const compactionEvents: Array<{ before: number; after: number }> = []
+
+    const loop = new AgentLoop(
+      backend, memory, mockCompactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    await loop.run("test query", [], () => {}, undefined, undefined, undefined, (before, after) => {
+      compactionEvents.push({ before, after })
+    })
+
+    expect(compactionEvents.length).toBeGreaterThan(0)
+    expect(compactionEvents[0].before).toBe(500)
+    expect(compactionEvents[0].after).toBe(100)
+  })
+
+  it("run synchronizes memory after compaction", async () => {
+    const mockCompactor = new Compactor(null, {
+      contextLimit: 100,
+      bufferTokens: 0,
+      keepTokens: 10,
+    })
+
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ toolName: "read", arguments: { path: "test.ts" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "After sync" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValue({
+      anyFailed: false,
+    })
+
+    const loop = new AgentLoop(
+      backend, memory, mockCompactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    await loop.run("test query", [], () => {})
+
+    const recent = memory.getRecent()
+    expect(recent.length).toBeGreaterThan(0)
+  })
+
+  it("run synchronizes sessionContext after compaction", async () => {
+    const mockSessionContext = createMockSessionContext()
+    const replaceSpy = vi.spyOn(mockSessionContext, "replaceMessages")
+
+    const mockCompactor = new MockCompactor(null)
+    mockCompactor.enableCompaction()
+    mockCompactor.setCompactionResult({
+      needsCompaction: true,
+      compactedHistory: [{ role: "user", content: "Summary", timestamp: Date.now() }],
+      summary: "Summary",
+      tokensBefore: 500,
+      tokensAfter: 100,
+    })
+
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ toolName: "read", arguments: { path: "test.ts" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "After sync" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValue({
+      anyFailed: false,
+    })
+
+    const loop = new AgentLoop(
+      backend, memory, mockCompactor, modeManager, mockSessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    await loop.run("test query", [], () => {})
+
+    expect(replaceSpy).toHaveBeenCalled()
+  })
+
+  it("run returns error when max compactions exceeded", async () => {
+    const mockCompactor = new MockCompactor(null)
+    mockCompactor.enableCompaction()
+    mockCompactor.setCompactionResult({
+      needsCompaction: true,
+      compactedHistory: [{ role: "user", content: "Summary", timestamp: Date.now() }],
+      summary: "Summary",
+      tokensBefore: 500,
+      tokensAfter: 100,
+    })
+
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend).mockResolvedValue({
+      type: "tool_calls",
+      toolCalls: [{ toolName: "read", arguments: { path: "test.ts" } }],
+    })
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValue({
+      anyFailed: false,
+    })
+
+    const loop = new AgentLoop(
+      backend, memory, mockCompactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      2,
+    )
+    const result = await loop.run("test query", [], () => {})
+
+    expect(result.role).toBe("assistant")
+    expect(result.content).toContain("Контекст превышает допустимые пределы")
+  })
+
+  it("run re-injects plan step after compaction", async () => {
+    const testPlan = new Plan({
+      title: "test plan",
+      reasoning: "reason",
+      steps: [
+        { description: "Step 1", suggestedTools: ["read"] },
+        { description: "Step 2", suggestedTools: [] },
+      ],
+    })
+    testPlan.start()
+
+    const mockPlanner = createMockPlanner()
+    vi.mocked(mockPlanner.getPlan).mockReturnValue(testPlan)
+
+    const mockCompactor = new Compactor(null, {
+      contextLimit: 100,
+      bufferTokens: 0,
+      keepTokens: 10,
+    })
+
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ toolName: "read", arguments: { path: "test.ts" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "After compaction" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValue({
+      anyFailed: false,
+    })
+
+    const loop = new AgentLoop(
+      backend, memory, mockCompactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, mockPlanner,
+    )
+    await loop.run("test query", [], () => {})
+
+    const secondCall = vi.mocked(mockToolExecutor.callBackend).mock.calls[1]
+    const conversation = secondCall[0] as ChatMessage[]
+    const planStepMsg = conversation.find(
+      (m) => m.role === "user" && m.content.includes("Выполнить шаг"),
+    )
+    expect(planStepMsg).toBeDefined()
   })
 })

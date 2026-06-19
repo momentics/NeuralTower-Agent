@@ -18,6 +18,7 @@ export class AgentLoop {
   private readonly maxRecoveryAttempts: number
   private readonly replanOnFailure: boolean
   private readonly maxReplanAttempts: number
+  private readonly maxCompactions: number
 
   constructor(
     private readonly backend: IBackend,
@@ -32,12 +33,14 @@ export class AgentLoop {
     maxRecoveryAttempts?: number,
     replanOnFailure?: boolean,
     maxReplanAttempts?: number,
+    maxCompactions?: number,
   ) {
     const defaults = loadDefaultAgentConfig()
     this.maxIterations = maxIterations ?? defaults.maxIterations
     this.maxRecoveryAttempts = maxRecoveryAttempts ?? defaults.maxRecoveryAttempts
     this.replanOnFailure = replanOnFailure ?? defaults.replanOnFailure
     this.maxReplanAttempts = maxReplanAttempts ?? defaults.maxReplanAttempts
+    this.maxCompactions = maxCompactions ?? 5
   }
 
   async run(
@@ -47,6 +50,7 @@ export class AgentLoop {
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
     onToolResult?: (name: string, result: { output: string; success: boolean }) => void,
     signal?: AbortSignal,
+    onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
   ): Promise<ChatMessage> {
     const currentMode = this.modeManager.getModeName()
 
@@ -89,12 +93,45 @@ export class AgentLoop {
 
     let iterations = 0
     let recoveryAttempts = 0
+    let compactionCount = 0
 
     while (iterations < this.maxIterations) {
       iterations++
 
       if (signal?.aborted) {
         throw new AbortError("Task aborted")
+      }
+
+      // Периодическая компактизация контекста перед каждым вызовом бэкенда
+      const compactionResult = await this.compactor.compactIfNeeded(
+        workingConversation.slice(1),
+        systemPrompt,
+      )
+
+      if (compactionResult.needsCompaction && compactionResult.compactedHistory) {
+        if (compactionCount >= this.maxCompactions) {
+          // Слишком много компактизаций — контекст превышает допустимые пределы
+          return {
+            role: "assistant",
+            content: "Контекст превышает допустимые пределы. Задача может быть незавершённой.",
+            timestamp: Date.now(),
+          }
+        }
+
+        compactionCount++
+        workingConversation = [
+          { role: "system", content: systemPrompt, timestamp: Date.now() },
+          ...compactionResult.compactedHistory,
+        ]
+
+        onCompaction?.(compactionResult.tokensBefore, compactionResult.tokensAfter)
+
+        // Синхронизация памяти после компактизации
+        this.memory.restoreFromMessages(workingConversation.slice(1))
+
+        if (this.sessionContext) {
+          this.sessionContext.replaceMessages(workingConversation.slice(1))
+        }
       }
 
       // Инъекция шага плана в разговор

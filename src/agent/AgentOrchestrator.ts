@@ -44,9 +44,10 @@ export class AgentOrchestrator {
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
     onToolResult?: (name: string, result: { output: string; success: boolean }) => void,
     signal?: AbortSignal,
+    onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
   ): Promise<ChatMessage> {
     const combined = AbortSignal.any([this.abortController.signal, signal].filter((s): s is AbortSignal => !!s))
-    return this.core.run(query, onChunk, onToolUse, onToolResult, combined)
+    return this.core.run(query, onChunk, onToolUse, onToolResult, combined, onCompaction)
   }
 
   // ── Планирование ───────────────────────────────────────

@@ -100,6 +100,7 @@ export class AgentCore {
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
     onToolResult?: (name: string, result: { output: string; success: boolean }) => void,
     signal?: AbortSignal,
+    onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
   ): Promise<ChatMessage> {
     if (this.disposed) {
       throw new Error("Агент освобождён")
@@ -145,6 +146,7 @@ export class AgentCore {
       onToolUse,
       onToolResult,
       signal,
+      onCompaction,
     )
   }
 
