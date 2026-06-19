@@ -37,6 +37,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
     diffViewer: deps.diffViewer,
     commitMessageService: deps.commitMessageService,
     extUri: ctx.extensionUri,
+    codebaseIndexer: deps.codebaseIndexer,
   })
 
   // ── Сериализаторы панелей Webview ─────────────────────────────
@@ -77,6 +78,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
         () => deps.diffViewer.dispose(),
         // Мониторинг
         () => deps.healthMonitor.dispose(),
+        () => deps.indexingStatusBar.dispose(),
         () => deps.commitMessageService.dispose(),
         () => deps.autocompleteService.dispose(),
         // Сервисы
@@ -85,6 +87,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
         () => deps.sessionStore.dispose(),
         () => deps.gitService.dispose(),
         // Инфраструктура
+        () => deps.codebaseIndexer.dispose(),
         () => deps.mcpManager.disconnect(),
         () => telemetry.dispose(),
         () => disposeOutputChannel(),

@@ -27,6 +27,8 @@ export class CodebaseIndexer {
   private state: IndexingState = "idle"
   private disposables: vscode.Disposable[] = []
   private isDisposed = false
+  private readonly _onDidChangeState = new vscode.EventEmitter<IndexingState>()
+  readonly onDidChangeState = this._onDidChangeState.event
 
   constructor(
     private readonly fileIndex: IFileIndex,
@@ -62,13 +64,27 @@ export class CodebaseIndexer {
     await this.fullIndex(workspaceUri.fsPath)
   }
 
+  private setState(newState: IndexingState): void {
+    if (this.state !== newState) {
+      this.state = newState
+      this._onDidChangeState.fire(newState)
+    }
+  }
+
+  /**
+   * Запустить полную индексацию (публичный метод для команды).
+   */
+  async reindex(workspacePath: string): Promise<void> {
+    await this.fullIndex(workspacePath)
+  }
+
   /**
    * Полная индексация репозитория.
    */
   async fullIndex(workspacePath: string): Promise<void> {
     if (this.state === "indexing") return
 
-    this.state = "indexing"
+    this.setState("indexing")
 
     try {
       // Очистить старые индексы
@@ -83,9 +99,9 @@ export class CodebaseIndexer {
       // Индексировать фрагменты
       await this.search.indexChunks(result.chunks)
 
-      this.state = "idle"
+      this.setState("idle")
     } catch {
-      this.state = "error"
+      this.setState("error")
     }
   }
 

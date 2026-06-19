@@ -70,6 +70,7 @@ import { FullTextSearch } from "../repo/FullTextSearch"
 import { CodebaseSearch } from "../repo/CodebaseSearch"
 import { CodebaseChunker, createDefaultChunkerConfig } from "../repo/CodebaseChunker"
 import { CodebaseIndexer } from "../services/indexing/CodebaseIndexer"
+import { IndexingStatusBar } from "../services/indexing/IndexingStatusBar"
 
 // ── Публичные типы ────────────────────────────────────────
 
@@ -92,8 +93,9 @@ export interface ExtensionDeps {
   config: AppConfig
   agentDeps: AgentDependencies
   fileIndex: FileIndex
-  codebaseSearch: CodebaseSearch
+ codebaseSearch: CodebaseSearch
   codebaseIndexer: CodebaseIndexer
+  indexingStatusBar: IndexingStatusBar
   setWorkDir: (dir: string) => void
 }
 
@@ -137,6 +139,12 @@ export function createCodebaseIndexer(
   embeddingProvider: NeuralTowerEmbeddingProvider,
 ): CodebaseIndexer {
   return new CodebaseIndexer(fileIndex, chunker, search, embeddingProvider)
+}
+
+export function createIndexingStatusBar(
+  indexer: CodebaseIndexer,
+): IndexingStatusBar {
+  return new IndexingStatusBar(indexer)
 }
 
 export async function createSessionStore(
@@ -463,9 +471,12 @@ export async function createDeps(
   )
 
   // Запустить индексацию (если есть рабочая область)
-  if (vscode.workspace.workspaceFolders?.[0]) {
+ if (vscode.workspace.workspaceFolders?.[0]) {
     await codebaseIndexer.start(vscode.workspace.workspaceFolders[0].uri)
   }
+
+  const indexingStatusBar = createIndexingStatusBar(codebaseIndexer)
+  await indexingStatusBar.init()
 
   return {
     backend,
@@ -486,8 +497,9 @@ export async function createDeps(
     config,
     agentDeps,
     fileIndex,
-    codebaseSearch,
+codebaseSearch,
     codebaseIndexer,
+    indexingStatusBar,
     setWorkDir: (dir: string) => { workDirRef.current = dir },
   }
 }

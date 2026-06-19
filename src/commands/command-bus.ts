@@ -10,6 +10,7 @@ import type { IBackend } from "../core/IBackend"
 import type { GitService } from "../services/git/GitService"
 import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
 import type { CommitMessageService } from "../services/commit-message/CommitMessageService"
+import type { CodebaseIndexer } from "../services/indexing/CodebaseIndexer"
 import * as vscode from "vscode"
 
 export interface CommandDeps {
@@ -22,6 +23,7 @@ export interface CommandDeps {
   diffViewer: DiffViewerProvider
   commitMessageService: CommitMessageService
   extUri: vscode.Uri
+  codebaseIndexer: CodebaseIndexer
 }
 
 export function registerAllCommands(deps: CommandDeps): void {
@@ -38,4 +40,13 @@ export function registerAllCommands(deps: CommandDeps): void {
     deps.extUri,
   )
   registerCodeActionCommands(deps.app, deps.agent, deps.gitService, deps.diffViewer)
+
+  deps.app.registerCommand("neuralTowerAgent.reindex", async () => {
+    const folder = vscode.workspace.workspaceFolders?.[0]
+    if (!folder) {
+      vscode.window.showWarningMessage("Рабочая область не открыта")
+      return
+    }
+    await deps.codebaseIndexer.reindex(folder.uri.fsPath)
+  })
 }

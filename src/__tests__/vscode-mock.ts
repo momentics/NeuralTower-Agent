@@ -1,6 +1,6 @@
 const EventEmitter = class {
   private listeners: Function[] = []
-  event(handler: Function) {
+  event = (handler: Function) => {
     this.listeners.push(handler)
     return { dispose: () => { this.listeners = this.listeners.filter(l => l !== handler) } }
   }

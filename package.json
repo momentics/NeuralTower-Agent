@@ -81,6 +81,11 @@
         "command": "neuralTowerAgent.openDiffViewer",
         "title": "Показать изменения",
         "icon": "$(diff)"
+      },
+      {
+        "command": "neuralTowerAgent.reindex",
+        "title": "Повторная индексация кодовой базы",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
