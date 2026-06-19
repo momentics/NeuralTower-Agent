@@ -84,6 +84,10 @@ export class AgentCore {
       contextBuilder,
       this.toolExecutor,
       this.planner,
+      undefined,
+      undefined,
+      deps.config.agent.replanOnFailure,
+      deps.config.agent.maxReplanAttempts,
     )
   }
 

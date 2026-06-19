@@ -16,6 +16,8 @@ import { loadDefaultAgentConfig } from "../core/config"
 export class AgentLoop {
   private readonly maxIterations: number
   private readonly maxRecoveryAttempts: number
+  private readonly replanOnFailure: boolean
+  private readonly maxReplanAttempts: number
 
   constructor(
     private readonly backend: IBackend,
@@ -28,9 +30,14 @@ export class AgentLoop {
     private readonly planner: AgentPlanner,
     maxIterations?: number,
     maxRecoveryAttempts?: number,
+    replanOnFailure?: boolean,
+    maxReplanAttempts?: number,
   ) {
-    this.maxIterations = maxIterations ?? loadDefaultAgentConfig().maxIterations
-    this.maxRecoveryAttempts = maxRecoveryAttempts ?? loadDefaultAgentConfig().maxRecoveryAttempts
+    const defaults = loadDefaultAgentConfig()
+    this.maxIterations = maxIterations ?? defaults.maxIterations
+    this.maxRecoveryAttempts = maxRecoveryAttempts ?? defaults.maxRecoveryAttempts
+    this.replanOnFailure = replanOnFailure ?? defaults.replanOnFailure
+    this.maxReplanAttempts = maxReplanAttempts ?? defaults.maxReplanAttempts
   }
 
   async run(
@@ -159,6 +166,31 @@ export class AgentLoop {
           if (recoveryAttempts >= this.maxRecoveryAttempts) {
             break
           }
+
+          // Попытка адаптивного репланирования, если шаг провалился окончательно
+          if (this.replanOnFailure && currentPlan && currentPlan.currentStep?.status === "failed") {
+            const failedStep = currentPlan.currentStep!
+            const failedError = failedStep.error ?? "Инструмент вернул ошибку"
+            const newPlan = await this.planner.attemptReplan(failedStep, failedError, this.maxReplanAttempts)
+
+            if (newPlan) {
+              recoveryAttempts++
+              const newPlanText = newPlan.toText()
+              workingConversation.push({
+                role: "user",
+                content: `План пересмотрен после провала шага "${failedStep.description}". Новый план:\n\n${newPlanText}`,
+                timestamp: Date.now(),
+              })
+              this.memory.add(workingConversation[workingConversation.length - 1])
+
+              if (this.sessionContext) {
+                this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
+              }
+
+              continue
+            }
+          }
+
           recoveryAttempts++
           const failedNames = failedTools?.map((t) => t.name).join(", ") ?? "неизвестно"
           workingConversation.push({

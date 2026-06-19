@@ -1,21 +1,73 @@
 import type { IBackend, ChatMessage } from "../core/IBackend"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { ISkill } from "../skills/ISkill"
+import type { PlanStep } from "./Plan"
 import { Plan } from "./Plan"
 import type { SessionContext } from "./SessionContext"
 import { PlanError } from "../core/errors"
+import { Replanner } from "./Replanner"
 
 /** Специальный префикс для системного сообщения с сериализованным планом. */
 const PLAN_MESSAGE_PREFIX = "__PLAN__"
 
 export class AgentPlanner {
   private currentPlan: Plan | null = null
+  private replanAttemptCount = 0
 
   constructor(
     private readonly backend: IBackend,
     private readonly toolRegistry: ToolRegistry,
     private readonly sessionContext: SessionContext | null,
   ) {}
+
+  /**
+   * Попытка репланирования после провала шага.
+   *
+   * @param maxAttempts — максимальное число попыток репланирования
+   * @returns Новый план или null, если реплан невозможен
+   */
+  async attemptReplan(
+    failedStep: PlanStep,
+    error: string,
+    maxAttempts: number,
+  ): Promise<Plan | null> {
+    const plan = this.currentPlan
+    if (!plan) return null
+
+    if (this.replanAttemptCount >= maxAttempts) {
+      return null
+    }
+
+    this.replanAttemptCount++
+
+    const replanner = new Replanner(this.backend, this.toolRegistry)
+    const result = await replanner.replan(plan, failedStep, error, this.replanAttemptCount)
+
+    if (result.plan) {
+      plan.recordReplan(result.reason, result.attempt)
+      this.currentPlan = result.plan
+      if (this.sessionContext) {
+        this.sessionContext.setPlan(result.plan)
+      }
+      return result.plan
+    }
+
+    return null
+  }
+
+  /**
+   * Вернуть текущее число попыток репланирования.
+   */
+  getReplanAttemptCount(): number {
+    return this.replanAttemptCount
+  }
+
+  /**
+   * Сбросить счётчик попыток репланирования.
+   */
+  resetReplanAttempts(): void {
+    this.replanAttemptCount = 0
+  }
 
   /**
    * Сериализовать план в системное сообщение для сохранения в сессии.
@@ -159,6 +211,7 @@ ${toolList}${skillsSection}
 
   clearPlan(): void {
     this.currentPlan = null
+    this.replanAttemptCount = 0
     if (this.sessionContext) {
       this.sessionContext.clearPlan()
     }

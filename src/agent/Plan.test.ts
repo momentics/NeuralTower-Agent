@@ -340,4 +340,116 @@ describe("Plan", () => {
     vi.mocked(fs.readFile).mockResolvedValueOnce(JSON.stringify({ id: "1" }))
     await expect(Plan.load("/work/test.json")).rejects.toThrow(/Невалидный файл плана/)
   })
+
+  it("replanHistory is empty by default", () => {
+    const plan = new Plan({
+      title: "T",
+      reasoning: "R",
+      steps: [{ description: "S1", suggestedTools: [] }],
+    })
+    expect(plan.replanHistory).toEqual([])
+  })
+
+  it("recordReplan adds entry to history", () => {
+    const plan = new Plan({
+      title: "T",
+      reasoning: "R",
+      steps: [{ description: "S1", suggestedTools: [] }],
+    })
+    plan.recordReplan("Step failed", 1)
+    expect(plan.replanHistory.length).toBe(1)
+    expect(plan.replanHistory[0].reason).toBe("Step failed")
+    expect(plan.replanHistory[0].attempt).toBe(1)
+    expect(plan.replanHistory[0].timestamp).toBeGreaterThan(0)
+  })
+
+  it("recordReplan accumulates entries", () => {
+    const plan = new Plan({
+      title: "T",
+      reasoning: "R",
+      steps: [{ description: "S1", suggestedTools: [] }],
+    })
+    plan.recordReplan("First failure", 1)
+    plan.recordReplan("Second failure", 2)
+    expect(plan.replanHistory.length).toBe(2)
+    expect(plan.replanHistory[0].attempt).toBe(1)
+    expect(plan.replanHistory[1].attempt).toBe(2)
+  })
+
+  it("toText includes replan history when present", () => {
+    const plan = new Plan({
+      title: "T",
+      reasoning: "R",
+      steps: [{ description: "S1", suggestedTools: [] }],
+    })
+    plan.start()
+    plan.recordReplan("Step failed", 1)
+    const text = plan.toText()
+    expect(text).toContain("История репланирования")
+    expect(text).toContain("Step failed")
+  })
+
+  it("toText does not include replan history when empty", () => {
+    const plan = new Plan({
+      title: "T",
+      reasoning: "R",
+      steps: [{ description: "S1", suggestedTools: [] }],
+    })
+    plan.start()
+    const text = plan.toText()
+    expect(text).not.toContain("История репланирования")
+  })
+
+  it("toJSON includes replanHistory", () => {
+    const plan = new Plan({
+      title: "T",
+      reasoning: "R",
+      steps: [{ description: "S1", suggestedTools: [] }],
+    })
+    plan.recordReplan("Step failed", 1)
+    const json = plan.toJSON()
+    expect(json.replanHistory).toBeDefined()
+    expect(json.replanHistory!.length).toBe(1)
+    expect(json.replanHistory![0].reason).toBe("Step failed")
+  })
+
+  it("fromJSON restores replanHistory", () => {
+    const plan = new Plan({
+      title: "T",
+      reasoning: "R",
+      steps: [{ description: "S1", suggestedTools: [] }],
+    })
+    plan.recordReplan("Step failed", 1)
+    const json = plan.toJSON()
+    const restored = Plan.fromJSON(json)
+    expect(restored.replanHistory.length).toBe(1)
+    expect(restored.replanHistory[0].reason).toBe("Step failed")
+  })
+
+  it("fromJSON defaults replanHistory to empty array when missing", () => {
+    const json = {
+      id: "test-1",
+      title: "T",
+      reasoning: "R",
+      steps: [{ description: "S1", suggestedTools: [], status: "pending", attempts: 0 }],
+      status: "draft",
+      currentStepIndex: 0,
+      maxRetries: 3,
+      createdAt: 1000,
+      updatedAt: 1000,
+    }
+    const restored = Plan.fromJSON(json)
+    expect(restored.replanHistory).toEqual([])
+  })
+
+  it("reset clears replanHistory", () => {
+    const plan = new Plan({
+      title: "T",
+      reasoning: "R",
+      steps: [{ description: "S1", suggestedTools: [] }],
+    })
+    plan.recordReplan("Step failed", 1)
+    plan.reset()
+    expect(plan.replanHistory).toEqual([])
+  })
 })

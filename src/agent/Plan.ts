@@ -34,6 +34,20 @@ export interface PlanStep {
 }
 
 /**
+ * Запись истории репланирования.
+ */
+export interface ReplanEntry {
+  /** Причина репланирования. */
+  reason: string
+
+  /** Номер попытки репланирования. */
+  attempt: number
+
+  /** Временная метка. */
+  timestamp: number
+}
+
+/**
  * Состояние плана в целом.
  */
 export type PlanStatus = "draft" | "running" | "paused" | "completed" | "failed"
@@ -78,6 +92,9 @@ export class Plan {
   /** Данные для передачи управления между сессиями. */
   public transferData?: PlanHandover
 
+  /** История репланирования. */
+  public replanHistory: ReplanEntry[]
+
   constructor(input: {
     id?: string
     title: string
@@ -98,6 +115,7 @@ export class Plan {
     this.maxRetries = input.maxRetries ?? 3
     this.createdAt = Date.now()
     this.updatedAt = this.createdAt
+    this.replanHistory = []
   }
 
   /**
@@ -107,11 +125,18 @@ export class Plan {
     return this.steps.filter((s) => s.status === "done").length
   }
 
-  /**
-   * Вернуть количество проваленных шагов.
-   */
+ /**
+    * Вернуть количество проваленных шагов.
+    */
   get failedCount(): number {
     return this.steps.filter((s) => s.status === "failed").length
+  }
+
+  /**
+   * Записать событие репланирования в историю.
+   */
+  recordReplan(reason: string, attempt: number): void {
+    this.replanHistory.push({ reason, attempt, timestamp: Date.now() })
   }
 
   /**
@@ -217,6 +242,7 @@ export class Plan {
   reset(): void {
     this.status = "draft"
     this.currentStepIndex = 0
+    this.replanHistory = []
     for (const step of this.steps) {
       step.status = "pending"
       step.attempts = 0
@@ -254,7 +280,15 @@ export class Plan {
 
     const footer = `\n\nПрогресс: ${this.progress}% (${this.completedCount}/${this.steps.length})`
 
-    return header + steps + footer
+    let replanInfo = ""
+    if (this.replanHistory.length > 0) {
+      replanInfo = `\n\n## История репланирования (${this.replanHistory.length})\n`
+      for (const entry of this.replanHistory) {
+        replanInfo += `- Попытка ${entry.attempt}: ${entry.reason}\n`
+      }
+    }
+
+    return header + steps + footer + replanInfo
   }
 
   /**
@@ -272,6 +306,7 @@ export class Plan {
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
       handover: this.transferData,
+      replanHistory: this.replanHistory,
     }
   }
 
@@ -291,6 +326,7 @@ export class Plan {
     // createdAt — только для чтения, используется значение из конструктора
     plan.updatedAt = data.updatedAt
     plan.transferData = data.handover
+    plan.replanHistory = data.replanHistory ?? []
     for (const [i, step] of data.steps.entries()) {
       plan.steps[i].status = step.status
       plan.steps[i].attempts = step.attempts
@@ -380,4 +416,5 @@ export interface PlanSerialized {
   createdAt: number
   updatedAt: number
   handover?: PlanHandover
+  replanHistory?: ReplanEntry[]
 }

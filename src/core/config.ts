@@ -29,6 +29,12 @@ export interface AgentConfig {
 
   /** Автоматически создавать план задачи перед выполнением. */
   autoPlan: boolean
+
+  /** Включить адаптивное репланирование при провале шага. */
+  replanOnFailure: boolean
+
+  /** Максимальное число попыток репланирования за одну сессию. */
+  maxReplanAttempts: number
 }
 
 export function loadDefaultAgentConfig(): AgentConfig {
@@ -38,6 +44,8 @@ export function loadDefaultAgentConfig(): AgentConfig {
     injectDiffContext: true,
     maxRecoveryAttempts: 3,
     autoPlan: true,
+    replanOnFailure: true,
+    maxReplanAttempts: 2,
   }
 }
 
@@ -148,6 +156,8 @@ export function loadAppConfig(): AppConfig {
       injectDiffContext: cfg.get<boolean>("git.injectDiffContext", loadDefaultAgentConfig().injectDiffContext)!,
       maxRecoveryAttempts: cfg.get<number>("agent.maxRecoveryAttempts", loadDefaultAgentConfig().maxRecoveryAttempts)!,
       autoPlan: cfg.get<boolean>("agent.autoPlan", loadDefaultAgentConfig().autoPlan)!,
+      replanOnFailure: cfg.get<boolean>("agent.replanOnFailure", loadDefaultAgentConfig().replanOnFailure)!,
+      maxReplanAttempts: cfg.get<number>("agent.maxReplanAttempts", loadDefaultAgentConfig().maxReplanAttempts)!,
     },
     context: {
       tokenBudget: loadDefaultContextConfig().tokenBudget,

@@ -337,4 +337,132 @@ describe("AgentLoop", () => {
     expect(result.role).toBe("assistant")
     expect(result.content).toContain("максимальное число итераций")
   })
+
+  it("run triggers replan when step fails and replanOnFailure is true", async () => {
+    const testPlan = new Plan({
+      title: "test plan",
+      reasoning: "reason",
+      steps: [{ description: "Step 1", suggestedTools: [] }],
+      maxRetries: 0,
+    })
+    testPlan.start()
+
+    const mockPlanner = createMockPlanner()
+    vi.mocked(mockPlanner.getPlan).mockReturnValue(testPlan)
+
+    const newPlan = new Plan({
+      title: "test plan",
+      reasoning: "Replan reasoning",
+      steps: [{ description: "New step", suggestedTools: [] }],
+    })
+    newPlan.start()
+    vi.mocked(mockPlanner as any).attemptReplan = vi.fn(async () => newPlan)
+
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ toolName: "read", arguments: {} }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "After replan" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValueOnce({
+      anyFailed: true,
+      failedTools: [{ name: "read", error: "file not found" }],
+    })
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, mockPlanner,
+      undefined,
+      undefined,
+      true,
+      2,
+    )
+    const result = await loop.run("test query", [], () => {})
+
+    expect(result.role).toBe("assistant")
+    expect(result.content).toBe("After replan")
+    expect((mockPlanner as any).attemptReplan).toHaveBeenCalled()
+  })
+
+  it("run skips replan when replanOnFailure is false", async () => {
+    const testPlan = new Plan({
+      title: "test plan",
+      reasoning: "reason",
+      steps: [{ description: "Step 1", suggestedTools: [] }],
+      maxRetries: 0,
+    })
+    testPlan.start()
+
+    const mockPlanner = createMockPlanner()
+    vi.mocked(mockPlanner.getPlan).mockReturnValue(testPlan)
+    ;(mockPlanner as any).attemptReplan = vi.fn(async () => null)
+
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ toolName: "read", arguments: {} }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "After recovery" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValueOnce({
+      anyFailed: true,
+      failedTools: [{ name: "read", error: "file not found" }],
+    })
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, mockPlanner,
+      undefined,
+      undefined,
+      false,
+      2,
+    )
+    await loop.run("test query", [], () => {})
+
+    expect((mockPlanner as any).attemptReplan).not.toHaveBeenCalled()
+  })
+
+  it("run falls back to recovery when replan returns null", async () => {
+    const testPlan = new Plan({
+      title: "test plan",
+      reasoning: "reason",
+      steps: [{ description: "Step 1", suggestedTools: [] }],
+      maxRetries: 0,
+    })
+    testPlan.start()
+
+    const mockPlanner = createMockPlanner()
+    vi.mocked(mockPlanner.getPlan).mockReturnValue(testPlan)
+    ;(mockPlanner as any).attemptReplan = vi.fn(async () => null)
+
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ toolName: "read", arguments: {} }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "After fallback" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValueOnce({
+      anyFailed: true,
+      failedTools: [{ name: "read", error: "file not found" }],
+    })
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, mockPlanner,
+      undefined,
+      undefined,
+      true,
+      2,
+    )
+    const result = await loop.run("test query", [], () => {})
+
+    expect(result.role).toBe("assistant")
+    expect(result.content).toBe("After fallback")
+    expect((mockPlanner as any).attemptReplan).toHaveBeenCalled()
+  })
 })
