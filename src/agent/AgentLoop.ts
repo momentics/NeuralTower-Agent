@@ -43,8 +43,15 @@ export class AgentLoop {
   ): Promise<ChatMessage> {
     const currentMode = this.modeManager.getModeName()
 
+    let planContext = ""
+    const activePlan = this.planner.getPlan()
+    if (activePlan) {
+      planContext = activePlan.toText()
+    }
+
     const systemPrompt = (await this.contextBuilder.buildSystemPrompt(activeSkills))
       + "\n\n" + this.modeManager.getSystemPromptAddon()
+      + (planContext ? "\n\n" + planContext : "")
 
     const conversation: ChatMessage[] = [
       { role: "system", content: systemPrompt, timestamp: Date.now() },
@@ -83,12 +90,14 @@ export class AgentLoop {
         throw new AbortError("Task aborted")
       }
 
-      if (this.planner.getPlan()?.status === "running") {
-        const step = this.planner.getPlan()!.currentStep
+      // Инъекция шага плана в разговор
+      const plan = this.planner.getPlan()
+      if (plan && plan.status === "running") {
+        const step = plan.currentStep
         if (step && step.status === "pending") {
           workingConversation.push({
             role: "user",
-            content: `Выполнить шаг ${this.planner.getPlan()!.currentStepIndex + 1}: ${step.description}${
+            content: `Выполнить шаг ${plan.currentStepIndex + 1}: ${step.description}${
               step.suggestedTools.length ? ` (предлагаемые инструменты: ${step.suggestedTools.join(", ")})` : ""
             }`,
             timestamp: Date.now(),
@@ -111,10 +120,10 @@ export class AgentLoop {
             this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
           }
 
-          const plan = this.planner.getPlan()
-          if (plan && plan.status === "running") {
-            plan.markDone(result.content.slice(0, 500))
-            if (plan.status === "running") {
+          const currentPlan = this.planner.getPlan()
+          if (currentPlan && currentPlan.status === "running") {
+            currentPlan.markDone(result.content.slice(0, 500))
+            if (currentPlan.status === "running") {
               continue
             }
           }
@@ -124,9 +133,9 @@ export class AgentLoop {
       }
 
       if (result.type === "tool_calls" && result.toolCalls) {
-        const plan = this.planner.getPlan()
-        if (plan && plan.status === "running") {
-          plan.markRunning()
+        const currentPlan = this.planner.getPlan()
+        if (currentPlan && currentPlan.status === "running") {
+          currentPlan.markRunning()
         }
 
         const { anyFailed, failedTools } = await this.toolExecutor.executeToolCalls(
@@ -138,11 +147,11 @@ export class AgentLoop {
           onToolResult,
         )
 
-        if (plan) {
+        if (currentPlan) {
           if (anyFailed) {
-            plan.markFailed("Инструмент вернул ошибку")
+            currentPlan.markFailed("Инструмент вернул ошибку")
           } else {
-            plan.markDone()
+            currentPlan.markDone()
           }
         }
 
@@ -165,6 +174,9 @@ export class AgentLoop {
 
           continue
         }
+
+        // Инструменты выполнены успешно — продолжить цикл
+        continue
       } else {
         break
       }

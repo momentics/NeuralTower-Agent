@@ -152,6 +152,17 @@ export class ChatProvider implements IProvider {
       }, this.abortController.signal)
 
       await this.sessionStore.push(result)
+
+      // Сохранить план в сессию
+      const plan = this.agent.getPlan()
+      if (plan) {
+        await this.sessionStore.push({
+          role: "system",
+          content: `__PLAN__${JSON.stringify(plan.toJSON())}`,
+          timestamp: Date.now(),
+        })
+      }
+
       this.panel!.webview.postMessage({ type: "streamDone" } as ExtToWebview)
       this.panel!.webview.postMessage({ type: "agentDone" } as ExtToWebview)
       this.notificationService.show("agentDone", "Агент завершил задачу")

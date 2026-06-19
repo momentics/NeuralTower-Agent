@@ -1,6 +1,7 @@
 import type { ITool } from "../tools/ITool"
 import type { ISkill } from "../skills/ISkill"
 import type { IBackend, ChatMessage } from "./IBackend"
+import type { Plan } from "../agent/Plan"
 
 /**
  * Интерфейс оркестратора агента. Управляет циклом агента:
@@ -36,4 +37,7 @@ export interface IAgentOrchestrator {
 
   /** Очистить текущий план. */
   clearPlan(): void
+
+  /** Вернуть текущий план (или null, если плана нет). */
+  getPlan(): Plan | null
 }

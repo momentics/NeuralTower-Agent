@@ -1,8 +1,11 @@
-import type { IBackend } from "../core/IBackend"
+import type { IBackend, ChatMessage } from "../core/IBackend"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import { Plan } from "./Plan"
 import type { SessionContext } from "./SessionContext"
 import { PlanError } from "../core/errors"
+
+/** Специальный префикс для системного сообщения с сериализованным планом. */
+const PLAN_MESSAGE_PREFIX = "__PLAN__"
 
 export class AgentPlanner {
   private currentPlan: Plan | null = null
@@ -12,6 +15,50 @@ export class AgentPlanner {
     private readonly toolRegistry: ToolRegistry,
     private readonly sessionContext: SessionContext | null,
   ) {}
+
+  /**
+   * Сериализовать план в системное сообщение для сохранения в сессии.
+   */
+  serializePlan(): ChatMessage | null {
+    if (!this.currentPlan) return null
+    return {
+      role: "system",
+      content: `${PLAN_MESSAGE_PREFIX}${JSON.stringify(this.currentPlan.toJSON())}`,
+      timestamp: Date.now(),
+    }
+  }
+
+  /**
+   * Десериализовать план из системного сообщения.
+   */
+  deserializePlan(msg: ChatMessage): Plan | null {
+    if (msg.role !== "system" || !msg.content.startsWith(PLAN_MESSAGE_PREFIX)) {
+      return null
+    }
+    try {
+      const json = msg.content.slice(PLAN_MESSAGE_PREFIX.length)
+      const data = JSON.parse(json)
+      const plan = Plan.fromJSON(data)
+      this.currentPlan = plan
+      if (this.sessionContext) {
+        this.sessionContext.setPlan(plan)
+      }
+      return plan
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Найти и восстановить план из истории сообщений сессии.
+   */
+  restorePlanFromMessages(messages: ChatMessage[]): Plan | null {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const plan = this.deserializePlan(messages[i])
+      if (plan) return plan
+    }
+    return null
+  }
 
   async createPlan(
     query: string,

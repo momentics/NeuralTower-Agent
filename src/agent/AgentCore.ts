@@ -107,6 +107,15 @@ export class AgentCore {
 
     const activeSkills: ISkill[] = this.skillManager.match(query)
 
+    // Переключить в режим планирования для создания плана
+    this.modeManager.switchMode("plan")
+
+    // Создать план задачи
+    await this.planner.createPlan(query)
+
+    // Переключить в режим выполнения
+    this.modeManager.switchMode("build")
+
     return this.agentLoop.run(
       query,
       activeSkills,
@@ -170,6 +179,8 @@ export class AgentCore {
     this.deps.contextManager.reset()
     this.memory.restoreFromMessages(messages)
     this.sessionContext.restoreMessages(messages)
+    // Восстановить план из сериализованного сообщения
+    this.planner.restorePlanFromMessages(messages)
   }
 
   /**
