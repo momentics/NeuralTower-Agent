@@ -23,6 +23,9 @@ export interface AgentConfig {
 
   /** Добавлять контекст git-различий в системный запрос агента. */
   injectDiffContext: boolean
+
+  /** Максимальное число попыток восстановления после сбоя инструмента. */
+  maxRecoveryAttempts: number
 }
 
 export function loadDefaultAgentConfig(): AgentConfig {
@@ -30,6 +33,7 @@ export function loadDefaultAgentConfig(): AgentConfig {
     maxIterations: 20,
     maxTokens: 60_000,
     injectDiffContext: true,
+    maxRecoveryAttempts: 3,
   }
 }
 
@@ -138,6 +142,7 @@ export function loadAppConfig(): AppConfig {
       maxIterations: cfg.get<number>("agent.maxIterations", loadDefaultAgentConfig().maxIterations)!,
       maxTokens: loadDefaultAgentConfig().maxTokens,
       injectDiffContext: cfg.get<boolean>("git.injectDiffContext", loadDefaultAgentConfig().injectDiffContext)!,
+      maxRecoveryAttempts: cfg.get<number>("agent.maxRecoveryAttempts", loadDefaultAgentConfig().maxRecoveryAttempts)!,
     },
     context: {
       tokenBudget: loadDefaultContextConfig().tokenBudget,

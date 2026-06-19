@@ -15,6 +15,7 @@ import { loadDefaultAgentConfig } from "../core/config"
 
 export class AgentLoop {
   private readonly maxIterations: number
+  private readonly maxRecoveryAttempts: number
 
   constructor(
     private readonly backend: IBackend,
@@ -26,8 +27,10 @@ export class AgentLoop {
     private readonly toolExecutor: AgentToolExecutor,
     private readonly planner: AgentPlanner,
     maxIterations?: number,
+    maxRecoveryAttempts?: number,
   ) {
     this.maxIterations = maxIterations ?? loadDefaultAgentConfig().maxIterations
+    this.maxRecoveryAttempts = maxRecoveryAttempts ?? loadDefaultAgentConfig().maxRecoveryAttempts
   }
 
   async run(
@@ -71,6 +74,7 @@ export class AgentLoop {
     }
 
     let iterations = 0
+    let recoveryAttempts = 0
 
     while (iterations < this.maxIterations) {
       iterations++
@@ -125,7 +129,7 @@ export class AgentLoop {
           plan.markRunning()
         }
 
-        const { anyFailed } = await this.toolExecutor.executeToolCalls(
+        const { anyFailed, failedTools } = await this.toolExecutor.executeToolCalls(
           result.toolCalls,
           currentMode,
           workingConversation,
@@ -140,6 +144,26 @@ export class AgentLoop {
           } else {
             plan.markDone()
           }
+        }
+
+        if (anyFailed) {
+          if (recoveryAttempts >= this.maxRecoveryAttempts) {
+            break
+          }
+          recoveryAttempts++
+          const failedNames = failedTools?.map((t) => t.name).join(", ") ?? "неизвестно"
+          workingConversation.push({
+            role: "user",
+            content: `Внимание: инструменты ${failedNames} завершены с ошибкой. Проанализируйте ошибки выше и попробуйте выполнить задачу другим способом. Вы можете: повторить вызов с другими аргументами, использовать другой инструмент, или завершить задачу с описанием ошибки.`,
+            timestamp: Date.now(),
+          })
+          this.memory.add(workingConversation[workingConversation.length - 1])
+
+          if (this.sessionContext) {
+            this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
+          }
+
+          continue
         }
       } else {
         break

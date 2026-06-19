@@ -61,8 +61,9 @@ export class AgentToolExecutor {
     signal?: AbortSignal,
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
     onToolResult?: (name: string, result: ToolResult) => void,
-  ): Promise<{ anyFailed: boolean }> {
+  ): Promise<{ anyFailed: boolean; failedTools?: { name: string; error: string }[] }> {
     let anyFailed = false
+    const failedTools: { name: string; error: string }[] = []
 
     for (const tc of toolCalls) {
       const modePerm = this.modeManager.checkToolPermission(tc.toolName)
@@ -75,6 +76,7 @@ export class AgentToolExecutor {
           timestamp: Date.now(),
         })
         anyFailed = true
+        failedTools.push({ name: tc.toolName, error: `Режим ${currentMode} запрещает вызов` })
         continue
       }
 
@@ -90,6 +92,7 @@ export class AgentToolExecutor {
             timestamp: Date.now(),
           })
           anyFailed = true
+          failedTools.push({ name: tc.toolName, error: "Отказано в доступе" })
           continue
         }
       }
@@ -118,10 +121,13 @@ export class AgentToolExecutor {
         this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
       }
 
-      if (!toolResult.success) anyFailed = true
+      if (!toolResult.success) {
+        anyFailed = true
+        failedTools.push({ name: tc.toolName, error: toolResult.output })
+      }
     }
 
-    return { anyFailed }
+    return { anyFailed, failedTools: anyFailed ? failedTools : undefined }
   }
 
   private resolveArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {

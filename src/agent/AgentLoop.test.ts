@@ -234,14 +234,107 @@ describe("AgentLoop", () => {
       type: "tool_calls",
       toolCalls: [{ toolName: "read", arguments: {} }],
     })
-    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValue({ anyFailed: true })
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValue({
+      anyFailed: true,
+      failedTools: [{ name: "read", error: "file not found" }],
+    })
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, mockPlanner,
+      undefined,
+      0,
+    )
+    await loop.run("test query", [], () => {})
+
+    expect(testPlan.steps[0].error).toBe("Инструмент вернул ошибку")
+  })
+
+  it("run recovers from tool failure and continues loop", async () => {
+    const testPlan = new Plan({
+      title: "test plan",
+      reasoning: "reason",
+      steps: [{ description: "Step 1", suggestedTools: [] }],
+    })
+    testPlan.start()
+
+    const mockPlanner = createMockPlanner()
+    vi.mocked(mockPlanner.getPlan).mockReturnValue(testPlan)
+
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ toolName: "read", arguments: { path: "test.ts" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "Recovered" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValueOnce({
+      anyFailed: true,
+      failedTools: [{ name: "read", error: "file not found" }],
+    })
 
     const loop = new AgentLoop(
       backend, memory, compactor, modeManager, sessionContext,
       contextBuilder, mockToolExecutor, mockPlanner,
     )
+    const result = await loop.run("test query", [], () => {})
+
+    expect(result.role).toBe("assistant")
+    expect(result.content).toBe("Recovered")
+    expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(2)
+  })
+
+  it("run injects recovery hint after tool failure", async () => {
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ toolName: "read", arguments: { path: "test.ts" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "After recovery" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValueOnce({
+      anyFailed: true,
+      failedTools: [{ name: "read", error: "file not found" }],
+    })
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
     await loop.run("test query", [], () => {})
 
-    expect(testPlan.steps[0].error).toBe("Инструмент вернул ошибку")
+    expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(2)
+    const secondCall = vi.mocked(mockToolExecutor.callBackend).mock.calls[1]
+    const conversation = secondCall[0] as ChatMessage[]
+    const recoveryMsg = conversation.find(
+      (m) => m.role === "user" && m.content.includes("Внимание: инструменты"),
+    )
+    expect(recoveryMsg).toBeDefined()
+    expect(recoveryMsg?.content).toContain("read")
+  })
+
+  it("run breaks after max recovery attempts exceeded", async () => {
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend).mockResolvedValue({
+      type: "tool_calls",
+      toolCalls: [{ toolName: "read", arguments: {} }],
+    })
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValue({
+      anyFailed: true,
+      failedTools: [{ name: "read", error: "error" }],
+    })
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+      undefined,
+      2,
+    )
+    const result = await loop.run("test query", [], () => {})
+
+    expect(result.role).toBe("assistant")
+    expect(result.content).toContain("максимальное число итераций")
   })
 })
