@@ -2,6 +2,8 @@ import * as vscode from "vscode"
 import type { ITool } from "../../tools/ITool"
 import type { PermissionLevel, ToolPermission, PermissionRequest, AutoApproveConfig } from "../../shared/PermissionTypes"
 
+const PERMISSION_TIMEOUT_MS = 30000
+
 /**
  * Интерфейс PermissionManager — только методы, используемые через AgentDependencies.
  */
@@ -64,7 +66,7 @@ export class PermissionManager implements IPermissionManager {
   async checkPermission(
     tool: ITool,
     args: Record<string, unknown>,
-    timeoutMs = 30000,
+    timeoutMs = PERMISSION_TIMEOUT_MS,
   ): Promise<boolean> {
     const level = this.getPermissionLevel(tool.name)
 

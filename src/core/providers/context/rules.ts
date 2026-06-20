@@ -18,8 +18,9 @@ export async function loadRulesFiles(getWorkDir: () => string): Promise<Array<{ 
         const content = await fs.readFile(path.default.join(dir, fname), "utf-8")
         rules.push({ name: fname, content: content.trim() })
       }
-    } catch {
-      // директория может не существовать
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Не удалось прочитать директорию правил: ${msg}`)
     }
   }
 
@@ -27,8 +28,9 @@ export async function loadRulesFiles(getWorkDir: () => string): Promise<Array<{ 
     try {
       const content = await fs.readFile(path.default.join(workDir, fname), "utf-8")
       rules.push({ name: fname, content: content.trim() })
-    } catch {
-      // файл может не существовать
+   } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Не удалось прочитать ${fname}: ${msg}`)
     }
   }
 
@@ -41,7 +43,7 @@ export function makeRulesProvider(
   return {
     description: {
       name: "rules",
-      displayTitle: "Rules",
+      displayTitle: "Правила",
       description: "Правила проекта",
       type: "normal",
       priority: 99,

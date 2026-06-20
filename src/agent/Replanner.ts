@@ -53,7 +53,9 @@ export class Replanner {
     try {
       const newPlan = await this.requestReplan(plan, failedStep, error, attempt)
       return { plan: newPlan, reason, attempt }
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Повторное планирование не выполнено: ${msg}`)
       return { plan: this.fallbackPlan(plan, failedStep, error), reason, attempt }
     }
   }

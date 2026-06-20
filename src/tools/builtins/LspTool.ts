@@ -11,7 +11,7 @@ import {
   executeSignatureHelp,
 } from "../../lsp/LspClient"
 
-const operations = [
+const OPERATIONS = [
   "goToDefinition",
   "findReferences",
   "hover",
@@ -22,8 +22,9 @@ const operations = [
   "goToTypeDefinition",
 ] as const
 
-type LspOperation = (typeof operations)[number]
+type LspOperation = (typeof OPERATIONS)[number]
 
+/** Инструмент для семантического анализа кода через LSP: определение, ссылки, символы, hover и т.д. */
 export class LspTool implements ITool {
   name = "lsp"
   description = "LSP-операции для семантического анализа кода: переход к определению, поиск ссылок, символы документа/workspace, всплывающая подсказка, реализация, сигнатура, тип"
@@ -36,8 +37,8 @@ export class LspTool implements ITool {
     parameters: {
       operation: {
         type: "string",
-        description: `Операция: ${operations.join(", ")}`,
-        enum: [...operations],
+        description: `Операция: ${OPERATIONS.join(", ")}`,
+        enum: [...OPERATIONS],
       },
       filePath: {
         type: "string",
@@ -69,8 +70,8 @@ export class LspTool implements ITool {
       return { output: "Не указана операция", success: false }
     }
 
-    if (!operations.includes(operation)) {
-      return { output: `Неподдерживаемая операция: ${operation}. Доступно: ${operations.join(", ")}`, success: false }
+    if (!OPERATIONS.includes(operation)) {
+      return { output: `Неподдерживаемая операция: ${operation}. Доступно: ${OPERATIONS.join(", ")}`, success: false }
     }
 
     if (!filePathRaw && operation !== "workspaceSymbol") {
@@ -100,7 +101,7 @@ export class LspTool implements ITool {
         case "goToTypeDefinition":
           return await executeGoToTypeDefinition(filePathRaw!, line, character, this.getWorkDir)
       }
-    } catch (err) {
+    } catch (err: unknown) {
       return {
         output: `LSP-ошибка: ${err instanceof Error ? err.message : String(err)}`,
         success: false,

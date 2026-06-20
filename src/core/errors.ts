@@ -1,3 +1,5 @@
+import * as vscode from "vscode"
+
 // ── Base ──────────────────────────────────────────────────
 
 /**
@@ -125,4 +127,42 @@ export class AbortError extends AgentError {
     super(message)
     this.name = "AbortError"
   }
+}
+
+// ── Error handling ─────────────────────────────────────────
+
+/**
+ * Обработать ошибку запроса к бэкенду: вызвать обратный вызов с сообщением,
+ * показать уведомление и вернуть флаг прерывания.
+ * @param err ошибка для обработки
+ * @param onMessage обратный вызов с отформатированным сообщением
+ * @param showNotification показать ли уведомление VS Code
+ * @returns true если запрос следует прервать (AbortError)
+ */
+export function handleBackendError(
+  err: unknown,
+  onMessage: (message: string) => void,
+  showNotification: boolean = true,
+): boolean {
+  if (err instanceof AbortError) {
+    onMessage("Задача остановлена пользователем")
+    return true
+  }
+
+  let message: string
+  if (err instanceof BackendError) {
+    message = `Ошибка бэкенда: ${err.message}`
+  } else if (err instanceof NeuralTowerError) {
+    message = `${err.name}: ${err.message}`
+  } else {
+    message = err instanceof Error ? err.message : "Неизвестная ошибка"
+  }
+
+  onMessage(message)
+
+  if (showNotification) {
+    vscode.window.showErrorMessage(message)
+  }
+
+  return false
 }

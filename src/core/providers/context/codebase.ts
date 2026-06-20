@@ -1,6 +1,9 @@
 ﻿import type { ContextProvider, ContextItem } from "./types"
 import type { CodebaseSearch } from "../../../repo/CodebaseSearch"
 
+const CODEBASE_TOPK = 5
+const CODEBASE_MAX_CONTENT = 2000
+
 /**
  * Контекстный провайдер для семантического поиска по коду.
  *
@@ -13,7 +16,7 @@ export function makeCodebaseProvider(
   return {
     description: {
       name: "codebase",
-      displayTitle: "Codebase",
+      displayTitle: "Кодовая база",
       description: "Семантический поиск по коду репозитория",
       type: "query",
     },
@@ -23,7 +26,7 @@ export function makeCodebaseProvider(
 
       try {
         const results = await search.search(trimmed, {
-          topK: 5,
+          topK: CODEBASE_TOPK,
           searchMode: "hybrid",
         })
 
@@ -53,7 +56,7 @@ export function makeCodebaseProvider(
 
           lines.push("")
           lines.push("`" + r.chunk.language)
-          lines.push(r.chunk.content.slice(0, 2000))
+          lines.push(r.chunk.content.slice(0, CODEBASE_MAX_CONTENT))
           lines.push("`")
           lines.push("")
         }
@@ -63,7 +66,9 @@ export function makeCodebaseProvider(
           name: "Codebase: " + trimmed,
           description: String(results.length) + " результатов",
         }]
-      } catch {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`Поиск по коду не выполнен: ${msg}`)
         return [{
           content: "Ошибка поиска по коду для \"" + trimmed + "\"",
           name: "codebase",

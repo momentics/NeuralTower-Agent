@@ -84,10 +84,10 @@ export function resolveToolPermission(
 /**
  * Встроенные режимы агента.
  */
-export const builtInModes: Record<AgentModeName, AgentMode> = {
+export const BUILT_IN_MODES: Record<AgentModeName, AgentMode> = {
   build: {
     name: "build",
-    displayName: "Build",
+    displayName: "Построение",
     description: "Основной режим: выполнение задач, редактирование файлов, запуск команд",
     priority: 10,
     transitions: ["plan", "explore"],
@@ -102,7 +102,7 @@ export const builtInModes: Record<AgentModeName, AgentMode> = {
       { tool: "todo_write", level: "allow" },
       { tool: "*", level: "ask" },
     ],
-    systemPromptAddon: `# Режим: Build
+    systemPromptAddon: `# Режим: Построение
 
 Вы работаете в режиме выполнения задач. Ваша цель — реализовать запрошенные изменения.
 
@@ -115,7 +115,7 @@ export const builtInModes: Record<AgentModeName, AgentMode> = {
 
   plan: {
     name: "plan",
-    displayName: "Plan",
+    displayName: "Планирование",
     description: "Режим планирования: анализ, исследование, создание плана без изменений",
     priority: 5,
     transitions: ["build"],
@@ -130,7 +130,7 @@ export const builtInModes: Record<AgentModeName, AgentMode> = {
       { tool: "bash", level: "deny" },
       { tool: "*", level: "deny" },
     ],
-    systemPromptAddon: `# Режим: Plan
+    systemPromptAddon: `# Режим: Планирование
 
 Вы работаете в режиме планирования. Ваша задача — проанализировать запрос,
 изучить кодовую базу и создать подробный план действий.
@@ -145,7 +145,7 @@ export const builtInModes: Record<AgentModeName, AgentMode> = {
 
   explore: {
     name: "explore",
-    displayName: "Explore",
+    displayName: "Исследование",
     description: "Режим исследования: чтение и поиск без изменений",
     priority: 3,
     transitions: ["build", "plan"],
@@ -160,7 +160,7 @@ export const builtInModes: Record<AgentModeName, AgentMode> = {
       { tool: "todo_write", level: "deny" },
       { tool: "*", level: "deny" },
     ],
-    systemPromptAddon: `# Режим: Explore
+    systemPromptAddon: `# Режим: Исследование
 
 Вы работаете в режиме исследования. Ваша задача — изучить кодовую базу,
 найти релевантные файлы и ответить на вопросы пользователя.
@@ -182,7 +182,7 @@ export class AgentModeManager {
   private customModes: Map<AgentModeName, AgentMode> = new Map()
 
   constructor() {
-    for (const [name, mode] of Object.entries(builtInModes)) {
+    for (const [name, mode] of Object.entries(BUILT_IN_MODES)) {
       this.customModes.set(name as AgentModeName, mode)
     }
   }
@@ -193,7 +193,7 @@ export class AgentModeManager {
   getMode(): AgentMode {
     return (
       this.customModes.get(this.currentMode) ??
-      builtInModes[this.currentMode]
+      BUILT_IN_MODES[this.currentMode]
     )
   }
 
@@ -236,8 +236,8 @@ export class AgentModeManager {
    */
   listModes(): AgentMode[] {
     const modes: AgentMode[] = []
-    for (const [name] of Object.entries(builtInModes)) {
-      const mode = this.customModes.get(name as AgentModeName) ?? builtInModes[name as AgentModeName]
+    for (const [name] of Object.entries(BUILT_IN_MODES)) {
+      const mode = this.customModes.get(name as AgentModeName) ?? BUILT_IN_MODES[name as AgentModeName]
       modes.push(mode)
     }
     return modes.sort((a, b) => b.priority - a.priority)

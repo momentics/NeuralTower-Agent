@@ -40,7 +40,7 @@ export class DeleteFileTool implements ITool {
         output: `Удалено: ${fp}${stat.isDirectory() ? " (директория)" : ""}`,
         success: true,
       }
-    } catch (err) {
+    } catch (err: unknown) {
       return {
         output: `Не удалось удалить: ${err instanceof Error ? err.message : String(err)}`,
         success: false,

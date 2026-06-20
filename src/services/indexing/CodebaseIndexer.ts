@@ -100,7 +100,9 @@ export class CodebaseIndexer {
       await this.search.indexChunks(result.chunks)
 
       this.setState("idle")
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Индексация кодовой базы не выполнена: ${msg}`)
       this.setState("error")
     }
   }
@@ -117,8 +119,9 @@ export class CodebaseIndexer {
       if (chunks.length > 0) {
         await this.search.indexChunks(chunks)
       }
-    } catch {
-      // Тихо пропустить ошибки
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Ошибка при индексации файла ${filePath}: ${msg}`)
     }
   }
 
@@ -128,8 +131,9 @@ export class CodebaseIndexer {
   private async onFileDeleted(filePath: string): Promise<void> {
     try {
       await this.search.deleteByFile(filePath)
-    } catch {
-      // Тихо пропустить ошибки
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Ошибка при удалении индекса файла ${filePath}: ${msg}`)
     }
   }
 

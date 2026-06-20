@@ -144,8 +144,9 @@ export class ContextManager implements IContextManager {
           content,
           revision: this.revision,
         })
-      } catch {
-        // Провайдер недоступен — пропускаем
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`Провайдер контекста недоступен: ${msg}`)
       }
     }
 
@@ -203,8 +204,9 @@ export class ContextManager implements IContextManager {
         } else {
           newContent.delete(provider.description.name)
         }
-      } catch {
-        // Провайдер недоступен
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`Провайдер контекста недоступен при обновлении: ${msg}`)
       }
     }
 

@@ -38,10 +38,10 @@ export async function fetchUrl(
   let url: URL
   try {
     url = new URL(urlString)
-  } catch {
+  } catch (_err: unknown) {
     try {
       url = new URL(`https://${urlString}`)
-    } catch {
+    } catch (_err2: unknown) {
       return {
         text: `Некорректный URL: ${urlString}`,
         title: null,
@@ -69,7 +69,7 @@ export async function fetchUrl(
       ok: response.ok,
       statusText: response.statusText,
     }
-  } catch (err) {
+  } catch (err: unknown) {
     return {
       text: `Ошибка загрузки: ${err instanceof Error ? err.message : String(err)}`,
       title: null,

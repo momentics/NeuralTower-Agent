@@ -54,8 +54,9 @@ export class FileIndex implements IFileIndex {
       try {
         const stat = await fs.stat(f)
         size = stat.size
-      } catch {
-        // пропустить нечитаемые файлы
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`Не удалось получить размер файла ${f}: ${msg}`)
       }
 
       const entry: IndexEntry = { path: f, language: lang, size }
@@ -103,8 +104,5 @@ export class FileIndex implements IFileIndex {
     this.nameMap.clear()
     this.langMap.clear()
   }
-
-  // ── Приватные методы ────────────────────────────────────
-
 
 }

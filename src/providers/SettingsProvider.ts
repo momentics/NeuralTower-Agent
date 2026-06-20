@@ -31,12 +31,19 @@ export class SettingsProvider {
     SettingsProvider.current = inst
   }
 
+  private getWebview(): vscode.Webview {
+    if (!this.panel) {
+      throw new Error("Панель не инициализирована")
+    }
+    return this.panel.webview
+  }
+
   private async loadData(): Promise<void> {
     const cfg = await this.backend.getConfig()
     const models = await this.backend.listModels().catch(() => [])
     const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
-    const autoApprove = vsCfg.get<boolean>("autoApprove.enabled", false) ?? false
-    this.panel!.webview.postMessage({
+    const autoApprove = vsCfg.get<boolean>("autoApprove.enabled", false)
+    this.getWebview().postMessage({
       type: "settingsData",
       config: { ...cfg, autoApprove },
       models,
@@ -44,7 +51,7 @@ export class SettingsProvider {
   }
 
   private setupHandler(): void {
-    this.panel!.webview.onDidReceiveMessage(async (msg: SettingsToExt) => {
+    this.getWebview().onDidReceiveMessage(async (msg: SettingsToExt) => {
       switch (msg.type) {
         case "settingsSave": {
           await this.backend.updateConfig({ url: msg.url, model: msg.model })
@@ -57,13 +64,13 @@ export class SettingsProvider {
               true,
             )
           }
-          this.panel!.webview.postMessage({ type: "settingsSaved" } as ExtToSettings)
+          this.getWebview().postMessage({ type: "settingsSaved" } as ExtToSettings)
           vscode.window.showInformationMessage("Настройки сохранены")
           break
         }
         case "settingsTest":
           const ok = await this.backend.healthCheck()
-          this.panel!.webview.postMessage({
+          this.getWebview().postMessage({
             type: "settingsTestResult",
             success: ok,
             message: ok ? "Подключено" : "Не удалось подключиться",
@@ -75,10 +82,10 @@ export class SettingsProvider {
 
   private html(): string {
     const nonce = crypto.randomBytes(16).toString("hex")
-    const css = this.panel!.webview.asWebviewUri(
+    const css = this.getWebview().asWebviewUri(
       vscode.Uri.joinPath(this.extUri, "resources", "settings.css"),
     )
-    const js = this.panel!.webview.asWebviewUri(
+    const js = this.getWebview().asWebviewUri(
       vscode.Uri.joinPath(this.extUri, "resources", "settings.js"),
     )
 
@@ -87,7 +94,7 @@ export class SettingsProvider {
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src ${this.panel!.webview.cspSource};
+    content="default-src 'none'; style-src ${this.getWebview().cspSource};
              script-src 'nonce-${nonce}';">
   <link rel="stylesheet" href="${css}">
 </head>

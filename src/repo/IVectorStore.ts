@@ -5,7 +5,7 @@
  * поиск по косинусному сходству.
  */
 
-import type { CodeChunk } from "../repo/ChunkTypes"
+import type { CodeChunk } from "./ChunkTypes"
 
 /**
  * Эмбеддинг фрагмента кода.

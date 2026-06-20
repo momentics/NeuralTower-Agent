@@ -3,7 +3,7 @@ import { NeuralTowerBackend } from "../backend/NeuralTowerBackend"
 import { AgentOrchestrator } from "../agent/AgentOrchestrator"
 import { ToolRegistry } from "../tools/ToolRegistry"
 import { SkillManager } from "../skills/SkillManager"
-import { builtInSkills } from "../skills/builtInSkills"
+import { BUILT_IN_SKILLS } from "../skills/builtInSkills"
 import { ChatProvider } from "../providers/ChatProvider"
 import { DiffViewerProvider } from "../providers/DiffViewerProvider"
 import { PersistentSessionStore } from "../shared/PersistentSessionStore"
@@ -163,8 +163,8 @@ export function createPermissionManager(
 ): PermissionManager {
   const pm = new PermissionManager(globalState)
   pm.init()
-  const autoApproveEnabled = vsCfg.get<boolean>("autoApprove.enabled", false) ?? false
-  const autoApproveTools = vsCfg.get<string[]>("autoApprove.tools", []) ?? []
+  const autoApproveEnabled = vsCfg.get<boolean>("autoApprove.enabled", false)
+  const autoApproveTools = vsCfg.get<string[]>("autoApprove.tools", [])
   pm.setAutoApprove({ enabled: autoApproveEnabled, tools: autoApproveTools, maxCost: 0 })
   return pm
 }
@@ -213,7 +213,7 @@ export async function createMCPChain(
   try {
     await mcpManager.connect()
     await mcpManager.syncWithRegistry(tools)
-  } catch (err) {
+  } catch (err: unknown) {
     console.warn(`MCP-инициализация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
   }
   return mcpManager
@@ -221,7 +221,7 @@ export async function createMCPChain(
 
 export function createSkillManager(): SkillManager {
   const skills = new SkillManager()
-  skills.registerMany(builtInSkills)
+  skills.registerMany(BUILT_IN_SKILLS)
   return skills
 }
 

@@ -132,7 +132,7 @@ export class AgentCore {
       if (workDir) {
         try {
           await plan.save(workDir)
-        } catch (err) {
+        } catch (err: unknown) {
           console.warn(`Не удалось сохранить план: ${err instanceof Error ? err.message : String(err)}`)
         }
       }

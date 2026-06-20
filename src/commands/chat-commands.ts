@@ -8,6 +8,7 @@ import type { GitService } from "../services/git/GitService"
 import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
 import { SettingsProvider } from "../providers/SettingsProvider"
 
+/** Зарегистрировать команды чата: новый чат, фокус ввода, настройки, список сессий, diff-viewer. */
 export function registerChatCommands(
   app: App,
   chatProvider: IProvider,

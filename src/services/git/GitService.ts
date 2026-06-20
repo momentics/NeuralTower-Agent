@@ -1,8 +1,13 @@
-import type { Plugin } from "../../shared/types"
 import { exec } from "child_process"
 import { promisify } from "util"
 
+import type { Plugin } from "../../shared/types"
+
 const execAsync = promisify(exec)
+
+const GIT_ROOT_TIMEOUT_MS = 5000
+const GIT_DIFF_TIMEOUT_MS = 10000
+const GIT_MAX_BUFFER = 512 * 1024
 
 export interface GitDiffResult {
   changed: string[]
@@ -39,11 +44,13 @@ export class GitService implements Plugin, IGitService {
     if (this.root) return this.root
     try {
       const { stdout } = await execAsync(`git -C "${cwd}" rev-parse --show-toplevel`, {
-        timeout: 5000,
+        timeout: GIT_ROOT_TIMEOUT_MS,
       })
       this.root = stdout.trim()
       return this.root
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Не удалось определить корень репозитория: ${msg}`)
       this.root = cwd
       return null
     }
@@ -53,7 +60,7 @@ export class GitService implements Plugin, IGitService {
     try {
       const { stdout } = await execAsync(
         `git -C "${dir}" diff --stat --numstat`,
-        { timeout: 10000 },
+        { timeout: GIT_DIFF_TIMEOUT_MS },
       )
       const lines = stdout.trim().split("\n")
       const changed: string[] = []
@@ -70,7 +77,9 @@ export class GitService implements Plugin, IGitService {
       }
 
       return { changed, additions, deletions }
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Не удалось получить изменения Git: ${msg}`)
       return { changed: [], additions: 0, deletions: 0 }
     }
   }
@@ -79,7 +88,7 @@ export class GitService implements Plugin, IGitService {
     try {
       const { stdout } = await execAsync(
         `git -C "${dir}" status --porcelain=2 --branch`,
-        { timeout: 10000 },
+        { timeout: GIT_DIFF_TIMEOUT_MS },
       )
       const headBranch = stdout.match(/^# host .* head (.*?) branch.*/m)
       const behindAhead = stdout.match(/^# .* (\d+) .* (\d+)/m)
@@ -88,7 +97,9 @@ export class GitService implements Plugin, IGitService {
         ahead: behindAhead?.[1] ? Number(behindAhead[1]) : 0,
         behind: behindAhead?.[2] ? Number(behindAhead[2]) : 0,
       }
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Не удалось получить информацию о ветке: ${msg}`)
       return null
     }
   }
@@ -97,11 +108,13 @@ export class GitService implements Plugin, IGitService {
     try {
       const { stdout } = await execAsync(
         `git -C "${dir}" diff --unified=0`,
-        { timeout: 10000, maxBuffer: 512 * 1024 },
+        { timeout: GIT_DIFF_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER },
       )
       if (!stdout.trim()) return ""
       return `## Изменения Git (не добавленные)\n\`\`\`diff\n${stdout.slice(0, 10000)}\n\`\`\``
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Не удалось получить diff: ${msg}`)
       return ""
     }
   }
@@ -110,10 +123,12 @@ export class GitService implements Plugin, IGitService {
     try {
       const { stdout } = await execAsync(
         `git -C "${dir}" diff --cached`,
-        { timeout: 10000, maxBuffer: 512 * 1024 },
+        { timeout: GIT_DIFF_TIMEOUT_MS, maxBuffer: GIT_MAX_BUFFER },
       )
       return stdout
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Не удалось получить staged diff: ${msg}`)
       return ""
     }
   }

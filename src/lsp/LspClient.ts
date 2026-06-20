@@ -6,7 +6,10 @@ const LSP_TIMEOUT_MS = 10_000
 const MAX_SYMBOL_RESULTS = 50
 const MAX_REFERENCE_RESULTS = 30
 const MAX_HOVER_CHARS = 4000
+const LSP_MAX_DEPTH = 4
+const LSP_SNIPPET_LENGTH = 200
 
+/** Вернуть текстовую метку для вида LSP-символа. */
 export function lspSymbolKindLabel(kind: vscode.SymbolKind): string {
   const map: Record<number, string> = {
     [vscode.SymbolKind.File]: "file",
@@ -39,6 +42,7 @@ export function lspSymbolKindLabel(kind: vscode.SymbolKind): string {
   return map[kind] ?? `kind:${kind}`
 }
 
+/** Форматировать дерево символов документа в строки с отступами. */
 export function formatDocumentSymbols(
   symbols: vscode.DocumentSymbol[],
   depth: number,
@@ -54,7 +58,7 @@ export function formatDocumentSymbols(
     const detail = sym.detail ? ` (${sym.detail})` : ""
     results.push(`${indent}${kindLabel} ${sym.name}${detail} [${range}]`)
 
-    if (sym.children && sym.children.length > 0 && depth < 4 && results.length < maxResults) {
+    if (sym.children && sym.children.length > 0 && depth < LSP_MAX_DEPTH && results.length < maxResults) {
       formatDocumentSymbols(sym.children, depth + 1, results, maxResults)
     }
   }
@@ -62,6 +66,7 @@ export function formatDocumentSymbols(
   return results
 }
 
+/** Выполнить асинхронную функцию с таймаутом. */
 export async function withTimeout<T>(fn: () => Promise<T>, label: string, timeoutMs: number = LSP_TIMEOUT_MS): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
   const timeoutPromise = new Promise<never>((_, reject) => {
@@ -384,16 +389,18 @@ function resolveFilePath(filePathRaw: string, getWorkDir: () => string): string 
 async function ensureFileExists(filePath: string): Promise<void> {
   try {
     await fs.access(filePath)
-  } catch {
-    throw new Error(`Файл не найден: ${filePath}`)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`Файл не найден: ${filePath} (${msg})`)
   }
 }
 
 async function openDocumentForLsp(uri: vscode.Uri): Promise<void> {
   try {
     await vscode.workspace.openTextDocument(uri)
-  } catch {
-    // Документ может быть бинарным или недоступным
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`Не удалось открыть документ для LSP: ${msg}`)
   }
 }
 
@@ -428,12 +435,15 @@ async function formatLocations(
   return lines
 }
 
+/** Вернуть текст строки по LSP-локации. */
 export async function getLineSnippet(location: vscode.Location): Promise<string> {
   try {
     const doc = await vscode.workspace.openTextDocument(location.uri)
     const line = doc.lineAt(location.range.start.line)
-    return line.text.trim().slice(0, 200)
-  } catch {
+    return line.text.trim().slice(0, LSP_SNIPPET_LENGTH)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`Не удалось получить сниппет строки: ${msg}`)
     return ""
   }
 }
@@ -448,6 +458,7 @@ function groupLocationsByFile(locations: vscode.Location[]): Record<string, vsco
   return grouped
 }
 
+/** Преобразовать Markdown-содержимое LSP в обычный текст. */
 export function markdownToString(content: vscode.MarkdownString | vscode.MarkedString | vscode.MarkedString[]): string {
   if (Array.isArray(content)) {
     return content.map((c) => markdownToString(c)).filter(Boolean).join("\n\n")

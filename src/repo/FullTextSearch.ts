@@ -10,6 +10,10 @@
 
 import type { CodeChunk } from "./ChunkTypes"
 
+const FTS_MIN_TOKEN_LENGTH = 2
+const FTS_LENGTH_PENALTY = 2000
+const FTS_MAX_MATCH_COUNT = 10
+
 /**
  * Результат полнотекстового поиска.
  */
@@ -55,7 +59,7 @@ export class FullTextSearch {
    * @param topK число результатов
    */
   search(query: string, topK: number): FtsResult[] {
-    const tokens = this.tokenize(query).filter((t) => t.length > 2)
+    const tokens = this.tokenize(query).filter((t) => t.length > FTS_MIN_TOKEN_LENGTH)
 
     if (tokens.length === 0) return []
 
@@ -92,8 +96,8 @@ export class FullTextSearch {
 
       // Оценка: учитывает число совпаждений токенов и частоту
       const tokenRatio = tokenMatches / tokens.length
-      const lengthPenalty = Math.min(1, 2000 / chunk.charLength)
-      const score = tokenRatio * lengthPenalty * (0.5 + 0.5 * Math.min(matchCount, 10) / 10)
+ const lengthPenalty = Math.min(1, FTS_LENGTH_PENALTY / chunk.charLength)
+      const score = tokenRatio * lengthPenalty * (0.5 + 0.5 * Math.min(matchCount, FTS_MAX_MATCH_COUNT) / FTS_MAX_MATCH_COUNT)
 
       if (score > 0) {
         scores.push({ index: idx, score, matchCount })

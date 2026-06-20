@@ -60,7 +60,7 @@ vi.mock("./skills/SkillManager", () => ({
 }))
 
 vi.mock("./skills/builtInSkills", () => ({
-  builtInSkills: [],
+  BUILT_IN_SKILLS: [],
 }))
 
 vi.mock("./providers/ChatProvider", () => ({

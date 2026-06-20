@@ -33,7 +33,7 @@ export class CreateDirTool implements ITool {
     try {
       await fs.mkdir(resolved, { recursive: Boolean(args.recursive ?? false) })
       return { output: `Директория создана: ${p}`, success: true }
-    } catch (err) {
+    } catch (err: unknown) {
       return {
         output: `Не удалось создать директорию: ${err instanceof Error ? err.message : String(err)}`,
         success: false,

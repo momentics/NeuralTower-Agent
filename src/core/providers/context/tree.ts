@@ -1,12 +1,14 @@
 import type { ContextProvider, ContextItem } from "./types"
 
+const CONTEXT_TREE_MAX_DEPTH = 4
+
 async function buildTree(
   root: string,
   current: string,
   prefix: string,
   isLast: boolean,
   depth: number,
-  maxDepth = 4,
+  maxDepth = CONTEXT_TREE_MAX_DEPTH,
 ): Promise<string> {
   const fs = await import("fs/promises")
   const path = await import("path")
@@ -16,7 +18,7 @@ async function buildTree(
   let entries: { name: string; isDirectory(): boolean }[]
   try {
     entries = await fs.readdir(current, { withFileTypes: true })
-  } catch (err) {
+  } catch (err: unknown) {
     if (current === root) throw err
     entries = []
   }
@@ -60,7 +62,7 @@ export function makeTreeProvider(
   return {
     description: {
       name: "tree",
-      displayTitle: "Tree",
+      displayTitle: "Дерево",
       description: "Дерево директорий проекта",
       type: "query",
     },
@@ -77,7 +79,7 @@ export function makeTreeProvider(
           name: `Tree: ${path.default.basename(targetDir) || targetDir}`,
           description: `${lines.split("\n").length} строк`,
         }]
-      } catch (err) {
+      } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         return [{ content: `Не удалось построить дерево для ${targetDir}: ${msg}`, name: "tree", description: "error" }]
       }

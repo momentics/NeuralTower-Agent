@@ -135,7 +135,7 @@ export function makeLspProvider(
         }
 
         return [{ content: `Некорректный запрос: ${trimmed}`, name: "lsp", description: "error" }]
-      } catch (err) {
+      } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         return [{ content: `LSP-ошибка: ${msg}`, name: "lsp", description: "error" }]
       }

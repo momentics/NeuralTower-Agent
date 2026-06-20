@@ -57,7 +57,7 @@ function getExt(filePath: string): string {
 
 export function detectLanguageShort(filePath: string): string {
   const ext = getExt(filePath)
-  return EXT_MAP[ext]?.short ?? ext.replace(".", "") ?? "unknown"
+  return EXT_MAP[ext]?.short ?? ext.replace(".", "")
 }
 
 export function detectLanguageDisplay(filePath: string): string {

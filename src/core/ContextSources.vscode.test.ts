@@ -407,7 +407,7 @@ describe("ContextSources.vscode", () => {
       const items = await provider.resolve("")
 
       expect(items).toHaveLength(1)
-      expect(items[0].content).toContain("Поток: none")
+      expect(items[0].content).toContain("Поток: нет")
     })
 
     it("handles customRequest error gracefully", async () => {
@@ -471,7 +471,7 @@ describe("ContextSources.vscode", () => {
       expect(items).toHaveLength(1)
       expect(items[0].content).toContain("Терминалов: 2")
       expect(items[0].content).toContain("Terminal 1")
-      expect(items[0].content).toContain("active")
+      expect(items[0].content).toContain("активен")
     })
 
     it("handles no active terminal", async () => {
@@ -483,8 +483,8 @@ describe("ContextSources.vscode", () => {
       const items = await provider.resolve("")
 
       expect(items).toHaveLength(1)
-      expect(items[0].content).toContain("none")
-      expect(items[0].content).toContain("inactive")
+      expect(items[0].content).toContain("нет")
+      expect(items[0].content).toContain("неактивен")
     })
   })
 

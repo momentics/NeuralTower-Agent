@@ -21,7 +21,9 @@ export class AgentLoop {
   private readonly maxCompactions: number
 
   private pushSessionMessage(msg: ChatMessage): void {
-    this.sessionContext?.pushMessage(msg)
+    if (this.sessionContext) {
+      this.sessionContext.pushMessage(msg)
+    }
   }
 
   constructor(
@@ -85,7 +87,7 @@ export class AgentLoop {
         conversation.slice(1),
         systemPrompt,
       )
-    } catch (err) {
+    } catch (err: unknown) {
       console.warn(`Компактизация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
       compactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
     }
@@ -119,7 +121,7 @@ export class AgentLoop {
           workingConversation.slice(1),
           systemPrompt,
         )
-      } catch (err) {
+      } catch (err: unknown) {
         console.warn(`Компактизация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
         loopCompactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
       }
@@ -221,7 +223,7 @@ export class AgentLoop {
         } else {
           break
         }
-      } catch (err) {
+      } catch (err: unknown) {
         anyFailed = true
         const errorMessage = err instanceof Error ? err.message : String(err)
         failedTools = [{ name: "backend", error: errorMessage }]

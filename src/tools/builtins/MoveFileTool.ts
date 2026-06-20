@@ -41,7 +41,7 @@ export class MoveFileTool implements ITool {
       await fs.mkdir(dstDir, { recursive: true })
       await fs.rename(resolvedSrc, resolvedDst)
       return { output: `Перемещено: ${src} -> ${dst}`, success: true }
-    } catch (err) {
+    } catch (err: unknown) {
       return {
         output: `Не удалось переместить: ${err instanceof Error ? err.message : String(err)}`,
         success: false,

@@ -3,6 +3,9 @@ import type { IBackend, BackendConfig, ChatMessage, ToolCall, ToolDefinition } f
 import { BackendError, ConnectionError, TimeoutError } from "../core/errors"
 import { loadDefaultBackendConfig } from "../core/config"
 
+const RETRY_BASE_DELAY_MS = 1000
+const RETRY_MAX_DELAY_MS = 10000
+
 /**
  * Бэкенд Neural Tower. Подключается к локальному серверу
  * SGLang/vLLM на аппаратном узле Neural Tower (4× V100, 128 ГБ HBM2).
@@ -47,7 +50,9 @@ export class NeuralTowerBackend implements IBackend {
       const cfg = await this.getConfig()
       await this.request(`${cfg.url}/v1/models`)
       return true
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Проверка здоровья бэкенда не выполнена: ${msg}`)
       return false
     }
   }
@@ -141,7 +146,10 @@ export class NeuralTowerBackend implements IBackend {
                   if (tc.function?.arguments) existing.arguments += tc.function.arguments
                 }
               }
-            } catch { /* пропустить некорректные данные SSE */ }
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err)
+              console.error(`Некорректные данные SSE: ${msg}`)
+            }
           }
         }
       }
@@ -178,8 +186,9 @@ export class NeuralTowerBackend implements IBackend {
 
     try {
       return JSON.parse(content) as T
-    } catch {
-      throw new BackendError(`Бэкенд вернул не-JSON: ${content.slice(0, 200)}`)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      throw new BackendError(`Бэкенд вернул не-JSON: ${content.slice(0, 200)} (${msg})`)
     }
   }
 
@@ -191,7 +200,7 @@ export class NeuralTowerBackend implements IBackend {
 
     for (let attempt = 0; attempt <= cfg.maxRetries; attempt++) {
       if (attempt > 0) {
-        const delay = Math.min(1000 * Math.pow(2, attempt - 1), 10000)
+        const delay = Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1), RETRY_MAX_DELAY_MS)
         await new Promise((r) => setTimeout(r, delay))
       }
 
@@ -207,7 +216,7 @@ export class NeuralTowerBackend implements IBackend {
           throw new BackendError(`HTTP ${res.status}: ${body}`)
         }
         return res
-      } catch (err) {
+      } catch (err: unknown) {
         if (err instanceof BackendError) {
           lastError = err
         } else if (err instanceof DOMException && err.name === "AbortError") {

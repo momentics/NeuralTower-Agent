@@ -48,7 +48,7 @@ export class ToolRegistry {
     try {
       const result = await tool.execute(args)
       return { ...result, durationMs: Date.now() - start }
-    } catch (err) {
+    } catch (err: unknown) {
       const msg = err instanceof ToolError ? `${err.name}: ${err.message}` : err instanceof Error ? err.message : String(err)
       return {
         output: `Инструмент "${name}" не выполнен: ${msg}`,
@@ -78,11 +78,11 @@ export class ToolRegistry {
   /**
    * Сформировать JSON Schema для tool_choice / вызова функций.
    */
-  toToolDefinitions(): Array<{ name: string; description: string; parameters: object }> {
+  toToolDefinitions(): Array<{ name: string; description: string; parameters: Record<string, unknown> }> {
     return this.list().map((t) => ({
       name: t.name,
       description: t.description,
-      parameters: t.schema,
+      parameters: t.schema as unknown as Record<string, unknown>,
     }))
   }
 

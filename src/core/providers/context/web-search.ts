@@ -1,10 +1,14 @@
 import type { ContextProvider, ContextItem } from "./types"
 
+const CONTEXT_TIMEOUT_MS = 15000
+const WEB_SEARCH_MAX_TOPICS = 8
+const WEB_SEARCH_MAX_CONTENT = 2000
+
 export function makeWebSearchProvider(): ContextProvider {
   return {
     description: {
       name: "web",
-      displayTitle: "Web Search",
+      displayTitle: "Поиск в сети",
       description: "Поиск в интернете",
       type: "query",
     },
@@ -14,7 +18,7 @@ export function makeWebSearchProvider(): ContextProvider {
 
       try {
         const controller = new AbortController()
-        const timer = setTimeout(() => controller.abort(), 15000)
+        const timer = setTimeout(() => controller.abort(), CONTEXT_TIMEOUT_MS)
         const resp = await fetch(
           `https://api.duckduckgo.com/?q=${encodeURIComponent(trimmed)}&format=json`,
           { signal: controller.signal },
@@ -28,7 +32,7 @@ export function makeWebSearchProvider(): ContextProvider {
         const data = await resp.json() as Record<string, unknown>
         const abstract = (data.Abstract as string) ?? "Результаты не найдены"
         const related = ((data.RelatedTopics as unknown[]) ?? [])
-          .slice(0, 8)
+          .slice(0, WEB_SEARCH_MAX_TOPICS)
           .map((t: unknown) => {
             if (typeof t === "string") return t
             if (typeof t === "object" && t !== null) {
@@ -46,7 +50,7 @@ export function makeWebSearchProvider(): ContextProvider {
         }]
 
         return items
-      } catch (err) {
+      } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         return [{ content: `Ошибка поиска: ${msg}`, name: "web", description: "error" }]
       }

@@ -17,7 +17,6 @@ import type {
 import type { IChunker } from "./Chunker"
 import { LineChunker, TypeScriptChunker, createDefaultChunkerConfig } from "./Chunker"
 import { detectLanguageShort } from "../utils/LanguageDetector"
-import { walkDirectory } from "../utils/FileSystem"
 export { createDefaultChunkerConfig } from "./Chunker"
 
 /**
@@ -61,8 +60,9 @@ export class CodebaseChunker {
 
         chunks.push(...result.chunks)
         filesProcessed++
-      } catch {
-        // Пропустить нечитаемые файлы
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`Не удалось прочитать файл ${entry.path}: ${msg}`)
         filesSkipped++
       }
     }
@@ -85,7 +85,9 @@ export class CodebaseChunker {
       const chunker = this.getChunkerForLanguage(lang)
       const result = chunker.chunk(filePath, content)
       return result.chunks
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Не удалось обработать файл ${filePath}: ${msg}`)
       return []
     }
   }

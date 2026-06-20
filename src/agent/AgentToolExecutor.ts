@@ -26,7 +26,7 @@ export class AgentToolExecutor {
     signal?: AbortSignal,
   ): Promise<AgentTurnResult> {
     if (signal?.aborted) {
-      throw new AbortError("Task aborted")
+      throw new AbortError("Задача прервана")
     }
 
     const wrappedChunk = (text: string) => {
@@ -105,7 +105,7 @@ export class AgentToolExecutor {
 
       try {
         toolResult = await this.toolRegistry.invoke(tc.toolName, resolvedArgs)
-      } catch (err) {
+      } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : String(err)
         toolResult = { output: `Ошибка выполнения: ${errorMessage}`, success: false }
       }
@@ -164,8 +164,9 @@ const calls: AgentToolCall[] = []
             arguments: parsed.args as Record<string, unknown>,
           })
         }
-      } catch {
-        // пропустить некорректные данные
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`Некорректные данные вызова инструмента: ${msg}`)
       }
     }
 
@@ -215,8 +216,9 @@ function parseBackendToolCalls(backendCalls: BackendToolCall[]): AgentToolCall[]
     let args: Record<string, unknown> = {}
     try {
       args = JSON.parse(bc.arguments) as Record<string, unknown>
-    } catch {
-      // невалидный JSON — пропустить
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Невалидный JSON аргументов: ${msg}`)
       continue
     }
     calls.push({

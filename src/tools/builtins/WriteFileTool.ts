@@ -36,7 +36,7 @@ export class WriteFileTool implements ITool {
       await fs.mkdir(dir, { recursive: true })
       await fs.writeFile(resolved, content, "utf-8")
       return { output: `Записано ${content.length} байт в ${fp}`, success: true }
-    } catch (err) {
+    } catch (err: unknown) {
       return {
         output: `Не удалось записать файл: ${err instanceof Error ? err.message : String(err)}`,
         success: false,

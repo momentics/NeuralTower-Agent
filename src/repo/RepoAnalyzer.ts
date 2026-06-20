@@ -52,7 +52,7 @@ export class RepoAnalyzer {
 
     return {
       fileCount: files.length,
-      dirCount: new Set(files.map((f) => f.split(path.sep)[0])).size,
+      dirCount: this.countAllDirectories(files),
       languages,
       buildSystems,
       topDirs,
@@ -74,7 +74,9 @@ export class RepoAnalyzer {
         packages: pkg.workspaces ?? [],
         workspaces: !!pkg.workspaces,
       }
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Не удалось прочитать package.json: ${msg}`)
       return { packages: [], workspaces: false }
     }
   }
@@ -113,6 +115,26 @@ export class RepoAnalyzer {
       if (parts.length > 1) dirs.add(parts[0])
     }
     return [...dirs]
+  }
+
+  private countTopDirectories(files: string[]): number {
+    const dirs = new Set<string>()
+    for (const f of files) {
+      const parts = f.split(path.sep)
+      if (parts.length > 1) dirs.add(parts[0])
+    }
+    return dirs.size
+  }
+
+  private countAllDirectories(files: string[]): number {
+    const dirs = new Set<string>()
+    for (const f of files) {
+      const parts = f.split(path.sep)
+      for (let i = 0; i < parts.length - 1; i++) {
+        dirs.add(parts.slice(0, i + 1).join(path.sep))
+      }
+    }
+    return dirs.size
   }
 
   private findNotableFiles(files: string[], root: string): string[] {

@@ -1,8 +1,6 @@
+import * as vscode from "vscode"
+
 import type { App } from "../core/App"
-import { registerEditorCommands } from "./editor-commands"
-import { registerGitCommands } from "./git-commands"
-import { registerChatCommands } from "./chat-commands"
-import { registerCodeActionCommands } from "./code-action-commands"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IProvider } from "../core/IProvider"
 import type { TodoStore } from "../agent/TodoStore"
@@ -11,7 +9,10 @@ import type { GitService } from "../services/git/GitService"
 import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
 import type { CommitMessageService } from "../services/commit-message/CommitMessageService"
 import type { CodebaseIndexer } from "../services/indexing/CodebaseIndexer"
-import * as vscode from "vscode"
+import { registerEditorCommands } from "./editor-commands"
+import { registerGitCommands } from "./git-commands"
+import { registerChatCommands } from "./chat-commands"
+import { registerCodeActionCommands } from "./code-action-commands"
 
 export interface CommandDeps {
   app: App
@@ -26,6 +27,7 @@ export interface CommandDeps {
   codebaseIndexer: CodebaseIndexer
 }
 
+/** Зарегистрировать все команды расширения. */
 export function registerAllCommands(deps: CommandDeps): void {
   registerEditorCommands(deps.app, deps.agent, deps.gitService, deps.diffViewer)
   registerGitCommands(deps.app, deps.commitMessageService)

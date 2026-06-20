@@ -129,7 +129,7 @@ export class AgentOrchestrator {
       const handle = await subagent.run(task, () => {})
       subagent.dispose()
       return handle.content
-    } catch (err) {
+    } catch (err: unknown) {
       subagent.dispose()
       return `Ошибка субагента: ${err instanceof Error ? err.message : String(err)}`
     }

@@ -216,7 +216,9 @@ export class Compactor {
         },
       ])
       return summary.summary || this.fallbackSummary(messages)
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Компактизация не выполнена: ${msg}`)
       return this.fallbackSummary(messages)
     }
   }

@@ -2,6 +2,12 @@ import * as vscode from "vscode"
 import type { IBackend } from "../../core/IBackend"
 import type { Plugin } from "../../shared/types"
 
+const AUTOCOMPLETE_DEBOUNCE_MS = 150
+const AUTOCOMPLETE_MAX_PROMPT_TOKENS = 2048
+const AUTOCOMPLETE_DIFF_TRUNCATE = 10000
+const AUTOCOMPLETE_CONTEXT_BEFORE = 30
+const AUTOCOMPLETE_CONTEXT_AFTER = 10
+
 /**
  * Сервис автодополнения кода (Inline Completion).
  * Подключается к бэкенду Neural Tower для генерации
@@ -24,15 +30,15 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
   // ── Настройки ───────────────────────────────────────────
 
   private get enabled(): boolean {
-    return vscode.workspace.getConfiguration("neuralTowerAgent").get<boolean>("autocomplete.enabled", true) ?? true
+    return vscode.workspace.getConfiguration("neuralTowerAgent").get<boolean>("autocomplete.enabled", true)
   }
 
   private get debounceMs(): number {
-    return vscode.workspace.getConfiguration("neuralTowerAgent").get<number>("autocomplete.debounceMs", 150) ?? 150
+    return vscode.workspace.getConfiguration("neuralTowerAgent").get<number>("autocomplete.debounceMs", AUTOCOMPLETE_DEBOUNCE_MS) ?? AUTOCOMPLETE_DEBOUNCE_MS
   }
 
   private get maxPromptTokens(): number {
-    return vscode.workspace.getConfiguration("neuralTowerAgent").get<number>("autocomplete.maxPromptTokens", 2048) ?? 2048
+    return vscode.workspace.getConfiguration("neuralTowerAgent").get<number>("autocomplete.maxPromptTokens", AUTOCOMPLETE_MAX_PROMPT_TOKENS) ?? AUTOCOMPLETE_MAX_PROMPT_TOKENS
   }
 
   // ── Жизненный цикл плагина ──────────────────────────────
@@ -91,7 +97,9 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
             this.cache.set(cacheKey, items)
           }
           resolve(items)
-        } catch {
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error(`Автодополнение не выполнено: ${msg}`)
           resolve(undefined)
         }
       }, this.debounceMs)
@@ -141,7 +149,9 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
 
       const item = new vscode.InlineCompletionItem(cleaned, range)
       return [item]
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Встроенное автодополнение не выполнено: ${msg}`)
       return undefined
     } finally {
       if (this.pendingAbort) {
@@ -172,8 +182,8 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
     const cursorCol = lines[cursorLine].length
 
     // ── Взять контекстные строки до и после курсора ────────
-    const contextLinesBefore = 30
-    const contextLinesAfter = 10
+    const contextLinesBefore = AUTOCOMPLETE_CONTEXT_BEFORE
+    const contextLinesAfter = AUTOCOMPLETE_CONTEXT_AFTER
     const startLine = Math.max(0, cursorLine - contextLinesBefore)
     const endLine = Math.min(totalLines, cursorLine + contextLinesAfter)
 

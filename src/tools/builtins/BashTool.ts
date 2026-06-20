@@ -1,6 +1,9 @@
 import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
-import { spawn } from "child_process"
+import { spawn } from "node:child_process"
+
+const BASH_DEFAULT_TIMEOUT_MS = 30000
+const BASH_MAX_BUFFER = 1024 * 1024
 
 /**
  * Выполнить команду оболочки. Настраиваемый таймаут и рабочая директория.
@@ -17,7 +20,7 @@ export class BashTool implements ITool {
     description: "Выполнить команду оболочки",
     parameters: {
       command: { type: "string", description: "Команда оболочки для выполнения" },
-      timeout: { type: "number", description: "Таймаут в миллисекундах (по умолчанию 30000)", default: 30000 },
+      timeout: { type: "number", description: "Таймаут в миллисекундах (по умолчанию 30000)", default: BASH_DEFAULT_TIMEOUT_MS },
       workdir: { type: "string", description: "Рабочая директория" },
     },
     required: ["command"],
@@ -26,14 +29,14 @@ export class BashTool implements ITool {
   async execute(args: Record<string, unknown>): Promise<ToolResult> {
     const cmd = String(args.command ?? "")
     if (!cmd) return { output: "Не указана команда", success: false }
-    const timeout = Number(args.timeout ?? 30000)
+    const timeout = Number(args.timeout ?? BASH_DEFAULT_TIMEOUT_MS)
     const workdir = args.workdir ? String(args.workdir) : undefined
     try {
       const { stdout, stderr } = await this.runCommand(cmd, timeout, workdir)
       const outTrimmed = stdout.trim()
       const out = (outTrimmed ? stdout : "") + (stderr ? `\nВЫВОД ОШИБОК:\n${stderr}` : "")
       return { output: out || "(нет вывода)", success: true }
-    } catch (err) {
+    } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
       return { output: `Команда не выполнена: ${msg}`, success: false }
     }
@@ -70,7 +73,7 @@ export class BashTool implements ITool {
 
       const stdoutChunks: Buffer[] = []
       const stderrChunks: Buffer[] = []
-      const maxBuffer = 1024 * 1024
+      const maxBuffer = BASH_MAX_BUFFER
       let stdoutSize = 0
       let stderrSize = 0
 

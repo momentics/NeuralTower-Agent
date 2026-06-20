@@ -129,7 +129,7 @@ export class SubagentRunner {
         }
         onDone?.(result)
         return result
-      } catch (err) {
+      } catch (err: unknown) {
         const duration = Date.now() - startTime
         const isCancelled = abortController.signal.aborted
         const result: SubagentResult = {

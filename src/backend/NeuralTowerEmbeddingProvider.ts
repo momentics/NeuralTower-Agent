@@ -11,21 +11,26 @@
 import type { IEmbeddingProvider, EmbeddingProviderConfig } from "./IEmbeddingProvider"
 import { BackendError, ConnectionError } from "../core/errors"
 
+const DEFAULT_EMBEDDING_DIMENSION = 1536
+const DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
+const DEFAULT_BACKEND_URL = "http://localhost:30000"
+const EMBEDDING_TIMEOUT_MS = 30000
+
 /**
  * Провайдер эмбеддингов Neural Tower.
  */
 export class NeuralTowerEmbeddingProvider implements IEmbeddingProvider {
   private config: EmbeddingProviderConfig
   private _available = false
-  private _dimension = 1536
-  private _modelName = "nomic-embed-text"
+ private _dimension = DEFAULT_EMBEDDING_DIMENSION
+  private _modelName = DEFAULT_EMBEDDING_MODEL
 
   constructor(config?: Partial<EmbeddingProviderConfig>) {
     this.config = {
-      baseUrl: config?.baseUrl ?? "http://localhost:30000",
-      model: config?.model ?? "nomic-embed-text",
+      baseUrl: config?.baseUrl ?? DEFAULT_BACKEND_URL,
+      model: config?.model ?? DEFAULT_EMBEDDING_MODEL,
       batchSize: config?.batchSize ?? 256,
-      timeoutMs: config?.timeoutMs ?? 30000,
+      timeoutMs: config?.timeoutMs ?? EMBEDDING_TIMEOUT_MS,
     }
     this._modelName = this.config.model
   }
@@ -89,7 +94,7 @@ export class NeuralTowerEmbeddingProvider implements IEmbeddingProvider {
         data.data?.map((d) => d.embedding ?? new Array(this._dimension).fill(0)) ??
         texts.map(() => new Array(this._dimension).fill(0))
       )
-    } catch (err) {
+   } catch (err: unknown) {
       if (err instanceof BackendError) throw err
       if (err instanceof DOMException && err.name === "AbortError") {
         throw new ConnectionError("Запрос эмбеддинга прерван по таймауту")
@@ -111,7 +116,9 @@ export class NeuralTowerEmbeddingProvider implements IEmbeddingProvider {
         this._available = true
         this._dimension = testEmbedding[0].length
       }
-    } catch {
+   } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Проверка доступности эмбеддингов не выполнена: ${msg}`)
       this._available = false
     }
   }

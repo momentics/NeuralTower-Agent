@@ -8,6 +8,9 @@ import type {
   PersistedMessage,
 } from "./SessionTypes"
 
+const SESSION_TITLE_TRUNCATE = 60
+const DEFAULT_SESSION_TITLE = "Без названия"
+
 export interface ISessionStore {
   init(): Promise<void>
   push(message: ChatMessage): Promise<void>
@@ -77,7 +80,9 @@ export class PersistentSessionStore implements ISessionStore {
         if (!this.data.sessions.length && !this.data.activeId) {
           this.createDefault()
         }
-      } catch {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`Не удалось загрузить хранилище сессий: ${msg}`)
         this.data = { ...DEFAULT_DATA }
         this.createDefault()
       }
@@ -117,8 +122,8 @@ export class PersistentSessionStore implements ISessionStore {
       if (session) {
         session.updatedAt = Date.now()
         session.messageCount++
-        if (session.title === "Без названия" && message.role === "user") {
-          session.title = message.content.slice(0, 60)
+        if (session.title === DEFAULT_SESSION_TITLE && message.role === "user") {
+          session.title = message.content.slice(0, SESSION_TITLE_TRUNCATE)
         }
       }
       if (this.data.sessions.length > this.maxSessions) {
@@ -133,7 +138,7 @@ export class PersistentSessionStore implements ISessionStore {
       const id = `session-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       this.data.sessions.push({
         id,
-        title: "Без названия",
+        title: DEFAULT_SESSION_TITLE,
         pinned: false,
         createdAt: Date.now(),
         updatedAt: Date.now(),
@@ -226,7 +231,7 @@ export class PersistentSessionStore implements ISessionStore {
     const id = "default"
     this.data.sessions = [{
       id,
-      title: "Без названия",
+      title: DEFAULT_SESSION_TITLE,
       pinned: false,
       createdAt: Date.now(),
       updatedAt: Date.now(),

@@ -7,7 +7,10 @@ import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { NotificationService } from "../services/notification/NotificationService"
 import type { PermissionManager } from "../services/permission/PermissionManager"
 import type { WebviewToExt, ExtToWebview } from "../shared/messages"
-import { AbortError, BackendError, NeuralTowerError } from "../core/errors"
+import { handleBackendError } from "../core/errors"
+
+const ARGS_LOG_TRUNCATE = 200
+const PLAN_MARKER = "__PLAN__"
 
 export class ChatProvider implements IProvider {
   public readonly viewType = "neuralTowerAgent.chat"
@@ -51,10 +54,17 @@ export class ChatProvider implements IProvider {
     this.panel = undefined
   }
 
+  private getWebview(): vscode.Webview {
+    if (!this.panel) {
+      throw new Error("Панель не инициализирована")
+    }
+    return this.panel.webview
+  }
+
   // ── Обработка сообщений ─────────────────────────────────
 
   private setupHandler(): void {
-    this.panel!.webview.onDidReceiveMessage(async (msg: WebviewToExt) => {
+    this.getWebview().onDidReceiveMessage(async (msg: WebviewToExt) => {
       if (this.streaming && msg.type !== "permissionResponse" && msg.type !== "stopAgent") return
 
       switch (msg.type) {
@@ -104,7 +114,7 @@ export class ChatProvider implements IProvider {
           type: "permissionRequest",
           requestId: req.id ?? "",
           toolName: req.toolName,
-          description: `Инструмент "${req.toolName}" хочет выполнить вызов с аргументами: ${JSON.stringify(req.args).slice(0, 200)}`,
+          description: `Инструмент "${req.toolName}" хочет выполнить вызов с аргументами: ${JSON.stringify(req.args).slice(0, ARGS_LOG_TRUNCATE)}`,
         } as ExtToWebview)
       } else {
         const result = await this.notificationService.askPermission(
@@ -129,21 +139,21 @@ export class ChatProvider implements IProvider {
   private async handleMessage(content: string): Promise<void> {
     this.streaming = true
     this.abortController = new AbortController()
-    this.panel!.webview.postMessage({ type: "messageConfirmed", content } as ExtToWebview)
+    this.getWebview().postMessage({ type: "messageConfirmed", content } as ExtToWebview)
 
     await this.sessionStore.push({ role: "user", content, timestamp: Date.now() })
 
     try {
       const result = await this.agent.run(content, (chunk) => {
-        this.panel!.webview.postMessage({ type: "streamChunk", text: chunk } as ExtToWebview)
+        this.getWebview().postMessage({ type: "streamChunk", text: chunk } as ExtToWebview)
       }, (toolName, args) => {
-        this.panel!.webview.postMessage({
+        this.getWebview().postMessage({
           type: "toolUse",
           toolName,
           args: JSON.stringify(args),
         } as ExtToWebview)
       }, (toolName, result) => {
-        this.panel!.webview.postMessage({
+        this.getWebview().postMessage({
           type: "toolResult",
           toolName,
           output: result.output,
@@ -158,42 +168,18 @@ export class ChatProvider implements IProvider {
       if (plan) {
         await this.sessionStore.push({
           role: "system",
-          content: `__PLAN__${JSON.stringify(plan.toJSON())}`,
+          content: `${PLAN_MARKER}${JSON.stringify(plan.toJSON())}`,
           timestamp: Date.now(),
         })
       }
 
-      this.panel!.webview.postMessage({ type: "streamDone" } as ExtToWebview)
-      this.panel!.webview.postMessage({ type: "agentDone" } as ExtToWebview)
+      this.getWebview().postMessage({ type: "streamDone" } as ExtToWebview)
+      this.getWebview().postMessage({ type: "agentDone" } as ExtToWebview)
       this.notificationService.show("agentDone", "Агент завершил задачу")
-    } catch (err) {
-      if (err instanceof AbortError) {
-        this.panel!.webview.postMessage({
-          type: "streamError",
-          error: "Задача остановлена пользователем",
-        } as ExtToWebview)
-      } else if (err instanceof BackendError) {
-        const errorMsg = `Ошибка бэкенда: ${err.message}`
-        this.panel!.webview.postMessage({
-          type: "streamError",
-          error: errorMsg,
-        } as ExtToWebview)
-        this.notificationService.show("error", errorMsg)
-      } else if (err instanceof NeuralTowerError) {
-        const errorMsg = `${err.name}: ${err.message}`
-        this.panel!.webview.postMessage({
-          type: "streamError",
-          error: errorMsg,
-        } as ExtToWebview)
-        this.notificationService.show("error", errorMsg)
-      } else {
-        const errorMsg = err instanceof Error ? err.message : "Неизвестная ошибка"
-        this.panel!.webview.postMessage({
-          type: "streamError",
-          error: errorMsg,
-        } as ExtToWebview)
-        this.notificationService.show("error", errorMsg)
-      }
+    } catch (err: unknown) {
+      handleBackendError(err, (msg) => {
+        this.getWebview().postMessage({ type: "streamError", error: msg } as ExtToWebview)
+      }, true)
     } finally {
       this.streaming = false
       this.abortController = null
@@ -205,10 +191,10 @@ export class ChatProvider implements IProvider {
     const messages = this.sessionStore.getActiveMessages()
     for (const msg of messages) {
       if (msg.role === "user") {
-        this.panel!.webview.postMessage({ type: "messageConfirmed", content: msg.content } as ExtToWebview)
+        this.getWebview().postMessage({ type: "messageConfirmed", content: msg.content } as ExtToWebview)
       } else if (msg.role === "assistant") {
-        this.panel!.webview.postMessage({ type: "streamChunk", text: msg.content } as ExtToWebview)
-        this.panel!.webview.postMessage({ type: "streamDone" } as ExtToWebview)
+        this.getWebview().postMessage({ type: "streamChunk", text: msg.content } as ExtToWebview)
+        this.getWebview().postMessage({ type: "streamDone" } as ExtToWebview)
       }
     }
   }
@@ -229,10 +215,10 @@ export class ChatProvider implements IProvider {
 
   private html(): string {
     const nonce = crypto.randomBytes(16).toString("hex")
-    const css = this.panel!.webview.asWebviewUri(
+    const css = this.getWebview().asWebviewUri(
       vscode.Uri.joinPath(this.extUri, "resources", "chat.css"),
     )
-    const js = this.panel!.webview.asWebviewUri(
+    const js = this.getWebview().asWebviewUri(
       vscode.Uri.joinPath(this.extUri, "resources", "chat.js"),
     )
 
@@ -241,7 +227,7 @@ export class ChatProvider implements IProvider {
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src ${this.panel!.webview.cspSource};
+    content="default-src 'none'; style-src ${this.getWebview().cspSource};
              script-src 'nonce-${nonce}';">
   <link rel="stylesheet" href="${css}">
 </head>

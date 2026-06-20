@@ -2,6 +2,9 @@ import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import { fetchUrl, htmlToText } from "../../network/UrlFetcher"
 
+const FETCH_DEFAULT_TIMEOUT_S = 30
+const FETCH_MAX_LENGTH = 8000
+
 /**
  * Получить содержимое URL и вернуть в формате Markdown или текста.
  */
@@ -17,7 +20,7 @@ export class WebFetchTool implements ITool {
     parameters: {
       url: { type: "string", description: "URL для загрузки" },
       format: { type: "string", description: "Формат вывода", enum: ["markdown", "text", "html"], default: "markdown" },
-      timeout: { type: "number", description: "Тайм-аут в секундах", default: 30 },
+      timeout: { type: "number", description: "Тайм-аут в секундах", default: FETCH_DEFAULT_TIMEOUT_S },
     },
     required: ["url"],
   }
@@ -27,11 +30,11 @@ export class WebFetchTool implements ITool {
     if (!url) return { output: "Не указан URL", success: false }
 
     const format = (args.format as string | undefined) ?? "markdown"
-    const timeoutSec = Number(args.timeout ?? 30) || 30
+    const timeoutSec = Number(args.timeout ?? FETCH_DEFAULT_TIMEOUT_S) || FETCH_DEFAULT_TIMEOUT_S
 
     const result = await fetchUrl(url, {
       timeout: timeoutSec * 1000,
-      maxLength: 8000,
+      maxLength: FETCH_MAX_LENGTH,
     })
 
     if (!result.ok) {

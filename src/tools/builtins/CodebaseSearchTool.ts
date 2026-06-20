@@ -5,9 +5,12 @@
  * по смыслу, а не только по ключевым словам.
  */
 
-import type { ITool, ToolSchema } from "../../tools/ITool"
+import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import type { CodebaseSearch } from "../../repo/CodebaseSearch"
+
+const SEARCH_DEFAULT_MAX_RESULTS = 5
+const SEARCH_MAX_RESULTS = 20
 
 /**
  * Инструмент поиска по репозиторию.
@@ -30,7 +33,7 @@ export class CodebaseSearchTool implements ITool {
       maxResults: {
         type: "number",
         description: "Максимальное число результатов",
-        default: 5,
+        default: SEARCH_DEFAULT_MAX_RESULTS,
       },
       mode: {
         type: "string",
@@ -50,7 +53,7 @@ export class CodebaseSearchTool implements ITool {
       return { output: "Не указан запрос для поиска", success: false }
     }
 
-    const maxResults = Math.min(Number(args.maxResults ?? 5), 20)
+    const maxResults = Math.min(Number(args.maxResults ?? SEARCH_DEFAULT_MAX_RESULTS), SEARCH_MAX_RESULTS)
     const mode = (args.mode as string) ?? "hybrid"
 
     try {
@@ -61,8 +64,8 @@ export class CodebaseSearchTool implements ITool {
 
       if (results.length === 0) {
         return {
-          output: "Ничего не найдено по запросу: \"" + query + "\"",
-          success: false,
+          output: "Совпадений не найдено по запросу: \"" + query + "\"",
+          success: true,
         }
       }
 
@@ -90,7 +93,7 @@ export class CodebaseSearchTool implements ITool {
       }
 
       return { output, success: true }
-    } catch (err) {
+    } catch (err: unknown) {
       return {
         output: "Ошибка поиска: " + (err instanceof Error ? err.message : String(err)),
         success: false,

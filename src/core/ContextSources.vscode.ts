@@ -1,7 +1,17 @@
+import * as path from "path"
 import * as vscode from "vscode"
 import type { ContextProvider, ContextItem } from "./providers/context/types"
 
 const MAX_CONTENT_LINES = 300
+const SELECTION_TEXT_LIMIT = 2000
+const CONTENT_TEXT_LIMIT = 8000
+const MAX_DIAGNOSTICS_PER_FILE = 10
+const DIAGNOSTIC_MSG_MAX = 300
+const MAX_RELATED_INFO = 3
+const RELATED_INFO_MSG_MAX = 120
+const MAX_PROBLEMS_SHOWN = 25
+const CLIPBOARD_PREVIEW_LENGTH = 120
+const STACK_TRACE_LEVELS = 8
 
 /**
  * Провайдер контекста: активный файл.
@@ -10,7 +20,7 @@ export function makeCurrentFileProvider(): ContextProvider {
   return {
     description: {
       name: "currentfile",
-      displayTitle: "Current File",
+      displayTitle: "Текущий файл",
       description: "Содержимое активного файла",
       type: "normal",
       priority: 95,
@@ -26,8 +36,8 @@ export function makeCurrentFileProvider(): ContextProvider {
       let content = doc.getText()
       if (doc.lineCount > MAX_CONTENT_LINES) {
         const mid = Math.floor(doc.lineCount / 2)
-        const top = doc.getText(new vscode.Range(mid - 150, 0, mid, 0))
-        const bot = doc.getText(new vscode.Range(mid, 0, mid + 150, 0))
+      const top = doc.getText(new vscode.Range(mid - MAX_CONTENT_LINES / 2, 0, mid, 0))
+         const bot = doc.getText(new vscode.Range(mid, 0, mid + MAX_CONTENT_LINES / 2, 0))
         content = `${top}\n...\n${bot}`
       }
 
@@ -43,14 +53,14 @@ export function makeCurrentFileProvider(): ContextProvider {
         `Строк: ${doc.lineCount}`,
       ]
       if (selection) {
-        parts.push(`Выделенный текст:\n\`\`\`${doc.languageId}\n${selection.slice(0, 2000)}\n\`\`\``)
+        parts.push(`Выделенный текст:\n\`\`\`${doc.languageId}\n${selection.slice(0, SELECTION_TEXT_LIMIT)}\n\`\`\``)
       }
-      parts.push(`Содержимое:\n\`\`\`${doc.languageId}\n${content.slice(0, 8000)}\n\`\`\``)
+      parts.push(`Содержимое:\n\`\`\`${doc.languageId}\n${content.slice(0, CONTENT_TEXT_LIMIT)}\n\`\`\``)
 
       return [{
         content: parts.join("\n"),
         name: vscode.workspace.asRelativePath(doc.uri.fsPath),
-        description: `${doc.languageId}, ${doc.lineCount} lines`,
+        description: `${doc.languageId}, ${doc.lineCount} строк`,
       }]
     },
   }
@@ -63,7 +73,7 @@ export function makeOpenFilesProvider(): ContextProvider {
   return {
     description: {
       name: "openfiles",
-      displayTitle: "Open Files",
+      displayTitle: "Открытые файлы",
       description: "Список открытых файлов",
       type: "normal",
       priority: 92,
@@ -78,8 +88,8 @@ export function makeOpenFilesProvider(): ContextProvider {
       if (result.length === 0) return []
       return [{
         content: `## Открытые файлы\n${result.join("\n")}`,
-        name: "Open Files",
-        description: `${result.length} files`,
+        name: "Открытые файлы",
+        description: `${result.length} файлов`,
       }]
     },
   }
@@ -98,12 +108,12 @@ export function makeProblemsProvider(
     3: "hint",
   }
 
-  const pathMod = require("path") as typeof import("path")
+  const pathMod = path
 
   return {
     description: {
       name: "problems",
-      displayTitle: "Problems",
+      displayTitle: "Проблемы",
       description: "Проблемы в коде проекта",
       type: "normal",
       priority: 88,
@@ -124,11 +134,11 @@ export function makeProblemsProvider(
       for (const [uri, diagnostics] of allDiagnostics) {
         if (diagnostics.length === 0 || uri.scheme !== "file") continue
         affectedFiles.add(uri.fsPath)
-        for (const d of diagnostics.slice(0, 10)) {
+        for (const d of diagnostics.slice(0, MAX_DIAGNOSTICS_PER_FILE)) {
           const entry: (typeof problems)[number] = {
             file: uri.fsPath,
             severity: severityMap[d.severity] ?? "unknown",
-            message: d.message.slice(0, 300),
+            message: d.message.slice(0, DIAGNOSTIC_MSG_MAX),
             line: d.range.start.line + 1,
           }
 
@@ -141,9 +151,9 @@ export function makeProblemsProvider(
           }
 
           if (d.relatedInformation && d.relatedInformation.length > 0) {
-            const related = d.relatedInformation.slice(0, 3).map((ri) => {
-              const relPath = pathMod.relative(getWorkDir(), ri.location.uri.fsPath)
-              return `${relPath}:${ri.location.range.start.line + 1} ${ri.message.slice(0, 120)}`
+        const related = d.relatedInformation.slice(0, MAX_RELATED_INFO).map((ri) => {
+               const relPath = pathMod.relative(getWorkDir(), ri.location.uri.fsPath)
+               return `${relPath}:${ri.location.range.start.line + 1} ${ri.message.slice(0, RELATED_INFO_MSG_MAX)}`
             })
             entry.relatedInfo = related.join("; ")
           }
@@ -169,7 +179,7 @@ export function makeProblemsProvider(
       }
 
       let shown = 0
-      const maxShown = 25
+      const maxShown = MAX_PROBLEMS_SHOWN
       for (const [file, entries] of grouped) {
         if (shown >= maxShown) break
         const relPath = pathMod.relative(getWorkDir(), file)
@@ -187,8 +197,8 @@ export function makeProblemsProvider(
 
       return [{
         content: `## Проблемы в коде\n${lines.join("\n")}`,
-        name: "Problems",
-        description: `${errors.length} errors, ${warnings.length} warnings`,
+        name: "Проблемы",
+        description: `${errors.length} ошибок, ${warnings.length} предупреждений`,
       }]
     },
   }
@@ -201,7 +211,7 @@ export function makeClipboardProvider(): ContextProvider {
   return {
     description: {
       name: "clipboard",
-      displayTitle: "Clipboard",
+      displayTitle: "Буфер обмена",
       description: "Содержимое буфера обмена",
       type: "normal",
       priority: 60,
@@ -210,13 +220,15 @@ export function makeClipboardProvider(): ContextProvider {
       try {
         const text = await vscode.env.clipboard.readText()
         if (text.length === 0) return []
-        const preview = text.slice(0, 120).replace(/\n/g, " ")
+        const preview = text.slice(0, CLIPBOARD_PREVIEW_LENGTH).replace(/\n/g, " ")
         return [{
           content: `## Буфер обмена\n  Символов: ${text.length}\n  Начало: "${preview}"`,
-          name: "Clipboard",
-          description: `${text.length} chars`,
+          name: "Буфер обмена",
+          description: `${text.length} символов`,
         }]
-      } catch {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`Не удалось прочитать буфер обмена: ${msg}`)
         return []
       }
     },
@@ -230,7 +242,7 @@ export function makeDebuggerProvider(): ContextProvider {
   return {
     description: {
       name: "debugger",
-      displayTitle: "Debugger",
+      displayTitle: "Отладчик",
       description: "Состояние отладчика",
       type: "normal",
       priority: 82,
@@ -246,31 +258,33 @@ export function makeDebuggerProvider(): ContextProvider {
 
         if (!mainThread) {
           return [{
-            content: `## Отладчик\n  Сессия: ${session.name}\n  Поток: none`,
-            name: "Debugger",
+            content: `## Отладчик\n  Сессия: ${session.name}\n  Поток: нет`,
+            name: "Отладчик",
             description: session.name,
           }]
         }
 
         const stackResp = await session.customRequest("stackTrace", {
           threadId: mainThread.id,
-          levels: 8,
+          levels: STACK_TRACE_LEVELS,
         }) as { stackFrames: Array<{ name: string; line: number; source?: { name: string; path: string } }> }
         const frames = stackResp?.stackFrames ?? []
-        const stack = frames.slice(0, 8).map((f: { name: string; line: number; source?: { name: string; path: string } }) => {
+        const stack = frames.slice(0, STACK_TRACE_LEVELS).map((f: { name: string; line: number; source?: { name: string; path: string } }) => {
           const loc = f.source ? `${f.source.name}:${f.line}` : `line ${f.line}`
           return `  ${f.name} at ${loc}`
         }).join("\n")
 
         return [{
           content: `## Отладчик\n  Сессия: ${session.name}\n  Поток: ${mainThread.name}\n  Стек:\n${stack}`,
-          name: "Debugger",
+          name: "Отладчик",
           description: `${session.name}: ${mainThread.name}`,
         }]
-      } catch {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`Не удалось получить стек отладки: ${msg}`)
         return [{
           content: `## Отладчик\n  Сессия: ${session.name}\n  Поток: error`,
-          name: "Debugger",
+          name: "Отладчик",
           description: session.name,
         }]
       }
@@ -285,7 +299,7 @@ export function makeTerminalProvider(): ContextProvider {
   return {
     description: {
       name: "terminal",
-      displayTitle: "Terminal",
+      displayTitle: "Терминал",
       description: "Состояние терминалов",
       type: "normal",
       priority: 65,
@@ -296,9 +310,9 @@ export function makeTerminalProvider(): ContextProvider {
 
       const active = vscode.window.activeTerminal
       return [{
-        content: `## Терминал\n  Терминалов: ${terminals.length}\n  Активный: ${active?.name ?? "none"} (${active ? "active" : "inactive"})`,
-        name: "Terminal",
-        description: `${terminals.length} terminals`,
+        content: `## Терминал\n  Терминалов: ${terminals.length}\n  Активный: ${active?.name ?? "нет"} (${active ? "активен" : "неактивен"})`,
+        name: "Терминал",
+        description: `${terminals.length} терминалов`,
       }]
     },
   }
@@ -311,7 +325,7 @@ export function makeOSProvider(): ContextProvider {
   return {
     description: {
       name: "os",
-      displayTitle: "OS",
+      displayTitle: "ОС",
       description: "Информация об операционной системе",
       type: "normal",
       priority: 98,
@@ -321,7 +335,7 @@ export function makeOSProvider(): ContextProvider {
       const shell = process.env.SHELL ?? process.env.COMSPEC ?? "unknown"
       return [{
         content: `## Система\n  Платформа: ${os.platform()} ${os.arch()}\n  Релиз: ${os.release()}\n  Shell: ${shell}\n  Память: ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(1)} ГБ\n  CPU: ${os.cpus()[0]?.model ?? "unknown"}`,
-        name: "OS",
+        name: "ОС",
         description: `${os.platform()} ${os.arch()}`,
       }]
     },

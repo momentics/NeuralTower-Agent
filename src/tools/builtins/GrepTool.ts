@@ -8,6 +8,12 @@ import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 
 const execFileAsync = promisify(execFile)
 
+const RG_TIMEOUT_MS = 15000
+const RG_MAX_BUFFER = 512 * 1024
+const RG_MAX_FILES = 5000
+const GREP_LINE_TRUNCATE = 200
+const GREP_OUTPUT_TRUNCATE = 10000
+
 /**
  * Поиск содержимого файлов с помощью ripgrep (rg).
  * При отсутствии rg используется рекурсивный поиск по файлам.
@@ -29,8 +35,8 @@ export class GrepTool implements ITool {
     required: ["pattern"],
   }
 
-  private static _rgChecked = false
-  private static _rgAvailable = true
+  private static rgChecked = false
+  private static rgAvailable = true
 
   constructor(private readonly workDir?: string) {}
 
@@ -46,18 +52,20 @@ export class GrepTool implements ITool {
     }
 
     try {
-      if (GrepTool._rgAvailable) {
+      if (GrepTool.rgAvailable) {
         try {
           const rgResult = await this.executeRg(pattern, resolved, include)
           return rgResult
-        } catch {
-          GrepTool._rgChecked = true
-          GrepTool._rgAvailable = false
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error(`ripgrep недоступен: ${msg}`)
+          GrepTool.rgChecked = true
+          GrepTool.rgAvailable = false
         }
       }
 
       return await this.executeFallback(pattern, resolved, include)
-    } catch (err) {
+    } catch (err: unknown) {
       return {
         output: `Поиск не выполнен: ${err instanceof Error ? err.message : String(err)}`,
         success: false,
@@ -73,7 +81,7 @@ export class GrepTool implements ITool {
     const fileArg = include ? ["-g", include, root] : [root]
     const { stdout, stderr } = await execFileAsync("rg", [
       "-n", "--no-heading", "--color=never", pattern, ...fileArg,
-    ], { timeout: 15000, maxBuffer: 512 * 1024 })
+    ], { timeout: RG_TIMEOUT_MS, maxBuffer: RG_MAX_BUFFER })
     if (stderr && !stdout) {
       return { output: `Ошибка ripgrep: ${stderr}`, success: false }
     }
@@ -87,7 +95,7 @@ export class GrepTool implements ITool {
   ): Promise<ToolResult> {
     const re = new RegExp(pattern, "i")
     const results: string[] = []
-    const maxFiles = 5000
+    const maxFiles = RG_MAX_FILES
     let counted = 0
 
     const walk = async (dir: string): Promise<void> => {
@@ -107,11 +115,12 @@ export class GrepTool implements ITool {
             const lines = content.split("\n")
             for (let i = 0; i < lines.length; i++) {
               if (re.test(lines[i])) {
-                results.push(`${full}:${i + 1}: ${lines[i].slice(0, 200)}`)
+                results.push(`${full}:${i + 1}: ${lines[i].slice(0, GREP_LINE_TRUNCATE)}`)
               }
             }
-          } catch {
-            // пропустить нечитаемые файлы
+          } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : String(err)
+            console.error(`Не удалось прочитать файл при поиске: ${full} — ${msg}`)
           }
         }
       }
@@ -119,7 +128,7 @@ export class GrepTool implements ITool {
 
     await walk(root)
     return {
-      output: results.length > 0 ? results.join("\n").slice(0, 10000) : "Совпадений не найдено",
+      output: results.length > 0 ? results.join("\n").slice(0, GREP_OUTPUT_TRUNCATE) : "Совпадений не найдено",
       success: true,
     }
   }

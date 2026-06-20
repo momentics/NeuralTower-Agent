@@ -43,8 +43,9 @@ export class AgentContextBuilder {
         if (prepared.systemPrompt) {
           contextManagerContent = prepared.systemPrompt
         }
-      } catch {
-        // ContextManager недоступен — пропускаем
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`ContextManager недоступен: ${msg}`)
       }
     }
 

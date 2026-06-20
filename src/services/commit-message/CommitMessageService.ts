@@ -2,6 +2,7 @@ import type { IBackend } from "../../core/IBackend"
 import type { GitService } from "../../services/git/GitService"
 import type { Plugin } from "../../shared/types"
 
+/** Сервис генерации сообщений коммита на основе git diff через бэкенд. */
 export class CommitMessageService implements Plugin {
   name = "commit-message"
   version = "0.1.0"
@@ -21,8 +22,10 @@ export class CommitMessageService implements Plugin {
     private readonly gitService: GitService,
   ) {}
 
+  /** Инициализация не требуется. */
   async init(): Promise<void> {}
 
+  /** Сгенерировать сообщение коммита из добавленных изменений в рабочей директории. */
   async generate(dir: string): Promise<string> {
     const diff = await this.gitService.getCachedDiff(dir)
     if (!diff || !diff.trim()) return ""
@@ -35,11 +38,14 @@ export class CommitMessageService implements Plugin {
     try {
       const result = await this.backend.chat(messages, () => {})
       return this.clean(result.content)
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Генерация сообщения коммита не выполнена: ${msg}`)
       return this.fallbackMessage(diff)
     }
   }
 
+  /** Освобождение ресурсов не требуется. */
   dispose(): void {}
 
   private clean(content: string): string {

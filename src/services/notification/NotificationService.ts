@@ -10,6 +10,7 @@ export interface NotificationServiceOptions {
   permissionRequests: boolean
 }
 
+/** Сервис уведомлений: отображение сообщений и запросы разрешений в VS Code. */
 export class NotificationService implements Plugin {
   name = "notifications"
   version = "0.1.0"
@@ -20,8 +21,10 @@ export class NotificationService implements Plugin {
     permissionRequests: true,
   }
 
+  /** Инициализация не требуется. */
   async init(): Promise<void> {}
 
+  /** Показать уведомление указанного типа с опциональными действиями. */
   async show(type: NotificationType, message: string, actions?: string[]): Promise<void> {
     if (!this.options.enabled) return
     const opts = actions ?? []
@@ -48,6 +51,7 @@ export class NotificationService implements Plugin {
     }
   }
 
+  /** Запросить разрешение пользователя на действие инструмента. */
   async askPermission(
     toolName: string,
     description: string,
@@ -63,13 +67,16 @@ export class NotificationService implements Plugin {
     return result === "Разрешить всегда" ? "allowAlways" : result === "Разрешить" ? "allow" : "deny"
   }
 
+  /** Обновить настройки уведомлений. */
   setOptions(partial: Partial<NotificationServiceOptions>): void {
     Object.assign(this.options, partial)
   }
 
+  /** Вернуть текущие настройки уведомлений. */
   getOptions(): NotificationServiceOptions {
     return { ...this.options }
   }
 
+  /** Освобождение ресурсов не требуется. */
   dispose(): void {}
 }

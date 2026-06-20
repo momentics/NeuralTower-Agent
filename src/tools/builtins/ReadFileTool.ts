@@ -4,6 +4,8 @@ import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
 import * as path from "path"
 
+const DEFAULT_READ_LIMIT = 2000
+
 /** Чтение содержимого текстового файла. */
 export class ReadFileTool implements ITool {
   name = "read_file"
@@ -17,7 +19,7 @@ export class ReadFileTool implements ITool {
     parameters: {
       filepath: { type: "string", description: "Путь к файлу" },
       offset: { type: "number", description: "Номер начальной строки (с 1)", default: 0 },
-      limit: { type: "number", description: "Максимальное число строк", default: 2000 },
+      limit: { type: "number", description: "Максимальное число строк", default: DEFAULT_READ_LIMIT },
     },
     required: ["filepath"],
   }
@@ -34,11 +36,11 @@ export class ReadFileTool implements ITool {
     try {
       const content = await fs.readFile(resolved, "utf-8")
       const offset = Number(args.offset ?? 0)
-      const limit = Number(args.limit ?? 2000)
+      const limit = Number(args.limit ?? DEFAULT_READ_LIMIT)
       const lines = content.split("\n")
       const slice = offset > 0 ? lines.slice(offset - 1, offset - 1 + limit) : lines.slice(0, limit)
       return { output: slice.join("\n"), success: true }
-    } catch (err) {
+    } catch (err: unknown) {
       return {
         output: `Не удалось прочитать файл: ${err instanceof Error ? err.message : String(err)}`,
         success: false,

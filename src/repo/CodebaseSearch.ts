@@ -15,6 +15,8 @@ import type { IVectorStore } from "./IVectorStore"
 import type { CodeChunk, SearchConfig, SearchMode } from "./ChunkTypes"
 import { FullTextSearch } from "./FullTextSearch"
 
+const SEARCH_MULTIPLIER = 2
+
 /**
  * Результат объединённого поиска.
  */
@@ -76,7 +78,7 @@ export class CodebaseSearch {
     try {
       const [queryEmbedding] = await this.embeddingProvider.embed([query])
 
-      const results = await this.vectorStore.search(queryEmbedding, topK * 2)
+      const results = await this.vectorStore.search(queryEmbedding, topK * SEARCH_MULTIPLIER)
 
       return results
         .filter((r) => r.score >= minScore)
@@ -86,7 +88,9 @@ export class CodebaseSearch {
           score: r.score,
           source: "semantic" as const,
         }))
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Семантический поиск не выполнен: ${msg}`)
       return []
     }
   }
@@ -99,7 +103,7 @@ export class CodebaseSearch {
     topK: number,
     minScore: number
   ): Promise<UnifiedSearchResult[]> {
-    const results = this.fts.search(query, topK * 2)
+    const results = this.fts.search(query, topK * SEARCH_MULTIPLIER)
 
     return results
       .filter((r) => r.score >= minScore)
@@ -123,8 +127,8 @@ export class CodebaseSearch {
     minScore: number
   ): Promise<UnifiedSearchResult[]> {
     const [semanticResults, keywordResults] = await Promise.all([
-      this.semanticSearch(query, topK * 2, 0),
-      this.keywordSearch(query, topK * 2, 0),
+      this.semanticSearch(query, topK * SEARCH_MULTIPLIER, 0),
+      this.keywordSearch(query, topK * SEARCH_MULTIPLIER, 0),
     ])
 
     // Объединить результаты, удалив дубликаты
@@ -188,12 +192,13 @@ export class CodebaseSearch {
         const chunkEmbeddings = chunks.map((chunk, i) => ({
           id: chunk.id,
           chunk,
-          embedding: embeddings[i] ?? (this.embeddingProvider ? new Array(this.embeddingProvider.dimension()).fill(0) : []),
+          embedding: embeddings[i] ?? new Array(this.embeddingProvider!.dimension()).fill(0),
         }))
 
         await this.vectorStore.add(chunkEmbeddings)
-      } catch {
-        // Эмбеддинги недоступны — пропустить
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`Эмбеддинги недоступны: ${msg}`)
       }
     }
   }

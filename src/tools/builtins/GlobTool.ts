@@ -38,7 +38,7 @@ export class GlobTool implements ITool {
         output: files.length > 0 ? files.join("\n") : "Совпадений не найдено",
         success: true,
       }
-    } catch (err) {
+    } catch (err: unknown) {
       return {
         output: `Поиск не выполнен: ${err instanceof Error ? err.message : String(err)}`,
         success: false,

@@ -12,6 +12,7 @@ export interface EditorCommandAction {
   requireSelection: boolean
 }
 
+/** Создать и зарегистрировать команду редактора для действия (refactor, explain и т.д.). */
 export function createEditorCommand(
   app: App,
   action: EditorCommandAction,

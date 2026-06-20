@@ -29,10 +29,6 @@ export class DiffViewerProvider implements vscode.Disposable {
       },
     )
 
-    this.panel.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [this.extUri],
-    }
     this.panel.webview.html = this.buildHtml()
 
     this.panel.onDidDispose(() => {

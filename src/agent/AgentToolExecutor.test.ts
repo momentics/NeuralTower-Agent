@@ -168,7 +168,7 @@ describe("AgentToolExecutor", () => {
       null,
     )
     const conversation: ChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
-    await expect(executor.callBackend(conversation, () => {}, ac.signal)).rejects.toThrow("Task aborted")
+    await expect(executor.callBackend(conversation, () => {}, ac.signal)).rejects.toThrow("Задача прервана")
   })
 
   it("executeToolCalls executes allowed tools and appends to conversation", async () => {

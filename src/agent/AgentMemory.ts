@@ -106,7 +106,7 @@ export class AgentMemory {
     return { ...this.project }
   }
 
-  /*  * Сформировать фрагмент системного промпта из памяти о проекте. */
+  /** Сформировать фрагмент системного промпта из памяти о проекте. */
   projectContext(): string {
     const parts: string[] = []
     if (this.project.repo) parts.push(`Проект: ${this.project.repo}`)

@@ -16,7 +16,7 @@ export function makeRepoMapProvider(
   return {
     description: {
       name: "repo-map",
-      displayTitle: "Repo Map",
+      displayTitle: "Карта репозитория",
       description: "Карта архитектуры репозитория",
       type: "normal",
       priority: 87,

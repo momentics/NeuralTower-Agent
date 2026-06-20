@@ -357,8 +357,9 @@ export class Plan {
     let data: unknown
   try {
       data = JSON.parse(raw)
-    } catch {
-      throw new PlanError(`Невалидный файл плана: ${filePath}`)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      throw new PlanError(`Невалидный файл плана: ${filePath} (${msg})`)
     }
 
     if (!data || typeof data !== "object" || !Array.isArray((data as any).steps)) {

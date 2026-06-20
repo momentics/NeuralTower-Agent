@@ -1,9 +1,11 @@
 import * as vscode from "vscode"
 import type { IAgentOrchestrator } from "../core/IAgent"
-import { AbortError, BackendError, NeuralTowerError } from "../core/errors"
+import { handleBackendError } from "../core/errors"
 import type { GitService } from "../services/git/GitService"
 import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
 import { detectLanguageDisplay } from "../utils/LanguageDetector"
+
+const LOG_TRUNCATE_LENGTH = 80
 
 let agentOutputChannel: vscode.OutputChannel | undefined
 
@@ -19,6 +21,7 @@ export function disposeOutputChannel(): void {
   agentOutputChannel = undefined
 }
 
+/** Отправить запрос агенту с выводом в канал логов и открытием diff-viewer. */
 export async function sendAgentQuery(
   query: string,
   workDir: string,
@@ -28,7 +31,7 @@ export async function sendAgentQuery(
 ): Promise<void> {
   const channel = getOutputChannel()
   channel.show()
-  channel.appendLine(`> ${query.slice(0, 80)}...`)
+   channel.appendLine(`> ${query.slice(0, LOG_TRUNCATE_LENGTH)}...`)
 
   try {
     await agent.run(query, (chunk: string) => {
@@ -38,16 +41,8 @@ export async function sendAgentQuery(
 
     const diff = await gitService.getDiff(workDir)
     diffViewer?.openPanel(diff)
-  } catch (err) {
-    if (err instanceof AbortError) {
-      channel.appendLine("\nЗадача остановлена пользователем")
-    } else if (err instanceof BackendError) {
-      channel.appendLine(`\nОшибка бэкенда: ${err.message}`)
-    } else if (err instanceof NeuralTowerError) {
-      channel.appendLine(`\n${err.name}: ${err.message}`)
-    } else {
-      channel.appendLine(`\nОшибка: ${err instanceof Error ? err.message : String(err)}`)
-    }
+  } catch (err: unknown) {
+    handleBackendError(err, (msg) => channel.appendLine(`\n${msg}`), false)
   }
 }
 

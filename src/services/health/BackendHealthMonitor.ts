@@ -3,6 +3,9 @@ import type { IBackend } from "../../core/IBackend"
 import type { IContextManager } from "../../core/ContextManager"
 import type { Plugin } from "../../shared/types"
 
+const HEALTH_CHECK_INTERVAL_MS = 15000
+
+/** Монитор здоровья бэкенда: периодическая проверка подключения и отображение статуса в статус-баре. */
 export class BackendHealthMonitor implements Plugin {
   name = "backend-health"
   version = "0.1.0"
@@ -24,6 +27,7 @@ export class BackendHealthMonitor implements Plugin {
     this.statusBar.tooltip = "NeuralTower Agent: статус подключения"
   }
 
+  /** Инициализировать мониторинг: выполнить первую проверку и запустить периодический таймер. */
   async init(): Promise<void> {
     await this.check()
     if (this.contextManager) {
@@ -34,14 +38,16 @@ export class BackendHealthMonitor implements Plugin {
     }
     this.healthTimer = setInterval(async () => {
       await this.check()
-    }, 15000)
-    if (this.healthTimer) this.healthTimer.unref?.()
+    }, HEALTH_CHECK_INTERVAL_MS)
+    if (this.healthTimer) { this.healthTimer.unref?.() }
   }
 
+  /** Вернуть текущий статус подключения. */
   isConnected(): boolean {
     return this.connected
   }
 
+  /** Выполнить проверку здоровья бэкенда и обновить статус-бар. */
   async check(): Promise<boolean> {
     if (this.checking) return this.connected
     this.checking = true
@@ -52,7 +58,9 @@ export class BackendHealthMonitor implements Plugin {
       this.checking = false
       this.syncBar()
       return ok
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Проверка здоровья бэкенда не выполнена: ${msg}`)
       this.connected = false
       this.checking = false
       this.syncBar()
@@ -60,6 +68,7 @@ export class BackendHealthMonitor implements Plugin {
     }
   }
 
+  /** Остановить мониторинг и освободить ресурсы. */
   dispose(): void {
     if (this.healthTimer) clearInterval(this.healthTimer)
     this.healthTimer = null

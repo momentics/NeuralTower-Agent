@@ -13,7 +13,7 @@ export function makeEnvironmentProvider(
   return {
     description: {
       name: "environment",
-      displayTitle: "Environment",
+      displayTitle: "Окружение",
       description: "Информация об окружении",
       type: "normal",
       priority: 100,
@@ -26,8 +26,9 @@ export function makeEnvironmentProvider(
         try {
           const info = await gitService.getBranchInfo(dir)
           branch = info?.name ?? "unknown"
-        } catch {
-          // ignore
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error(`Не удалось получить информацию о ветке: ${msg}`)
         }
       }
       return [{
@@ -38,8 +39,8 @@ export function makeEnvironmentProvider(
   Дата: ${new Date().toISOString()}
   Ветка: ${branch}
 </env>`,
-        name: "Environment",
-        description: `${cfgModel} on ${branch}`,
+        name: "Окружение",
+        description: `${cfgModel} на ${branch}`,
       }]
     },
   }
@@ -54,7 +55,7 @@ export function makeProjectMemoryProvider(
   return {
     description: {
       name: "projectmemory",
-      displayTitle: "Project Memory",
+      displayTitle: "Память проекта",
       description: "Контекст проекта из памяти",
       type: "normal",
       priority: 85,
@@ -79,8 +80,8 @@ export function makeProjectMemoryProvider(
       if (parts.length === 0) return []
       return [{
         content: `## Контекст проекта\n${parts.join("\n")}`,
-        name: "Project Memory",
-        description: `${v.notes.length} notes`,
+        name: "Память проекта",
+        description: `${v.notes.length} заметок`,
       }]
     },
   }
@@ -96,7 +97,7 @@ export function makeGitDiffProvider(
   return {
     description: {
       name: "gitdiff",
-      displayTitle: "Git Diff",
+      displayTitle: "Изменения Git",
       description: "Текущие git-различия",
       type: "normal",
       priority: 70,
@@ -109,8 +110,8 @@ export function makeGitDiffProvider(
         content: `## Git-различия\n  Файлов: ${diff.changed.length}, +${diff.additions} -${diff.deletions}\n${diff.changed
           .map((f: string) => `  ${f}`)
           .join("\n")}`,
-        name: "Git Diff",
-        description: `${diff.changed.length} changed files`,
+        name: "Изменения Git",
+        description: `${diff.changed.length} изменённых файлов`,
       }]
     },
   }

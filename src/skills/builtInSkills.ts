@@ -4,12 +4,12 @@ import type { ISkill } from "../skills/ISkill"
  * Встроенные навыки агента Neural Tower.
  * Навыки активируются автоматически по совпадению ключевых слов с запросом.
  */
-export const builtInSkills: ISkill[] = [
+export const BUILT_IN_SKILLS: ISkill[] = [
   {
-    name: "Git Workflow",
+    name: "Git-рабочий процесс",
     description: "Работа с git: коммиты, ветки, pull request, разрешение конфликтов",
     triggers: ["git", "commit", "коммит", "ветка", "branch", "pull request", "pr", "merge", "слияние", "конфликт"],
-    instructions: `# Git Workflow
+    instructions: `# Git-рабочий процесс
 
 Вы выполняете git-операции. Следуйте правилам:
 
@@ -30,10 +30,10 @@ export const builtInSkills: ISkill[] = [
     priority: 10,
   },
   {
-    name: "Testing",
+    name: "Тестирование",
     description: "Написание и запуск тестов, отладка",
     triggers: ["тест", "test", "unittest", "e2e", "интеграция", "debug", "отладк", "баг", "bug", "ошибк"],
-    instructions: `# Testing
+    instructions: `# Тестирование
 
 Вы пишете или запускаете тесты. Правила:
 
@@ -45,10 +45,10 @@ export const builtInSkills: ISkill[] = [
     priority: 8,
   },
   {
-    name: "Code Review",
+    name: "Обзор кода",
     description: "Обзор кода, поиск багов, улучшение качества",
     triggers: ["review", "ревью", "обзор", "баг", "quality", "качеств", "code smell", "запах"],
-    instructions: `# Code Review
+    instructions: `# Обзор кода
 
 Вы проводите обзор кода. Правила:
 
@@ -60,10 +60,10 @@ export const builtInSkills: ISkill[] = [
     priority: 7,
   },
   {
-    name: "Architecture",
+    name: "Архитектура",
     description: "Архитектура, проектирование, рефакторинг",
     triggers: ["архитектур", "дизайн", "рефактор", "паттерн", "structure", "design", "refactor"],
-    instructions: `# Architecture & Design
+    instructions: `# Архитектура и дизайн
 
 Вы работаете с архитектурой кодовой базы. Правила:
 

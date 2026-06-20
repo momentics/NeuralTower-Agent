@@ -97,7 +97,9 @@ export class AgentPlanner {
         this.sessionContext.setPlan(plan)
       }
       return plan
-    } catch {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Планирование не выполнено: ${msg}`)
       return null
     }
   }
@@ -134,8 +136,9 @@ export class AgentPlanner {
         }
         return plan
       }
-    } catch {
-      // Файл плана не найден или повреждён — игнорируем
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.error(`Файл плана не найден или повреждён: ${msg}`)
     }
     return null
   }
@@ -196,7 +199,7 @@ ${toolList}${skillsSection}
       }
 
       return plan
-    } catch (err) {
+    } catch (err: unknown) {
       // BackendError или PlanError — деградация к простому плану
       const plan = new Plan({
         title: query.slice(0, 80),

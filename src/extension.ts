@@ -96,8 +96,9 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
       for (const fn of toDispose) {
         try {
           fn()
-        } catch {
-          // Продолжить освобождение остальных ресурсов
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.error(`Ошибка при освобождении ресурса: ${msg}`)
         }
       }
     },

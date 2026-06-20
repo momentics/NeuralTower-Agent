@@ -2,6 +2,9 @@ import * as vscode from "vscode"
 import type { App } from "../core/App"
 import type { CommitMessageService } from "../services/commit-message/CommitMessageService"
 
+const COMMIT_MSG_TRUNCATE = 50
+
+/** Зарегистрировать Git-команды: генерация сообщения коммита. */
 export function registerGitCommands(
   app: App,
   commitMessageService: CommitMessageService,
@@ -18,7 +21,7 @@ export function registerGitCommands(
       })
       if (confirmed) {
         vscode.env.clipboard.writeText(confirmed)
-        vscode.window.showInformationMessage(`Сообщение коммита скопировано: "${confirmed.slice(0, 50)}${confirmed.length > 50 ? "..." : ""}"`)
+        vscode.window.showInformationMessage(`Сообщение коммита скопировано: "${confirmed.slice(0, COMMIT_MSG_TRUNCATE)}${confirmed.length > COMMIT_MSG_TRUNCATE ? "..." : ""}"`)
       }
     } else {
       vscode.window.showInformationMessage("Нет добавленных изменений")

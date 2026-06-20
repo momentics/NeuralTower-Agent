@@ -10,12 +10,20 @@
  * соответствуют смысловым единицам кода.
  */
 
+import { detectLanguageShort } from "../utils/LanguageDetector"
 import type {
   ChunkerConfig,
   CodeChunk,
   ChunkNodeKind,
   ChunkResult,
 } from "./ChunkTypes"
+
+const DEFAULT_CHUNK_SIZE = 4096
+const DEFAULT_OVERLAP_LINES = 5
+const DEFAULT_MAX_FILE_SIZE = 256_000
+const DEFAULT_MIN_CHUNK_LINES = 3
+const DEFAULT_CONTEXT_LINES = 2
+const ESTIMATED_CHARS_PER_LINE = 50
 
 /**
  * Интерфейс чанкера — разбиение файла на фрагменты.
@@ -39,12 +47,12 @@ export interface IChunker {
  * Конфигурация по умолчанию для чанкера.
  */
 export function createDefaultChunkerConfig(): ChunkerConfig {
-  return {
-    maxChunkSize: 4096,
-    overlapLines: 5,
-    maxFileSize: 256_000,
-    minChunkLines: 3,
-    contextLines: 2,
+ return {
+    maxChunkSize: DEFAULT_CHUNK_SIZE,
+    overlapLines: DEFAULT_OVERLAP_LINES,
+    maxFileSize: DEFAULT_MAX_FILE_SIZE,
+    minChunkLines: DEFAULT_MIN_CHUNK_LINES,
+    contextLines: DEFAULT_CONTEXT_LINES,
   }
 }
 
@@ -58,7 +66,7 @@ export class LineChunker implements IChunker {
   constructor(private readonly config: ChunkerConfig) {}
 
   chunk(filePath: string, content: string): ChunkResult {
-    const lines = content.split("\\n")
+    const lines = content.split("\n")
     const totalLines = lines.length
     const chunks: CodeChunk[] = []
     let chunkIndex = 0
@@ -70,35 +78,35 @@ export class LineChunker implements IChunker {
     // Оценка строк на чанк (примерно 50 символов в строке)
     const linesPerChunk = Math.max(
       this.config.minChunkLines,
-      Math.floor(chunkSize / 50)
+      Math.floor(chunkSize / ESTIMATED_CHARS_PER_LINE)
     )
 
     let start = 0
     while (start < totalLines) {
       const end = Math.min(start + linesPerChunk, totalLines)
       const chunkLines = lines.slice(start, end)
-      const chunkContent = chunkLines.join("\\n")
+      const chunkContent = chunkLines.join("\n")
 
       // Добавить контекст из предыдущих строк
       let contextBefore = ""
       if (start > 0) {
         const ctxStart = Math.max(0, start - ctxLines)
-        contextBefore = lines.slice(ctxStart, start).join("\\n")
+        contextBefore = lines.slice(ctxStart, start).join("\n")
       }
 
       // Добавить контекст из следующих строк
       let contextAfter = ""
       if (end < totalLines) {
         const ctxEnd = Math.min(end + ctxLines, totalLines)
-        contextAfter = lines.slice(end, ctxEnd).join("\\n")
+        contextAfter = lines.slice(end, ctxEnd).join("\n")
       }
 
       let fullContent = chunkContent
       if (contextBefore) {
-        fullContent = "```context\\n" + contextBefore + "\\n```\\n" + chunkContent
+        fullContent = "```context\n" + contextBefore + "\n```\n" + chunkContent
       }
       if (contextAfter) {
-        fullContent = fullContent + "\\n```context\\n" + contextAfter + "\\n```"
+        fullContent = fullContent + "\n```context\n" + contextAfter + "\n```"
       }
 
       chunks.push({
@@ -142,7 +150,7 @@ export class TypeScriptChunker implements IChunker {
   constructor(private readonly config: ChunkerConfig) {}
 
   chunk(filePath: string, content: string): ChunkResult {
-    const lines = content.split("\\n")
+    const lines = content.split("\n")
     const totalLines = lines.length
     const chunks: CodeChunk[] = []
     let chunkIndex = 0
@@ -161,7 +169,7 @@ export class TypeScriptChunker implements IChunker {
       const startIdx = Math.max(0, def.startLine - this.config.contextLines)
       const endIdx = Math.min(totalLines, def.endLine + this.config.contextLines)
       const chunkLines = lines.slice(startIdx, endIdx)
-      const chunkContent = chunkLines.join("\\n")
+      const chunkContent = chunkLines.join("\n")
 
       chunks.push({
         id: filePath + "::" + chunkIndex,
@@ -490,7 +498,7 @@ export class TypeScriptChunker implements IChunker {
     }
 
     if (docLines.length === 0) return undefined
-    return docLines.join("\\n")
+    return docLines.join("\n")
   }
 
   /**
@@ -529,7 +537,4 @@ export class TypeScriptChunker implements IChunker {
   }
 }
 
-/**
- * Определить язык файла по расширению.
- */
-import { detectLanguageShort } from "../utils/LanguageDetector"
+

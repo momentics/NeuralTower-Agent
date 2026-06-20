@@ -4,6 +4,7 @@ import { ToolRegistry } from "../tools/ToolRegistry"
 import { MCPToolAdapter } from "./MCPToolAdapter"
 import { ExecutionError, TimeoutError } from "../core/errors"
 
+/** Конфигурация MCP-сервера для подключения. */
 export interface MCPServerConfig {
   name: string
   transport: "stdio" | "http"
@@ -12,6 +13,7 @@ export interface MCPServerConfig {
   env?: Record<string, string>
 }
 
+/** Описание инструмента, обнаруженного на MCP-сервере. */
 export interface MCPTool {
   name: string
   description: string
@@ -94,8 +96,9 @@ export class MCPManager implements IMCPManager {
                   req.resolve(resp.result)
                 }
               }
-            } catch {
-              // Игнорировать ошибки разбора для несвязанных данных
+            } catch (err: unknown) {
+              const msg = err instanceof Error ? err.message : String(err)
+              console.error(`Ошибка разбора MCP-ответа: ${msg}`)
             }
           })
         }
@@ -115,7 +118,9 @@ export class MCPManager implements IMCPManager {
           }
           server.pendingRequests = null
         })
-      } catch {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`MCP-сервер недоступен: ${msg}`)
         server.ready = false
       }
     }
@@ -131,8 +136,9 @@ export class MCPManager implements IMCPManager {
           server.tools = (result as unknown as { tools: MCPTool[] }).tools
           all.push(...server.tools)
         }
-      } catch {
-        // Сервер может не поддерживать tools/list
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`MCP-сервер не поддерживает tools/list: ${msg}`)
       }
     }
     return all
@@ -162,7 +168,7 @@ export class MCPManager implements IMCPManager {
         }
       }
       return { output: "Содержимое не возвращено", success: true }
-    } catch (err) {
+    } catch (err: unknown) {
       return {
         output: `Вызов MCP-инструмента не выполнен: ${err instanceof Error ? err.message : String(err)}`,
         success: false,

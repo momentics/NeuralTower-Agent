@@ -4,6 +4,8 @@ import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
 import * as path from "path"
 
+const EDIT_PREVIEW_TRUNCATE = 60
+
 /**
  * Точная замена текста в файле. Ищет старую строку,
  * заменяет новой. Работает на уровне всего файла или отдельных строк.
@@ -45,7 +47,7 @@ export class EditFileTool implements ITool {
       const count = content.split(oldStr).length - 1
 
       if (count === 0) {
-        const preview = oldStr.length > 60 ? `${oldStr.slice(0, 60)}...` : oldStr
+        const preview = oldStr.length > EDIT_PREVIEW_TRUNCATE ? `${oldStr.slice(0, EDIT_PREVIEW_TRUNCATE)}...` : oldStr
         return { output: `"${preview}" не найдено в файле`, success: false }
       }
       if (count > 1 && !all) {
@@ -61,7 +63,7 @@ export class EditFileTool implements ITool {
         output: `Заменено ${count} вхождений в ${fp}`,
         success: true,
       }
-    } catch (err) {
+    } catch (err: unknown) {
       return {
         output: `Редактирование не выполнено: ${err instanceof Error ? err.message : String(err)}`,
         success: false,

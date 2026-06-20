@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest"
 import {
   toolMatchesRule,
   resolveToolPermission,
-  builtInModes,
+  BUILT_IN_MODES,
   AgentModeManager,
 } from "./AgentMode"
 
@@ -67,37 +67,37 @@ describe("resolveToolPermission", () => {
   })
 })
 
-describe("builtInModes", () => {
+describe("BUILT_IN_MODES", () => {
   it("has all three modes", () => {
-    expect(builtInModes).toHaveProperty("build")
-    expect(builtInModes).toHaveProperty("plan")
-    expect(builtInModes).toHaveProperty("explore")
+    expect(BUILT_IN_MODES).toHaveProperty("build")
+    expect(BUILT_IN_MODES).toHaveProperty("plan")
+    expect(BUILT_IN_MODES).toHaveProperty("explore")
   })
 
   it("build mode allows read and asks for edit", () => {
-    expect(resolveToolPermission(builtInModes.build, "read")).toBe("allow")
-    expect(resolveToolPermission(builtInModes.build, "edit")).toBe("ask")
-    expect(resolveToolPermission(builtInModes.build, "bash")).toBe("ask")
+    expect(resolveToolPermission(BUILT_IN_MODES.build, "read")).toBe("allow")
+    expect(resolveToolPermission(BUILT_IN_MODES.build, "edit")).toBe("ask")
+    expect(resolveToolPermission(BUILT_IN_MODES.build, "bash")).toBe("ask")
   })
 
   it("plan mode denies edit, write, bash", () => {
-    expect(resolveToolPermission(builtInModes.plan, "edit")).toBe("deny")
-    expect(resolveToolPermission(builtInModes.plan, "write")).toBe("deny")
-    expect(resolveToolPermission(builtInModes.plan, "bash")).toBe("deny")
+    expect(resolveToolPermission(BUILT_IN_MODES.plan, "edit")).toBe("deny")
+    expect(resolveToolPermission(BUILT_IN_MODES.plan, "write")).toBe("deny")
+    expect(resolveToolPermission(BUILT_IN_MODES.plan, "bash")).toBe("deny")
   })
 
   it("explore mode denies edit and todo_write", () => {
-    expect(resolveToolPermission(builtInModes.explore, "edit")).toBe("deny")
-    expect(resolveToolPermission(builtInModes.explore, "todo_write")).toBe("deny")
+    expect(resolveToolPermission(BUILT_IN_MODES.explore, "edit")).toBe("deny")
+    expect(resolveToolPermission(BUILT_IN_MODES.explore, "todo_write")).toBe("deny")
   })
 
   it("build has correct transitions", () => {
-    expect(builtInModes.build.transitions).toContain("plan")
-    expect(builtInModes.build.transitions).toContain("explore")
+    expect(BUILT_IN_MODES.build.transitions).toContain("plan")
+    expect(BUILT_IN_MODES.build.transitions).toContain("explore")
   })
 
   it("plan only transitions to build", () => {
-    expect(builtInModes.plan.transitions).toEqual(["build"])
+    expect(BUILT_IN_MODES.plan.transitions).toEqual(["build"])
   })
 })
 
@@ -139,7 +139,7 @@ describe("AgentModeManager", () => {
   })
 
   it("returns system prompt addon", () => {
-    expect(mgr.getSystemPromptAddon()).toContain("Build")
+    expect(mgr.getSystemPromptAddon()).toContain("Построение")
   })
 
   it("lists modes sorted by priority", () => {
