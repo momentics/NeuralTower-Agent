@@ -703,4 +703,133 @@ describe("AgentLoop", () => {
     )
     expect(planStepMsg).toBeDefined()
   })
+
+  it("run recovers when callBackend throws and continues loop", async () => {
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockRejectedValueOnce(new Error("Network error"))
+      .mockResolvedValueOnce({ type: "text", content: "Recovered" })
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    const result = await loop.run("test query", [], () => {})
+
+    expect(result.role).toBe("assistant")
+    expect(result.content).toBe("Recovered")
+    expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(2)
+  })
+
+  it("run breaks after max recovery attempts when callBackend throws", async () => {
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend).mockRejectedValue(new Error("Network error"))
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+      undefined,
+      2,
+    )
+    const result = await loop.run("test query", [], () => {})
+
+    expect(result.role).toBe("assistant")
+    expect(result.content).toContain("максимальное число итераций")
+  })
+
+  it("run continues when initial compaction throws", async () => {
+    const mockCompactor = new MockCompactor(null)
+    mockCompactor.setCompactionResult({
+      needsCompaction: false,
+      tokensBefore: 0,
+      tokensAfter: 0,
+    })
+    vi.spyOn(mockCompactor, "compactIfNeeded").mockRejectedValueOnce(new Error("Compaction error"))
+
+    const loop = new AgentLoop(
+      backend, memory, mockCompactor, modeManager, sessionContext,
+      contextBuilder, toolExecutor, planner,
+    )
+    const result = await loop.run("test query", [], () => {})
+
+    expect(result.role).toBe("assistant")
+    expect(result.content).toBe("Test response")
+  })
+
+  it("run continues when loop compaction throws", async () => {
+    const mockCompactor = new MockCompactor(null)
+    mockCompactor.enableCompaction()
+    mockCompactor.setCompactionResult({
+      needsCompaction: false,
+      tokensBefore: 0,
+      tokensAfter: 0,
+    })
+    vi.spyOn(mockCompactor, "compactIfNeeded").mockRejectedValue(new Error("Compaction error"))
+
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ toolName: "read", arguments: { path: "test.ts" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "After compaction error" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValue({
+      anyFailed: false,
+    })
+
+    const loop = new AgentLoop(
+      backend, memory, mockCompactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    const result = await loop.run("test query", [], () => {})
+
+    expect(result.role).toBe("assistant")
+    expect(result.content).toBe("After compaction error")
+  })
+
+  it("run recovers when executeToolCalls throws and continues loop", async () => {
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ toolName: "read", arguments: { path: "test.ts" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "Recovered from tool crash" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls)
+      .mockRejectedValueOnce(new Error("Tool execution crashed"))
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    const result = await loop.run("test query", [], () => {})
+
+    expect(result.role).toBe("assistant")
+    expect(result.content).toBe("Recovered from tool crash")
+    expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(2)
+  })
+
+  it("run injects error message into conversation when callBackend throws", async () => {
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockRejectedValueOnce(new Error("Connection refused"))
+      .mockResolvedValueOnce({ type: "text", content: "After error" })
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    await loop.run("test query", [], () => {})
+
+    expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(2)
+    const secondCall = vi.mocked(mockToolExecutor.callBackend).mock.calls[1]
+    const conversation = secondCall[0] as ChatMessage[]
+    const errorMsg = conversation.find(
+      (m) => m.role === "user" && m.content.includes("Внимание: инструменты"),
+    )
+    expect(errorMsg).toBeDefined()
+    expect(errorMsg?.content).toContain("backend")
+  })
 })

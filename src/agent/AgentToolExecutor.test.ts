@@ -325,4 +325,55 @@ describe("AgentToolExecutor", () => {
     await executor.executeToolCalls(toolCalls, "build", conversation)
     expect(pushSpy).toHaveBeenCalledTimes(1)
   })
+
+  it("executeToolCalls handles tool that throws exception", async () => {
+    const mockTool = createMockTool("read")
+    vi.mocked(mockTool.execute).mockRejectedValue(new Error("Unexpected crash"))
+    toolRegistry.register(mockTool)
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      null,
+      modeManager,
+      memory,
+      null,
+    )
+    const conversation: ChatMessage[] = []
+    const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
+    const result = await executor.executeToolCalls(toolCalls, "build", conversation)
+
+    expect(result.anyFailed).toBe(true)
+    expect(result.failedTools).toHaveLength(1)
+    expect(result.failedTools![0].name).toBe("read")
+    expect(result.failedTools![0].error).toContain("не выполнен")
+    expect(result.failedTools![0].error).toContain("Unexpected crash")
+    expect(conversation).toHaveLength(2)
+    expect(conversation[1].content).toContain("не выполнен")
+  })
+
+  it("executeToolCalls continues processing remaining tools when one throws", async () => {
+    const throwingTool = createMockTool("read")
+    vi.mocked(throwingTool.execute).mockRejectedValue(new Error("Crash"))
+    const okTool = createMockTool("write")
+    toolRegistry.register(throwingTool)
+    toolRegistry.register(okTool)
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      null,
+      modeManager,
+      memory,
+      null,
+    )
+    const conversation: ChatMessage[] = []
+    const toolCalls = [
+      { toolName: "read", arguments: { path: "/test" } },
+      { toolName: "write", arguments: { path: "/out" } },
+    ]
+    const result = await executor.executeToolCalls(toolCalls, "build", conversation)
+
+    expect(result.anyFailed).toBe(true)
+    expect(throwingTool.execute).toHaveBeenCalledTimes(1)
+    expect(okTool.execute).toHaveBeenCalledTimes(1)
+  })
 })

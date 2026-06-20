@@ -76,10 +76,21 @@ export class AgentLoop {
       this.sessionContext.pushMessage(conversation[conversation.length - 1])
     }
 
-    const compactionResult = await this.compactor.compactIfNeeded(
-      conversation.slice(1),
-      systemPrompt,
-    )
+    let compactionResult: {
+      needsCompaction: boolean
+      compactedHistory?: ChatMessage[]
+      tokensBefore?: number
+      tokensAfter?: number
+    } = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
+
+    try {
+      compactionResult = await this.compactor.compactIfNeeded(
+        conversation.slice(1),
+        systemPrompt,
+      )
+    } catch {
+      compactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
+    }
 
     let workingConversation: ChatMessage[]
     if (compactionResult.needsCompaction && compactionResult.compactedHistory) {
@@ -103,12 +114,23 @@ export class AgentLoop {
       }
 
       // Периодическая компактизация контекста перед каждым вызовом бэкенда
-      const compactionResult = await this.compactor.compactIfNeeded(
-        workingConversation.slice(1),
-        systemPrompt,
-      )
+      let loopCompactionResult: {
+        needsCompaction: boolean
+        compactedHistory?: ChatMessage[]
+        tokensBefore?: number
+        tokensAfter?: number
+      } = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
 
-      if (compactionResult.needsCompaction && compactionResult.compactedHistory) {
+      try {
+        loopCompactionResult = await this.compactor.compactIfNeeded(
+          workingConversation.slice(1),
+          systemPrompt,
+        )
+      } catch {
+        loopCompactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
+      }
+
+      if (loopCompactionResult.needsCompaction && loopCompactionResult.compactedHistory) {
         if (compactionCount >= this.maxCompactions) {
           // Слишком много компактизаций — контекст превышает допустимые пределы
           return {
@@ -121,10 +143,10 @@ export class AgentLoop {
         compactionCount++
         workingConversation = [
           { role: "system", content: systemPrompt, timestamp: Date.now() },
-          ...compactionResult.compactedHistory,
+          ...loopCompactionResult.compactedHistory,
         ]
 
-        onCompaction?.(compactionResult.tokensBefore, compactionResult.tokensAfter)
+        onCompaction?.(loopCompactionResult.tokensBefore ?? 0, loopCompactionResult.tokensAfter ?? 0)
 
         // Синхронизация памяти после компактизации
         this.memory.restoreFromMessages(workingConversation.slice(1))
@@ -149,106 +171,124 @@ export class AgentLoop {
         }
       }
 
-      const result = await this.toolExecutor.callBackend(workingConversation, onChunk, signal)
+      let anyFailed = false
+      let failedTools: { name: string; error: string }[] | undefined
+      let currentPlan: Plan | null = null
 
-      if (result.type === "text") {
-        if (result.content) {
-          workingConversation.push({
-            role: "assistant",
-            content: result.content,
-            timestamp: Date.now(),
-          })
-          this.memory.add(workingConversation[workingConversation.length - 1])
+      try {
+        const result = await this.toolExecutor.callBackend(workingConversation, onChunk, signal)
 
-          if (this.sessionContext) {
-            this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
-          }
+        if (result.type === "text") {
+          if (result.content) {
+            workingConversation.push({
+              role: "assistant",
+              content: result.content,
+              timestamp: Date.now(),
+            })
+            this.memory.add(workingConversation[workingConversation.length - 1])
 
-          const currentPlan = this.planner.getPlan()
-          if (currentPlan && currentPlan.status === "running") {
-            currentPlan.markDone(result.content.slice(0, 500))
-            if (currentPlan.status === "running") {
-              continue
+            if (this.sessionContext) {
+              this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
             }
-          }
 
-          return workingConversation[workingConversation.length - 1] as ChatMessage
-        }
-      }
-
-      if (result.type === "tool_calls" && result.toolCalls) {
-        const currentPlan = this.planner.getPlan()
-        if (currentPlan && currentPlan.status === "running") {
-          currentPlan.markRunning()
-        }
-
-        const { anyFailed, failedTools } = await this.toolExecutor.executeToolCalls(
-          result.toolCalls,
-          currentMode,
-          workingConversation,
-          signal,
-          onToolUse,
-          onToolResult,
-        )
-
-        if (currentPlan) {
-          if (anyFailed) {
-            currentPlan.markFailed("Инструмент вернул ошибку")
-          } else {
-            currentPlan.markDone()
-          }
-        }
-
-        if (anyFailed) {
-          if (recoveryAttempts >= this.maxRecoveryAttempts) {
-            break
-          }
-
-          // Попытка адаптивного репланирования, если шаг провалился окончательно
-          if (this.replanOnFailure && currentPlan && currentPlan.currentStep?.status === "failed") {
-            const failedStep = currentPlan.currentStep!
-            const failedError = failedStep.error ?? "Инструмент вернул ошибку"
-            const newPlan = await this.planner.attemptReplan(failedStep, failedError, this.maxReplanAttempts)
-
-            if (newPlan) {
-              recoveryAttempts++
-              const newPlanText = newPlan.toText()
-              workingConversation.push({
-                role: "user",
-                content: `План пересмотрен после провала шага "${failedStep.description}". Новый план:\n\n${newPlanText}`,
-                timestamp: Date.now(),
-              })
-              this.memory.add(workingConversation[workingConversation.length - 1])
-
-              if (this.sessionContext) {
-                this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
+            currentPlan = this.planner.getPlan()
+            if (currentPlan && currentPlan.status === "running") {
+              currentPlan.markDone(result.content.slice(0, 500))
+              if (currentPlan.status === "running") {
+                continue
               }
-
-              continue
             }
+
+            return workingConversation[workingConversation.length - 1] as ChatMessage
           }
-
-          recoveryAttempts++
-          const failedNames = failedTools?.map((t) => t.name).join(", ") ?? "неизвестно"
-          workingConversation.push({
-            role: "user",
-            content: `Внимание: инструменты ${failedNames} завершены с ошибкой. Проанализируйте ошибки выше и попробуйте выполнить задачу другим способом. Вы можете: повторить вызов с другими аргументами, использовать другой инструмент, или завершить задачу с описанием ошибки.`,
-            timestamp: Date.now(),
-          })
-          this.memory.add(workingConversation[workingConversation.length - 1])
-
-          if (this.sessionContext) {
-            this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
-          }
-
-          continue
         }
 
-        // Инструменты выполнены успешно — продолжить цикл
-        continue
-      } else {
-        break
+        if (result.type === "tool_calls" && result.toolCalls) {
+          currentPlan = this.planner.getPlan()
+          if (currentPlan && currentPlan.status === "running") {
+            currentPlan.markRunning()
+          }
+
+          const toolResult = await this.toolExecutor.executeToolCalls(
+            result.toolCalls,
+            currentMode,
+            workingConversation,
+            signal,
+            onToolUse,
+            onToolResult,
+          )
+
+          anyFailed = toolResult.anyFailed
+          failedTools = toolResult.failedTools
+
+          if (currentPlan) {
+            if (anyFailed) {
+              currentPlan.markFailed("Инструмент вернул ошибку")
+            } else {
+              currentPlan.markDone()
+            }
+          }
+        } else {
+          break
+        }
+      } catch (err) {
+        anyFailed = true
+        const errorMessage = err instanceof Error ? err.message : String(err)
+        failedTools = [{ name: "backend", error: errorMessage }]
+
+        currentPlan = this.planner.getPlan()
+        if (currentPlan) {
+          currentPlan.markFailed(errorMessage)
+        }
       }
+
+      if (anyFailed) {
+        if (recoveryAttempts >= this.maxRecoveryAttempts) {
+          break
+        }
+
+        // Попытка адаптивного репланирования, если шаг провалился окончательно
+        if (this.replanOnFailure && currentPlan && currentPlan.currentStep?.status === "failed") {
+          const failedStep = currentPlan.currentStep!
+          const failedError = failedStep.error ?? "Инструмент вернул ошибку"
+          const newPlan = await this.planner.attemptReplan(failedStep, failedError, this.maxReplanAttempts)
+
+          if (newPlan) {
+            recoveryAttempts++
+            const newPlanText = newPlan.toText()
+            workingConversation.push({
+              role: "user",
+              content: `План пересмотрен после провала шага "${failedStep.description}". Новый план:\n\n${newPlanText}`,
+              timestamp: Date.now(),
+            })
+            this.memory.add(workingConversation[workingConversation.length - 1])
+
+            if (this.sessionContext) {
+              this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
+            }
+
+            continue
+          }
+        }
+
+        recoveryAttempts++
+        const failedNames = failedTools?.map((t) => t.name).join(", ") ?? "неизвестно"
+        workingConversation.push({
+          role: "user",
+          content: `Внимание: инструменты ${failedNames} завершены с ошибкой. Проанализируйте ошибки выше и попробуйте выполнить задачу другим способом. Вы можете: повторить вызов с другими аргументами, использовать другой инструмент, или завершить задачу с описанием ошибки.`,
+          timestamp: Date.now(),
+        })
+        this.memory.add(workingConversation[workingConversation.length - 1])
+
+        if (this.sessionContext) {
+          this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
+        }
+
+        continue
+      }
+
+      // Инструменты выполнены успешно — продолжить цикл
+      continue
     }
 
     return {

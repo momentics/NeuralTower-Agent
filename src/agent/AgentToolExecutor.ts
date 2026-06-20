@@ -101,7 +101,15 @@ export class AgentToolExecutor {
 
       onToolUse?.(tc.toolName, resolvedArgs)
 
-      const toolResult = await this.toolRegistry.invoke(tc.toolName, resolvedArgs)
+      let toolResult: ToolResult
+
+      try {
+        toolResult = await this.toolRegistry.invoke(tc.toolName, resolvedArgs)
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : String(err)
+        toolResult = { output: `Ошибка выполнения: ${errorMessage}`, success: false }
+      }
+
       onToolResult?.(tc.toolName, toolResult)
 
       workingConversation.push({
