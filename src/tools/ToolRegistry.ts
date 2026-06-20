@@ -47,8 +47,7 @@ export class ToolRegistry {
     const start = Date.now()
     try {
       const result = await tool.execute(args)
-      if (result.durationMs === undefined) result.durationMs = Date.now() - start
-      return result
+      return { ...result, durationMs: Date.now() - start }
     } catch (err) {
       const msg = err instanceof ToolError ? `${err.name}: ${err.message}` : err instanceof Error ? err.message : String(err)
       return {

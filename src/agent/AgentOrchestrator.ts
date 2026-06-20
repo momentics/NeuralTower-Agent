@@ -3,11 +3,13 @@ import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
 import type { ISkill } from "../skills/ISkill"
 import { AgentCore } from "./AgentCore"
+import type { AgentModeName } from "./AgentMode"
 import type { AgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
 import type { Plan } from "./Plan"
 import type { TodoStore } from "./TodoStore"
 import type { ToolResult } from "./AgentTypes"
 import type { IContextProviderRegistry } from "../core/providers/context/registry"
+import type { ContextItem } from "../core/providers/context/types"
 
 /**
  * AgentOrchestrator — тонкий фасад над AgentCore.
@@ -29,11 +31,15 @@ export class AgentOrchestrator {
     private readonly deps: AgentDependencies,
     private readonly spawnFactory: AgentSpawnFactory | null = null,
   ) {
-    this.core = new AgentCore(
-      backend,
-      toolRegistry,
-      skillManager,
-      deps,
+    this.core = this.createCore()
+  }
+
+  private createCore(): AgentCore {
+    return new AgentCore(
+      this.backend,
+      this.toolRegistry,
+      this.skillManager,
+      this.deps,
     )
   }
 
@@ -67,11 +73,11 @@ export class AgentOrchestrator {
 
   // ── Режим ──────────────────────────────────────────────
 
-  getMode() {
+  getMode(): AgentModeName {
     return this.core.getMode()
   }
 
-  switchMode(newMode: string): boolean {
+  switchMode(newMode: AgentModeName): boolean {
     return this.core.switchMode(newMode)
   }
 
@@ -83,16 +89,11 @@ export class AgentOrchestrator {
 
   // ── Сессия ─────────────────────────────────────────────
 
-  async restoreSession(messages: import("../core/IBackend").ChatMessage[]): Promise<void> {
+  async restoreSession(messages: ChatMessage[]): Promise<void> {
     this.abortController.abort()
     this.core.dispose()
     this.abortController = new AbortController()
-    this.core = new AgentCore(
-      this.backend,
-      this.toolRegistry,
-      this.skillManager,
-      this.deps,
-    )
+    this.core = this.createCore()
     await this.core.restoreSession(messages)
   }
 
@@ -102,7 +103,7 @@ export class AgentOrchestrator {
 
   // ── Контекст ───────────────────────────────────────────
 
-  async resolveContextProvider(name: string, query: string): Promise<import("../core/providers/context/types").ContextItem[]> {
+  async resolveContextProvider(name: string, query: string): Promise<ContextItem[]> {
     const provider = this.deps.contextProviderRegistry.get(name)
     if (!provider) return []
     return provider.resolve(query)
@@ -139,12 +140,7 @@ export class AgentOrchestrator {
       await this.deps.fileIndex.build(workDir)
     }
     this.abortController = new AbortController()
-    this.core = new AgentCore(
-      this.backend,
-      this.toolRegistry,
-      this.skillManager,
-      this.deps,
-    )
+    this.core = this.createCore()
   }
 
   dispose(): void {

@@ -45,6 +45,17 @@ export class BashTool implements ITool {
     cwd: string | undefined,
   ): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
+      let settled = false
+      const trySettle = (value: { stdout: string; stderr: string } | undefined, error: Error | undefined) => {
+        if (settled) return
+        settled = true
+        if (error) {
+          reject(error)
+        } else if (value) {
+          resolve(value)
+        }
+      }
+
       const isWindows = process.platform === "win32"
       const proc = spawn(
         isWindows ? "cmd.exe" : "sh",
@@ -67,7 +78,7 @@ export class BashTool implements ITool {
         stdoutSize += chunk.length
         if (stdoutSize > maxBuffer) {
           proc.kill()
-          reject(new Error("Превышен лимит вывода (1 МБ)"))
+          trySettle(undefined, new Error("Превышен лимит вывода (1 МБ)"))
           return
         }
         stdoutChunks.push(chunk)
@@ -77,23 +88,23 @@ export class BashTool implements ITool {
         stderrSize += chunk.length
         if (stderrSize > maxBuffer) {
           proc.kill()
-          reject(new Error("Превышен лимит вывода ошибок (1 МБ)"))
+          trySettle(undefined, new Error("Превышен лимит вывода ошибок (1 МБ)"))
           return
         }
         stderrChunks.push(chunk)
       })
 
       proc.on("error", (err) => {
-        reject(err)
+        trySettle(undefined, err instanceof Error ? err : new Error(String(err)))
       })
 
       proc.on("close", (code) => {
         const stdout = Buffer.concat(stdoutChunks).toString("utf-8")
         const stderr = Buffer.concat(stderrChunks).toString("utf-8")
         if (code === 0) {
-          resolve({ stdout, stderr })
+          trySettle({ stdout, stderr }, undefined)
         } else {
-          reject(new Error(`Выходной код: ${code ?? -1}` + (stderr ? `\n${stderr}` : "")))
+          trySettle(undefined, new Error(`Выходной код: ${code ?? -1}` + (stderr ? `\n${stderr}` : "")))
         }
       })
     })

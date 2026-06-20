@@ -33,7 +33,7 @@ export type AgentSpawnFactory = (
  */
 export interface AgentDependencies {
   /** Функция получения рабочей директории (может меняться). */
-  getWorkDir: () => string
+  getWorkDir: () => string | null
 
   /** Конфигурация приложения. */
   readonly config: AppConfig

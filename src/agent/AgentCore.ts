@@ -12,9 +12,10 @@ import { AgentPlanner } from "./AgentPlanner"
 import { SessionContext } from "./SessionContext"
 import type { AgentDependencies } from "./AgentDependencies"
 import type { ToolResult } from "./AgentTypes"
+import type { AgentModeName } from "./AgentMode"
 import { TodoStore } from "./TodoStore"
 import type { Plan } from "./Plan"
-import { AbortError } from "../core/errors"
+import { AbortError, AgentError } from "../core/errors"
 
 /**
  * AgentCore — ядро выполнения агента.
@@ -104,11 +105,11 @@ export class AgentCore {
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
   ): Promise<ChatMessage> {
     if (this.disposed) {
-      throw new Error("Агент освобождён")
+      throw new AgentError("Агент освобождён")
     }
 
     if (signal?.aborted) {
-      throw new AbortError("Task aborted")
+      throw new AbortError()
     }
 
     const activeSkills: ISkill[] = this.skillManager.match(query)
@@ -131,8 +132,8 @@ export class AgentCore {
       if (workDir) {
         try {
           await plan.save(workDir)
-        } catch {
-          // Сохранение плана не критично — продолжаем выполнение
+        } catch (err) {
+          console.warn(`Не удалось сохранить план: ${err instanceof Error ? err.message : String(err)}`)
         }
       }
 
@@ -175,15 +176,15 @@ export class AgentCore {
   /**
    * Вернуть текущий режим.
    */
-  getMode() {
-    return this.modeManager.getMode()
+  getMode(): AgentModeName {
+    return this.modeManager.getModeName()
   }
 
   /**
    * Переключить режим.
    */
-  switchMode(newMode: string): boolean {
-    return this.modeManager.switchMode(newMode as import("./AgentMode").AgentModeName)
+  switchMode(newMode: AgentModeName): boolean {
+    return this.modeManager.switchMode(newMode)
   }
 
   /**

@@ -88,7 +88,7 @@ describe("AgentCore", () => {
     const core = new AgentCore(backend, toolRegistry, skillManager, deps)
     const ac = new AbortController()
     ac.abort()
-    await expect(core.run("test", () => {}, undefined, undefined, ac.signal)).rejects.toThrow("Task aborted")
+    await expect(core.run("test", () => {}, undefined, undefined, ac.signal)).rejects.toThrow("Задача отменена")
   })
 
   it("throws after dispose", async () => {

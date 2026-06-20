@@ -107,7 +107,7 @@ describe("AgentOrchestrator", () => {
     const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps)
     const ac = new AbortController()
     ac.abort()
-    await expect(orchestrator.run("test", () => {}, undefined, undefined, ac.signal)).rejects.toThrow("Task aborted")
+    await expect(orchestrator.run("test", () => {}, undefined, undefined, ac.signal)).rejects.toThrow("Задача отменена")
   })
 
   it("resets session", () => {
@@ -184,7 +184,7 @@ describe("AgentOrchestrator", () => {
     const orchestrator = new AgentOrchestrator(slowBackend, toolRegistry, skillManager, deps)
     const runPromise = orchestrator.run("test", () => {})
     await orchestrator.reload()
-    await expect(runPromise).rejects.toThrow("Task aborted")
+    await expect(runPromise).rejects.toThrow("Задача отменена")
   })
 
   it("dispose aborts running task", async () => {
@@ -202,7 +202,7 @@ describe("AgentOrchestrator", () => {
     const orchestrator = new AgentOrchestrator(slowBackend, toolRegistry, skillManager, deps)
     const runPromise = orchestrator.run("test", () => {})
     orchestrator.dispose()
-    await expect(runPromise).rejects.toThrow("Task aborted")
+    await expect(runPromise).rejects.toThrow("Задача отменена")
   })
 
   it("getTodoStore returns a TodoStore instance", () => {

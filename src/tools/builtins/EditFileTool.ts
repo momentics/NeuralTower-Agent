@@ -45,7 +45,8 @@ export class EditFileTool implements ITool {
       const count = content.split(oldStr).length - 1
 
       if (count === 0) {
-        return { output: `"${oldStr.slice(0, 60)}..." не найдено в файле`, success: false }
+        const preview = oldStr.length > 60 ? `${oldStr.slice(0, 60)}...` : oldStr
+        return { output: `"${preview}" не найдено в файле`, success: false }
       }
       if (count > 1 && !all) {
         return { output: `Найдено ${count} вхождений. Установите replaceAll=true или добавьте контекст.`, success: false }

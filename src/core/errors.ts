@@ -79,7 +79,7 @@ export class AgentMismatchError extends ContextError {
     public readonly expectedAgent: string,
     public readonly actualAgent: string,
   ) {
-    super(`Agent mismatch: expected "${expectedAgent}", got "${actualAgent}"`)
+    super(`Несоответствие агента: ожидался "${expectedAgent}", получен "${actualAgent}"`)
     this.name = "AgentMismatchError"
   }
 }
@@ -92,9 +92,9 @@ export class AgentReplacementBlockedError extends ContextError {
     public readonly currentAgent: string,
   ) {
     super(
-      `Agent replacement blocked in session ${sessionID}: ` +
-      `"${previousAgent}" -> "${currentAgent}"`,
-    )
+       `Замена агента заблокирована в сессии ${sessionID}: ` +
+       `"${previousAgent}" -> "${currentAgent}"`,
+     )
     this.name = "AgentReplacementBlockedError"
   }
 }
@@ -121,7 +121,7 @@ export class AgentError extends NeuralTowerError {
 
 /** Агент отменён пользователем. */
 export class AbortError extends AgentError {
-  constructor(message = "Task aborted") {
+  constructor(message = "Задача отменена") {
     super(message)
     this.name = "AbortError"
   }

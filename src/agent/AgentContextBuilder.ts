@@ -13,7 +13,7 @@ export class AgentContextBuilder {
     private readonly memory: AgentMemory,
     private readonly fileIndex: IFileIndex,
     private readonly gitService: IGitService | null,
-    private readonly getWorkDir: () => string,
+    private readonly getWorkDir: () => string | null,
     private readonly injectDiffContext: boolean,
     private readonly contextManager: IContextManager | null = null,
   ) {}
@@ -30,7 +30,10 @@ export class AgentContextBuilder {
 
     let gitContext = ""
     if (this.gitService && this.injectDiffContext) {
-      gitContext = await this.gitService.getDiffContext(this.getWorkDir())
+      const workDir = this.getWorkDir()
+      if (workDir) {
+        gitContext = await this.gitService.getDiffContext(workDir)
+      }
     }
 
     let contextManagerContent = ""

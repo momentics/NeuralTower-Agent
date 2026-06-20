@@ -1,10 +1,11 @@
 import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
-import { execFile } from "child_process"
-import { promisify } from "util"
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
 import * as fs from "fs/promises"
 import * as path from "path"
 import { ExecutionError } from "../../core/errors"
+import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 
 const execFileAsync = promisify(execFile)
 
@@ -29,7 +30,10 @@ export class GrepTool implements ITool {
     required: ["pattern"],
   }
 
-  private static rgAvailable = true
+  private static _rgChecked = false
+  private static _rgAvailable = true
+
+  constructor(private readonly workDir?: string) {}
 
   async execute(args: Record<string, unknown>): Promise<ToolResult> {
     const pattern = String(args.pattern ?? "")
@@ -37,17 +41,23 @@ export class GrepTool implements ITool {
     const include = args.include ? String(args.include) : undefined
     if (!pattern) return { output: "Не указан шаблон поиска", success: false }
 
+    const resolved = path.resolve(root)
+    if (!isInsideWorkspace(resolved, this.workDir)) {
+      return { output: "Доступ запрещён: путь выходит за пределы рабочей директории", success: false }
+    }
+
     try {
-      if (GrepTool.rgAvailable) {
+      if (GrepTool._rgAvailable) {
         try {
-          const rgResult = await this.executeRg(pattern, root, include)
+          const rgResult = await this.executeRg(pattern, resolved, include)
           return rgResult
         } catch {
-          GrepTool.rgAvailable = false
+          GrepTool._rgChecked = true
+          GrepTool._rgAvailable = false
         }
       }
 
-      return await this.executeFallback(pattern, root, include)
+      return await this.executeFallback(pattern, resolved, include)
     } catch (err) {
       return {
         output: `Поиск не выполнен: ${err instanceof Error ? err.message : String(err)}`,
@@ -66,7 +76,7 @@ export class GrepTool implements ITool {
       "-n", "--no-heading", "--color=never", pattern, ...fileArg,
     ], { timeout: 15000, maxBuffer: 512 * 1024 })
     if (stderr && !stdout) {
-      throw new ExecutionError(stderr)
+      return { output: `Ошибка ripgrep: ${stderr}`, success: false }
     }
     return { output: stdout || "Совпадений не найдено", success: true }
   }

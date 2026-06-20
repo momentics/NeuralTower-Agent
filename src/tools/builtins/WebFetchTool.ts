@@ -1,6 +1,6 @@
 import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
-import { fetchUrl } from "../../network/UrlFetcher"
+import { fetchUrl, htmlToText } from "../../network/UrlFetcher"
 
 /**
  * Получить содержимое URL и вернуть в формате Markdown или текста.
@@ -26,6 +26,7 @@ export class WebFetchTool implements ITool {
     const url = String(args.url ?? "")
     if (!url) return { output: "Не указан URL", success: false }
 
+    const format = (args.format as string | undefined) ?? "markdown"
     const timeoutSec = Number(args.timeout ?? 30) || 30
 
     const result = await fetchUrl(url, {
@@ -40,6 +41,11 @@ export class WebFetchTool implements ITool {
       return { output: `HTTP ${result.status}`, success: false }
     }
 
-    return { output: result.text, success: true }
+    let output = result.text
+    if (format === "text") {
+      output = htmlToText(result.text)
+    }
+
+    return { output, success: true }
   }
 }

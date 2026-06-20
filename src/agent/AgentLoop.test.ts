@@ -124,7 +124,7 @@ describe("AgentLoop", () => {
     )
     const ac = new AbortController()
     ac.abort()
-    await expect(loop.run("test", [], () => {}, undefined, undefined, ac.signal)).rejects.toThrow("Task aborted")
+    await expect(loop.run("test", [], () => {}, undefined, undefined, ac.signal)).rejects.toThrow("Задача отменена")
   })
 
   it("run handles tool_calls and loops back to backend", async () => {

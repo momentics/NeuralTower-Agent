@@ -20,6 +20,10 @@ export class AgentLoop {
   private readonly maxReplanAttempts: number
   private readonly maxCompactions: number
 
+  private pushSessionMessage(msg: ChatMessage): void {
+    this.sessionContext?.pushMessage(msg)
+  }
+
   constructor(
     private readonly backend: IBackend,
     private readonly memory: AgentMemory,
@@ -72,9 +76,7 @@ export class AgentLoop {
 
     this.memory.add(conversation[conversation.length - 1])
 
-    if (this.sessionContext) {
-      this.sessionContext.pushMessage(conversation[conversation.length - 1])
-    }
+    this.pushSessionMessage(conversation[conversation.length - 1])
 
     let compactionResult: {
       needsCompaction: boolean
@@ -88,7 +90,8 @@ export class AgentLoop {
         conversation.slice(1),
         systemPrompt,
       )
-    } catch {
+    } catch (err) {
+      console.warn(`Компактизация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
       compactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
     }
 
@@ -110,7 +113,7 @@ export class AgentLoop {
       iterations++
 
       if (signal?.aborted) {
-        throw new AbortError("Task aborted")
+        throw new AbortError()
       }
 
       // Периодическая компактизация контекста перед каждым вызовом бэкенда
@@ -126,7 +129,8 @@ export class AgentLoop {
           workingConversation.slice(1),
           systemPrompt,
         )
-      } catch {
+      } catch (err) {
+        console.warn(`Компактизация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
         loopCompactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
       }
 
@@ -151,9 +155,7 @@ export class AgentLoop {
         // Синхронизация памяти после компактизации
         this.memory.restoreFromMessages(workingConversation.slice(1))
 
-        if (this.sessionContext) {
-          this.sessionContext.replaceMessages(workingConversation.slice(1))
-        }
+        this.sessionContext?.replaceMessages(workingConversation.slice(1))
       }
 
       // Инъекция шага плана в разговор
@@ -187,9 +189,7 @@ export class AgentLoop {
             })
             this.memory.add(workingConversation[workingConversation.length - 1])
 
-            if (this.sessionContext) {
-              this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
-            }
+            this.pushSessionMessage(workingConversation[workingConversation.length - 1])
 
             currentPlan = this.planner.getPlan()
             if (currentPlan && currentPlan.status === "running") {
@@ -263,9 +263,7 @@ export class AgentLoop {
             })
             this.memory.add(workingConversation[workingConversation.length - 1])
 
-            if (this.sessionContext) {
-              this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
-            }
+            this.pushSessionMessage(workingConversation[workingConversation.length - 1])
 
             continue
           }
@@ -280,9 +278,7 @@ export class AgentLoop {
         })
         this.memory.add(workingConversation[workingConversation.length - 1])
 
-        if (this.sessionContext) {
-          this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
-        }
+        this.pushSessionMessage(workingConversation[workingConversation.length - 1])
 
         continue
       }
