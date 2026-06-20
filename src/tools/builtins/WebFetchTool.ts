@@ -1,5 +1,6 @@
 import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
+import { fetchUrl } from "../../network/UrlFetcher"
 
 /**
  * Получить содержимое URL и вернуть в формате Markdown или текста.
@@ -25,22 +26,20 @@ export class WebFetchTool implements ITool {
     const url = String(args.url ?? "")
     if (!url) return { output: "Не указан URL", success: false }
 
-    try {
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), (Number(args.timeout ?? 30) || 30) * 1000)
-      const res = await fetch(url, { signal: controller.signal }).finally(() => clearTimeout(timer))
+    const timeoutSec = Number(args.timeout ?? 30) || 30
 
-      if (!res.ok) {
-        return { output: `HTTP ${res.status}`, success: false }
-      }
+    const result = await fetchUrl(url, {
+      timeout: timeoutSec * 1000,
+      maxLength: 8000,
+    })
 
-      const text = await res.text()
-      return { output: text.slice(0, 8000), success: true }
-    } catch (err) {
-      return {
-        output: `Загрузка не выполнена: ${err instanceof Error ? err.message : String(err)}`,
-        success: false,
+    if (!result.ok) {
+      if (result.status === 0) {
+        return { output: result.text, success: false }
       }
+      return { output: `HTTP ${result.status}`, success: false }
     }
+
+    return { output: result.text, success: true }
   }
 }

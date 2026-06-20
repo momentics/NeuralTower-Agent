@@ -28,6 +28,7 @@ describe("makeUrlProvider", () => {
       ok: false,
       status: 404,
       statusText: "Not Found",
+      text: vi.fn().mockResolvedValue(""),
     }))
     const result = await provider.resolve("https://example.com")
     expect(result).toHaveLength(1)

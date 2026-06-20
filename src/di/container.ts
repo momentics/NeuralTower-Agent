@@ -44,7 +44,6 @@ import {
   makeUrlProvider,
   makeWebSearchProvider,
   makeFileProvider,
-  makeCodeProvider,
   makeTreeProvider,
   makeRepoMapProvider,
   makeRulesProvider,
@@ -279,7 +278,7 @@ function registerContextProviders(
   providers.push(register(makeUrlProvider()))
   providers.push(register(makeWebSearchProvider()))
   providers.push(register(makeFileProvider(getWorkDir)))
-  providers.push(register(makeCodeProvider(getWorkDir, () => fileIndex)))
+ 
   providers.push(register(makeTreeProvider(getWorkDir)))
   providers.push(register(makeRepoMapProvider(
     getWorkDir,

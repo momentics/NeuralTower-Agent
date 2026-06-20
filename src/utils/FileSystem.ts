@@ -1,0 +1,48 @@
+import * as fs from "fs/promises"
+import * as path from "path"
+
+export interface WalkOptions {
+  /** Максимальное число файлов */
+  maxFiles?: number
+  /** Пропускать скрытые директории и файлы (начинающиеся с .) */
+  skipHidden?: boolean
+  /** Пропускать node_modules */
+  skipNodeModules?: boolean
+}
+
+const DEFAULT_WALK_OPTIONS: Required<WalkOptions> = {
+  maxFiles: 20000,
+  skipHidden: true,
+  skipNodeModules: true,
+}
+
+/**
+ * Рекурсивно обходить директорию и вернуть список файлов.
+ * Пропускает скрытые файлы/директории и node_modules.
+ */
+export async function walkDirectory(
+  dir: string,
+  options: WalkOptions = {},
+): Promise<string[]> {
+  const opts = { ...DEFAULT_WALK_OPTIONS, ...options }
+  const files: string[] = []
+
+  const walk = async (current: string): Promise<void> => {
+    if (files.length >= opts.maxFiles) return
+    const entries = await fs.readdir(current, { withFileTypes: true }).catch(() => [])
+    for (const entry of entries) {
+      if (files.length >= opts.maxFiles) return
+      if (opts.skipHidden && entry.name.startsWith(".")) continue
+      if (opts.skipNodeModules && entry.name === "node_modules") continue
+      const full = path.join(current, entry.name)
+      if (entry.isDirectory()) {
+        await walk(full)
+      } else {
+        files.push(full)
+      }
+    }
+  }
+
+  await walk(dir)
+  return files
+}

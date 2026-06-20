@@ -1,14 +1,6 @@
-import type { CodeSearchEntry } from "./code"
+import type { IndexEntry } from "../../../repo/FileIndex"
 import type { ContextProvider, ContextItem } from "./types"
-
-export interface RepoSummary {
-  fileCount: number
-  dirCount: number
-  languages: Record<string, number>
-  buildSystems: string[]
-  topDirs: string[]
-  notableFiles: string[]
-}
+import { RepoSummary } from "../../../repo/RepoAnalyzer"
 
 export interface FileIndexStats {
   totalFiles: number
@@ -18,7 +10,7 @@ export interface FileIndexStats {
 
 export function makeRepoMapProvider(
   getWorkDir: () => string,
-  getFileIndex: () => { findByPattern(pattern: string): CodeSearchEntry[]; findByLanguage(lang: string): CodeSearchEntry[]; stats(): FileIndexStats },
+  getFileIndex: () => { findByPattern(pattern: string): IndexEntry[]; findByLanguage(lang: string): IndexEntry[]; stats(): FileIndexStats },
   getRepoSummary: () => Promise<RepoSummary>,
 ): ContextProvider {
   return {

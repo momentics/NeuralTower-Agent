@@ -1,61 +1,20 @@
 import * as vscode from "vscode"
 import type { ContextProvider, ContextItem } from "./types"
+import {
+  lspSymbolKindLabel,
+  formatDocumentSymbols,
+  withTimeout,
+  executeWorkspaceSymbol,
+  executeDocumentSymbol,
+} from "../../../lsp/LspClient"
 
-const LSP_PROVIDER_TIMEOUT_MS = 10_000
 const LSP_PROVIDER_MAX_SYMBOLS = 30
 const LSP_PROVIDER_MAX_DEFS = 5
 const LSP_PROVIDER_MAX_REFS = 15
 
-function lspSymbolKindLabel(kind: vscode.SymbolKind): string {
-  const map: Record<number, string> = {
-    [vscode.SymbolKind.Class]: "class",
-    [vscode.SymbolKind.Function]: "function",
-    [vscode.SymbolKind.Method]: "method",
-    [vscode.SymbolKind.Interface]: "interface",
-    [vscode.SymbolKind.Variable]: "variable",
-    [vscode.SymbolKind.Constant]: "constant",
-    [vscode.SymbolKind.Struct]: "struct",
-    [vscode.SymbolKind.Enum]: "enum",
-    [vscode.SymbolKind.Property]: "property",
-    [vscode.SymbolKind.Field]: "field",
-    [vscode.SymbolKind.Constructor]: "constructor",
-    [vscode.SymbolKind.Module]: "module",
-    [vscode.SymbolKind.Namespace]: "namespace",
-    [vscode.SymbolKind.Package]: "package",
-    [vscode.SymbolKind.TypeParameter]: "type_param",
-  }
-  return map[kind] ?? `kind:${kind}`
-}
-
-function formatDocSymbols(symbols: vscode.DocumentSymbol[], depth: number, results: string[]): string[] {
-  const indent = "  ".repeat(depth)
-
-  for (const sym of symbols) {
-    if (results.length >= 100) break
-    const kind = lspSymbolKindLabel(sym.kind)
-    const range = `${sym.range.start.line + 1}-${sym.range.end.line + 1}`
-    const detail = sym.detail ? ` (${sym.detail})` : ""
-    results.push(`${indent}${kind} ${sym.name}${detail} [${range}]`)
-
-    if (sym.children && sym.children.length > 0 && depth < 4 && results.length < 100) {
-      formatDocSymbols(sym.children, depth + 1, results)
-    }
-  }
-
-  return results
-}
-
 export function makeLspProvider(
   getWorkDir: () => string,
 ): ContextProvider {
-  const withTimeout = <T>(fn: () => Promise<T>, label: string): Promise<T> => {
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const timeoutP = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`LSP ${label}: таймаут ${LSP_PROVIDER_TIMEOUT_MS}ms`)), LSP_PROVIDER_TIMEOUT_MS)
-    })
-    return Promise.race([fn(), timeoutP]).finally(() => { if (timer) clearTimeout(timer) })
-  }
-
   return {
     description: {
       name: "lsp",
@@ -93,37 +52,18 @@ export function makeLspProvider(
 
       try {
         if (symbolQuery && !filePath) {
-          const results = await withTimeout(
-            () => Promise.resolve(vscode.commands.executeCommand<vscode.SymbolInformation[]>(
-              "vscode.executeWorkspaceSymbolProvider",
-              symbolQuery,
-            )).then((r) => r ?? []),
-            "workspaceSymbol",
-          )
-
-          if (results.length === 0) {
-            return [{ content: `Символы workspace для "${symbolQuery}" не найдены`, name: "lsp", description: "not found" }]
-          }
-
-          const lines = results.slice(0, LSP_PROVIDER_MAX_SYMBOLS).map((s) => {
-            const kindLabel = lspSymbolKindLabel(s.kind)
-            const container = s.containerName ? ` <${s.containerName}>` : ""
-            const loc = s.location
-            return `${kindLabel} ${s.name}${container} — ${loc.uri.fsPath}:${loc.range.start.line + 1}`
-          })
-
+          const wsResult = await executeWorkspaceSymbol(symbolQuery, getWorkDir, LSP_PROVIDER_MAX_SYMBOLS)
           return [{
-            content: `Символы workspace для "${symbolQuery}" (${results.length}):\n\n${lines.join("\n")}`,
+            content: wsResult.output,
             name: `LSP: ${symbolQuery}`,
-            description: `${results.length} результатов`,
+            description: wsResult.output.includes("не найдены") ? "not found" : `${LSP_PROVIDER_MAX_SYMBOLS} результатов`,
           }]
         }
 
         if (filePath) {
-          const uri = vscode.Uri.file(filePath)
-          await vscode.workspace.openTextDocument(uri)
-
           if (line && character) {
+            const uri = vscode.Uri.file(filePath)
+            await vscode.workspace.openTextDocument(uri)
             const position = new vscode.Position(line - 1, character - 1)
 
             const [definitions, references, hovers] = await Promise.all([
@@ -186,22 +126,11 @@ export function makeLspProvider(
             }]
           }
 
-          const symbols = await withTimeout(
-            () => Promise.resolve(vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-              "vscode.executeDocumentSymbolProvider", uri,
-            )).then((r) => r ?? []),
-            "documentSymbol",
-          )
-
-          if (symbols.length === 0) {
-            return [{ content: `Символы не найдены для ${filePath}`, name: "lsp", description: "empty" }]
-          }
-
-          const lines = formatDocSymbols(symbols, 0, []).slice(0, 50)
+          const docResult = await executeDocumentSymbol(filePath, getWorkDir)
           return [{
-            content: `Символы файла ${filePath}:\n\n${lines.join("\n")}`,
+            content: docResult.output,
             name: `LSP: ${path.default.basename(filePath)}`,
-            description: `${symbols.length} символов`,
+            description: docResult.output.includes("не найдены") ? "empty" : `${LSP_PROVIDER_MAX_SYMBOLS} символов`,
           }]
         }
 

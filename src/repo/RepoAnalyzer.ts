@@ -1,5 +1,7 @@
 import * as fs from "fs/promises"
 import * as path from "path"
+import { detectLanguageFull } from "../utils/LanguageDetector"
+import { walkDirectory } from "../utils/FileSystem"
 
 /**
  * Анализатор репозитория. Строит карту структуры, определяет
@@ -11,42 +13,15 @@ import * as path from "path"
  */
 
 export interface RepoSummary {
-  /** Общее число файлов. */
   fileCount: number
-  /** Число директорий. */
   dirCount: number
-  /** Определённые языки с количеством файлов. */
   languages: Record<string, number>
-  /** Определённые менеджеры пакетов и средства сборки. */
   buildSystems: string[]
-  /** Структура директорий верхнего уровня. */
   topDirs: string[]
-  /** Заметные файлы (конфигурация, точки входа, README). */
   notableFiles: string[]
 }
 
 export class RepoAnalyzer {
-  private readonly languagePatterns: Record<string, RegExp> = {
-    TypeScript: /\.(ts|tsx|mts|cts)$/,
-    JavaScript: /\.(js|jsx|mjs|cjs)$/,
-    Rust: /\.rs$/,
-    Go: /\.go$/,
-    Python: /\.py$/,
-    Java: /\.java$/,
-    Kotlin: /\.kt$/,
-    Swift: /\.swift$/,
-    C: /\.(c|h)$/,
-    CPP: /\.(cpp|cxx|cc|hpp|hh)$/,
-    HTML: /\.(html|htm)$/,
-    CSS: /\.(css|scss|sass|less)$/,
-    Markdown: /\.md$/,
-    JSON: /\.json$/,
-    TOML: /\.toml$/,
-    YAML: /\.(yaml|yml)$/,
-    Shell: /\.(sh|bash|zsh)$/,
-    PowerShell: /\.(ps1|psm1)$/,
-  }
-
   private readonly buildPatterns: Record<string, RegExp> = {
     npm: /package\.json/,
     bun: /bun\.lockb/,
@@ -69,7 +44,7 @@ export class RepoAnalyzer {
    * содержимое файлов не читается.
    */
   async analyze(dir: string): Promise<RepoSummary> {
-    const files = await this.scanDir(dir)
+    const files = await walkDirectory(dir, { maxFiles: 5000 })
     const languages = this.detectLanguages(files)
     const buildSystems = this.detectBuildSystems(files)
     const topDirs = this.topDirectories(files)
@@ -106,36 +81,12 @@ export class RepoAnalyzer {
 
   // ── Вспомогательные приватные методы ────────────────────
 
-  private async scanDir(dir: string, maxFiles = 5000): Promise<string[]> {
-    const files: string[] = []
-
-    const list = async (current: string): Promise<void> => {
-      if (files.length >= maxFiles) return
-      const entries = await fs.readdir(current, { withFileTypes: true })
-      for (const entry of entries) {
-        if (files.length >= maxFiles) return
-        const full = path.join(current, entry.name)
-        if (entry.name.startsWith(".") || entry.name === "node_modules") continue
-        if (entry.isDirectory()) {
-          await list(full)
-        } else {
-          files.push(full)
-        }
-      }
-    }
-
-    await list(dir)
-    return files
-  }
-
   private detectLanguages(files: string[]): Record<string, number> {
     const counts: Record<string, number> = {}
     for (const f of files) {
-      for (const [lang, re] of Object.entries(this.languagePatterns)) {
-        if (re.test(f)) {
-          counts[lang] = (counts[lang] ?? 0) + 1
-          break
-        }
+      const lang = detectLanguageFull(f)
+      if (lang !== "Unknown") {
+        counts[lang] = (counts[lang] ?? 0) + 1
       }
     }
     return counts

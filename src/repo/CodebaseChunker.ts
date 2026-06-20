@@ -7,6 +7,7 @@
  */
 
 import * as fs from "fs/promises"
+import * as path from "path"
 import type { IFileIndex } from "./FileIndex"
 import type {
   ChunkerConfig,
@@ -15,6 +16,8 @@ import type {
 } from "./ChunkTypes"
 import type { IChunker } from "./Chunker"
 import { LineChunker, TypeScriptChunker, createDefaultChunkerConfig } from "./Chunker"
+import { detectLanguageShort } from "../utils/LanguageDetector"
+import { walkDirectory } from "../utils/FileSystem"
 export { createDefaultChunkerConfig } from "./Chunker"
 
 /**
@@ -131,28 +134,6 @@ export class CodebaseChunker {
    * Определить язык по пути к файлу.
    */
   private detectLanguageFromPath(filePath: string): string {
-    const ext = filePath.substring(filePath.lastIndexOf(".")).toLowerCase()
-    const langMap: Record<string, string> = {
-      ".ts": "ts",
-      ".tsx": "tsx",
-      ".js": "js",
-      ".jsx": "jsx",
-      ".py": "py",
-      ".rs": "rs",
-      ".go": "go",
-      ".java": "java",
-      ".kt": "kt",
-      ".rb": "rb",
-      ".c": "c",
-      ".h": "c",
-      ".cpp": "cpp",
-      ".hpp": "cpp",
-      ".cs": "cs",
-      ".swift": "swift",
-      ".html": "html",
-      ".css": "css",
-      ".sh": "sh",
-    }
-    return langMap[ext] ?? "unknown"
+    return detectLanguageShort(filePath)
   }
 }

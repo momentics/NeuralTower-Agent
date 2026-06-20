@@ -1,22 +1,5 @@
 import type { ContextProvider, ContextItem } from "./types"
-
-function detectLanguageFromPath(filePath: string): string {
-  const ext = filePath.split(".").pop()?.toLowerCase() ?? ""
-  const map: Record<string, string> = {
-    ts: "typescript", tsx: "typescript", mts: "typescript", cts: "typescript",
-    js: "javascript", jsx: "javascript", mjs: "javascript", cjs: "javascript",
-    py: "python", rs: "rust", go: "go", java: "java", kt: "kotlin",
-    rb: "ruby", cs: "csharp",
-    c: "c", h: "c", cpp: "cpp", cxx: "cpp", cc: "cpp", hpp: "cpp",
-    html: "html", htm: "html", css: "css", scss: "scss", sass: "sass",
-    json: "json", toml: "toml", yaml: "yaml", yml: "yaml",
-    md: "markdown", sh: "bash", bash: "bash", zsh: "zsh",
-    sql: "sql", xml: "xml", svg: "xml",
-    tf: "hcl", tfvars: "hcl",
-    lua: "lua", php: "php", swift: "swift", dart: "dart",
-  }
-  return map[ext] ?? ext ?? "text"
-}
+import { detectLanguageDisplay } from "../../../utils/LanguageDetector"
 
 export function makeFileProvider(
   getWorkDir: () => string,
@@ -48,7 +31,7 @@ export function makeFileProvider(
           return [{ content: `Файл слишком большой (${(stat.size / 1024).toFixed(0)} КБ): ${filePath}`, name: "file", description: "error" }]
         }
         const content = await fs.readFile(filePath, "utf-8")
-        const lang = detectLanguageFromPath(filePath)
+        const lang = detectLanguageDisplay(filePath)
         return [{
           content: `Файл: ${filePath}\n\n\`\`\`${lang}\n${content.slice(0, 100000)}\n\`\`\``,
           name: path.default.basename(filePath),

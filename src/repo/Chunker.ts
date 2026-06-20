@@ -108,7 +108,7 @@ export class LineChunker implements IChunker {
         startLine: start + 1,
         endLine: end,
         nodeKind: "block",
-        language: detectLanguage(filePath),
+        language: detectLanguageShort(filePath),
         charLength: fullContent.length,
       })
 
@@ -532,37 +532,4 @@ export class TypeScriptChunker implements IChunker {
 /**
  * Определить язык файла по расширению.
  */
-function detectLanguage(filePath: string): string {
-  const ext = filePath.substring(filePath.lastIndexOf(".")).toLowerCase()
-  const langMap: Record<string, string> = {
-    ".ts": "ts",
-    ".tsx": "tsx",
-    ".mts": "mts",
-    ".cts": "cts",
-    ".js": "js",
-    ".jsx": "jsx",
-    ".mjs": "mjs",
-    ".cjs": "cjs",
-    ".py": "py",
-    ".rs": "rs",
-    ".go": "go",
-    ".java": "java",
-    ".kt": "kt",
-    ".rb": "rb",
-    ".c": "c",
-    ".h": "h",
-    ".cpp": "cpp",
-    ".hpp": "hpp",
-    ".cs": "cs",
-    ".swift": "swift",
-    ".html": "html",
-    ".css": "css",
-    ".json": "json",
-    ".yaml": "yaml",
-    ".yml": "yaml",
-    ".toml": "toml",
-    ".md": "md",
-    ".sh": "sh",
-  }
-  return langMap[ext] ?? "unknown"
-}
+import { detectLanguageShort } from "../utils/LanguageDetector"
