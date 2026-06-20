@@ -47,7 +47,7 @@ export interface IChunker {
  * Конфигурация по умолчанию для чанкера.
  */
 export function createDefaultChunkerConfig(): ChunkerConfig {
- return {
+  return {
     maxChunkSize: DEFAULT_CHUNK_SIZE,
     overlapLines: DEFAULT_OVERLAP_LINES,
     maxFileSize: DEFAULT_MAX_FILE_SIZE,
@@ -63,7 +63,7 @@ export function createDefaultChunkerConfig(): ChunkerConfig {
  * Подходит для всех языков, но не учитывает структуру кода.
  */
 export class LineChunker implements IChunker {
-  constructor(private readonly config: ChunkerConfig) {}
+  constructor(private readonly config: ChunkerConfig) { }
 
   chunk(filePath: string, content: string): ChunkResult {
     const lines = content.split("\n")
@@ -147,7 +147,7 @@ export class LineChunker implements IChunker {
  * Каждый фрагмент — это целая смысловая единица кода.
  */
 export class TypeScriptChunker implements IChunker {
-  constructor(private readonly config: ChunkerConfig) {}
+  constructor(private readonly config: ChunkerConfig) { }
 
   chunk(filePath: string, content: string): ChunkResult {
     const lines = content.split("\n")
