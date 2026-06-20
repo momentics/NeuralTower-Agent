@@ -1,6 +1,3 @@
-/**
- * Проверка, что путь находится внутри рабочей директории.
- */
 /** Проверить, что путь находится внутри рабочей директории. */
 export function isInsideWorkspace(resolved: string, workDir?: string): boolean {
   if (!workDir) return true

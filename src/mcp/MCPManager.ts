@@ -32,6 +32,8 @@ interface MCPServer {
   tools: MCPTool[]
   nextRequestId: number
   pendingRequests: Map<number, PendingRequest> | null
+  /** Ссылки на обработчики событий для очистки при отключении */
+  listeners: Array<{ stream: NodeJS.ReadableStream | ChildProcess; event: string; handler: any }>
 }
 
 /**
@@ -49,6 +51,29 @@ export interface IMCPManager {
   disconnect(): Promise<void>
 }
 
+/**
+ * Добавить обработчик события с сохранением ссылки для последующего удаления.
+ */
+function addTrackedListener(
+  listeners: MCPServer["listeners"],
+  stream: NodeJS.ReadableStream | ChildProcess,
+  event: string,
+  handler: any,
+): void {
+  listeners.push({ stream, event, handler })
+  stream.on(event, handler)
+}
+
+/**
+ * Удалить все обработчики событий для сервера.
+ */
+function removeListeners(listeners: MCPServer["listeners"]): void {
+  for (const { stream, event, handler } of listeners) {
+    stream.off(event, handler)
+  }
+  listeners.length = 0
+}
+
 export class MCPManager implements IMCPManager {
   private servers: MCPServer[] = []
   private toolAdapter = new MCPToolAdapter()
@@ -61,6 +86,7 @@ export class MCPManager implements IMCPManager {
       tools: [],
       nextRequestId: 0,
       pendingRequests: null,
+      listeners: [],
     })
   }
 
@@ -82,7 +108,7 @@ export class MCPManager implements IMCPManager {
         server.pendingRequests = new Map()
 
         if (proc.stdout) {
-          proc.stdout.on("data", (data: Buffer) => {
+          addTrackedListener(server.listeners, proc.stdout, "data", (data: Buffer) => {
             const pending = server.pendingRequests
             if (!pending) return
             try {
@@ -103,10 +129,11 @@ export class MCPManager implements IMCPManager {
           })
         }
 
-        proc.on("error", () => {
+        addTrackedListener(server.listeners, proc, "error", () => {
           server.ready = false
         })
-        proc.on("exit", () => {
+
+        addTrackedListener(server.listeners, proc, "exit", () => {
           server.ready = false
           server.process = null
           const pending = server.pendingRequests
@@ -201,6 +228,7 @@ export class MCPManager implements IMCPManager {
 
   async disconnect(): Promise<void> {
     for (const server of this.servers) {
+      removeListeners(server.listeners)
       if (server.process) {
         server.process.kill()
         server.process = null

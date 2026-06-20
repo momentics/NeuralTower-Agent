@@ -17,9 +17,11 @@ import type {
 
 /**
  * Векторное хранилище в памяти.
+ * Использует tombstone-подход для O(1) удаления.
  */
 export class InMemoryVectorStore implements IVectorStore {
-  private embeddings: ChunkEmbedding[] = []
+  private embeddings: (ChunkEmbedding | null)[] = []
+  private deleted = new Set<number>()
   private idIndex = new Map<string, number>()
   private fileIndex = new Map<string, Set<number>>()
 
@@ -27,14 +29,24 @@ export class InMemoryVectorStore implements IVectorStore {
    * Добавить эмбеддинги в хранилище.
    */
   async add(embeddings: ChunkEmbedding[]): Promise<void> {
-    const startIndex = this.embeddings.length
-
     for (const emb of embeddings) {
-      const idx = this.embeddings.length
-      this.embeddings.push(emb)
+      let idx: number | undefined
+      // Переиспользовать слот удалённого эмбеддинга
+      for (const d of this.deleted) {
+        if (d >= this.embeddings.length) continue
+        idx = d
+        this.deleted.delete(d)
+        break
+      }
+      // Новый слот
+      if (idx === undefined) {
+        idx = this.embeddings.length
+        this.embeddings.push(null)
+      }
+
+      this.embeddings[idx] = emb
       this.idIndex.set(emb.id, idx)
 
-      // Индекс по файлу
       const fileSet = this.fileIndex.get(emb.chunk.filePath) ?? new Set<number>()
       fileSet.add(idx)
       this.fileIndex.set(emb.chunk.filePath, fileSet)
@@ -51,13 +63,16 @@ export class InMemoryVectorStore implements IVectorStore {
     const scores: Array<{ index: number; score: number }> = []
 
     for (let i = 0; i < this.embeddings.length; i++) {
-      const similarity = cosineSimilarity(queryEmbedding, this.embeddings[i].embedding)
+      if (this.deleted.has(i)) continue
+      const emb = this.embeddings[i]
+      if (!emb) continue
+
+      const similarity = cosineSimilarity(queryEmbedding, emb.embedding)
       if (similarity > 0) {
         scores.push({ index: i, score: similarity })
       }
     }
 
-    // Быстрая сортировка по убыванию
     scores.sort((a, b) => b.score - a.score)
 
     const results: SearchResult[] = []
@@ -66,7 +81,7 @@ export class InMemoryVectorStore implements IVectorStore {
     for (let i = 0; i < limit; i++) {
       const entry = scores[i]
       results.push({
-        chunk: this.embeddings[entry.index].chunk,
+        chunk: this.embeddings[entry.index]!.chunk,
         score: entry.score,
       })
     }
@@ -75,31 +90,26 @@ export class InMemoryVectorStore implements IVectorStore {
   }
 
   /**
-   * Удалить все эмбеддинги для файла.
+   * Удалить все эмбеддинги для файла — O(1) через tombstone.
    */
   async deleteByFile(filePath: string): Promise<void> {
     const indices = this.fileIndex.get(filePath)
     if (!indices) return
 
-    // Удалить по убыванию индексов (чтобы не сдвигать индексы)
-    const sorted = Array.from(indices).sort((a, b) => b - a)
-
-    for (const idx of sorted) {
+    for (const idx of indices) {
       const emb = this.embeddings[idx]
       if (emb) {
         this.idIndex.delete(emb.id)
-        this.embeddings.splice(idx, 1)
+        this.embeddings[idx] = null
+        this.deleted.add(idx)
       }
     }
 
     this.fileIndex.delete(filePath)
-
-    // Обновить индексы (пересоздать idIndex)
-    this.rebuildIndex()
   }
 
   /**
-   * Удалить конкретный эмбеддинг.
+   * Удалить конкретный эмбеддинг — O(1) через tombstone.
    */
   async deleteById(id: string): Promise<void> {
     const idx = this.idIndex.get(id)
@@ -110,7 +120,6 @@ export class InMemoryVectorStore implements IVectorStore {
 
     this.idIndex.delete(id)
 
-    // Удалить из fileIndex
     const fileSet = this.fileIndex.get(emb.chunk.filePath)
     if (fileSet) {
       fileSet.delete(idx)
@@ -119,8 +128,8 @@ export class InMemoryVectorStore implements IVectorStore {
       }
     }
 
-    this.embeddings.splice(idx, 1)
-    this.rebuildIndex()
+    this.embeddings[idx] = null
+    this.deleted.add(idx)
   }
 
   /**
@@ -128,6 +137,7 @@ export class InMemoryVectorStore implements IVectorStore {
    */
   async clear(): Promise<void> {
     this.embeddings = []
+    this.deleted.clear()
     this.idIndex.clear()
     this.fileIndex.clear()
   }
@@ -136,39 +146,28 @@ export class InMemoryVectorStore implements IVectorStore {
    * Число хранимых эмбеддингов.
    */
   count(): number {
-    return this.embeddings.length
+    return this.embeddings.length - this.deleted.size
   }
 
   /**
    * Получить статистику хранилища.
    */
   stats(): { totalChunks: number; filesIndexed: number; avgChunkSize: number } {
-    const totalChunks = this.embeddings.length
-    const filesIndexed = this.fileIndex.size
-    const avgChunkSize =
-      totalChunks > 0
-        ? Math.round(
-            this.embeddings.reduce((s, e) => s + e.chunk.charLength, 0) / totalChunks
-          )
-        : 0
-
-    return { totalChunks, filesIndexed, avgChunkSize }
-  }
-
-  /**
-   * Пересоздать индексы после удаления элементов.
-   */
-  private rebuildIndex(): void {
-    this.idIndex.clear()
-    this.fileIndex.clear()
+    let totalChunks = 0
+    let totalSize = 0
 
     for (let i = 0; i < this.embeddings.length; i++) {
       const emb = this.embeddings[i]
-      this.idIndex.set(emb.id, i)
+      if (emb && !this.deleted.has(i)) {
+        totalChunks++
+        totalSize += emb.chunk.charLength
+      }
+    }
 
-      const fileSet = this.fileIndex.get(emb.chunk.filePath) ?? new Set<number>()
-      fileSet.add(i)
-      this.fileIndex.set(emb.chunk.filePath, fileSet)
+    return {
+      totalChunks,
+      filesIndexed: this.fileIndex.size,
+      avgChunkSize: totalChunks > 0 ? Math.round(totalSize / totalChunks) : 0,
     }
   }
 }

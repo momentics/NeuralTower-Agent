@@ -79,6 +79,109 @@ export async function withTimeout<T>(fn: () => Promise<T>, label: string, timeou
   }
 }
 
+// ── Приватные вспомогательные функции ────────────────────
+
+function resolveFilePath(filePathRaw: string, getWorkDir: () => string): string {
+  if (path.isAbsolute(filePathRaw)) return filePathRaw
+  return path.join(getWorkDir(), filePathRaw)
+}
+
+async function ensureFileExists(filePath: string): Promise<void> {
+  try {
+    await fs.access(filePath)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    throw new Error(`Файл не найден: ${filePath} (${msg})`)
+  }
+}
+
+async function openDocumentForLsp(uri: vscode.Uri): Promise<void> {
+  try {
+    await vscode.workspace.openTextDocument(uri)
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error(`Не удалось открыть документ для LSP: ${msg}`)
+  }
+}
+
+function toPosition(line?: number, character?: number): vscode.Position {
+  const l = line ? Math.max(0, line - 1) : 0
+  const c = character ? Math.max(0, character - 1) : 0
+  return new vscode.Position(l, c)
+}
+
+function relativePath(absPath: string, getWorkDir: () => string): string {
+  const workspaces = vscode.workspace.workspaceFolders
+  if (workspaces && workspaces.length > 0) {
+    return path.relative(workspaces[0].uri.fsPath, absPath)
+  }
+  return path.relative(getWorkDir(), absPath)
+}
+
+/**
+ * Общий шаблон: разрешить путь → проверить существование → открыть документ → выполнить LSP-команду.
+ * Принимает колбэк для форматирования результата.
+ */
+async function executeLspCommand<T>(
+  filePathRaw: string,
+  command: string,
+  label: string,
+  args: unknown[],
+  getWorkDir: () => string,
+  format: (result: T[]) => Promise<{ output: string; success: boolean }> | { output: string; success: boolean },
+  notFoundMsg: (filePath: string, position?: vscode.Position) => string,
+): Promise<{ output: string; success: boolean }> {
+  const filePath = resolveFilePath(filePathRaw, getWorkDir)
+  await ensureFileExists(filePath)
+  const uri = vscode.Uri.file(filePath)
+  await openDocumentForLsp(uri)
+
+  const results = await withTimeout(
+    () => Promise.resolve(vscode.commands.executeCommand<T[]>(command, ...args)).then((r) => r ?? []),
+    label,
+  )
+
+  if (results.length === 0) {
+    const position = args[1] as vscode.Position | undefined
+    return { output: notFoundMsg(filePath, position), success: true }
+  }
+
+  return format(results)
+}
+
+/**
+ * Общий шаблон для команд с позицией: разрешить путь → проверить → открыть → позиция → выполнить.
+ */
+async function executeLspPositionCommand<T>(
+  filePathRaw: string,
+  line: number | undefined,
+  character: number | undefined,
+  command: string,
+  label: string,
+  getWorkDir: () => string,
+  format: (result: T[]) => Promise<{ output: string; success: boolean }> | { output: string; success: boolean },
+  notFoundMsg: (filePath: string, position: vscode.Position) => string,
+): Promise<{ output: string; success: boolean }> {
+  const position = toPosition(line, character)
+  const filePath = resolveFilePath(filePathRaw, getWorkDir)
+  await ensureFileExists(filePath)
+  const uri = vscode.Uri.file(filePath)
+  await openDocumentForLsp(uri)
+
+  const results = await withTimeout(
+    () => Promise.resolve(vscode.commands.executeCommand<T[]>(command, uri, position)).then((r) => r ?? []),
+    label,
+  )
+
+  if (results.length === 0) {
+    return { output: notFoundMsg(filePath, position), success: true }
+  }
+
+  return format(results)
+}
+
+// ── Публичные функции ────────────────────────────────────
+
 export async function executeDocumentSymbol(
   filePathRaw: string,
   getWorkDir: () => string,
@@ -166,27 +269,16 @@ export async function executeGoToDefinition(
   character: number | undefined,
   getWorkDir: () => string,
 ): Promise<{ output: string; success: boolean }> {
-  const filePath = resolveFilePath(filePathRaw, getWorkDir)
-  await ensureFileExists(filePath)
-  const uri = vscode.Uri.file(filePath)
-  await openDocumentForLsp(uri)
-  const position = toPosition(line, character)
-
-  const definitions = await withTimeout(
-    () => Promise.resolve(vscode.commands.executeCommand<vscode.Location[]>(
-      "vscode.executeDefinitionProvider",
-      uri,
-      position,
-    )).then((r) => r ?? []),
+  return executeLspPositionCommand<vscode.Location>(
+    filePathRaw,
+    line,
+    character,
+    "vscode.executeDefinitionProvider",
     "definition",
+    getWorkDir,
+    (locations) => formatLocations(locations, "Определение", getWorkDir),
+    (fp, pos) => `Определение не найдено в ${fp}:${pos.line + 1}:${pos.character + 1}`,
   )
-
-  if (definitions.length === 0) {
-    return { output: `Определение не найдено в ${filePath}:${position.line + 1}:${position.character + 1}`, success: true }
-  }
-
-  const lines = await formatLocations(definitions, "Определение", getWorkDir)
-  return { output: lines.join("\n\n"), success: true }
 }
 
 export async function executeGoToTypeDefinition(
@@ -195,27 +287,16 @@ export async function executeGoToTypeDefinition(
   character: number | undefined,
   getWorkDir: () => string,
 ): Promise<{ output: string; success: boolean }> {
-  const filePath = resolveFilePath(filePathRaw, getWorkDir)
-  await ensureFileExists(filePath)
-  const uri = vscode.Uri.file(filePath)
-  await openDocumentForLsp(uri)
-  const position = toPosition(line, character)
-
-  const typeDefs = await withTimeout(
-    () => Promise.resolve(vscode.commands.executeCommand<vscode.Location[]>(
-      "vscode.executeTypeDefinitionProvider",
-      uri,
-      position,
-    )).then((r) => r ?? []),
+  return executeLspPositionCommand<vscode.Location>(
+    filePathRaw,
+    line,
+    character,
+    "vscode.executeTypeDefinitionProvider",
     "typeDefinition",
+    getWorkDir,
+    (locations) => formatLocations(locations, "Определение типа", getWorkDir),
+    (fp, pos) => `Определение типа не найдено в ${fp}:${pos.line + 1}:${pos.character + 1}`,
   )
-
-  if (typeDefs.length === 0) {
-    return { output: `Определение типа не найдено в ${filePath}:${position.line + 1}:${position.character + 1}`, success: true }
-  }
-
-  const lines = await formatLocations(typeDefs, "Определение типа", getWorkDir)
-  return { output: lines.join("\n\n"), success: true }
 }
 
 export async function executeGoToImplementation(
@@ -224,27 +305,16 @@ export async function executeGoToImplementation(
   character: number | undefined,
   getWorkDir: () => string,
 ): Promise<{ output: string; success: boolean }> {
-  const filePath = resolveFilePath(filePathRaw, getWorkDir)
-  await ensureFileExists(filePath)
-  const uri = vscode.Uri.file(filePath)
-  await openDocumentForLsp(uri)
-  const position = toPosition(line, character)
-
-  const implementations = await withTimeout(
-    () => Promise.resolve(vscode.commands.executeCommand<vscode.Location[]>(
-      "vscode.executeImplementationProvider",
-      uri,
-      position,
-    )).then((r) => r ?? []),
+  return executeLspPositionCommand<vscode.Location>(
+    filePathRaw,
+    line,
+    character,
+    "vscode.executeImplementationProvider",
     "implementation",
+    getWorkDir,
+    (locations) => formatLocations(locations, "Реализация", getWorkDir),
+    (fp, pos) => `Реализация не найдена в ${fp}:${pos.line + 1}:${pos.character + 1}`,
   )
-
-  if (implementations.length === 0) {
-    return { output: `Реализация не найдена в ${filePath}:${position.line + 1}:${position.character + 1}`, success: true }
-  }
-
-  const lines = await formatLocations(implementations, "Реализация", getWorkDir)
-  return { output: lines.join("\n\n"), success: true }
 }
 
 export async function executeFindReferences(
@@ -253,11 +323,11 @@ export async function executeFindReferences(
   character: number | undefined,
   getWorkDir: () => string,
 ): Promise<{ output: string; success: boolean }> {
+  const position = toPosition(line, character)
   const filePath = resolveFilePath(filePathRaw, getWorkDir)
   await ensureFileExists(filePath)
   const uri = vscode.Uri.file(filePath)
   await openDocumentForLsp(uri)
-  const position = toPosition(line, character)
 
   const references = await withTimeout(
     () => Promise.resolve(vscode.commands.executeCommand<vscode.Location[]>(
@@ -294,11 +364,11 @@ export async function executeHover(
   character: number | undefined,
   getWorkDir: () => string,
 ): Promise<{ output: string; success: boolean }> {
+  const position = toPosition(line, character)
   const filePath = resolveFilePath(filePathRaw, getWorkDir)
   await ensureFileExists(filePath)
   const uri = vscode.Uri.file(filePath)
   await openDocumentForLsp(uri)
-  const position = toPosition(line, character)
 
   const hovers = await withTimeout(
     () => Promise.resolve(vscode.commands.executeCommand<vscode.Hover[]>(
@@ -336,11 +406,11 @@ export async function executeSignatureHelp(
   character: number | undefined,
   getWorkDir: () => string,
 ): Promise<{ output: string; success: boolean }> {
+  const position = toPosition(line, character)
   const filePath = resolveFilePath(filePathRaw, getWorkDir)
   await ensureFileExists(filePath)
   const uri = vscode.Uri.file(filePath)
   await openDocumentForLsp(uri)
-  const position = toPosition(line, character)
 
   const help = await withTimeout(
     () => Promise.resolve(vscode.commands.executeCommand<vscode.SignatureHelp | undefined>(
@@ -379,50 +449,11 @@ export async function executeSignatureHelp(
   return { output: lines.join("\n"), success: true }
 }
 
-// ── Приватные вспомогательные функции ────────────────────
-
-function resolveFilePath(filePathRaw: string, getWorkDir: () => string): string {
-  if (path.isAbsolute(filePathRaw)) return filePathRaw
-  return path.join(getWorkDir(), filePathRaw)
-}
-
-async function ensureFileExists(filePath: string): Promise<void> {
-  try {
-    await fs.access(filePath)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    throw new Error(`Файл не найден: ${filePath} (${msg})`)
-  }
-}
-
-async function openDocumentForLsp(uri: vscode.Uri): Promise<void> {
-  try {
-    await vscode.workspace.openTextDocument(uri)
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    console.error(`Не удалось открыть документ для LSP: ${msg}`)
-  }
-}
-
-function toPosition(line?: number, character?: number): vscode.Position {
-  const l = line ? Math.max(0, line - 1) : 0
-  const c = character ? Math.max(0, character - 1) : 0
-  return new vscode.Position(l, c)
-}
-
-function relativePath(absPath: string, getWorkDir: () => string): string {
-  const workspaces = vscode.workspace.workspaceFolders
-  if (workspaces && workspaces.length > 0) {
-    return path.relative(workspaces[0].uri.fsPath, absPath)
-  }
-  return path.relative(getWorkDir(), absPath)
-}
-
 async function formatLocations(
   locations: vscode.Location[],
   title: string,
   getWorkDir: () => string,
-): Promise<string[]> {
+): Promise<{ output: string; success: boolean }> {
   const lines: string[] = []
   for (const loc of locations) {
     const relPath = relativePath(loc.uri.fsPath, getWorkDir)
@@ -432,7 +463,7 @@ async function formatLocations(
       lines.push(`  ${snippet}`)
     }
   }
-  return lines
+  return { output: lines.join("\n\n"), success: true }
 }
 
 /** Вернуть текст строки по LSP-локации. */

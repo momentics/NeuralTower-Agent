@@ -137,6 +137,7 @@ describe("MCPManager", () => {
   it("disconnect kills processes", async () => {
     const proc = {
       on: vi.fn(),
+      off: vi.fn(),
       stdout: null,
       stdin: { write: vi.fn() },
       kill: vi.fn(),

@@ -41,20 +41,34 @@ export interface IFullTextSearch {
 
 /**
  * Полнотекстовый поиск по фрагментам кода.
+ * Использует tombstone-подход для O(1) удаления без перестроения индекса.
  */
 export class FullTextSearch implements IFullTextSearch {
-  private chunks: CodeChunk[] = []
+  private chunks: (CodeChunk | null)[] = []
+  private deleted = new Set<number>()
   private tokenIndex = new Map<string, Set<number>>()
 
   /**
-   * Добавить фрагменты для индексации.
-   */
+ * Добавить фрагменты для индексации.
+ */
   add(chunks: CodeChunk[]): void {
     for (const chunk of chunks) {
-      const idx = this.chunks.length
-      this.chunks.push(chunk)
+      let idx: number | undefined
+      // Переиспользовать слот удалённого фрагмента
+      for (const d of this.deleted) {
+        if (d >= this.chunks.length) continue
+        idx = d
+        this.deleted.delete(d)
+        break
+      }
+      // Новый слот
+      if (idx === undefined) {
+        idx = this.chunks.length
+        this.chunks.push(null)
+      }
 
-      // Разбить на токены и добавить в индекс
+      this.chunks[idx] = chunk
+
       const tokens = this.tokenize(chunk.content)
       for (const token of tokens) {
         const set = this.tokenIndex.get(token) ?? new Set<number>()
@@ -74,18 +88,18 @@ export class FullTextSearch implements IFullTextSearch {
 
     if (tokens.length === 0) return []
 
-    // Найти фрагменты, содержащие хотя бы один токен
     const candidateIndices = new Set<number>()
     for (const token of tokens) {
       const indices = this.tokenIndex.get(token)
       if (indices) {
         for (const idx of indices) {
-          candidateIndices.add(idx)
+          if (!this.deleted.has(idx)) {
+            candidateIndices.add(idx)
+          }
         }
       }
     }
 
-    // Рассчитать оценку для каждого кандидата
     const scores: Array<{ index: number; score: number; matchCount: number }> = []
 
     for (const idx of candidateIndices) {
@@ -105,9 +119,8 @@ export class FullTextSearch implements IFullTextSearch {
         }
       }
 
-      // Оценка: учитывает число совпаждений токенов и частоту
       const tokenRatio = tokenMatches / tokens.length
- const lengthPenalty = Math.min(1, FTS_LENGTH_PENALTY / chunk.charLength)
+  const lengthPenalty = Math.min(1, FTS_LENGTH_PENALTY / chunk.charLength)
       const score = tokenRatio * lengthPenalty * (0.5 + 0.5 * Math.min(matchCount, FTS_MAX_MATCH_COUNT) / FTS_MAX_MATCH_COUNT)
 
       if (score > 0) {
@@ -115,7 +128,6 @@ export class FullTextSearch implements IFullTextSearch {
       }
     }
 
-    // Сортировка по убыванию оценки
     scores.sort((a, b) => b.score - a.score)
 
     const limit = Math.min(topK, scores.length)
@@ -124,7 +136,7 @@ export class FullTextSearch implements IFullTextSearch {
     for (let i = 0; i < limit; i++) {
       const entry = scores[i]
       results.push({
-        chunk: this.chunks[entry.index],
+        chunk: this.chunks[entry.index]!,
         score: entry.score,
         matchCount: entry.matchCount,
       })
@@ -133,35 +145,37 @@ export class FullTextSearch implements IFullTextSearch {
     return results
   }
 
- /**
-   * Удалить фрагменты для файла.
+  /**
+   * Удалить фрагменты для файла — O(1) через tombstone.
    */
   deleteByFile(filePath: string): void {
-    const indicesToRemove: Set<number> = new Set()
+    const indicesToRemove: number[] = []
 
     for (let i = 0; i < this.chunks.length; i++) {
-      if (this.chunks[i].filePath === filePath) {
-        indicesToRemove.add(i)
+      const chunk = this.chunks[i]
+      if (chunk && chunk.filePath === filePath) {
+        indicesToRemove.push(i)
       }
     }
 
-    if (indicesToRemove.size === 0) return
+    if (indicesToRemove.length === 0) return
 
-    // Удалить из массива (по убыванию, чтобы индексы не сдвинулись)
-    const sorted = Array.from(indicesToRemove).sort((a, b) => b - a)
-    for (const idx of sorted) {
-      this.chunks.splice(idx, 1)
-    }
-
-    // Перестроить индекс токенов для оставшихся фрагментов
-    this.tokenIndex.clear()
-    for (let i = 0; i < this.chunks.length; i++) {
-      const tokens = this.tokenize(this.chunks[i].content)
-      for (const token of tokens) {
-        const set = this.tokenIndex.get(token) ?? new Set<number>()
-        set.add(i)
-        this.tokenIndex.set(token, set)
+    for (const idx of indicesToRemove) {
+      const chunk = this.chunks[idx]
+      if (chunk) {
+        const tokens = this.tokenize(chunk.content)
+        for (const token of tokens) {
+          const set = this.tokenIndex.get(token)
+          if (set) {
+            set.delete(idx)
+            if (set.size === 0) {
+              this.tokenIndex.delete(token)
+            }
+          }
+        }
       }
+      this.chunks[idx] = null
+      this.deleted.add(idx)
     }
   }
 
@@ -170,6 +184,7 @@ export class FullTextSearch implements IFullTextSearch {
    */
   clear(): void {
     this.chunks = []
+    this.deleted.clear()
     this.tokenIndex.clear()
   }
 
@@ -177,7 +192,7 @@ export class FullTextSearch implements IFullTextSearch {
    * Число фрагментов в индексе.
    */
   count(): number {
-    return this.chunks.length
+    return this.chunks.length - this.deleted.size
   }
 
   /**

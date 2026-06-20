@@ -1,5 +1,7 @@
 import type { Plugin } from "../../shared/types"
 
+const TELEMETRY_MAX_EVENTS = 1000
+
 export type TelemetryEventName =
   | "session_started"
   | "message_sent"
@@ -9,7 +11,7 @@ export interface TelemetryProps {
   [key: string]: string | number | boolean
 }
 
-/** Заглушка: собирает события только в памяти. */
+/** Заглушка: собирает события только в памяти с ограничением размера. */
 export class TelemetryService implements Plugin {
   name = "telemetry"
   private events: Array<{ name: TelemetryEventName; props: TelemetryProps }> = []
@@ -17,6 +19,9 @@ export class TelemetryService implements Plugin {
   async init(): Promise<void> {}
 
   capture(name: TelemetryEventName, props: TelemetryProps = {}): void {
+    if (this.events.length >= TELEMETRY_MAX_EVENTS) {
+      this.events.splice(0, TELEMETRY_MAX_EVENTS / 2)
+    }
     this.events.push({ name, props })
   }
 

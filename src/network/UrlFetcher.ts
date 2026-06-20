@@ -24,6 +24,9 @@ const DEFAULT_TIMEOUT = 15000
 const DEFAULT_MAX_LENGTH = 12000
 const DEFAULT_USER_AGENT = "NeuralTower-Agent/0.1"
 
+/** Разрешённые протоколы для загрузки. */
+const ALLOWED_PROTOCOLS = new Set(["http:", "https:"])
+
 export async function fetchUrl(
   urlString: string,
   options: FetchUrlOptions = {},
@@ -51,12 +54,22 @@ export async function fetchUrl(
     }
   }
 
+  if (!ALLOWED_PROTOCOLS.has(url.protocol)) {
+    return {
+      text: `Протокол "${url.protocol}" не разрешён`,
+      title: null,
+      status: 0,
+      ok: false,
+    }
+  }
+
   try {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeout)
     const response = await fetch(url.toString(), {
       signal: controller.signal,
       headers,
+      redirect: "follow",
     }).finally(() => clearTimeout(timer))
 
     const text = await response.text()

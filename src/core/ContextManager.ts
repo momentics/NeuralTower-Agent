@@ -48,6 +48,34 @@ export interface IContextManager {
 }
 
 /**
+ * Простой мютекс на основе Promise для защиты от гонки данных.
+ */
+class Mutex {
+  private locked = false
+  private queue: Array<() => void> = []
+
+  acquire(): Promise<void> {
+    return new Promise((resolve) => {
+      if (!this.locked) {
+        this.locked = true
+        resolve()
+      } else {
+        this.queue.push(resolve)
+      }
+    })
+  }
+
+  release(): void {
+    if (this.queue.length > 0) {
+      const next = this.queue.shift()!
+      next()
+    } else {
+      this.locked = false
+    }
+  }
+}
+
+/**
  * ContextManager управляет провайдерами контекста, строит
  * базовый системный промпт, сравнивает изменения между
  * ходами агента и отслеживает потребление токенов.
@@ -65,6 +93,7 @@ export class ContextManager implements IContextManager {
   private revision = 0
   private previousContent: Map<string, string> = new Map()
   private tokenBudget: number
+  private readonly mutex = new Mutex()
 
   constructor(tokenBudget?: number) {
     this.tokenBudget = tokenBudget ?? loadDefaultContextConfig().tokenBudget
@@ -114,6 +143,15 @@ export class ContextManager implements IContextManager {
    * Вызывается один раз на начало этапа сессии.
    */
   async initialize(): Promise<PreparedContext> {
+    await this.mutex.acquire()
+    try {
+      return await this.doInitialize()
+    } finally {
+      this.mutex.release()
+    }
+  }
+
+  private async doInitialize(): Promise<PreparedContext> {
     const snapshots: ContextSnapshot[] = []
     const baselineParts: string[] = []
     this.previousContent.clear()
@@ -171,6 +209,15 @@ export class ContextManager implements IContextManager {
    * Если провайдеры не изменились — возвращает базовый текст без изменений.
    */
   async prepare(): Promise<PreparedContext> {
+    await this.mutex.acquire()
+    try {
+      return await this.doPrepare()
+    } finally {
+      this.mutex.release()
+    }
+  }
+
+  private async doPrepare(): Promise<PreparedContext> {
     const deltas: string[] = []
     const newSnapshots: ContextSnapshot[] = []
     const newContent: Map<string, string> = new Map()
@@ -258,9 +305,9 @@ export class ContextManager implements IContextManager {
     )
   }
 
-/**
-    * Сбросить состояние (новый сеанс).
-    */
+  /**
+   * Сбросить состояние (новый сеанс).
+   */
   reset(): void {
     this.snapshot = []
     this.revision = 0
@@ -268,8 +315,8 @@ export class ContextManager implements IContextManager {
   }
 
   /**
-    * Освободить ресурсы и очистить состояние.
-    */
+   * Освободить ресурсы и очистить состояние.
+   */
   dispose(): void {
     this.providers = []
     this.snapshot = []

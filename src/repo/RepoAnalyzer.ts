@@ -117,15 +117,6 @@ export class RepoAnalyzer {
     return [...dirs]
   }
 
-  private countTopDirectories(files: string[]): number {
-    const dirs = new Set<string>()
-    for (const f of files) {
-      const parts = f.split(path.sep)
-      if (parts.length > 1) dirs.add(parts[0])
-    }
-    return dirs.size
-  }
-
   private countAllDirectories(files: string[]): number {
     const dirs = new Set<string>()
     for (const f of files) {

@@ -36,6 +36,7 @@ export class FileIndex implements IFileIndex {
   private entries: IndexEntry[] = []
   private nameMap = new Map<string, string[]>()
   private langMap = new Map<string, string[]>()
+  private regexCache = new Map<string, RegExp>()
 
   /**
    * Построить индекс для директории. Сканирует только имена
@@ -45,6 +46,7 @@ export class FileIndex implements IFileIndex {
     this.entries = []
     this.nameMap.clear()
     this.langMap.clear()
+    this.regexCache.clear()
 
     const files = await walkDirectory(dir, { maxFiles, signal })
 
@@ -75,7 +77,11 @@ export class FileIndex implements IFileIndex {
 
   /** Найти файлы по имени (частичное совпадение). */
   findByPattern(pattern: string): IndexEntry[] {
-    const re = new RegExp(pattern, "i")
+    let re = this.regexCache.get(pattern)
+    if (!re) {
+      re = new RegExp(pattern, "i")
+      this.regexCache.set(pattern, re)
+    }
     return this.entries.filter((e) => re.test(e.path))
   }
 
@@ -103,6 +109,7 @@ export class FileIndex implements IFileIndex {
     this.entries = []
     this.nameMap.clear()
     this.langMap.clear()
+    this.regexCache.clear()
   }
 
 }

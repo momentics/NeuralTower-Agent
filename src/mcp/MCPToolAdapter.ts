@@ -13,6 +13,18 @@ export type CallToolFn = (
   args: Record<string, unknown>,
 ) => Promise<{ output: string; success: boolean }>
 
+type ToolParamType = "string" | "number" | "boolean" | "array" | "object"
+
+const VALID_TOOL_PARAM_TYPES = new Set<ToolParamType>(["string", "number", "boolean", "array", "object"])
+
+/** Безопасно преобразовать строку к типу ToolParam["type"]. */
+function safeToolParamType(raw: unknown): ToolParamType {
+  if (typeof raw === "string" && VALID_TOOL_PARAM_TYPES.has(raw as ToolParamType)) {
+    return raw as ToolParamType
+  }
+  return "string"
+}
+
 /**
  * Адаптер инструментов MCP к интерфейсу ITool.
  * Инструменты MCP работают удалённо; этот адаптер оборачивает
@@ -60,10 +72,10 @@ export class MCPToolAdapter {
     if (tool.schema && typeof tool.schema === "object" && "inputSchema" in tool.schema) {
       const inputSchema = tool.schema.inputSchema as Record<string, unknown>
       if (inputSchema && typeof inputSchema === "object") {
-        const props = (inputSchema.properties as Record<string, { type: string; description?: string; enum?: string[] }>) ?? {}
+        const props = (inputSchema.properties as Record<string, { type?: unknown; description?: unknown; enum?: unknown }>) ?? {}
         for (const [k, p] of Object.entries(props)) {
           params[k] = {
-            type: p.type as ToolParam["type"],
+            type: safeToolParamType(p.type),
             description: typeof p.description === "string" ? p.description : undefined,
             enum: Array.isArray(p.enum) ? p.enum : undefined,
           }
