@@ -25,7 +25,7 @@ export class WebFetchTool implements ITool {
     required: ["url"],
   }
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
     const url = String(args.url ?? "")
     if (!url) return { output: "Не указан URL", success: false }
 

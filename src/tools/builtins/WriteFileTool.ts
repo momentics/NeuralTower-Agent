@@ -23,7 +23,7 @@ export class WriteFileTool implements ITool {
 
   constructor(private readonly workDir?: string) {}
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
     const fp = String(args.filepath ?? "")
     const content = String(args.content ?? "")
     if (!fp) return { output: "Не указан путь к файлу", success: false }

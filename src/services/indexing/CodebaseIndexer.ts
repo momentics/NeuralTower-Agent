@@ -11,8 +11,8 @@
 
 import * as vscode from "vscode"
 import type { IFileIndex } from "../../repo/FileIndex"
-import type { CodebaseChunker } from "../../repo/CodebaseChunker"
-import type { CodebaseSearch } from "../../repo/CodebaseSearch"
+import type { ICodebaseChunker } from "../../repo/CodebaseChunker"
+import type { ICodebaseSearch } from "../../repo/CodebaseSearch"
 import type { IEmbeddingProvider } from "../../backend/IEmbeddingProvider"
 
 /**
@@ -21,9 +21,21 @@ import type { IEmbeddingProvider } from "../../backend/IEmbeddingProvider"
 export type IndexingState = "idle" | "indexing" | "error"
 
 /**
+ * Интерфейс сервиса индексации.
+ */
+export interface ICodebaseIndexer {
+  start(workspaceUri: vscode.Uri): Promise<void>
+  reindex(workspacePath: string, signal?: AbortSignal): Promise<void>
+  getState(): IndexingState
+  stats(): { vectorChunks: number; ftsChunks: number; embeddingAvailable: boolean }
+  dispose(): void
+  onDidChangeState: vscode.Event<IndexingState>
+}
+
+/**
  * Сервис инкрементальной индексации.
  */
-export class CodebaseIndexer {
+export class CodebaseIndexer implements ICodebaseIndexer {
   private state: IndexingState = "idle"
   private disposables: vscode.Disposable[] = []
   private isDisposed = false
@@ -32,8 +44,8 @@ export class CodebaseIndexer {
 
   constructor(
     private readonly fileIndex: IFileIndex,
-    private readonly chunker: CodebaseChunker,
-    private readonly search: CodebaseSearch,
+    private readonly chunker: ICodebaseChunker,
+    private readonly search: ICodebaseSearch,
     private readonly embeddingProvider: IEmbeddingProvider | null
   ) {}
 
@@ -74,15 +86,16 @@ export class CodebaseIndexer {
   /**
    * Запустить полную индексацию (публичный метод для команды).
    */
-  async reindex(workspacePath: string): Promise<void> {
-    await this.fullIndex(workspacePath)
+  async reindex(workspacePath: string, signal?: AbortSignal): Promise<void> {
+    await this.fullIndex(workspacePath, signal)
   }
 
   /**
    * Полная индексация репозитория.
    */
-  async fullIndex(workspacePath: string): Promise<void> {
+  async fullIndex(workspacePath: string, signal?: AbortSignal): Promise<void> {
     if (this.state === "indexing") return
+    if (signal?.aborted) return
 
     this.setState("indexing")
 
@@ -91,13 +104,13 @@ export class CodebaseIndexer {
       await this.search.clear()
 
       // Построить файловый индекс
-      await this.fileIndex.build(workspacePath)
+      await this.fileIndex.build(workspacePath, undefined, signal)
 
       // Разбить все файлы на фрагменты
-      const result = await this.chunker.chunkAll()
+      const result = await this.chunker.chunkAll(signal)
 
       // Индексировать фрагменты
-      await this.search.indexChunks(result.chunks)
+      await this.search.indexChunks(result.chunks, signal)
 
       this.setState("idle")
     } catch (err: unknown) {
@@ -156,6 +169,7 @@ export class CodebaseIndexer {
    */
   dispose(): void {
     this.isDisposed = true
+    this._onDidChangeState.dispose()
     for (const d of this.disposables) {
       d.dispose()
     }

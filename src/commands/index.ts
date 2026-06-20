@@ -2,7 +2,7 @@ import * as vscode from "vscode"
 import type { App } from "../core/App"
 import { sendAgentQuery, detectLanguageDisplay } from "./utils"
 import type { IAgentOrchestrator } from "../core/IAgent"
-import type { GitService } from "../services/git/GitService"
+import type { IGitService } from "../services/git/GitService"
 import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
 
 export interface EditorCommandAction {
@@ -17,7 +17,7 @@ export function createEditorCommand(
   app: App,
   action: EditorCommandAction,
   agent: IAgentOrchestrator,
-  gitService: GitService,
+  gitService: IGitService,
   diffViewer: DiffViewerProvider | undefined,
 ): void {
   app.registerCommand(`neuralTowerAgent.${action.name}`, async () => {

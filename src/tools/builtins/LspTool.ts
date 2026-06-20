@@ -62,7 +62,7 @@ export class LspTool implements ITool {
 
   constructor(private readonly getWorkDir = () => process.cwd()) {}
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
     const operation = args.operation as LspOperation | undefined
     const filePathRaw = args.filePath as string | undefined
 

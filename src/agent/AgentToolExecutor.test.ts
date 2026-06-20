@@ -169,7 +169,7 @@ describe("AgentToolExecutor", () => {
     const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
     const result = await executor.executeToolCalls(toolCalls, "build", conversation)
     expect(result.anyFailed).toBe(false)
-    expect(mockTool.execute).toHaveBeenCalledWith({ path: "/test" })
+    expect(mockTool.execute).toHaveBeenCalledWith({ path: "/test" }, undefined)
     expect(conversation).toHaveLength(2)
     expect(conversation[0].role).toBe("assistant")
     expect(conversation[1].role).toBe("user")

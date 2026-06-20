@@ -34,7 +34,7 @@ export class MCPToolAdapter {
       category: "mcp",
       schema: this.toSchema(mcpTool, serverName),
       isSafe: true,
-      execute: async (args: Record<string, unknown>): Promise<ToolResult> => {
+      execute: async (args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> => {
         const start = Date.now()
         const result = await callToolFn(serverName, mcpTool.name, args)
         return {

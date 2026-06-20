@@ -1,5 +1,5 @@
 import type { IBackend, ChatMessage, ToolCall as BackendToolCall } from "../core/IBackend"
-import type { ToolRegistry } from "../tools/ToolRegistry"
+import type { IToolRegistry } from "../tools/ToolRegistry"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import type { AgentModeManager } from "./AgentMode"
 import type { AgentModeName } from "./AgentMode"
@@ -12,7 +12,7 @@ import { AbortError } from "../core/errors"
 export class AgentToolExecutor {
   constructor(
     private readonly backend: IBackend,
-    private readonly toolRegistry: ToolRegistry,
+    private readonly toolRegistry: IToolRegistry,
     private readonly permissionManager: IPermissionManager | null,
     private readonly modeManager: AgentModeManager,
     private readonly memory: AgentMemory,
@@ -103,7 +103,7 @@ export class AgentToolExecutor {
       let toolResult: ToolResult
 
       try {
-        toolResult = await this.toolRegistry.invoke(tc.toolName, resolvedArgs)
+        toolResult = await this.toolRegistry.invoke(tc.toolName, resolvedArgs, signal)
       } catch (err: unknown) {
         const errorMessage = err instanceof Error ? err.message : String(err)
         toolResult = { output: `Ошибка выполнения: ${errorMessage}`, success: false }

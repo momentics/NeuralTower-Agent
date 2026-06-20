@@ -7,7 +7,7 @@
 
 import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
-import type { CodebaseSearch } from "../../repo/CodebaseSearch"
+import type { ICodebaseSearch } from "../../repo/CodebaseSearch"
 
 const SEARCH_DEFAULT_MAX_RESULTS = 5
 const SEARCH_MAX_RESULTS = 20
@@ -45,9 +45,10 @@ export class CodebaseSearchTool implements ITool {
     required: ["query"],
   }
 
-  constructor(private readonly search: CodebaseSearch) {}
+  constructor(private readonly search: ICodebaseSearch) {}
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    if (signal?.aborted) return { output: "Операция отменена", success: false }
     const query = String(args.query ?? "").trim()
     if (!query) {
       return { output: "Не указан запрос для поиска", success: false }
@@ -60,7 +61,7 @@ export class CodebaseSearchTool implements ITool {
       const results = await this.search.search(query, {
         topK: maxResults,
         searchMode: mode as "semantic" | "keyword" | "hybrid",
-      })
+      }, signal)
 
       if (results.length === 0) {
         return {

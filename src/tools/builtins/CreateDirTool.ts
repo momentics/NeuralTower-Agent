@@ -23,7 +23,7 @@ export class CreateDirTool implements ITool {
 
   constructor(private readonly workDir?: string) {}
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
     const p = String(args.path ?? "")
     if (!p) return { output: "Не указан путь к директории", success: false }
     const resolved = path.resolve(p)

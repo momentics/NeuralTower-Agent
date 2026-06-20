@@ -17,33 +17,43 @@ describe("SettingsProvider", () => {
   beforeEach(() => {
     backend = createMockBackend()
     vi.clearAllMocks()
-    ; (SettingsProvider as any).current = undefined
   })
 
-  it("renders settings panel", () => {
+  it("shows settings panel", () => {
+    const provider = new SettingsProvider({ fsPath: "/ext" } as any, backend)
     expect(() => {
-      SettingsProvider.render({ fsPath: "/ext" } as any, backend)
+      provider.show()
     }).not.toThrow()
   })
 
-  it("reveals existing panel on second render", () => {
-    SettingsProvider.render({ fsPath: "/ext" } as any, backend)
+  it("reveals existing panel on second show", () => {
+    const provider = new SettingsProvider({ fsPath: "/ext" } as any, backend)
+    provider.show()
     expect(() => {
-      SettingsProvider.render({ fsPath: "/ext" } as any, backend)
+      provider.show()
     }).not.toThrow()
   })
 
-  it("calls backend getConfig on render", async () => {
-    SettingsProvider.render({ fsPath: "/ext" } as any, backend)
+  it("calls backend getConfig on show", async () => {
+    const provider = new SettingsProvider({ fsPath: "/ext" } as any, backend)
+    provider.show()
     await vi.waitFor(() => {
       expect(backend.getConfig).toHaveBeenCalled()
     })
   })
 
-  it("calls backend listModels on render", async () => {
-    SettingsProvider.render({ fsPath: "/ext" } as any, backend)
+  it("calls backend listModels on show", async () => {
+    const provider = new SettingsProvider({ fsPath: "/ext" } as any, backend)
+    provider.show()
     await vi.waitFor(() => {
       expect(backend.listModels).toHaveBeenCalled()
     })
+  })
+
+  it("disposes resources", () => {
+    const provider = new SettingsProvider({ fsPath: "/ext" } as any, backend)
+    expect(() => {
+      provider.dispose()
+    }).not.toThrow()
   })
 })

@@ -28,7 +28,7 @@ export interface IFileIndex {
   findByPattern(pattern: string): IndexEntry[]
   findByLanguage(lang: string): IndexEntry[]
   findByName(name: string): string[]
-  build(dir: string, maxFiles?: number): Promise<void>
+  build(dir: string, maxFiles?: number, signal?: AbortSignal): Promise<void>
   clear(): void
 }
 
@@ -41,12 +41,12 @@ export class FileIndex implements IFileIndex {
    * Построить индекс для директории. Сканирует только имена
    * файлов и размеры, не читает содержимое.
    */
-  async build(dir: string, maxFiles = 20000): Promise<void> {
+  async build(dir: string, maxFiles = 20000, signal?: AbortSignal): Promise<void> {
     this.entries = []
     this.nameMap.clear()
     this.langMap.clear()
 
-    const files = await walkDirectory(dir, { maxFiles })
+    const files = await walkDirectory(dir, { maxFiles, signal })
 
     for (const f of files) {
       const lang = detectLanguageShort(f)

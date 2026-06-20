@@ -8,9 +8,11 @@ export interface WalkOptions {
   skipHidden?: boolean
   /** Пропускать node_modules */
   skipNodeModules?: boolean
+  /** Сигнал отмены */
+  signal?: AbortSignal
 }
 
-const DEFAULT_WALK_OPTIONS: Required<WalkOptions> = {
+const DEFAULT_WALK_OPTIONS: Omit<Required<WalkOptions>, "signal"> = {
   maxFiles: 20000,
   skipHidden: true,
   skipNodeModules: true,
@@ -29,9 +31,11 @@ export async function walkDirectory(
 
   const walk = async (current: string): Promise<void> => {
     if (files.length >= opts.maxFiles) return
+    if (opts.signal?.aborted) return
     const entries = await fs.readdir(current, { withFileTypes: true }).catch(() => [])
     for (const entry of entries) {
       if (files.length >= opts.maxFiles) return
+      if (opts.signal?.aborted) return
       if (opts.skipHidden && entry.name.startsWith(".")) continue
       if (opts.skipNodeModules && entry.name === "node_modules") continue
       const full = path.join(current, entry.name)

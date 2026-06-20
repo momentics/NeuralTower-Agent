@@ -23,7 +23,7 @@ export class MoveFileTool implements ITool {
 
   constructor(private readonly workDir?: string) {}
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
     const src = String(args.source ?? "")
     const dst = String(args.destination ?? "")
     if (!src || !dst) return { output: "Не указаны обязательные аргументы", success: false }

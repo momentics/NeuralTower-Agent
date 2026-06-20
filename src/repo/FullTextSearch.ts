@@ -29,9 +29,20 @@ export interface FtsResult {
 }
 
 /**
+ * Интерфейс полнотекстового поиска.
+ */
+export interface IFullTextSearch {
+  add(chunks: CodeChunk[]): void
+  search(query: string, topK: number): FtsResult[]
+  deleteByFile(filePath: string): void
+  clear(): void
+  count(): number
+}
+
+/**
  * Полнотекстовый поиск по фрагментам кода.
  */
-export class FullTextSearch {
+export class FullTextSearch implements IFullTextSearch {
   private chunks: CodeChunk[] = []
   private tokenIndex = new Map<string, Set<number>>()
 
@@ -122,36 +133,35 @@ export class FullTextSearch {
     return results
   }
 
-  /**
+ /**
    * Удалить фрагменты для файла.
    */
   deleteByFile(filePath: string): void {
-    const indicesToRemove: number[] = []
+    const indicesToRemove: Set<number> = new Set()
 
     for (let i = 0; i < this.chunks.length; i++) {
       if (this.chunks[i].filePath === filePath) {
-        indicesToRemove.push(i)
+        indicesToRemove.add(i)
       }
     }
 
-    // Удалить из индекса токенов
-    for (const idx of indicesToRemove) {
-      const chunk = this.chunks[idx]
-      const tokens = this.tokenize(chunk.content)
+    if (indicesToRemove.size === 0) return
+
+    // Удалить из массива (по убыванию, чтобы индексы не сдвинулись)
+    const sorted = Array.from(indicesToRemove).sort((a, b) => b - a)
+    for (const idx of sorted) {
+      this.chunks.splice(idx, 1)
+    }
+
+    // Перестроить индекс токенов для оставшихся фрагментов
+    this.tokenIndex.clear()
+    for (let i = 0; i < this.chunks.length; i++) {
+      const tokens = this.tokenize(this.chunks[i].content)
       for (const token of tokens) {
-        const set = this.tokenIndex.get(token)
-        if (set) {
-          set.delete(idx)
-          if (set.size === 0) {
-            this.tokenIndex.delete(token)
-          }
-        }
+        const set = this.tokenIndex.get(token) ?? new Set<number>()
+        set.add(i)
+        this.tokenIndex.set(token, set)
       }
-    }
-
-    // Удалить из массива (по убыванию)
-    for (let i = indicesToRemove.length - 1; i >= 0; i--) {
-      this.chunks.splice(indicesToRemove[i], 1)
     }
   }
 

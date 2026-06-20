@@ -34,6 +34,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
     backend: deps.backend,
     gitService: deps.gitService,
     diffViewer: deps.diffViewer,
+    settingsProvider: deps.settingsProvider,
     commitMessageService: deps.commitMessageService,
     extUri: ctx.extensionUri,
     codebaseIndexer: deps.codebaseIndexer,
@@ -73,6 +74,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
         () => deps.agent.dispose(),
         // UI-провайдеры
         () => deps.diffViewer.dispose(),
+        () => deps.settingsProvider.dispose(),
         // Мониторинг
         () => deps.healthMonitor.dispose(),
         () => deps.indexingStatusBar.dispose(),

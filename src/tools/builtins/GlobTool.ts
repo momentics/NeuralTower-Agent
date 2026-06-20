@@ -25,7 +25,7 @@ export class GlobTool implements ITool {
 
   constructor(private readonly workDir?: string) {}
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
     const pattern = String(args.pattern ?? "")
     const root = args.path ? String(args.path) : "."
     const resolved = path.resolve(root)

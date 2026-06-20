@@ -3,11 +3,26 @@ import type { ToolResult } from "../agent/AgentTypes"
 import { ToolError } from "../core/errors"
 
 /**
+ * Интерфейс реестра инструментов.
+ */
+export interface IToolRegistry {
+  register(tool: ITool): void
+  registerMany(tools: ITool[]): void
+  unregister(name: string): void
+  list(): ITool[]
+  get(name: string): ITool | undefined
+  invoke(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult>
+  toSchemaList(): string
+  toToolDefinitions(): Array<{ name: string; description: string; parameters: Record<string, unknown> }>
+  clear(): void
+}
+
+/**
  * Центральный реестр всех доступных инструментов.
  * Инструменты загружаются из встроенных, MCP-серверов
  * или пакетов навыков.
  */
-export class ToolRegistry {
+export class ToolRegistry implements IToolRegistry {
   private tools = new Map<string, ITool>()
 
   /** Зарегистрировать один инструмент. */
@@ -39,6 +54,7 @@ export class ToolRegistry {
   async invoke(
     name: string,
     args: Record<string, unknown>,
+    signal?: AbortSignal,
   ): Promise<ToolResult> {
     const tool = this.tools.get(name)
     if (!tool) {
@@ -46,7 +62,7 @@ export class ToolRegistry {
     }
     const start = Date.now()
     try {
-      const result = await tool.execute(args)
+      const result = await tool.execute(args, signal)
       return { ...result, durationMs: Date.now() - start }
     } catch (err: unknown) {
       const msg = err instanceof ToolError ? `${err.name}: ${err.message}` : err instanceof Error ? err.message : String(err)

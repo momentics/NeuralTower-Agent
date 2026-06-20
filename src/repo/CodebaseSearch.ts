@@ -13,7 +13,7 @@
 import type { IEmbeddingProvider } from "../backend/IEmbeddingProvider"
 import type { IVectorStore } from "./IVectorStore"
 import type { CodeChunk, SearchConfig, SearchMode } from "./ChunkTypes"
-import { FullTextSearch } from "./FullTextSearch"
+import type { IFullTextSearch } from "./FullTextSearch"
 
 const SEARCH_MULTIPLIER = 2
 
@@ -32,13 +32,24 @@ export interface UnifiedSearchResult {
 }
 
 /**
+ * Интерфейс поиска по кодовой базе.
+ */
+export interface ICodebaseSearch {
+  search(query: string, config?: Partial<SearchConfig>, signal?: AbortSignal): Promise<UnifiedSearchResult[]>
+  indexChunks(chunks: CodeChunk[], signal?: AbortSignal): Promise<void>
+  deleteByFile(filePath: string): Promise<void>
+  clear(): Promise<void>
+  stats(): { vectorChunks: number; ftsChunks: number; embeddingAvailable: boolean }
+}
+
+/**
  * Объединённый поиск по репозиторию.
  */
-export class CodebaseSearch {
+export class CodebaseSearch implements ICodebaseSearch {
   constructor(
     private readonly vectorStore: IVectorStore,
     private readonly embeddingProvider: IEmbeddingProvider | null,
-    private readonly fts: FullTextSearch
+    private readonly fts: IFullTextSearch
   ) {}
 
   /**
@@ -48,21 +59,23 @@ export class CodebaseSearch {
    */
   async search(
     query: string,
-    config?: Partial<SearchConfig>
+    config?: Partial<SearchConfig>,
+    signal?: AbortSignal,
   ): Promise<UnifiedSearchResult[]> {
+    if (signal?.aborted) return []
     const topK = config?.topK ?? 10
     const minScore = config?.minScore ?? 0.1
     const mode = config?.searchMode ?? "hybrid"
 
     if (mode === "semantic") {
-      return this.semanticSearch(query, topK, minScore)
+      return this.semanticSearch(query, topK, minScore, signal)
     }
 
     if (mode === "keyword") {
       return this.keywordSearch(query, topK, minScore)
     }
 
-    return this.hybridSearch(query, topK, minScore)
+    return this.hybridSearch(query, topK, minScore, signal)
   }
 
   /**
@@ -71,9 +84,11 @@ export class CodebaseSearch {
   private async semanticSearch(
     query: string,
     topK: number,
-    minScore: number
+    minScore: number,
+    signal?: AbortSignal,
   ): Promise<UnifiedSearchResult[]> {
     if (!this.embeddingProvider) return []
+    if (signal?.aborted) return []
 
     try {
       const [queryEmbedding] = await this.embeddingProvider.embed([query])
@@ -90,7 +105,7 @@ export class CodebaseSearch {
         }))
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Семантический поиск не выполнен: ${msg}`)
+      console.warn(`Семантический поиск не выполнен: ${msg}`)
       return []
     }
   }
@@ -124,10 +139,11 @@ export class CodebaseSearch {
   private async hybridSearch(
     query: string,
     topK: number,
-    minScore: number
+    minScore: number,
+    signal?: AbortSignal,
   ): Promise<UnifiedSearchResult[]> {
     const [semanticResults, keywordResults] = await Promise.all([
-      this.semanticSearch(query, topK * SEARCH_MULTIPLIER, 0),
+      this.semanticSearch(query, topK * SEARCH_MULTIPLIER, 0, signal),
       this.keywordSearch(query, topK * SEARCH_MULTIPLIER, 0),
     ])
 
@@ -178,7 +194,8 @@ export class CodebaseSearch {
   /**
    * Добавить фрагменты в оба индекса.
    */
-  async indexChunks(chunks: CodeChunk[]): Promise<void> {
+  async indexChunks(chunks: CodeChunk[], signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) return
     // Добавить в FTS
     this.fts.add(chunks)
 
@@ -198,7 +215,7 @@ export class CodebaseSearch {
         await this.vectorStore.add(chunkEmbeddings)
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`Эмбеддинги недоступны: ${msg}`)
+        console.warn(`Эмбеддинги недоступны: ${msg}`)
       }
     }
   }

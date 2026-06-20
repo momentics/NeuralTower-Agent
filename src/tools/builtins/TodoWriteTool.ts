@@ -42,7 +42,7 @@ export class TodoWriteTool implements ITool {
 
   constructor(private readonly todoStore: TodoStore) {}
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
     const todos = args.todos as TodoItem[] | undefined
     if (!todos || !Array.isArray(todos)) {
       return {

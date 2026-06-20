@@ -36,11 +36,12 @@ export interface ITool {
   /** JSON Schema для параметров. */
   schema: ToolSchema
 
-  /**
-   * Выполнить инструмент с валидированными аргументами.
-   * Возвращает структурированный результат с текстом вывода и флагом успеха.
-   */
-  execute(args: Record<string, unknown>): Promise<ToolResult>
+ /**
+    * Выполнить инструмент с валидированными аргументами.
+    * Возвращает структурированный результат с текстом вывода и флагом успеха.
+    * @param signal сигнал отмены для длительных операций
+    */
+  execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult>
 
   /**
    * Безопасен ли инструмент для автоматического вызова.

@@ -130,6 +130,13 @@ export class AbortError extends AgentError {
 // ── Error handling ─────────────────────────────────────────
 
 /**
+ * Извлечь сообщение об ошибке из произвольного значения.
+ */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err)
+}
+
+/**
  * Обработать ошибку запроса к бэкенду: вызвать обратный вызов с сообщением,
  * показать уведомление и вернуть флаг прерывания.
  * @param err ошибка для обработки

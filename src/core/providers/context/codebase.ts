@@ -1,5 +1,5 @@
 ﻿import type { ContextProvider, ContextItem } from "./types"
-import type { CodebaseSearch } from "../../../repo/CodebaseSearch"
+import type { ICodebaseSearch } from "../../../repo/CodebaseSearch"
 
 const CODEBASE_TOPK = 5
 const CODEBASE_MAX_CONTENT = 2000
@@ -11,7 +11,7 @@ const CODEBASE_MAX_CONTENT = 2000
  * фрагментов кода по смыслу запроса.
  */
 export function makeCodebaseProvider(
-  search: CodebaseSearch,
+  search: ICodebaseSearch,
 ): ContextProvider {
   return {
     description: {

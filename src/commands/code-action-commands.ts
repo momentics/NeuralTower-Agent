@@ -1,14 +1,14 @@
 import type { App } from "../core/App"
 import { sendAgentQuery, detectLanguageDisplay } from "./utils"
 import type { IAgentOrchestrator } from "../core/IAgent"
-import type { GitService } from "../services/git/GitService"
+import type { IGitService } from "../services/git/GitService"
 import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
 import { EDITOR_ACTIONS } from "./action-definitions"
 
 export function registerCodeActionCommands(
   app: App,
   agent: IAgentOrchestrator,
-  gitService: GitService,
+  gitService: IGitService,
   diffViewer: DiffViewerProvider | undefined,
 ): void {
   for (const action of EDITOR_ACTIONS) {

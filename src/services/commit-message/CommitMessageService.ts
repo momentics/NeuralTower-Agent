@@ -1,5 +1,5 @@
 import type { IBackend } from "../../core/IBackend"
-import type { GitService } from "../../services/git/GitService"
+import type { IGitService } from "../../services/git/GitService"
 import type { Plugin } from "../../shared/types"
 
 /** Сервис генерации сообщений коммита на основе git diff через бэкенд. */
@@ -19,7 +19,7 @@ export class CommitMessageService implements Plugin {
 
   constructor(
     private readonly backend: IBackend,
-    private readonly gitService: GitService,
+    private readonly gitService: IGitService,
   ) {}
 
   /** Инициализация не требуется. */

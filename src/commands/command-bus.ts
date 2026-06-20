@@ -5,10 +5,11 @@ import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IProvider } from "../core/IProvider"
 import type { TodoStore } from "../agent/TodoStore"
 import type { IBackend } from "../core/IBackend"
-import type { GitService } from "../services/git/GitService"
+import type { IGitService } from "../services/git/GitService"
 import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
 import type { CommitMessageService } from "../services/commit-message/CommitMessageService"
 import type { CodebaseIndexer } from "../services/indexing/CodebaseIndexer"
+import type { SettingsProvider } from "../providers/SettingsProvider"
 import { registerEditorCommands } from "./editor-commands"
 import { registerGitCommands } from "./git-commands"
 import { registerChatCommands } from "./chat-commands"
@@ -20,8 +21,9 @@ export interface CommandDeps {
   chatProvider: IProvider
   todoStore: TodoStore
   backend: IBackend
-  gitService: GitService
+  gitService: IGitService
   diffViewer: DiffViewerProvider
+  settingsProvider: SettingsProvider
   commitMessageService: CommitMessageService
   extUri: vscode.Uri
   codebaseIndexer: CodebaseIndexer
@@ -39,6 +41,7 @@ export function registerAllCommands(deps: CommandDeps): void {
     deps.backend,
     deps.gitService,
     deps.diffViewer,
+    deps.settingsProvider,
     deps.extUri,
   )
   registerCodeActionCommands(deps.app, deps.agent, deps.gitService, deps.diffViewer)

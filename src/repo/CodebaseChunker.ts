@@ -20,9 +20,17 @@ import { detectLanguageShort } from "../utils/LanguageDetector"
 export { createDefaultChunkerConfig } from "./Chunker"
 
 /**
+ * Интерфейс оркестратора разбиения репозитория.
+ */
+export interface ICodebaseChunker {
+  chunkAll(signal?: AbortSignal): Promise<CodebaseChunkResult>
+  chunkFile(filePath: string, signal?: AbortSignal): Promise<CodeChunk[]>
+}
+
+/**
  * Оркестратор разбиения репозитория.
  */
-export class CodebaseChunker {
+export class CodebaseChunker implements ICodebaseChunker {
   private readonly chunkers: Map<string, IChunker> = new Map()
   private readonly config: ChunkerConfig
 
@@ -38,7 +46,7 @@ export class CodebaseChunker {
    * Разбить все файлы репозитория на фрагменты.
    * Использует FileIndex для получения списка файлов.
    */
-  async chunkAll(): Promise<CodebaseChunkResult> {
+  async chunkAll(signal?: AbortSignal): Promise<CodebaseChunkResult> {
     const chunks: CodeChunk[] = []
     let filesProcessed = 0
     let filesSkipped = 0
@@ -47,6 +55,7 @@ export class CodebaseChunker {
     const entries = this.fileIndex.findByPattern("")
 
     for (const entry of entries) {
+      if (signal?.aborted) break
       // Пропустить слишком большие файлы
       if (entry.size > this.config.maxFileSize) {
         filesSkipped++
@@ -78,7 +87,8 @@ export class CodebaseChunker {
   /**
    * Разбить один файл на фрагменты.
    */
-  async chunkFile(filePath: string): Promise<CodeChunk[]> {
+  async chunkFile(filePath: string, signal?: AbortSignal): Promise<CodeChunk[]> {
+    if (signal?.aborted) return []
     try {
       const content = await fs.readFile(filePath, "utf-8")
       const lang = this.detectLanguageFromPath(filePath)

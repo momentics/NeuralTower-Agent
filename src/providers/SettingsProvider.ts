@@ -4,38 +4,53 @@ import type { IBackend } from "../core/IBackend"
 import type { SettingsToExt, ExtToSettings } from "../shared/messages"
 
 export class SettingsProvider {
-  private static current: SettingsProvider | undefined
-  private panel: vscode.WebviewPanel | undefined
+  private _panel: vscode.WebviewPanel | undefined
+  private disposables: vscode.Disposable[] = []
 
   constructor(
     private readonly extUri: vscode.Uri,
     private readonly backend: IBackend,
   ) {}
 
-  static render(extUri: vscode.Uri, backend: IBackend): void {
-    if (SettingsProvider.current?.panel) {
-      SettingsProvider.current.panel.reveal(vscode.ViewColumn.Two)
+  /**
+   * Открыть панель настроек. Если панель уже открыта — показать её.
+   */
+  show(): void {
+    if (this._panel) {
+      this._panel.reveal(vscode.ViewColumn.Two)
       return
     }
-    const inst = new SettingsProvider(extUri, backend)
-    inst.panel = vscode.window.createWebviewPanel(
+    this._panel = vscode.window.createWebviewPanel(
       "neuralTowerAgent.settings",
       "NeuralTower Agent — Настройки",
       vscode.ViewColumn.Two,
-      { enableScripts: true, localResourceRoots: [extUri] },
+      { enableScripts: true, localResourceRoots: [this.extUri] },
     )
-    inst.panel.webview.html = inst.html()
-    inst.setupHandler()
-    inst.loadData()
-    inst.panel.onDidDispose(() => { SettingsProvider.current = undefined })
-    SettingsProvider.current = inst
+    this._panel.webview.html = this.html()
+    this.setupHandler()
+    this.loadData()
+    this._panel.onDidDispose(() => { this._panel = undefined })
+  }
+
+  /**
+   * Освободить ресурсы.
+   */
+  dispose(): void {
+    for (const d of this.disposables) {
+      d.dispose()
+    }
+    this.disposables = []
+    if (this._panel) {
+      this._panel.dispose()
+      this._panel = undefined
+    }
   }
 
   private getWebview(): vscode.Webview {
-    if (!this.panel) {
+    if (!this._panel) {
       throw new Error("Панель не инициализирована")
     }
-    return this.panel.webview
+    return this._panel.webview
   }
 
   private async loadData(): Promise<void> {
@@ -51,7 +66,7 @@ export class SettingsProvider {
   }
 
   private setupHandler(): void {
-    this.getWebview().onDidReceiveMessage(async (msg: SettingsToExt) => {
+    const disposable = this.getWebview().onDidReceiveMessage(async (msg: SettingsToExt) => {
       switch (msg.type) {
         case "settingsSave": {
           await this.backend.updateConfig({ url: msg.url, model: msg.model })
@@ -78,6 +93,7 @@ export class SettingsProvider {
           break
       }
     })
+    this.disposables.push(disposable)
   }
 
   private html(): string {

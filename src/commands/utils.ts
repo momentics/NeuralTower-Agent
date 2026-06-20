@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import { handleBackendError } from "../core/errors"
-import type { GitService } from "../services/git/GitService"
+import type { IGitService } from "../services/git/GitService"
 import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
 import { detectLanguageDisplay } from "../utils/LanguageDetector"
 
@@ -26,7 +26,7 @@ export async function sendAgentQuery(
   query: string,
   workDir: string,
   agent: IAgentOrchestrator,
-  gitService: GitService,
+  gitService: IGitService,
   diffViewer: DiffViewerProvider | undefined,
 ): Promise<void> {
   const channel = getOutputChannel()

@@ -9,12 +9,14 @@ import { DiffViewerProvider } from "../providers/DiffViewerProvider"
 import { PersistentSessionStore } from "../shared/PersistentSessionStore"
 import { PermissionManager } from "../services/permission/PermissionManager"
 import { GitService } from "../services/git/GitService"
+import type { IGitService } from "../services/git/GitService"
 import { NotificationService } from "../services/notification/NotificationService"
 import { BackendHealthMonitor } from "../services/health/BackendHealthMonitor"
 import { CommitMessageService } from "../services/commit-message/CommitMessageService"
 import { AutocompleteService } from "../services/autocomplete/AutocompleteService"
 import { TelemetryService } from "../services/telemetry/TelemetryService"
 import { MCPManager } from "../mcp/MCPManager"
+import { SettingsProvider } from "../providers/SettingsProvider"
 import { ReadFileTool } from "../tools/builtins/ReadFileTool"
 import { WriteFileTool } from "../tools/builtins/WriteFileTool"
 import { BashTool } from "../tools/builtins/BashTool"
@@ -70,7 +72,9 @@ import { NeuralTowerEmbeddingProvider } from "../backend/NeuralTowerEmbeddingPro
 import { InMemoryVectorStore } from "../repo/InMemoryVectorStore"
 import { FullTextSearch } from "../repo/FullTextSearch"
 import { CodebaseSearch } from "../repo/CodebaseSearch"
+import type { ICodebaseSearch } from "../repo/CodebaseSearch"
 import { CodebaseChunker, createDefaultChunkerConfig } from "../repo/CodebaseChunker"
+import type { ICodebaseChunker } from "../repo/CodebaseChunker"
 import { CodebaseIndexer } from "../services/indexing/CodebaseIndexer"
 import { IndexingStatusBar } from "../services/indexing/IndexingStatusBar"
 
@@ -82,10 +86,11 @@ export interface ExtensionDeps {
   todoStore: TodoStore
   chatProvider: IProvider
   diffViewer: DiffViewerProvider
+  settingsProvider: SettingsProvider
   healthMonitor: BackendHealthMonitor
   commitMessageService: CommitMessageService
   autocompleteService: AutocompleteService
-  gitService: GitService
+  gitService: IGitService
   sessionStore: ISessionStore
   notificationService: NotificationService
   permissionManager: PermissionManager
@@ -95,7 +100,7 @@ export interface ExtensionDeps {
   config: AppConfig
   agentDeps: AgentDependencies
   fileIndex: FileIndex
-  codebaseSearch: CodebaseSearch
+  codebaseSearch: ICodebaseSearch
   codebaseIndexer: CodebaseIndexer
   indexingStatusBar: IndexingStatusBar
   telemetry: TelemetryService
@@ -137,8 +142,8 @@ export function createCodebaseChunker(fileIndex: FileIndex): CodebaseChunker {
 
 export function createCodebaseIndexer(
   fileIndex: FileIndex,
-  chunker: CodebaseChunker,
-  search: CodebaseSearch,
+  chunker: ICodebaseChunker,
+  search: ICodebaseSearch,
   embeddingProvider: NeuralTowerEmbeddingProvider,
 ): CodebaseIndexer {
   return new CodebaseIndexer(fileIndex, chunker, search, embeddingProvider)
@@ -172,7 +177,7 @@ export function createPermissionManager(
 }
 
 export async function createServices(): Promise<{
-  gitService: GitService
+  gitService: IGitService
   notificationService: NotificationService
 }> {
   const gitService = new GitService()
@@ -184,7 +189,7 @@ export async function createServices(): Promise<{
 
 export function createToolRegistry(
   workspaceRoot: string | undefined,
-  codebaseSearch: CodebaseSearch | undefined,
+  codebaseSearch: ICodebaseSearch | undefined,
   todoStore: TodoStore,
 ): ToolRegistry {
   const tools = new ToolRegistry()
@@ -246,11 +251,11 @@ function registerContextProviders(
   contextManager: ContextManager,
   contextProviderRegistry: ContextProviderRegistry,
   backend: NeuralTowerBackend,
-  gitService: GitService,
+  gitService: IGitService,
   mcpManager: MCPManager,
   fileIndex: FileIndex,
   repoAnalyzer: RepoAnalyzer,
-  codebaseSearch: CodebaseSearch,
+  codebaseSearch: ICodebaseSearch,
   getWorkDir: () => string,
 ): ContextProvider[] {
   const register = (p: ContextProvider) => {
@@ -314,11 +319,11 @@ export function createContextChain(
   contextManager: ContextManager,
   contextProviderRegistry: ContextProviderRegistry,
   backend: NeuralTowerBackend,
-  gitService: GitService,
+  gitService: IGitService,
   mcpManager: MCPManager,
   fileIndex: FileIndex,
   repoAnalyzer: RepoAnalyzer,
-  codebaseSearch: CodebaseSearch,
+  codebaseSearch: ICodebaseSearch,
   getWorkDir: () => string,
 ): ContextProvider[] {
   return registerContextProviders(
@@ -369,7 +374,7 @@ export async function createMonitoringChain(
 
 export async function createCommitService(
   backend: IBackend,
-  gitService: GitService,
+  gitService: IGitService,
 ): Promise<CommitMessageService> {
   const commitMessageService = new CommitMessageService(backend, gitService)
   await commitMessageService.init()
@@ -473,6 +478,8 @@ export async function createDeps(
     permissionManager,
   )
 
+  const settingsProvider = new SettingsProvider(ctx.extensionUri, backend)
+
   const healthMonitor = await createMonitoringChain(backend, contextManager)
   const commitMessageService = await createCommitService(backend, gitService)
   const autocompleteService = await createAutocompleteService(backend)
@@ -502,6 +509,7 @@ export async function createDeps(
     todoStore,
     chatProvider,
     diffViewer,
+    settingsProvider,
     healthMonitor,
     commitMessageService,
     autocompleteService,

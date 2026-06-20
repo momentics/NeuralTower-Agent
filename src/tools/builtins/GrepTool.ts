@@ -5,6 +5,7 @@ import { promisify } from "node:util"
 import * as fs from "fs/promises"
 import * as path from "path"
 import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
+import { walkDirectory } from "../../utils/FileSystem"
 
 const execFileAsync = promisify(execFile)
 
@@ -39,7 +40,8 @@ export class GrepTool implements ITool {
 
   constructor(private readonly workDir?: string) {}
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    if (signal?.aborted) return { output: "Операция отменена", success: false }
     const pattern = String(args.pattern ?? "")
     const root = String(args.path ?? ".")
     const include = args.include ? String(args.include) : undefined
@@ -62,7 +64,7 @@ export class GrepTool implements ITool {
         }
       }
 
-      return await this.executeFallback(pattern, resolved, include)
+      return await this.executeFallback(pattern, resolved, include, signal)
     } catch (err: unknown) {
       return {
         output: `Поиск не выполнен: ${err instanceof Error ? err.message : String(err)}`,
@@ -90,41 +92,30 @@ export class GrepTool implements ITool {
     pattern: string,
     root: string,
     include: string | undefined,
+    signal?: AbortSignal,
   ): Promise<ToolResult> {
     const re = new RegExp(pattern, "i")
     const results: string[] = []
-    const maxFiles = RG_MAX_FILES
-    let counted = 0
 
-    const walk = async (dir: string): Promise<void> => {
-      if (counted >= maxFiles) return
-      const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => [])
-      for (const entry of entries) {
-        if (counted >= maxFiles) return
-        if (entry.name.startsWith(".") || entry.name === "node_modules") continue
-        const full = path.join(dir, entry.name)
-        if (entry.isDirectory()) {
-          await walk(full)
-        } else {
-          counted++
-          if (include && !this.matchesGlob(entry.name, include)) continue
-          try {
-            const content = await fs.readFile(full, "utf-8")
-            const lines = content.split("\n")
-            for (let i = 0; i < lines.length; i++) {
-              if (re.test(lines[i])) {
-                results.push(`${full}:${i + 1}: ${lines[i].slice(0, GREP_LINE_TRUNCATE)}`)
-              }
-            }
-          } catch (err: unknown) {
-            const msg = err instanceof Error ? err.message : String(err)
-            console.error(`Не удалось прочитать файл при поиске: ${full} — ${msg}`)
+    const files = await walkDirectory(root, { maxFiles: RG_MAX_FILES, signal })
+
+    for (const full of files) {
+      if (signal?.aborted) break
+      if (include && !this.matchesGlob(path.basename(full), include)) continue
+      try {
+        const content = await fs.readFile(full, "utf-8")
+        const lines = content.split("\n")
+        for (let i = 0; i < lines.length; i++) {
+          if (re.test(lines[i])) {
+            results.push(`${full}:${i + 1}: ${lines[i].slice(0, GREP_LINE_TRUNCATE)}`)
           }
         }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error(`Не удалось прочитать файл при поиске: ${full} — ${msg}`)
       }
     }
 
-    await walk(root)
     return {
       output: results.length > 0 ? results.join("\n").slice(0, GREP_OUTPUT_TRUNCATE) : "Совпадений не найдено",
       success: true,

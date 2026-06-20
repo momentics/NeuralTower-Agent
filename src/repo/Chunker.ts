@@ -128,7 +128,7 @@ export class LineChunker implements IChunker {
     return { filePath, chunks, totalLines }
   }
 
-  supportsLanguage(): boolean {
+  supportsLanguage(_language: string): boolean {
     return true
   }
 }

@@ -1,5 +1,5 @@
 import type { ContextProvider, ContextItem } from "./providers/context/types"
-import type { GitService } from "../services/git/GitService"
+import type { IGitService } from "../services/git/GitService"
 import type { AgentMemory } from "../agent/AgentMemory"
 
 /**
@@ -8,7 +8,7 @@ import type { AgentMemory } from "../agent/AgentMemory"
 export function makeEnvironmentProvider(
   workDir: () => string,
   model: () => Promise<string>,
-  gitService?: GitService | null,
+  gitService?: IGitService | null,
 ): ContextProvider {
   return {
     description: {
@@ -92,7 +92,7 @@ export function makeProjectMemoryProvider(
  */
 export function makeGitDiffProvider(
   workDir: () => string,
-  gitService: GitService,
+  gitService: IGitService,
 ): ContextProvider {
   return {
     description: {

@@ -70,11 +70,13 @@ vi.mock("./providers/ChatProvider", () => ({
   })),
 }))
 
-vi.mock("./providers/SettingsProvider", () => ({
-  SettingsProvider: {
-    render: vi.fn(),
-  },
-}))
+vi.mock("./providers/SettingsProvider", () => {
+  const SettingsProviderMock = vi.fn().mockImplementation(() => ({
+    show: vi.fn(),
+    dispose: vi.fn(),
+  }))
+  return { SettingsProvider: SettingsProviderMock }
+})
 
 vi.mock("./providers/DiffViewerProvider", () => {
   const DiffViewerProviderMock = vi.fn().mockImplementation(() => ({
@@ -509,7 +511,8 @@ describe("extension", () => {
       const calls = registeredCommands
       const settingsCmd = calls.find((c: any) => c.id === "neuralTowerAgent.settings")
       await settingsCmd.handler()
-      expect(SettingsProvider.render).toHaveBeenCalled()
+      const instance = (SettingsProvider as any).mock.results[0].value
+      expect(instance.show).toHaveBeenCalled()
     })
 
     it("explainCode shows message when no active editor", async () => {

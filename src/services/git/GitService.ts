@@ -27,6 +27,10 @@ export interface GitBranchInfo {
 export interface IGitService {
   getDiffContext(dir: string): Promise<string>
   getBranchInfo(dir: string): Promise<GitBranchInfo | null>
+  getDiff(dir: string): Promise<GitDiffResult>
+  getCachedDiff(dir: string): Promise<string>
+  findRoot(cwd: string): Promise<string | null>
+  dispose(): void
 }
 
 /**

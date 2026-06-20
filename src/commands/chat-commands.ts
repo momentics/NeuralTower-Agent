@@ -4,9 +4,9 @@ import type { IProvider } from "../core/IProvider"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { TodoStore } from "../agent/TodoStore"
 import type { IBackend } from "../core/IBackend"
-import type { GitService } from "../services/git/GitService"
+import type { IGitService } from "../services/git/GitService"
 import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
-import { SettingsProvider } from "../providers/SettingsProvider"
+import type { SettingsProvider } from "../providers/SettingsProvider"
 
 /** Зарегистрировать команды чата: новый чат, фокус ввода, настройки, список сессий, diff-viewer. */
 export function registerChatCommands(
@@ -14,10 +14,11 @@ export function registerChatCommands(
   chatProvider: IProvider,
   todoStore: TodoStore,
   agent: IAgentOrchestrator,
-  backend: IBackend,
-  gitService: GitService | undefined,
+  _backend: IBackend,
+  gitService: IGitService | undefined,
   diffViewer: DiffViewerProvider | undefined,
-  extUri: vscode.Uri,
+  settingsProvider: SettingsProvider,
+  _extUri: vscode.Uri,
 ): void {
   app.registerCommand("neuralTowerAgent.newChat", () => {
     chatProvider.broadcastNewChat?.()
@@ -31,7 +32,7 @@ export function registerChatCommands(
   })
 
   app.registerCommand("neuralTowerAgent.settings", () => {
-    SettingsProvider.render(extUri, backend)
+    settingsProvider.show()
   })
 
   app.registerCommand("neuralTowerAgent.session.list", () => {

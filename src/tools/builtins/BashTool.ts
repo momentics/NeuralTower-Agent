@@ -26,7 +26,8 @@ export class BashTool implements ITool {
     required: ["command"],
   }
 
-  async execute(args: Record<string, unknown>): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    if (signal?.aborted) return { output: "Операция отменена", success: false }
     const cmd = String(args.command ?? "")
     if (!cmd) return { output: "Не указана команда", success: false }
     const timeout = Number(args.timeout ?? BASH_DEFAULT_TIMEOUT_MS)
