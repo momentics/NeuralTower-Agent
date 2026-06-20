@@ -28,9 +28,8 @@ describe("AutocompleteService", () => {
     service.dispose()
   })
 
-  it("has correct name and version", () => {
+  it("has correct name", () => {
     expect(service.name).toBe("autocomplete")
-    expect(service.version).toBe("0.1.0")
   })
 
   it("init sets isInitialized", async () => {

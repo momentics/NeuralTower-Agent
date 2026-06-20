@@ -5,7 +5,6 @@ describe("TelemetryService", () => {
   it("implements Plugin interface", () => {
     const svc = new TelemetryService()
     expect(svc.name).toBe("telemetry")
-    expect(svc.version).toBe("0.1.0")
   })
 
   it("captures events", async () => {

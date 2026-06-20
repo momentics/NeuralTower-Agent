@@ -12,7 +12,6 @@ export interface TelemetryProps {
 /** Заглушка: собирает события только в памяти. */
 export class TelemetryService implements Plugin {
   name = "telemetry"
-  version = "0.1.0"
   private events: Array<{ name: TelemetryEventName; props: TelemetryProps }> = []
 
   async init(): Promise<void> {}

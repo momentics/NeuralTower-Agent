@@ -4,7 +4,7 @@ export type { BackendConfig } from "../core/IBackend"
 
 export interface Plugin {
   name: string
-  version: string
+  version?: string
   init(): Promise<void>
   dispose(): void
 }

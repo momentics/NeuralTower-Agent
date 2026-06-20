@@ -4,7 +4,6 @@ import type { Plugin } from "../../shared/types"
 
 export class IndexingStatusBar implements Plugin {
   name = "indexing-status"
-  version = "0.1.0"
 
   private statusBar: vscode.StatusBarItem
   private state: IndexingState = "idle"

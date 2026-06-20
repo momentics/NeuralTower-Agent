@@ -39,7 +39,6 @@ export interface IGitService {
  */
 export class GitService implements Plugin, IGitService {
   name = "git"
-  version = "0.1.0"
   private root: string | null = null
 
   async init(): Promise<void> {}

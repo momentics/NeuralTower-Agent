@@ -5,7 +5,6 @@ import type { Plugin } from "../../shared/types"
 /** Сервис генерации сообщений коммита на основе git diff через бэкенд. */
 export class CommitMessageService implements Plugin {
   name = "commit-message"
-  version = "0.1.0"
 
   private readonly systemPrompt = `Ты — генератор сообщений коммитов. 
 По git diff создай краткое и точное сообщение коммита.

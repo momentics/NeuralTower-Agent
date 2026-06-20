@@ -20,7 +20,6 @@ const AUTOCOMPLETE_CONTEXT_AFTER = 10
  */
 export class AutocompleteService implements Plugin, vscode.InlineCompletionItemProvider {
   name = "autocomplete"
-  version = "0.1.0"
 
   private readonly cache: Map<string, vscode.InlineCompletionItem[]> = new Map()
   private debounceTimer: ReturnType<typeof setTimeout> | null = null

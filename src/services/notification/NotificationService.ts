@@ -13,7 +13,6 @@ export interface NotificationServiceOptions {
 /** Сервис уведомлений: отображение сообщений и запросы разрешений в VS Code. */
 export class NotificationService implements Plugin {
   name = "notifications"
-  version = "0.1.0"
   private options: NotificationServiceOptions = {
     enabled: true,
     sounds: false,

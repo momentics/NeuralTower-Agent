@@ -8,7 +8,6 @@ const HEALTH_CHECK_INTERVAL_MS = 15000
 /** Монитор здоровья бэкенда: периодическая проверка подключения и отображение статуса в статус-баре. */
 export class BackendHealthMonitor implements Plugin {
   name = "backend-health"
-  version = "0.1.0"
 
   private statusBar: vscode.StatusBarItem
   private healthTimer: ReturnType<typeof setInterval> | null = null
