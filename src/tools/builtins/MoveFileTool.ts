@@ -1,5 +1,6 @@
 import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
+import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
 import * as path from "path"
 
@@ -28,10 +29,10 @@ export class MoveFileTool implements ITool {
     if (!src || !dst) return { output: "Не указаны обязательные аргументы", success: false }
     const resolvedSrc = path.resolve(src)
     const resolvedDst = path.resolve(dst)
-    if (!this.isInsideWorkspace(resolvedSrc)) {
+    if (!isInsideWorkspace(resolvedSrc, this.workDir)) {
       return { output: "Доступ запрещён: исходный путь выходит за пределы рабочей директории", success: false }
     }
-    if (!this.isInsideWorkspace(resolvedDst)) {
+    if (!isInsideWorkspace(resolvedDst, this.workDir)) {
       return { output: "Доступ запрещён: путь назначения выходит за пределы рабочей директории", success: false }
     }
     try {
@@ -46,12 +47,5 @@ export class MoveFileTool implements ITool {
         success: false,
       }
     }
-  }
-
-  private isInsideWorkspace(resolved: string): boolean {
-    if (!this.workDir) return true
-    const normalized = resolved.replace(/\\/g, "/").replace(/\/+$/, "")
-    const root = this.workDir.replace(/\\/g, "/").replace(/\/+$/, "")
-    return normalized === root || normalized.startsWith(root + "/")
   }
 }

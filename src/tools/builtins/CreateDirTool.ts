@@ -1,5 +1,6 @@
 import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
+import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
 import * as path from "path"
 
@@ -26,7 +27,7 @@ export class CreateDirTool implements ITool {
     const p = String(args.path ?? "")
     if (!p) return { output: "Не указан путь к директории", success: false }
     const resolved = path.resolve(p)
-    if (!this.isInsideWorkspace(resolved)) {
+    if (!isInsideWorkspace(resolved, this.workDir)) {
       return { output: "Доступ запрещён: путь выходит за пределы рабочей директории", success: false }
     }
     try {
@@ -38,12 +39,5 @@ export class CreateDirTool implements ITool {
         success: false,
       }
     }
-  }
-
-  private isInsideWorkspace(resolved: string): boolean {
-    if (!this.workDir) return true
-    const normalized = resolved.replace(/\\/g, "/").replace(/\/+$/, "")
-    const root = this.workDir.replace(/\\/g, "/").replace(/\/+$/, "")
-    return normalized === root || normalized.startsWith(root + "/")
   }
 }
