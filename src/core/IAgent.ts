@@ -15,6 +15,7 @@ export interface IAgentOrchestrator {
    * Обработчик `onChunk` вызывается для потоковой передачи
    * текста в интерфейс. Обработчик `onToolUse` вызывается при
    * вызове инструмента. `signal` позволяет отменить выполнение.
+   * Обработчик `onCompaction` вызывается при компактизации истории.
    */
   run(
     query: string,
@@ -22,6 +23,7 @@ export interface IAgentOrchestrator {
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
     onToolResult?: (name: string, result: ToolResult) => void,
     signal?: AbortSignal,
+    onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
   ): Promise<ChatMessage>
 
   /** Перезагрузить навыки и инструменты с диска/конфигурации. */

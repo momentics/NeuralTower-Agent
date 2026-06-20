@@ -1,4 +1,5 @@
 import type { IBackend, ChatMessage } from "../core/IBackend"
+import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
 import type { ISkill } from "../skills/ISkill"
@@ -19,7 +20,7 @@ import type { ContextItem } from "../core/providers/context/types"
  * подключается через фабрику (AgentSpawnFactory), что
  * разрывает циклическую зависимость.
  */
-export class AgentOrchestrator {
+export class AgentOrchestrator implements IAgentOrchestrator {
   private core: AgentCore
   private disposed = false
   private abortController: AbortController = new AbortController()
@@ -30,6 +31,7 @@ export class AgentOrchestrator {
     private readonly skillManager: SkillManager,
     private readonly deps: AgentDependencies,
     private readonly spawnFactory: AgentSpawnFactory | null = null,
+    private readonly todoStore: TodoStore,
   ) {
     this.core = this.createCore()
   }
@@ -40,6 +42,7 @@ export class AgentOrchestrator {
       this.toolRegistry,
       this.skillManager,
       this.deps,
+      this.todoStore,
     )
   }
 
@@ -124,6 +127,7 @@ export class AgentOrchestrator {
       this.backend,
       this.toolRegistry,
       this.skillManager,
+      this.todoStore,
     )
     try {
       const handle = await subagent.run(task, () => {})

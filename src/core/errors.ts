@@ -1,5 +1,3 @@
-import * as vscode from "vscode"
-
 // ── Base ──────────────────────────────────────────────────
 
 /**
@@ -136,13 +134,13 @@ export class AbortError extends AgentError {
  * показать уведомление и вернуть флаг прерывания.
  * @param err ошибка для обработки
  * @param onMessage обратный вызов с отформатированным сообщением
- * @param showNotification показать ли уведомление VS Code
+ * @param notifyAdapter адаптер для показа уведомлений (может быть undefined)
  * @returns true если запрос следует прервать (AbortError)
  */
 export function handleBackendError(
   err: unknown,
   onMessage: (message: string) => void,
-  showNotification: boolean = true,
+  notifyAdapter?: (message: string) => void,
 ): boolean {
   if (err instanceof AbortError) {
     onMessage("Задача остановлена пользователем")
@@ -160,9 +158,7 @@ export function handleBackendError(
 
   onMessage(message)
 
-  if (showNotification) {
-    vscode.window.showErrorMessage(message)
-  }
+  notifyAdapter?.(message)
 
   return false
 }

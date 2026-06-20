@@ -4,8 +4,7 @@ import type { TodoStore, TodoItem } from "../../agent/TodoStore"
 
 /**
  * Инструмент управления списком задач.
- * Состояние хранится в TodoStore, который инжектируется через аргументы.
- * Это сохраняет контракт ITool — инструмент не хранит состояние.
+ * TodoStore инжектируется через конструктор.
  */
 export class TodoWriteTool implements ITool {
   name = "todowrite"
@@ -41,6 +40,8 @@ export class TodoWriteTool implements ITool {
     required: ["todos"],
   }
 
+  constructor(private readonly todoStore: TodoStore) {}
+
   async execute(args: Record<string, unknown>): Promise<ToolResult> {
     const todos = args.todos as TodoItem[] | undefined
     if (!todos || !Array.isArray(todos)) {
@@ -50,35 +51,13 @@ export class TodoWriteTool implements ITool {
       }
     }
 
-    const store = args._todoStore as TodoStore | undefined
-    if (store) {
-      store.setItems(todos)
-    }
+    this.todoStore.setItems(todos)
 
-    const output = store ? store.formatItems() : this.formatItems(todos)
+    const output = this.todoStore.formatItems()
 
     return {
       output,
       success: true,
     }
-  }
-
-  private formatItems(items: TodoItem[]): string {
-    const active = items.filter((t) => t.status !== "completed" && t.status !== "cancelled")
-    const completed = items.filter((t) => t.status === "completed")
-
-    const lines = items.map((t, i) => {
-      const icon =
-        t.status === "completed"
-          ? "[x]"
-          : t.status === "cancelled"
-            ? "[-]"
-            : t.status === "in_progress"
-              ? "[~]"
-              : "[ ]"
-      return `${icon} [${i + 1}] ${t.content} (${t.priority})`
-    })
-
-    return `Список задач обновлён: ${active.length} активных, ${completed.length} завершено\n\n${lines.join("\n")}`
   }
 }

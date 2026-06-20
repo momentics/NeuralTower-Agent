@@ -42,7 +42,7 @@ export async function sendAgentQuery(
     const diff = await gitService.getDiff(workDir)
     diffViewer?.openPanel(diff)
   } catch (err: unknown) {
-    handleBackendError(err, (msg) => channel.appendLine(`\n${msg}`), false)
+     handleBackendError(err, (msg) => channel.appendLine(`\n${msg}`))
   }
 }
 

@@ -16,12 +16,6 @@ describe("TelemetryService", () => {
     svc.dispose()
   })
 
-  it("singleton get returns same instance", () => {
-    const a = TelemetryService.get()
-    const b = TelemetryService.get()
-    expect(a).toBe(b)
-  })
-
   it("dispose clears events", () => {
     const svc = new TelemetryService()
     svc.capture("session_started", {})

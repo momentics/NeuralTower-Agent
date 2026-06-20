@@ -6,7 +6,7 @@ import type { AgentModeName } from "./AgentMode"
 import type { AgentTurnResult, AgentToolCall, ToolResult } from "./AgentTypes"
 import { AgentMemory } from "./AgentMemory"
 import type { SessionContext } from "./SessionContext"
-import type { TodoStore } from "./TodoStore"
+
 import { AbortError } from "../core/errors"
 
 export class AgentToolExecutor {
@@ -17,7 +17,6 @@ export class AgentToolExecutor {
     private readonly modeManager: AgentModeManager,
     private readonly memory: AgentMemory,
     private readonly sessionContext: SessionContext | null,
-    private readonly todoStore: TodoStore | null = null,
   ) {}
 
   async callBackend(
@@ -138,10 +137,7 @@ export class AgentToolExecutor {
     return { anyFailed, failedTools: anyFailed ? failedTools : undefined }
   }
 
-  private resolveArgs(toolName: string, args: Record<string, unknown>): Record<string, unknown> {
-    if (toolName === "todowrite" && this.todoStore) {
-      return { ...args, _todoStore: this.todoStore }
-    }
+  private resolveArgs(_toolName: string, args: Record<string, unknown>): Record<string, unknown> {
     return args
   }
 

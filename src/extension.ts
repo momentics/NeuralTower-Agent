@@ -1,6 +1,5 @@
 import * as vscode from "vscode"
 import { App } from "./core/App"
-import { TelemetryService } from "./services/telemetry/TelemetryService"
 import { AgentCodeActionProvider, codeActionProviderMetadata } from "./services/code-actions/AgentCodeActionProvider"
 import { DiffViewerProvider } from "./providers/DiffViewerProvider"
 import { createDeps } from "./di/container"
@@ -64,9 +63,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 
   // ── Запуск ──────────────────────────────────────────────
   await app.init()
-  const telemetry = TelemetryService.get()
-  await telemetry.init()
-  telemetry.capture("session_started", { version: "0.1.1" })
+  deps.telemetry.capture("session_started", { version: "0.1.1" })
 
   // ── Сохранить объекты для освобождения ──────────────────
   ctx.subscriptions.push({
@@ -89,7 +86,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
         // Инфраструктура
         () => deps.codebaseIndexer.dispose(),
         () => deps.mcpManager.disconnect(),
-        () => telemetry.dispose(),
+        () => deps.telemetry.dispose(),
         () => disposeOutputChannel(),
       ]
 

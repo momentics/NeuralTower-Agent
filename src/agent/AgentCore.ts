@@ -39,6 +39,7 @@ export class AgentCore {
     private readonly toolRegistry: ToolRegistry,
     private readonly skillManager: SkillManager,
     private readonly deps: AgentDependencies,
+    todoStore: TodoStore,
   ) {
     this.memory = new AgentMemory(deps.config.agent.maxTokens)
     this.modeManager = new AgentModeManager()
@@ -46,7 +47,7 @@ export class AgentCore {
       `session-${Date.now()}`,
       deps.contextManager,
     )
-    this.todoStore = new TodoStore()
+    this.todoStore = todoStore
 
     const contextBuilder = new AgentContextBuilder(
       toolRegistry,
@@ -66,7 +67,6 @@ export class AgentCore {
       this.modeManager,
       this.memory,
       this.sessionContext,
-      this.todoStore,
     )
 
     this.planner = new AgentPlanner(

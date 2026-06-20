@@ -8,6 +8,7 @@ import type { IPermissionManager } from "../services/permission/PermissionManage
 import type { IMCPManager } from "../mcp/MCPManager"
 import type { AppConfig } from "../core/config"
 import type { IFileIndex } from "../repo/FileIndex"
+import type { TodoStore } from "./TodoStore"
 
 /**
  * Фабрика для создания экземпляров AgentOrchestrator.
@@ -19,6 +20,7 @@ export type AgentSpawnFactory = (
   backend: IBackend,
   toolRegistry: ToolRegistry,
   skillManager: SkillManager,
+  todoStore: TodoStore,
 ) => import("./AgentOrchestrator").AgentOrchestrator
 
 /**

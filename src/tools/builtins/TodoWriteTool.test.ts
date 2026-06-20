@@ -4,14 +4,14 @@ import { TodoStore } from "../../agent/TodoStore"
 
 describe("TodoWriteTool", () => {
   it("has correct metadata", () => {
-    const tool = new TodoWriteTool()
+    const tool = new TodoWriteTool(new TodoStore())
     expect(tool.name).toBe("todowrite")
     expect(tool.isSafe).toBe(true)
     expect(tool.category).toBe("agent")
   })
 
   it("executes with valid todos", async () => {
-    const tool = new TodoWriteTool()
+    const tool = new TodoWriteTool(new TodoStore())
     const result = await tool.execute({
       todos: [
         { content: "Task 1", status: "pending", priority: "high" },
@@ -25,28 +25,28 @@ describe("TodoWriteTool", () => {
   })
 
   it("returns error for empty todos", async () => {
-    const tool = new TodoWriteTool()
+    const tool = new TodoWriteTool(new TodoStore())
     const result = await tool.execute({ todos: [] })
     expect(result.success).toBe(true)
     expect(result.output).toContain("0 активных")
   })
 
   it("returns error for missing todos", async () => {
-    const tool = new TodoWriteTool()
+    const tool = new TodoWriteTool(new TodoStore())
     const result = await tool.execute({})
     expect(result.success).toBe(false)
     expect(result.output).toContain("должен быть массивом")
   })
 
   it("returns error for invalid todos type", async () => {
-    const tool = new TodoWriteTool()
+    const tool = new TodoWriteTool(new TodoStore())
     const result = await tool.execute({ todos: "not an array" })
     expect(result.success).toBe(false)
     expect(result.output).toContain("должен быть массивом")
   })
 
   it("formats all status types", async () => {
-    const tool = new TodoWriteTool()
+    const tool = new TodoWriteTool(new TodoStore())
     const result = await tool.execute({
       todos: [
         { content: "A", status: "pending", priority: "high" },
@@ -62,37 +62,27 @@ describe("TodoWriteTool", () => {
     expect(result.output).toContain("[-]")
   })
 
-  it("writes to TodoStore when injected via args", async () => {
+  it("writes to TodoStore via constructor injection", async () => {
     const store = new TodoStore()
-    const tool = new TodoWriteTool()
+    const tool = new TodoWriteTool(store)
     const items = [
       { content: "A", status: "pending", priority: "high" },
     ]
-    await tool.execute({ todos: items, _todoStore: store })
+    await tool.execute({ todos: items })
     expect(store.getItems()).toHaveLength(1)
     expect(store.getItems()[0].content).toBe("A")
   })
 
-  it("uses TodoStore formatItems when store is injected", async () => {
+  it("uses TodoStore formatItems from constructor", async () => {
     const store = new TodoStore()
-    const tool = new TodoWriteTool()
+    const tool = new TodoWriteTool(store)
     const items = [
       { content: "A", status: "pending", priority: "high" },
       { content: "B", status: "completed", priority: "low" },
     ]
-    const result = await tool.execute({ todos: items, _todoStore: store })
+    const result = await tool.execute({ todos: items })
     expect(result.success).toBe(true)
     expect(result.output).toContain("1 активных")
     expect(result.output).toContain("1 завершено")
-  })
-
-  it("works without TodoStore (standalone mode)", async () => {
-    const tool = new TodoWriteTool()
-    const items = [
-      { content: "A", status: "pending", priority: "high" },
-    ]
-    const result = await tool.execute({ todos: items })
-    expect(result.success).toBe(true)
-    expect(result.output).toContain("A")
   })
 })

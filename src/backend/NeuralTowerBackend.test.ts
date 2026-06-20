@@ -1,19 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NeuralTowerBackend } from "./NeuralTowerBackend"
-import * as vscode from "vscode"
 
 describe("NeuralTowerBackend", () => {
   let backend: NeuralTowerBackend
-  let configMock: ReturnType<typeof vi.fn>
+  let onConfigChangeSpy: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     vi.clearAllMocks()
-    configMock = vi.fn().mockReturnValue({
-      get: vi.fn().mockImplementation((_key: string, fallback: any) => fallback),
-      update: vi.fn().mockResolvedValue(undefined),
-    })
-    ;(vscode.workspace.getConfiguration as any) = configMock
-    backend = new NeuralTowerBackend()
+    onConfigChangeSpy = vi.fn()
+    backend = new NeuralTowerBackend(undefined, onConfigChangeSpy)
   })
 
   it("getConfig returns defaults", async () => {
@@ -24,15 +19,9 @@ describe("NeuralTowerBackend", () => {
     expect(result.timeoutMs).toBe(60000)
   })
 
-  it("updateConfig updates values", async () => {
-    const updateSpy = vi.fn().mockResolvedValue(undefined)
-    configMock.mockReturnValue({
-      get: vi.fn(),
-      update: updateSpy,
-    })
+  it("updateConfig calls onConfigChange callback", async () => {
     await backend.updateConfig({ url: "http://new", model: "new-model" })
-    expect(updateSpy).toHaveBeenCalledWith("neuralTowerUrl", "http://new", true)
-    expect(updateSpy).toHaveBeenCalledWith("model", "new-model", true)
+    expect(onConfigChangeSpy).toHaveBeenCalledWith({ url: "http://new", model: "new-model" })
   })
 
   it("listModels returns model ids", async () => {

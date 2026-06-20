@@ -1,4 +1,3 @@
-import * as vscode from "vscode"
 import type { IBackend, BackendConfig, ChatMessage, ToolCall, ToolDefinition } from "../core/IBackend"
 import { BackendError, ConnectionError, TimeoutError } from "../core/errors"
 import { loadDefaultBackendConfig } from "../core/config"
@@ -17,7 +16,10 @@ const RETRY_MAX_DELAY_MS = 10000
 export class NeuralTowerBackend implements IBackend {
   private config: BackendConfig
 
-  constructor(config?: BackendConfig) {
+  constructor(
+    config?: BackendConfig,
+    private readonly onConfigChange?: (partial: Partial<BackendConfig>) => void,
+  ) {
     this.config = config ?? loadDefaultBackendConfig()
   }
 
@@ -31,11 +33,7 @@ export class NeuralTowerBackend implements IBackend {
     if (partial.maxRetries !== undefined) this.config.maxRetries = partial.maxRetries
     if (partial.timeoutMs !== undefined) this.config.timeoutMs = partial.timeoutMs
 
-    const cfg = vscode.workspace.getConfiguration("neuralTowerAgent")
-    if (partial.url !== undefined) await cfg.update("neuralTowerUrl", partial.url, true)
-    if (partial.model !== undefined) await cfg.update("model", partial.model, true)
-    if (partial.maxRetries !== undefined) await cfg.update("maxRetries", partial.maxRetries, true)
-    if (partial.timeoutMs !== undefined) await cfg.update("timeoutMs", partial.timeoutMs, true)
+    this.onConfigChange?.(partial)
   }
 
   async listModels(): Promise<string[]> {

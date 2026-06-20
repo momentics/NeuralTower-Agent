@@ -86,13 +86,11 @@ vi.mock("./providers/DiffViewerProvider", () => {
 })
 
 vi.mock("./services/telemetry/TelemetryService", () => ({
-  TelemetryService: {
-    get: vi.fn().mockReturnValue({
-      init: vi.fn().mockResolvedValue(undefined),
-      capture: vi.fn(),
-      dispose: vi.fn(),
-    }),
-  },
+  TelemetryService: vi.fn().mockImplementation(() => ({
+    init: vi.fn().mockResolvedValue(undefined),
+    capture: vi.fn(),
+    dispose: vi.fn(),
+  })),
 }))
 
 vi.mock("./shared/PersistentSessionStore", () => ({
@@ -361,7 +359,7 @@ describe("extension", () => {
     it("initializes telemetry", async () => {
       await activate(ctx)
       const { TelemetryService } = await import("./services/telemetry/TelemetryService")
-      expect(TelemetryService.get).toHaveBeenCalled()
+      expect(TelemetryService).toHaveBeenCalled()
     })
 
     it("registers code actions provider", async () => {
@@ -408,7 +406,7 @@ describe("extension", () => {
     it("captures session_started telemetry event", async () => {
       await activate(ctx)
       const { TelemetryService } = await import("./services/telemetry/TelemetryService")
-      const telemetry = TelemetryService.get()
+      const telemetry = (TelemetryService as any).mock.results[0].value
       expect(telemetry.capture).toHaveBeenCalledWith("session_started", { version: "0.1.1" })
     })
 

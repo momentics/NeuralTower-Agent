@@ -13,13 +13,7 @@ export interface TelemetryProps {
 export class TelemetryService implements Plugin {
   name = "telemetry"
   version = "0.1.0"
-  private static _instance: TelemetryService | undefined
   private events: Array<{ name: TelemetryEventName; props: TelemetryProps }> = []
-
-  static get(): TelemetryService {
-    if (!TelemetryService._instance) TelemetryService._instance = new TelemetryService()
-    return TelemetryService._instance
-  }
 
   async init(): Promise<void> {}
 

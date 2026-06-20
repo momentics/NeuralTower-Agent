@@ -23,6 +23,10 @@ export interface ISessionStore {
   getActiveMessages(): ChatMessage[]
   get activeId(): string
   dispose(): void
+  save(): Promise<void>
+  getSession(id: string): PersistedSession | undefined
+  getMessagesForSession(id: string): ChatMessage[]
+  clearActive(): Promise<void>
 }
 
 const DEFAULT_DATA: SessionData = {

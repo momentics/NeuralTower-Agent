@@ -4,6 +4,7 @@ import type { SkillManager } from "../skills/SkillManager"
 import type { AgentModeName } from "./AgentMode"
 import type { AgentOrchestrator } from "./AgentOrchestrator"
 import type { AgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
+import type { TodoStore } from "./TodoStore"
 
 /**
  * Состояние подагента.
@@ -82,6 +83,7 @@ export class SubagentRunner {
     private readonly skillManager: SkillManager,
     private readonly deps: AgentDependencies,
     private readonly spawnFactory: AgentSpawnFactory,
+    private readonly todoStore: TodoStore,
   ) {}
 
   /**
@@ -217,12 +219,13 @@ export class SubagentRunner {
     return Promise.all(handles.map((h) => h.wait()))
   }
 
-  private createOrchestrator(): AgentOrchestrator {
+private createOrchestrator(): AgentOrchestrator {
     return this.spawnFactory(
       this.deps,
       this.backend,
       this.toolRegistry,
       this.skillManager,
+      this.todoStore,
     )
   }
 }

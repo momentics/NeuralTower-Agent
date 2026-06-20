@@ -13,6 +13,7 @@ import { NotificationService } from "../services/notification/NotificationServic
 import { BackendHealthMonitor } from "../services/health/BackendHealthMonitor"
 import { CommitMessageService } from "../services/commit-message/CommitMessageService"
 import { AutocompleteService } from "../services/autocomplete/AutocompleteService"
+import { TelemetryService } from "../services/telemetry/TelemetryService"
 import { MCPManager } from "../mcp/MCPManager"
 import { ReadFileTool } from "../tools/builtins/ReadFileTool"
 import { WriteFileTool } from "../tools/builtins/WriteFileTool"
@@ -35,8 +36,8 @@ import { SubagentRunner } from "../agent/SubagentRunner"
 import { loadAppConfig } from "../core/config"
 import type { AppConfig, SessionConfig } from "../core/config"
 import type { AgentDependencies, AgentSpawnFactory } from "../agent/AgentDependencies"
-import type { TodoStore } from "../agent/TodoStore"
-import type { IBackend } from "../core/IBackend"
+import { TodoStore } from "../agent/TodoStore"
+import type { IBackend, BackendConfig } from "../core/IBackend"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IProvider } from "../core/IProvider"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
@@ -97,13 +98,14 @@ export interface ExtensionDeps {
   codebaseSearch: CodebaseSearch
   codebaseIndexer: CodebaseIndexer
   indexingStatusBar: IndexingStatusBar
+  telemetry: TelemetryService
   setWorkDir: (dir: string) => void
 }
 
 // ── Фабричные функции ─────────────────────────────────────
 
-export function createBackend(config: AppConfig): IBackend {
-  return new NeuralTowerBackend(config.backend)
+export function createBackend(config: AppConfig, onConfigChange?: (partial: Partial<BackendConfig>) => void): IBackend {
+  return new NeuralTowerBackend(config.backend, onConfigChange)
 }
 
 export function createEmbeddingProvider(config: AppConfig): NeuralTowerEmbeddingProvider {
@@ -182,7 +184,8 @@ export async function createServices(): Promise<{
 
 export function createToolRegistry(
   workspaceRoot: string | undefined,
-  codebaseSearch: CodebaseSearch | null,
+  codebaseSearch: CodebaseSearch | undefined,
+  todoStore: TodoStore,
 ): ToolRegistry {
   const tools = new ToolRegistry()
   tools.register(new ReadFileTool(workspaceRoot))
@@ -196,7 +199,7 @@ export function createToolRegistry(
   tools.register(new GrepTool(workspaceRoot))
   tools.register(new WebFetchTool())
   tools.register(new LspTool())
-  tools.register(new TodoWriteTool())
+  tools.register(new TodoWriteTool(todoStore))
 
   // Добавить инструмент семантического поиска (если доступен)
   if (codebaseSearch) {
@@ -337,9 +340,9 @@ export function createAgentChain(
   skills: SkillManager,
   agentDeps: AgentDependencies,
   spawnFactory: AgentSpawnFactory,
+  todoStore: TodoStore,
 ): { agent: AgentOrchestrator; todoStore: TodoStore } {
-  const agent = new AgentOrchestrator(backend, tools, skills, agentDeps, spawnFactory)
-  const todoStore = agent.getTodoStore()
+  const agent = new AgentOrchestrator(backend, tools, skills, agentDeps, spawnFactory, todoStore)
   return { agent, todoStore }
 }
 
@@ -387,13 +390,19 @@ export async function createDeps(
   ctx: vscode.ExtensionContext,
 ): Promise<ExtensionDeps> {
   const config = loadAppConfig()
-  const backend = createBackend(config)
-  const sessionStore = await createSessionStore(ctx, config.session)
   const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
+  const backend = createBackend(config, async (partial) => {
+    if (partial.url !== undefined) await vsCfg.update("neuralTowerUrl", partial.url, true)
+    if (partial.model !== undefined) await vsCfg.update("model", partial.model, true)
+    if (partial.maxRetries !== undefined) await vsCfg.update("maxRetries", partial.maxRetries, true)
+    if (partial.timeoutMs !== undefined) await vsCfg.update("timeoutMs", partial.timeoutMs, true)
+  })
+  const sessionStore = await createSessionStore(ctx, config.session)
   const permissionManager = createPermissionManager(vsCfg, ctx.globalState)
   const { gitService, notificationService } = await createServices()
 
   const { fileIndex, repoAnalyzer } = createRepoInfrastructure()
+  const todoStore = new TodoStore()
 
   // ── Инфраструктура семантического поиска ────────────────
   const embeddingProvider = createEmbeddingProvider(config)
@@ -406,6 +415,7 @@ export async function createDeps(
   const tools = createToolRegistry(
     vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     codebaseSearch,
+    todoStore,
   )
   const mcpManager = await createMCPChain(tools)
   const skills = createSkillManager()
@@ -428,11 +438,11 @@ export async function createDeps(
     mcpManager,
   }
 
-  const spawnFactory: AgentSpawnFactory = (deps, b, t, s) =>
-    new AgentOrchestrator(b, t, s, deps)
+  const spawnFactory: AgentSpawnFactory = (deps, b, t, s, ts) =>
+    new AgentOrchestrator(b, t, s, deps, null, ts)
 
-  const { agent, todoStore } = createAgentChain(backend, tools, skills, agentDeps, spawnFactory)
-  const subagentRunner = new SubagentRunner(backend, tools, skills, agentDeps, spawnFactory)
+  const { agent } = createAgentChain(backend, tools, skills, agentDeps, spawnFactory, todoStore)
+  const subagentRunner = new SubagentRunner(backend, tools, skills, agentDeps, spawnFactory, todoStore)
 
   if (vscode.workspace.workspaceFolders?.[0]) {
     workDirState.current = vscode.workspace.workspaceFolders[0].uri.fsPath
@@ -483,6 +493,9 @@ export async function createDeps(
   const indexingStatusBar = createIndexingStatusBar(codebaseIndexer)
   await indexingStatusBar.init()
 
+  const telemetry = new TelemetryService()
+  await telemetry.init()
+
   return {
     backend,
     agent,
@@ -505,6 +518,7 @@ export async function createDeps(
     codebaseSearch,
     codebaseIndexer,
     indexingStatusBar,
+    telemetry,
     setWorkDir: (dir: string) => { workDirState.current = dir },
   }
 }

@@ -35,8 +35,7 @@ export class GrepTool implements ITool {
     required: ["pattern"],
   }
 
-  private static rgChecked = false
-  private static rgAvailable = true
+  private rgAvailable = true
 
   constructor(private readonly workDir?: string) {}
 
@@ -52,15 +51,14 @@ export class GrepTool implements ITool {
     }
 
     try {
-      if (GrepTool.rgAvailable) {
+      if (this.rgAvailable) {
         try {
           const rgResult = await this.executeRg(pattern, resolved, include)
           return rgResult
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err)
           console.error(`ripgrep недоступен: ${msg}`)
-          GrepTool.rgChecked = true
-          GrepTool.rgAvailable = false
+          this.rgAvailable = false
         }
       }
 

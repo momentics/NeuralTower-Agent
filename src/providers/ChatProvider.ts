@@ -179,7 +179,7 @@ export class ChatProvider implements IProvider {
     } catch (err: unknown) {
       handleBackendError(err, (msg) => {
         this.getWebview().postMessage({ type: "streamError", error: msg } as ExtToWebview)
-      }, true)
+      }, (m) => vscode.window.showErrorMessage(m))
     } finally {
       this.streaming = false
       this.abortController = null

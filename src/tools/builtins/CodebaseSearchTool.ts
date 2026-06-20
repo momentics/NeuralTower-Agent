@@ -64,38 +64,38 @@ export class CodebaseSearchTool implements ITool {
 
       if (results.length === 0) {
         return {
-          output: "Совпадений не найдено по запросу: \"" + query + "\"",
+          output: `Совпадений не найдено по запросу: "${query}"`,
           success: true,
         }
       }
 
-      let output = "Найдено " + results.length + " результатов по запросу: \"" + query + "\"\n\n"
+      let output = `Найдено ${results.length} результатов по запросу: "${query}"\n\n`
 
       for (let i = 0; i < results.length; i++) {
         const r = results[i]
-        output += "--- Результат " + (i + 1) + " (оценка: " + r.score.toFixed(3) + ", источник: " + r.source + ") ---\n"
-        output += "Файл: " + r.chunk.filePath + "\n"
-        output += "Строки: " + r.chunk.startLine + "-" + r.chunk.endLine + "\n"
+        output += `--- Результат ${i + 1} (оценка: ${r.score.toFixed(3)}, источник: ${r.source}) ---\n`
+        output += `Файл: ${r.chunk.filePath}\n`
+        output += `Строки: ${r.chunk.startLine}-${r.chunk.endLine}\n`
 
         if (r.chunk.symbolName) {
-          output += "Символ: " + r.chunk.symbolName
           if (r.chunk.parentName) {
-            output += " (" + r.chunk.parentName + ")"
+            output += `Символ: ${r.chunk.symbolName} (${r.chunk.parentName})\n`
+          } else {
+            output += `Символ: ${r.chunk.symbolName}\n`
           }
-          output += "\n"
         }
 
         if (r.chunk.signature) {
-          output += "Подпись: " + r.chunk.signature + "\n"
+          output += `Подпись: ${r.chunk.signature}\n`
         }
 
-        output += "`" + r.chunk.language + "\n" + r.chunk.content + "\n`\n\n"
+        output += `\`\`${r.chunk.language}\n${r.chunk.content}\n\`\`\n\n`
       }
 
       return { output, success: true }
     } catch (err: unknown) {
       return {
-        output: "Ошибка поиска: " + (err instanceof Error ? err.message : String(err)),
+        output: `Ошибка поиска: ${err instanceof Error ? err.message : String(err)}`,
         success: false,
       }
     }
