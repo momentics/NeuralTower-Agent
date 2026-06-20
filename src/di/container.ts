@@ -18,6 +18,9 @@ import { ReadFileTool } from "../tools/builtins/ReadFileTool"
 import { WriteFileTool } from "../tools/builtins/WriteFileTool"
 import { BashTool } from "../tools/builtins/BashTool"
 import { EditFileTool } from "../tools/builtins/EditFileTool"
+import { DeleteFileTool } from "../tools/builtins/DeleteFileTool"
+import { CreateDirTool } from "../tools/builtins/CreateDirTool"
+import { MoveFileTool } from "../tools/builtins/MoveFileTool"
 import { GlobTool } from "../tools/builtins/GlobTool"
 import { GrepTool } from "../tools/builtins/GrepTool"
 import { WebFetchTool } from "../tools/builtins/WebFetchTool"
@@ -184,10 +187,13 @@ export function createToolRegistry(
   codebaseSearch: CodebaseSearch | null,
 ): ToolRegistry {
   const tools = new ToolRegistry()
-  tools.register(new ReadFileTool(workspaceRoot))
+ tools.register(new ReadFileTool(workspaceRoot))
   tools.register(new WriteFileTool(workspaceRoot))
   tools.register(new BashTool())
   tools.register(new EditFileTool(workspaceRoot))
+  tools.register(new DeleteFileTool(workspaceRoot))
+  tools.register(new CreateDirTool(workspaceRoot))
+  tools.register(new MoveFileTool(workspaceRoot))
   tools.register(new GlobTool())
   tools.register(new GrepTool())
   tools.register(new WebFetchTool())
