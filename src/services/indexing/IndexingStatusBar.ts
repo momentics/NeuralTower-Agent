@@ -33,7 +33,7 @@ export class IndexingStatusBar implements Plugin {
   }
 
   private syncBar(): void {
-    const stats = this.indexer.getStats()
+    const stats = this.indexer.stats()
 
     if (this.state === "idle") {
       this.statusBar.text = `$(check) Индекс: ${stats.ftsChunks}`

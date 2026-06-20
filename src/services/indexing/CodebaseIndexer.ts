@@ -147,7 +147,7 @@ export class CodebaseIndexer {
   /**
    * Получить статистику индексации.
    */
-  getStats() {
+  stats(): { vectorChunks: number; ftsChunks: number; embeddingAvailable: boolean } {
     return this.search.stats()
   }
 

@@ -1,5 +1,4 @@
 import * as vscode from "vscode"
-import type { IAgentOrchestrator } from "../../core/IAgent"
 import type { IProvider } from "../../core/IProvider"
 
 export const codeActionProviderMetadata: vscode.CodeActionProviderMetadata = {

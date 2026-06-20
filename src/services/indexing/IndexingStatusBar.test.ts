@@ -12,7 +12,7 @@ describe("IndexingStatusBar", () => {
     stateEmitter = new vscode.EventEmitter()
     return {
       getState: vi.fn().mockReturnValue(state),
-      getStats: vi.fn().mockReturnValue({
+      stats: vi.fn().mockReturnValue({
         vectorChunks: 100,
         ftsChunks: 150,
         embeddingAvailable: true,

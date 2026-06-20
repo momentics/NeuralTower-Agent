@@ -22,7 +22,7 @@ const EMBEDDING_TIMEOUT_MS = 30000
 export class NeuralTowerEmbeddingProvider implements IEmbeddingProvider {
   private config: EmbeddingProviderConfig
   private _available = false
- private _dimension = DEFAULT_EMBEDDING_DIMENSION
+  private _dimension = DEFAULT_EMBEDDING_DIMENSION
   private _modelName = DEFAULT_EMBEDDING_MODEL
 
   constructor(config?: Partial<EmbeddingProviderConfig>) {
@@ -83,7 +83,7 @@ export class NeuralTowerEmbeddingProvider implements IEmbeddingProvider {
 
       if (!res.ok) {
         const body = await res.text()
-        throw new BackendError("HTTP " + res.status + ": " + body)
+        throw new BackendError(`HTTP ${res.status}: ${body}`)
       }
 
       const data = (await res.json()) as {
@@ -99,7 +99,7 @@ export class NeuralTowerEmbeddingProvider implements IEmbeddingProvider {
       if (err instanceof DOMException && err.name === "AbortError") {
         throw new ConnectionError("Запрос эмбеддинга прерван по таймауту")
       }
-      throw new ConnectionError("Ошибка эмбеддинга: " + String(err))
+      throw new ConnectionError(`Ошибка эмбеддинга: ${String(err)}`)
     } finally {
       clearTimeout(timer)
     }

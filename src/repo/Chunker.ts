@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Разбиение кода на фрагменты (чанки). Два подхода:
  *
  * 1. Линейное разбиение — разбивает файл на блоки фиксированного размера
@@ -103,14 +103,14 @@ export class LineChunker implements IChunker {
 
       let fullContent = chunkContent
       if (contextBefore) {
-        fullContent = "```context\n" + contextBefore + "\n```\n" + chunkContent
+        fullContent = `\`\`\`context\n${contextBefore}\n\`\`\`\n${chunkContent}`
       }
       if (contextAfter) {
-        fullContent = fullContent + "\n```context\n" + contextAfter + "\n```"
+        fullContent = `${fullContent}\n\`\`\`context\n${contextAfter}\n\`\`\``
       }
 
       chunks.push({
-        id: filePath + "::" + chunkIndex,
+        id: `${filePath}::${chunkIndex}`,
         filePath,
         content: fullContent,
         startLine: start + 1,
@@ -172,7 +172,7 @@ export class TypeScriptChunker implements IChunker {
       const chunkContent = chunkLines.join("\n")
 
       chunks.push({
-        id: filePath + "::" + chunkIndex,
+        id: `${filePath}::${chunkIndex}`,
         filePath,
         content: chunkContent,
         startLine: def.startLine + 1,
@@ -296,7 +296,7 @@ export class TypeScriptChunker implements IChunker {
         continue
       }
 
-      // Enum
+      // Перечисления
       const enumMatch = line.match(/^(?:export\s+)?enum\s+(\w+)/)
       if (enumMatch) {
         const endLine = this.findBlockEnd(lines, i)
@@ -326,7 +326,7 @@ export class TypeScriptChunker implements IChunker {
         continue
       }
 
-      // Arrow functions и константы (top-level)
+      // Стрелочные функции и константы (top-level)
       const constMatch = line.match(
         /^(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?(?:\((([^)]*\)))|[^=])\s*=>/
       )
