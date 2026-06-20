@@ -3,7 +3,7 @@ import type { ToolRegistry } from "../tools/ToolRegistry"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import type { AgentModeManager } from "./AgentMode"
 import type { AgentModeName } from "./AgentMode"
-import type { AgentTurnResult, ToolCall, ToolResult } from "./AgentTypes"
+import type { AgentTurnResult, AgentToolCall, ToolResult } from "./AgentTypes"
 import { AgentMemory } from "./AgentMemory"
 import type { SessionContext } from "./SessionContext"
 import type { TodoStore } from "./TodoStore"
@@ -55,7 +55,7 @@ export class AgentToolExecutor {
   }
 
   async executeToolCalls(
-    toolCalls: ToolCall[],
+    toolCalls: AgentToolCall[],
     currentMode: AgentModeName,
     workingConversation: ChatMessage[],
     signal?: AbortSignal,
@@ -145,8 +145,8 @@ export class AgentToolExecutor {
     return args
   }
 
-  private extractToolCalls(content: string): ToolCall[] | null {
-    const calls: ToolCall[] = []
+  private extractToolCalls(content: string): AgentToolCall[] | null {
+const calls: AgentToolCall[] = []
 
     const jsonBlocks = this.extractJsonBlocks(content)
 
@@ -209,8 +209,8 @@ export class AgentToolExecutor {
 /**
  * Преобразовать нативные tool_calls из бэкенда в формат AgentToolExecutor.
  */
-function parseBackendToolCalls(backendCalls: BackendToolCall[]): ToolCall[] | null {
-  const calls: ToolCall[] = []
+function parseBackendToolCalls(backendCalls: BackendToolCall[]): AgentToolCall[] | null {
+  const calls: AgentToolCall[] = []
   for (const bc of backendCalls) {
     let args: Record<string, unknown> = {}
     try {

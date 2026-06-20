@@ -11,6 +11,7 @@ import { AgentToolExecutor } from "./AgentToolExecutor"
 import { AgentPlanner } from "./AgentPlanner"
 import { SessionContext } from "./SessionContext"
 import type { AgentDependencies } from "./AgentDependencies"
+import type { ToolResult } from "./AgentTypes"
 import { TodoStore } from "./TodoStore"
 import type { Plan } from "./Plan"
 import { AbortError } from "../core/errors"
@@ -98,7 +99,7 @@ export class AgentCore {
     query: string,
     onChunk: (text: string) => void,
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: { output: string; success: boolean }) => void,
+    onToolResult?: (name: string, result: ToolResult) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
   ): Promise<ChatMessage> {

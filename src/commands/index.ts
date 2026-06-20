@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import type { App } from "../core/App"
-import { sendAgentQuery, getLang } from "./utils"
+import { sendAgentQuery, detectLanguageDisplay } from "./utils"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { GitService } from "../services/git/GitService"
 import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
@@ -34,7 +34,7 @@ export function createEditorCommand(
       return
     }
 
-    const lang = getLang(filePath)
+    const lang = detectLanguageDisplay(filePath)
     const prompt = action.promptTemplate(text, lang, filePath)
     await sendAgentQuery(prompt, filePath, agent, gitService, diffViewer)
   })

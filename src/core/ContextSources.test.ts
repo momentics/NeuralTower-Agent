@@ -1,14 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import {
   makeEnvironmentProvider,
-  makeRepoProvider,
-  makeFileIndexProvider,
   makeProjectMemoryProvider,
   makeGitDiffProvider,
 } from "./ContextSources"
 import type { GitService } from "../services/git/GitService"
-import type { RepoAnalyzer } from "../repo/RepoAnalyzer"
-import type { FileIndex } from "../repo/FileIndex"
 import type { AgentMemory } from "../agent/AgentMemory"
 
 describe("ContextSources", () => {
@@ -33,7 +29,6 @@ describe("ContextSources", () => {
       const mockGit: GitService = {
         getBranchInfo: vi.fn(async () => ({ name: "main" })),
         getDiff: vi.fn(async () => ({ changed: [], additions: 0, deletions: 0 })),
-        getStatus: vi.fn(async () => ({})),
         getDiffContext: vi.fn(async () => ""),
       } as unknown as GitService
       const provider = makeEnvironmentProvider(() => "/test", async () => "model-1", mockGit)
@@ -48,101 +43,6 @@ describe("ContextSources", () => {
       const provider = makeEnvironmentProvider(() => "/test", async () => "model-1", mockGit)
       const items = await provider.resolve("")
       expect(items[0].content).toContain("Ветка: unknown")
-    })
-  })
-
-  describe("makeRepoProvider", () => {
-    let mockAnalyzer: RepoAnalyzer
-
-    beforeEach(() => {
-      mockAnalyzer = {
-        analyze: vi.fn(async () => ({
-          fileCount: 100,
-          dirCount: 10,
-          languages: { TypeScript: 50, JavaScript: 30, Markdown: 2 },
-          buildSystems: ["npm"],
-          notableFiles: ["package.json", "tsconfig.json"],
-        })),
-      } as unknown as RepoAnalyzer
-    })
-
-    it("returns provider with correct name and priority", () => {
-      const provider = makeRepoProvider(() => "/test", mockAnalyzer)
-      expect(provider.description.name).toBe("repository")
-      expect(provider.description.priority).toBe(90)
-    })
-
-    it("resolves repo data", async () => {
-      const provider = makeRepoProvider(() => "/test", mockAnalyzer)
-      const items = await provider.resolve("")
-      expect(items).toHaveLength(1)
-      expect(items[0].content).toContain("Файлов: 100")
-      expect(items[0].content).toContain("Директорий: 10")
-    })
-
-    it("caches results within TTL", async () => {
-      const provider = makeRepoProvider(() => "/test", mockAnalyzer)
-      await provider.resolve("")
-      await provider.resolve("")
-      expect(mockAnalyzer.analyze).toHaveBeenCalledTimes(1)
-    })
-
-    it("refreshes cache after TTL", async () => {
-      const provider = makeRepoProvider(() => "/test", mockAnalyzer, 0)
-      await provider.resolve("")
-      await provider.resolve("")
-      expect(mockAnalyzer.analyze).toHaveBeenCalledTimes(2)
-    })
-
-    it("resolves with languages", async () => {
-      const provider = makeRepoProvider(() => "/test", mockAnalyzer)
-      const items = await provider.resolve("")
-      expect(items[0].content).toContain("TypeScript")
-      expect(items[0].content).toContain("JavaScript")
-      expect(items[0].content).not.toContain("Markdown")
-    })
-
-    it("returns empty when no significant data", async () => {
-      const mockEmpty = {
-        analyze: vi.fn(async () => ({
-          fileCount: 0,
-          dirCount: 0,
-          languages: {},
-          buildSystems: [],
-          notableFiles: [],
-        })),
-      } as unknown as RepoAnalyzer
-      const provider = makeRepoProvider(() => "/test", mockEmpty)
-      const items = await provider.resolve("")
-      expect(items).toHaveLength(1)
-      expect(items[0].content).toContain("Файлов: 0")
-    })
-  })
-
-  describe("makeFileIndexProvider", () => {
-    let mockIndex: FileIndex
-
-    beforeEach(() => {
-      mockIndex = {
-        stats: vi.fn(() => ({ totalFiles: 50, languages: 3, totalSize: 10240 })),
-        build: vi.fn(async () => {}),
-        clear: vi.fn(),
-      } as unknown as FileIndex
-    })
-
-    it("returns provider with correct name and priority", () => {
-      const provider = makeFileIndexProvider(mockIndex)
-      expect(provider.description.name).toBe("fileindex")
-      expect(provider.description.priority).toBe(80)
-    })
-
-    it("resolves index stats", async () => {
-      const provider = makeFileIndexProvider(mockIndex)
-      const items = await provider.resolve("")
-      expect(items).toHaveLength(1)
-      expect(items[0].content).toContain("Всего: 50 файлов")
-      expect(items[0].content).toContain("3 языков")
-      expect(items[0].content).toContain("10.0 КБ")
     })
   })
 
@@ -198,10 +98,6 @@ describe("ContextSources", () => {
           additions: 10,
           deletions: 5,
         })),
-        getStatus: vi.fn(async () => ({
-          staged: ["file1.ts"],
-          modified: ["file2.ts"],
-        })),
         getBranchInfo: vi.fn(async () => ({ name: "main" })),
         getDiffContext: vi.fn(async () => ""),
       } as unknown as GitService
@@ -224,7 +120,6 @@ describe("ContextSources", () => {
 
     it("handles git errors gracefully", async () => {
       mockGit.getDiff = vi.fn(async () => { throw new Error("git error") })
-      mockGit.getStatus = vi.fn(async () => { throw new Error("git error") })
       const provider = makeGitDiffProvider(() => "/test", mockGit)
       const items = await provider.resolve("")
       expect(items).toHaveLength(0)

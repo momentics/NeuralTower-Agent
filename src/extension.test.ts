@@ -469,19 +469,15 @@ describe("extension", () => {
     })
   })
 
-  describe("getLang", () => {
-    // Импорт getLang косвенно через модуль расширения
-    // Так как getLang — приватная функция, тестируем её через обработчики команд
-
-    it("returns typescript for .ts files", async () => {
+  describe("editor command registration", () => {
+    it("registers explainCode command", async () => {
       await activate(ctx)
-      // Тестирование через команду explainCode, которая использует getLang
       const calls = registeredCommands
       const explainCmd = calls.find((c: any) => c.id === "neuralTowerAgent.explainCode")
       expect(explainCmd).toBeDefined()
     })
 
-    it("returns javascript for .js files", async () => {
+    it("registers fixCode command", async () => {
       await activate(ctx)
       const calls = registeredCommands
       const fixCmd = calls.find((c: any) => c.id === "neuralTowerAgent.fixCode")

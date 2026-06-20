@@ -10,12 +10,6 @@ export interface GitDiffResult {
   deletions: number
 }
 
-export interface GitStatusResult {
-  staged: string[]
-  unstaged: string[]
-  untracked: string[]
-}
-
 export interface GitBranchInfo {
   name: string
   ahead: number
@@ -81,30 +75,6 @@ export class GitService implements Plugin, IGitService {
     }
   }
 
-  async getStatus(dir: string): Promise<GitStatusResult> {
-    try {
-      const { stdout } = await execAsync(
-        `git -C "${dir}" status --porcelain`,
-        { timeout: 10000 },
-      )
-      const staged: string[] = []
-      const unstaged: string[] = []
-      const untracked: string[] = []
-
-      for (const line of stdout.trim().split("\n").filter(Boolean)) {
-        const x = line[0]
-        const path = line.trim().slice(3)
-        if (x === "A" || x === "M" || x === "D") staged.push(path)
-        else if (line[1] === " ") untracked.push(path)
-        else unstaged.push(path)
-      }
-
-      return { staged, unstaged, untracked }
-    } catch {
-      return { staged: [], unstaged: [], untracked: [] }
-    }
-  }
-
   async getBranchInfo(dir: string): Promise<GitBranchInfo | null> {
     try {
       const { stdout } = await execAsync(
@@ -131,22 +101,6 @@ export class GitService implements Plugin, IGitService {
       )
       if (!stdout.trim()) return ""
       return `## Изменения Git (не добавленные)\n\`\`\`diff\n${stdout.slice(0, 10000)}\n\`\`\``
-    } catch {
-      return ""
-    }
-  }
-
-  async generateCommitMessage(dir: string): Promise<string> {
-    try {
-      const { stdout } = await execAsync(
-        `git -C "${dir}" diff --cached --stat`,
-        { timeout: 10000 },
-      )
-      if (!stdout.trim()) return ""
-      const lines = stdout.trim().split("\n")
-      const summary = lines[lines.length - 1]
-      const files = lines.slice(0, -1).map((l) => l.trim())
-      return `Добавленные изменения:\n${files.join("\n")}\n${summary}`
     } catch {
       return ""
     }

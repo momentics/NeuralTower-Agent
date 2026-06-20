@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { SessionContext } from "./SessionContext"
 import { ContextManager } from "../core/ContextManager"
-import { AgentMismatchError } from "../core/ContextSource"
+import { AgentMismatchError } from "../core/errors"
 import type { ContextProvider } from "../core/providers/context/types"
 
 describe("SessionContext", () => {

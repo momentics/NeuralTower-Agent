@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { AgentMismatchError, AgentReplacementBlockedError } from "./ContextSource"
+import { AgentMismatchError, AgentReplacementBlockedError } from "./errors"
 
 describe("AgentMismatchError", () => {
   it("creates error with expected message", () => {

@@ -3,6 +3,7 @@ import type { IAgentOrchestrator } from "../core/IAgent"
 import { AbortError, BackendError, NeuralTowerError } from "../core/errors"
 import type { GitService } from "../services/git/GitService"
 import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
+import { detectLanguageDisplay } from "../utils/LanguageDetector"
 
 let agentOutputChannel: vscode.OutputChannel | undefined
 
@@ -50,14 +51,4 @@ export async function sendAgentQuery(
   }
 }
 
-export function getLang(filepath: string): string {
-  const ext = filepath.split(".").pop()?.toLowerCase() ?? ""
-  const map: Record<string, string> = {
-    ts: "typescript", tsx: "typescript", js: "javascript", jsx: "javascript",
-    py: "python", rs: "rust", go: "go", java: "java", kt: "kotlin",
-    rb: "ruby", c: "c", h: "c", cpp: "cpp", cs: "csharp",
-    html: "html", css: "css", json: "json", yaml: "yaml", yml: "yaml",
-    md: "markdown", sh: "bash", ps1: "powershell",
-  }
-  return map[ext] ?? ""
-}
+export { detectLanguageDisplay }

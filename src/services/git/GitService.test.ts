@@ -54,24 +54,6 @@ describe("GitService", () => {
     expect(result.additions).toBe(0)
   })
 
-  it("getStatus returns categorized files", async () => {
-    mockExec.mockImplementation((cmd: string, opts: any, cb: any) => {
-      setImmediate(() => cb(null, { stdout: "M file1.ts\n?? file2.ts\n M file3.ts\n", stderr: "" }))
-    })
-    const result = await service.getStatus("/work")
-    expect(result.staged).toContain("ile1.ts")
-    expect(result.unstaged).toContain("file2.ts")
-    expect(result.unstaged).toContain("ile3.ts")
-  })
-
-  it("getStatus returns empty on error", async () => {
-    mockExec.mockImplementation((cmd: string, opts: any, cb: any) => {
-      setImmediate(() => cb(new Error("fail"), null))
-    })
-    const result = await service.getStatus("/work")
-    expect(result.staged).toEqual([])
-  })
-
   it("getBranchInfo returns branch info", async () => {
     mockExec.mockImplementation((cmd: string, opts: any, cb: any) => {
       setImmediate(() => cb(null, { stdout: "# host origin head main branch \"origin/main\"\n# upstream 1 0\n", stderr: "" }))
@@ -103,23 +85,6 @@ describe("GitService", () => {
       setImmediate(() => cb(null, { stdout: "", stderr: "" }))
     })
     const result = await service.getDiffContext("/work")
-    expect(result).toBe("")
-  })
-
-  it("generateCommitMessage returns message", async () => {
-    mockExec.mockImplementation((cmd: string, opts: any, cb: any) => {
-      setImmediate(() => cb(null, { stdout: " file1.ts | 1 +\n file2.ts | 2 ++\n 2 files changed, 3 insertions(+)\n", stderr: "" }))
-    })
-    const result = await service.generateCommitMessage("/work")
-    expect(result).toContain("Добавленные изменения")
-    expect(result).toContain("file1.ts")
-  })
-
-  it("generateCommitMessage returns empty on error", async () => {
-    mockExec.mockImplementation((cmd: string, opts: any, cb: any) => {
-      setImmediate(() => cb(new Error("fail"), null))
-    })
-    const result = await service.generateCommitMessage("/work")
     expect(result).toBe("")
   })
 

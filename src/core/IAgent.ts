@@ -2,6 +2,7 @@ import type { ITool } from "../tools/ITool"
 import type { ISkill } from "../skills/ISkill"
 import type { IBackend, ChatMessage } from "./IBackend"
 import type { Plan } from "../agent/Plan"
+import type { ToolResult } from "../agent/AgentTypes"
 
 /**
  * Интерфейс оркестратора агента. Управляет циклом агента:
@@ -19,7 +20,7 @@ export interface IAgentOrchestrator {
     query: string,
     onChunk: (text: string) => void,
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: { output: string; success: boolean }) => void,
+    onToolResult?: (name: string, result: ToolResult) => void,
     signal?: AbortSignal,
   ): Promise<ChatMessage>
 

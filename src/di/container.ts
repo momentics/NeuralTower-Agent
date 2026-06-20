@@ -61,8 +61,6 @@ import {
 } from "../core/ContextSources.vscode"
 import {
   makeEnvironmentProvider,
-  makeRepoProvider,
-  makeFileIndexProvider,
   makeGitDiffProvider,
 } from "../core/ContextSources"
 import { makeCodebaseProvider } from "../core/providers/context/codebase"
@@ -270,9 +268,7 @@ function registerContextProviders(
     () => backend.getConfig().then((c) => c.model),
     gitService,
   )))
-  providers.push(register(makeRepoProvider(getWorkDir, repoAnalyzer)))
-  providers.push(register(makeFileIndexProvider(fileIndex)))
-  providers.push(register(makeGitDiffProvider(getWorkDir, gitService)))
+ providers.push(register(makeGitDiffProvider(getWorkDir, gitService)))
 
   // ── Специализированные провайдеры ───────────────────────
   providers.push(register(makeUrlProvider()))
@@ -410,7 +406,7 @@ export async function createDeps(
   const mcpManager = await createMCPChain(tools)
   const skills = createSkillManager()
 
-  const contextManager = new ContextManager()
+  const contextManager = new ContextManager(config.context.tokenBudget)
   const contextProviderRegistry = new ContextProviderRegistry()
 
   const workDirRef = {

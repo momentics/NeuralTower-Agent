@@ -6,6 +6,7 @@ import { AgentCore } from "./AgentCore"
 import type { AgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
 import type { Plan } from "./Plan"
 import type { TodoStore } from "./TodoStore"
+import type { ToolResult } from "./AgentTypes"
 import type { IContextProviderRegistry } from "../core/providers/context/registry"
 
 /**
@@ -42,7 +43,7 @@ export class AgentOrchestrator {
     query: string,
     onChunk: (text: string) => void,
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: { output: string; success: boolean }) => void,
+    onToolResult?: (name: string, result: ToolResult) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
   ): Promise<ChatMessage> {

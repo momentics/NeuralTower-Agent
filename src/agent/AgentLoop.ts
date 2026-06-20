@@ -48,7 +48,7 @@ export class AgentLoop {
     activeSkills: ISkill[],
     onChunk: (text: string) => void,
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: { output: string; success: boolean }) => void,
+    onToolResult?: (name: string, result: ToolResult) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
   ): Promise<ChatMessage> {

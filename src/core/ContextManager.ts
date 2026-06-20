@@ -2,8 +2,6 @@ import type { ContextProvider, ContextItem } from "./providers/context/types"
 import { estimateTokens } from "./token-utils"
 import { loadDefaultContextConfig } from "./config"
 
-const DEFAULT_TOKEN_BUDGET = loadDefaultContextConfig().tokenBudget
-
 /**
  * Неподвижный снимок провайдера контекста на момент
  * начала хода агента. Используется для сравнения при
@@ -65,7 +63,11 @@ export class ContextManager implements IContextManager {
   private snapshot: ContextSnapshot[] = []
   private revision = 0
   private previousContent: Map<string, string> = new Map()
-  private tokenBudget = DEFAULT_TOKEN_BUDGET
+  private tokenBudget: number
+
+  constructor(tokenBudget?: number) {
+    this.tokenBudget = tokenBudget ?? loadDefaultContextConfig().tokenBudget
+  }
 
   /**
    * Зарегистрировать провайдер контекста.

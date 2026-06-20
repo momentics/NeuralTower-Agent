@@ -5,11 +5,11 @@
 export interface AgentTurnResult {
   type: "text" | "tool_calls"
   content?: string
-  toolCalls?: ToolCall[]
+  toolCalls?: AgentToolCall[]
   thinking?: string
 }
 
-export interface ToolCall {
+export interface AgentToolCall {
   toolName: string
   arguments: Record<string, unknown>
 }
