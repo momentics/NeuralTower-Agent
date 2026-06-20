@@ -1,3 +1,4 @@
+import * as vscode from "vscode"
 import type { App } from "../core/App"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IGitService } from "../services/git/GitService"
@@ -10,6 +11,7 @@ export function registerEditorCommands(
   agent: IAgentOrchestrator,
   gitService: IGitService,
   diffViewer: DiffViewerProvider | undefined,
+  outputChannel: vscode.OutputChannel,
 ): void {
   for (const action of EDITOR_ACTIONS) {
     createEditorCommand(app, {
@@ -17,6 +19,6 @@ export function registerEditorCommands(
       noSelectionMessage: action.noSelectionMessage,
       requireSelection: action.requireSelection,
       promptTemplate: action.editorPromptTemplate,
-    }, agent, gitService, diffViewer)
+    }, agent, gitService, diffViewer, outputChannel)
   }
 }

@@ -7,6 +7,9 @@ import type {
   PersistedSession,
   PersistedMessage,
 } from "./SessionTypes"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("SessionStore")
 
 const SESSION_TITLE_TRUNCATE = 60
 const DEFAULT_SESSION_TITLE = "Без названия"
@@ -86,7 +89,7 @@ export class PersistentSessionStore implements ISessionStore {
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`Не удалось загрузить хранилище сессий: ${msg}`)
+        log.error(`Не удалось загрузить хранилище сессий: ${msg}`)
         this.data = { ...DEFAULT_DATA }
         this.createDefault()
       }

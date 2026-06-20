@@ -1,5 +1,8 @@
 ﻿import type { ContextProvider, ContextItem } from "./types"
 import type { ICodebaseSearch } from "../../../repo/CodebaseSearch"
+import { createDomainLogger } from "../../../core/logger"
+
+const log = createDomainLogger("CodebaseProvider")
 
 const CODEBASE_TOPK = 5
 const CODEBASE_MAX_CONTENT = 2000
@@ -68,7 +71,7 @@ export function makeCodebaseProvider(
         }]
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`Поиск по коду не выполнен: ${msg}`)
+        log.error(`Поиск по коду не выполнен: ${msg}`)
         return [{
           content: "Ошибка поиска по коду для \"" + trimmed + "\"",
           name: "codebase",

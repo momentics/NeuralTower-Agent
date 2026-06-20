@@ -27,11 +27,12 @@ export interface CommandDeps {
   commitMessageService: CommitMessageService
   extUri: vscode.Uri
   codebaseIndexer: CodebaseIndexer
+  outputChannel: vscode.OutputChannel
 }
 
 /** Зарегистрировать все команды расширения. */
 export function registerAllCommands(deps: CommandDeps): void {
-  registerEditorCommands(deps.app, deps.agent, deps.gitService, deps.diffViewer)
+  registerEditorCommands(deps.app, deps.agent, deps.gitService, deps.diffViewer, deps.outputChannel)
   registerGitCommands(deps.app, deps.commitMessageService)
   registerChatCommands(
     deps.app,
@@ -43,8 +44,9 @@ export function registerAllCommands(deps: CommandDeps): void {
     deps.diffViewer,
     deps.settingsProvider,
     deps.extUri,
+    deps.outputChannel,
   )
-  registerCodeActionCommands(deps.app, deps.agent, deps.gitService, deps.diffViewer)
+  registerCodeActionCommands(deps.app, deps.agent, deps.gitService, deps.diffViewer, deps.outputChannel)
 
   deps.app.registerCommand("neuralTowerAgent.reindex", async () => {
     const folder = vscode.workspace.workspaceFolders?.[0]

@@ -1,6 +1,9 @@
 import * as vscode from "vscode"
 import type { IBackend } from "./IBackend"
 import type { IProvider } from "./IProvider"
+import { createDomainLogger } from "./logger"
+
+const log = createDomainLogger("App")
 
 /**
  * Базовый класс приложения. Управляет жизненным циклом:
@@ -35,14 +38,14 @@ export class App {
 
   /** Вызывается при активации расширения. */
   async init(): Promise<void> {
-    console.log(`[NeuralTower Agent] инициализация версии ${this.version()}`)
+    log.info(`[NeuralTower Agent] инициализация версии ${this.version()}`)
   }
 
   /** Вызывается при деактивации расширения. */
   dispose(): void {
     for (const p of this.providers) p.dispose()
     for (const d of this.disposables) d.dispose()
-    console.log("[NeuralTower Agent] ресурсы освобождены")
+    log.info("[NeuralTower Agent] ресурсы освобождены")
   }
 
   private version(): string {

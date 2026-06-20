@@ -2,14 +2,17 @@ import * as vscode from "vscode"
 import type { IBackend } from "../../core/IBackend"
 import type { IContextManager } from "../../core/ContextManager"
 import type { Plugin } from "../../shared/types"
+import { createDomainLogger } from "../../core/logger"
+import { StatusBarIndicator } from "../../services/StatusBarIndicator"
+
+const log = createDomainLogger("BackendHealth")
 
 const HEALTH_CHECK_INTERVAL_MS = 15000
 
 /** Монитор здоровья бэкенда: периодическая проверка подключения и отображение статуса в статус-баре. */
-export class BackendHealthMonitor implements Plugin {
+export class BackendHealthMonitor extends StatusBarIndicator implements Plugin {
   name = "backend-health"
 
-  private statusBar: vscode.StatusBarItem
   private healthTimer: ReturnType<typeof setInterval> | null = null
   private connected = false
   private checking = false
@@ -18,12 +21,12 @@ export class BackendHealthMonitor implements Plugin {
     private readonly backend: IBackend,
     private readonly contextManager: IContextManager | null = null,
   ) {
-    this.statusBar = vscode.window.createStatusBarItem(
+    super(
       vscode.StatusBarAlignment.Right,
       99,
+      "neuralTowerAgent.settings",
+      "NeuralTower Agent: статус подключения",
     )
-    this.statusBar.command = "neuralTowerAgent.settings"
-    this.statusBar.tooltip = "NeuralTower Agent: статус подключения"
   }
 
   /** Инициализировать мониторинг: выполнить первую проверку и запустить периодический таймер. */
@@ -32,7 +35,7 @@ export class BackendHealthMonitor implements Plugin {
     if (this.contextManager) {
       const providers = this.contextManager.list()
       if (providers.length === 0) {
-        console.warn("[NeuralTower] ContextManager: провайдеры контекста не зарегистрированы. Агент будет работать без контекста проекта.")
+        log.warn("ContextManager: провайдеры контекста не зарегистрированы. Агент будет работать без контекста проекта.")
       }
     }
     this.healthTimer = setInterval(async () => {
@@ -59,7 +62,7 @@ export class BackendHealthMonitor implements Plugin {
       return ok
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Проверка здоровья бэкенда не выполнена: ${msg}`)
+      log.error(`Проверка здоровья бэкенда не выполнена: ${msg}`)
       this.connected = false
       this.checking = false
       this.syncBar()
@@ -71,23 +74,23 @@ export class BackendHealthMonitor implements Plugin {
   dispose(): void {
     if (this.healthTimer) clearInterval(this.healthTimer)
     this.healthTimer = null
-    this.statusBar.dispose()
+    super.dispose()
   }
 
   private syncBar(): void {
     if (this.connected) {
-      this.statusBar.text = "$(check) Neural Tower"
-      this.statusBar.color = new vscode.ThemeColor("testing.iconPassed")
-      this.statusBar.tooltip = "Neural Tower: подключено"
+      this.setText("$(check) Neural Tower")
+      this.setColor(new vscode.ThemeColor("testing.iconPassed"))
+      this.setTooltip("Neural Tower: подключено")
     } else if (this.checking) {
-      this.statusBar.text = "$(loading~spin) Neural Tower ..."
-      this.statusBar.color = new vscode.ThemeColor("editorWarning.foreground")
-      this.statusBar.tooltip = "Neural Tower: проверка подключения..."
+      this.setText("$(loading~spin) Neural Tower ...")
+      this.setColor(new vscode.ThemeColor("editorWarning.foreground"))
+      this.setTooltip("Neural Tower: проверка подключения...")
     } else {
-      this.statusBar.text = "$(error) Neural Tower"
-      this.statusBar.color = new vscode.ThemeColor("testing.iconErrored")
-      this.statusBar.tooltip = "Neural Tower: недоступно\nНажмите для настроек"
+      this.setText("$(error) Neural Tower")
+      this.setColor(new vscode.ThemeColor("testing.iconErrored"))
+      this.setTooltip("Neural Tower: недоступно\nНажмите для настроек")
     }
-    this.statusBar.show()
+    this.show()
   }
 }

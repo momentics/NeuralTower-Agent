@@ -179,22 +179,13 @@ export const BUILT_IN_MODES: Record<AgentModeName, AgentMode> = {
  */
 export class AgentModeManager {
   private currentMode: AgentModeName = "build"
-  private customModes: Map<AgentModeName, AgentMode> = new Map()
-
-  constructor() {
-    for (const [name, mode] of Object.entries(BUILT_IN_MODES)) {
-      this.customModes.set(name as AgentModeName, mode)
-    }
-  }
+  private overrides: Map<AgentModeName, AgentMode> = new Map()
 
   /**
    * Вернуть текущий режим.
    */
   getMode(): AgentMode {
-    return (
-      this.customModes.get(this.currentMode) ??
-      BUILT_IN_MODES[this.currentMode]
-    )
+    return this.overrides.get(this.currentMode) ?? BUILT_IN_MODES[this.currentMode]
   }
 
   /**
@@ -237,17 +228,17 @@ export class AgentModeManager {
   listModes(): AgentMode[] {
     const modes: AgentMode[] = []
     for (const [name] of Object.entries(BUILT_IN_MODES)) {
-      const mode = this.customModes.get(name as AgentModeName) ?? BUILT_IN_MODES[name as AgentModeName]
+      const mode = this.overrides.get(name as AgentModeName) ?? BUILT_IN_MODES[name as AgentModeName]
       modes.push(mode)
     }
     return modes.sort((a, b) => b.priority - a.priority)
   }
 
   /**
-   * Зарегистрировать пользовательский режим.
+   * Зарегистрировать пользовательский режим (переопределяет встроенный).
    */
   registerMode(mode: AgentMode): void {
-    this.customModes.set(mode.name, mode)
+    this.overrides.set(mode.name, mode)
   }
 
 }

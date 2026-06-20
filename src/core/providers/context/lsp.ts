@@ -1,3 +1,4 @@
+import * as path from "path"
 import * as vscode from "vscode"
 import type { ContextProvider, ContextItem } from "./types"
 import {
@@ -23,7 +24,6 @@ export function makeLspProvider(
       type: "query",
     },
     async resolve(query: string): Promise<ContextItem[]> {
-      const path = await import("path")
       const trimmed = query.trim()
       if (!trimmed) return []
 
@@ -40,8 +40,8 @@ export function makeLspProvider(
 
         if (possiblePath.includes("/") || possiblePath.includes("\\")) {
           filePath = possiblePath
-          if (!path.default.isAbsolute(filePath)) {
-            filePath = path.default.join(getWorkDir(), filePath)
+          if (!path.isAbsolute(filePath)) {
+            filePath = path.join(getWorkDir(), filePath)
           }
         } else {
           symbolQuery = possiblePath
@@ -101,7 +101,7 @@ export function makeLspProvider(
 
             if (definitions.length > 0) {
               const defLines = definitions.slice(0, LSP_PROVIDER_MAX_DEFS).map((d) => {
-                const rel = path.default.relative(getWorkDir(), d.uri.fsPath)
+                const rel = path.relative(getWorkDir(), d.uri.fsPath)
                 return `  ${rel}:${d.range.start.line + 1}`
               })
               parts.push(`Определение (${definitions.length}):\n${defLines.join("\n")}`)
@@ -109,7 +109,7 @@ export function makeLspProvider(
 
             if (references.length > 0) {
               const refLines = references.slice(0, LSP_PROVIDER_MAX_REFS).map((r) => {
-                const rel = path.default.relative(getWorkDir(), r.uri.fsPath)
+                const rel = path.relative(getWorkDir(), r.uri.fsPath)
                 return `  ${rel}:${r.range.start.line + 1}`
               })
               parts.push(`Ссылки (${references.length}):\n${refLines.join("\n")}`)
@@ -121,7 +121,7 @@ export function makeLspProvider(
 
             return [{
               content: parts.join("\n\n"),
-              name: `LSP: ${path.default.basename(filePath)}:${line}:${character}`,
+              name: `LSP: ${path.basename(filePath)}:${line}:${character}`,
               description: `${definitions.length} def, ${references.length} ref`,
             }]
           }
@@ -129,7 +129,7 @@ export function makeLspProvider(
           const docResult = await executeDocumentSymbol(filePath, getWorkDir)
           return [{
             content: docResult.output,
-            name: `LSP: ${path.default.basename(filePath)}`,
+            name: `LSP: ${path.basename(filePath)}`,
             description: docResult.output.includes("не найдены") ? "empty" : `${LSP_PROVIDER_MAX_SYMBOLS} символов`,
           }]
         }

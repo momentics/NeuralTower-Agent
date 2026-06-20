@@ -1,19 +1,119 @@
 import * as vscode from "vscode"
 import type { IBackend } from "../../core/IBackend"
 import type { Plugin } from "../../shared/types"
+import { createDomainLogger } from "../../core/logger"
+
+const log = createDomainLogger("Autocomplete")
 
 const AUTOCOMPLETE_DEBOUNCE_MS = 150
 const AUTOCOMPLETE_MAX_PROMPT_TOKENS = 2048
 const AUTOCOMPLETE_DIFF_TRUNCATE = 10000
 const AUTOCOMPLETE_CONTEXT_BEFORE = 30
 const AUTOCOMPLETE_CONTEXT_AFTER = 10
+const AUTOCOMPLETE_CACHE_MAX_SIZE = 100
+
+/**
+ * Конфигурация автодополнения для конкретного языка.
+ * Добавление нового языка не требует изменения AutocompleteService (OCP).
+ */
+export interface LanguageCompletionConfig {
+  keywords: string[]
+  builtins: string[]
+}
+
+/**
+ * Реестр конфигураций автодополнения по языкам.
+ * Для добавления нового языка достаточно внести запись в этот объект.
+ */
+export const LANGUAGE_COMPLETIONS: Record<string, LanguageCompletionConfig> = {
+  javascript: {
+    keywords: [
+      "const", "let", "var", "function", "async", "await", "return",
+      "import", "export", "default", "from", "class", "extends",
+      "interface", "type", "enum", "implements", "public", "private",
+      "protected", "static", "readonly", "if", "else", "while",
+      "for", "do", "switch", "case", "break", "continue", "try",
+      "catch", "finally", "throw", "new", "this", "super",
+      "typeof", "instanceof", "void", "null", "undefined", "true",
+      "false", "constructor", "get", "set", "declare", "abstract",
+      "override", "namespace", "module", "as", "in", "of",
+    ],
+    builtins: [
+      "toString", "valueOf", "hasOwnProperty", "constructor",
+      "push", "pop", "shift", "unshift", "splice", "slice",
+      "map", "filter", "reduce", "forEach", "find", "findIndex",
+      "some", "every", "includes", "indexOf", "lastIndexOf",
+      "concat", "join", "sort", "reverse", "flat", "flatMap",
+      "entries", "keys", "values", "length",
+      "trim", "trimStart", "trimEnd", "toUpperCase", "toLowerCase",
+      "charAt", "charCodeAt", "startsWith", "endsWith", "repeat",
+      "replace", "replaceAll", "split", "substr", "substring",
+      "log", "error", "warn", "info", "debug",
+      "then", "catch", "finally", "resolve", "reject",
+      "querySelector", "querySelectorAll", "addEventListener",
+      "removeEventListener", "appendChild", "removeChild",
+      "createElement", "getElementById", "getElementsByClassName",
+      "getElementsByName", "getElementsByTagName",
+    ],
+  },
+  typescript: {
+    keywords: [
+      "const", "let", "var", "function", "async", "await", "return",
+      "import", "export", "default", "from", "class", "extends",
+      "interface", "type", "enum", "implements", "public", "private",
+      "protected", "static", "readonly", "if", "else", "while",
+      "for", "do", "switch", "case", "break", "continue", "try",
+      "catch", "finally", "throw", "new", "this", "super",
+      "typeof", "instanceof", "void", "null", "undefined", "true",
+      "false", "constructor", "get", "set", "declare", "abstract",
+      "override", "namespace", "module", "as", "in", "of",
+    ],
+    builtins: [
+      "toString", "valueOf", "hasOwnProperty", "constructor",
+      "push", "pop", "shift", "unshift", "splice", "slice",
+      "map", "filter", "reduce", "forEach", "find", "findIndex",
+      "some", "every", "includes", "indexOf", "lastIndexOf",
+      "concat", "join", "sort", "reverse", "flat", "flatMap",
+      "entries", "keys", "values", "length",
+      "trim", "trimStart", "trimEnd", "toUpperCase", "toLowerCase",
+      "charAt", "charCodeAt", "startsWith", "endsWith", "repeat",
+      "replace", "replaceAll", "split", "substr", "substring",
+      "log", "error", "warn", "info", "debug",
+      "then", "catch", "finally", "resolve", "reject",
+      "querySelector", "querySelectorAll", "addEventListener",
+      "removeEventListener", "appendChild", "removeChild",
+      "createElement", "getElementById", "getElementsByClassName",
+      "getElementsByName", "getElementsByTagName",
+    ],
+  },
+  python: {
+    keywords: [
+      "import", "from", "as", "def", "class", "return", "yield",
+      "if", "elif", "else", "while", "for", "in", "not", "and",
+      "or", "is", "True", "False", "None", "lambda", "with",
+      "try", "except", "finally", "raise", "pass", "break",
+      "continue", "del", "global", "nonlocal", "assert",
+    ],
+    builtins: [
+      "print", "len", "range", "str", "int", "float", "list",
+      "dict", "set", "tuple", "type", "isinstance", "hasattr",
+      "getattr", "setattr", "map", "filter", "zip", "enumerate",
+      "sorted", "reversed", "any", "all", "min", "max", "sum",
+      "open", "input", "super", "property", "staticmethod",
+      "classmethod", "append", "extend", "pop", "remove", "clear",
+      "keys", "values", "items", "get", "update", "split",
+      "join", "strip", "replace", "startswith", "endswith",
+      "find", "index", "count", "format",
+    ],
+  },
+}
 
 /**
  * Сервис автодополнения кода (Inline Completion).
  * Подключается к бэкенду Neural Tower для генерации
  * контекстно-зависимых дополнений. Поддерживает:
  *
- * - Кэширование по (file, position) с инвалидацией при изменении файла
+ * - Кэширование по (file, position) с LRU-эвикицией и инвалидацией при изменении файла
  * - Дебаунс запросов (150 мс) и отмена висящих запросов
  * - Быстрые локальные префиксные дополнения без вызова бэкенда
  * - Контекст уровня workspace (открытые файлы, проблемы)
@@ -22,6 +122,7 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
   name = "autocomplete"
 
   private readonly cache: Map<string, vscode.InlineCompletionItem[]> = new Map()
+  private readonly cacheOrder: string[] = []
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
   private pendingAbort: AbortController | null = null
   private isInitialized = false
@@ -53,6 +154,7 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
   dispose(): void {
     this.cancelPending()
     this.cache.clear()
+    this.cacheOrder.length = 0
     if (this.debounceTimer !== null) {
       clearTimeout(this.debounceTimer)
       this.debounceTimer = null
@@ -80,6 +182,7 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
     const cacheKey = this.cacheKey(document, position)
     const cached = this.cache.get(cacheKey)
     if (cached) {
+      this.touch(cacheKey)
       return cached
     }
 
@@ -93,12 +196,12 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
         try {
           const items = await this.fetchCompletion(document, position)
           if (items) {
-            this.cache.set(cacheKey, items)
+            this.cachePut(cacheKey, items)
           }
           resolve(items)
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err)
-          console.error(`Автодополнение не выполнено: ${msg}`)
+          log.error(`Автодополнение не выполнено: ${msg}`)
           resolve(undefined)
         }
       }, this.debounceMs)
@@ -150,7 +253,7 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
       return [item]
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Встроенное автодополнение не выполнено: ${msg}`)
+      log.error(`Встроенное автодополнение не выполнено: ${msg}`)
       return undefined
     } finally {
       if (this.pendingAbort) {
@@ -224,39 +327,11 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
     const prefix = match[1]
     if (prefix.length < 2) return undefined
 
-    // ── Ключевые слова ────────────────────────────────────
-    const keywords = [
-      "const", "let", "var", "function", "async", "await", "return",
-      "import", "export", "default", "from", "class", "extends",
-      "interface", "type", "enum", "implements", "public", "private",
-      "protected", "static", "readonly", "if", "else", "while",
-      "for", "do", "switch", "case", "break", "continue", "try",
-      "catch", "finally", "throw", "new", "this", "super",
-      "typeof", "instanceof", "void", "null", "undefined", "true",
-      "false", "constructor", "get", "set", "declare", "abstract",
-      "override", "namespace", "module", "as", "in", "of",
-    ]
+    // ── Конфигурация для языка ────────────────────────────
+    const config = LANGUAGE_COMPLETIONS[document.languageId]
+    if (!config) return undefined
 
-    // ── Встроенные методы ─────────────────────────────────
-    const builtins = [
-      "toString", "valueOf", "hasOwnProperty", "constructor",
-      "push", "pop", "shift", "unshift", "splice", "slice",
-      "map", "filter", "reduce", "forEach", "find", "findIndex",
-      "some", "every", "includes", "indexOf", "lastIndexOf",
-      "concat", "join", "sort", "reverse", "flat", "flatMap",
-      "entries", "keys", "values", "length",
-      "trim", "trimStart", "trimEnd", "toUpperCase", "toLowerCase",
-      "charAt", "charCodeAt", "startsWith", "endsWith", "repeat",
-      "replace", "replaceAll", "split", "substr", "substring",
-      "log", "error", "warn", "info", "debug",
-      "then", "catch", "finally", "resolve", "reject",
-      "querySelector", "querySelectorAll", "addEventListener",
-      "removeEventListener", "appendChild", "removeChild",
-      "createElement", "getElementById", "getElementsByClassName",
-      "getElementsByName", "getElementsByTagName",
-    ]
-
-    const allCandidates = [...keywords, ...builtins]
+    const allCandidates = [...config.keywords, ...config.builtins]
 
     const matches = allCandidates
       .filter((c) => c.startsWith(prefix) && c !== prefix)
@@ -305,6 +380,32 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
     if (this.debounceTimer !== null) {
       clearTimeout(this.debounceTimer)
       this.debounceTimer = null
+    }
+  }
+
+  // ── LRU-кэш ─────────────────────────────────────────────
+
+  private touch(key: string): void {
+    const idx = this.cacheOrder.indexOf(key)
+    if (idx !== -1) {
+      this.cacheOrder.splice(idx, 1)
+    }
+    this.cacheOrder.push(key)
+  }
+
+  private cachePut(key: string, value: vscode.InlineCompletionItem[]): void {
+    if (this.cache.has(key)) {
+      this.touch(key)
+      this.cache.set(key, value)
+    } else {
+      if (this.cache.size >= AUTOCOMPLETE_CACHE_MAX_SIZE) {
+        const oldest = this.cacheOrder.shift()
+        if (oldest) {
+          this.cache.delete(oldest)
+        }
+      }
+      this.cache.set(key, value)
+      this.cacheOrder.push(key)
     }
   }
 }

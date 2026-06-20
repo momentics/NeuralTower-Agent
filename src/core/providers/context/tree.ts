@@ -1,3 +1,5 @@
+import * as fs from "fs/promises"
+import * as path from "path"
 import type { ContextProvider, ContextItem } from "./types"
 
 const CONTEXT_TREE_MAX_DEPTH = 4
@@ -10,8 +12,6 @@ async function buildTree(
   depth: number,
   maxDepth = CONTEXT_TREE_MAX_DEPTH,
 ): Promise<string> {
-  const fs = await import("fs/promises")
-  const path = await import("path")
   if (depth > maxDepth) return `${prefix}${isLast ? "" : ""}...\n`
 
   let result = ""
@@ -27,7 +27,7 @@ async function buildTree(
 
   for (const e of entries) {
     if (e.name.startsWith(".") || e.name === "node_modules") continue
-    const full = path.default.join(current, e.name)
+    const full = path.join(current, e.name)
     if (e.isDirectory()) dirs.push({ name: e.name, full })
     else files.push({ name: e.name, full })
   }
@@ -67,16 +67,15 @@ export function makeTreeProvider(
       type: "query",
     },
     async resolve(query: string): Promise<ContextItem[]> {
-      const path = await import("path")
       const targetDir = query.trim()
-        ? (path.default.isAbsolute(query.trim()) ? query.trim() : path.default.join(getWorkDir(), query.trim()))
+        ? (path.isAbsolute(query.trim()) ? query.trim() : path.join(getWorkDir(), query.trim()))
         : getWorkDir()
 
       try {
         const lines = await buildTree(targetDir, targetDir, "", true, 0)
         return [{
           content: `Дерево: ${targetDir}\n\n${lines}`,
-          name: `Tree: ${path.default.basename(targetDir) || targetDir}`,
+          name: `Tree: ${path.basename(targetDir) || targetDir}`,
           description: `${lines.split("\n").length} строк`,
         }]
       } catch (err: unknown) {

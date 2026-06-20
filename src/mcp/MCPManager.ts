@@ -1,8 +1,12 @@
-import { spawn, type ChildProcess } from "child_process"
 import type { ITool } from "../tools/ITool"
 import { ToolRegistry } from "../tools/ToolRegistry"
 import { MCPToolAdapter } from "./MCPToolAdapter"
 import { ExecutionError, TimeoutError } from "../core/errors"
+import { createDomainLogger } from "../core/logger"
+import type { IMCPTransport } from "./MCPTransport"
+import { StdioMCPTransport, MCP_TRANSPORT_EVENTS } from "./MCPTransport"
+
+const log = createDomainLogger("MCP")
 
 /** Конфигурация MCP-сервера для подключения. */
 export interface MCPServerConfig {
@@ -28,12 +32,10 @@ interface PendingRequest {
 interface MCPServer {
   config: MCPServerConfig
   ready: boolean
-  process: ChildProcess | null
+  transport: IMCPTransport | null
   tools: MCPTool[]
   nextRequestId: number
   pendingRequests: Map<number, PendingRequest> | null
-  /** Ссылки на обработчики событий для очистки при отключении */
-  listeners: Array<{ stream: NodeJS.ReadableStream | ChildProcess; event: string; handler: any }>
 }
 
 /**
@@ -52,26 +54,17 @@ export interface IMCPManager {
 }
 
 /**
- * Добавить обработчик события с сохранением ссылки для последующего удаления.
+ * Создать транспорт для конфигурации сервера.
+ * Для добавления нового типа транспорта достаточно расширить эту функцию (OCP).
  */
-function addTrackedListener(
-  listeners: MCPServer["listeners"],
-  stream: NodeJS.ReadableStream | ChildProcess,
-  event: string,
-  handler: any,
-): void {
-  listeners.push({ stream, event, handler })
-  stream.on(event, handler)
-}
-
-/**
- * Удалить все обработчики событий для сервера.
- */
-function removeListeners(listeners: MCPServer["listeners"]): void {
-  for (const { stream, event, handler } of listeners) {
-    stream.off(event, handler)
+function createTransport(config: MCPServerConfig): IMCPTransport | null {
+  switch (config.transport) {
+    case "stdio":
+      return new StdioMCPTransport(config)
+    default:
+      log.error(`Неподдерживаемый транспорт: ${config.transport}`)
+      return null
   }
-  listeners.length = 0
 }
 
 export class MCPManager implements IMCPManager {
@@ -82,72 +75,68 @@ export class MCPManager implements IMCPManager {
     this.servers.push({
       config,
       ready: false,
-      process: null,
+      transport: null,
       tools: [],
       nextRequestId: 0,
       pendingRequests: null,
-      listeners: [],
     })
   }
 
   async connect(): Promise<void> {
     for (const server of this.servers) {
-      if (server.config.transport !== "stdio") continue
-      try {
-        const env: Record<string, string> = {
-          ...(process.env as Record<string, string>),
-          ...(server.config.env ?? {}),
-        }
-        const proc = spawn(server.config.command, server.config.args ?? [], {
-          env,
-          stdio: ["pipe", "pipe", "pipe"],
-        })
-        server.process = proc
-        server.ready = true
-        server.nextRequestId = 0
-        server.pendingRequests = new Map()
+      const transport = createTransport(server.config)
+      if (!transport) {
+        server.ready = false
+        continue
+      }
 
-        if (proc.stdout) {
-          addTrackedListener(server.listeners, proc.stdout, "data", (data: Buffer) => {
-            const pending = server.pendingRequests
-            if (!pending) return
-            try {
-              const resp = JSON.parse(data.toString()) as { id: number; result?: unknown; error?: { message: string } }
-              const req = pending.get(resp.id)
-              if (req) {
-                pending.delete(resp.id)
-                if (resp.error) {
-                  req.reject(new ExecutionError(resp.error.message))
-                } else {
-                  req.resolve(resp.result)
-                }
-              }
-            } catch (err: unknown) {
-              const msg = err instanceof Error ? err.message : String(err)
-              console.error(`Ошибка разбора MCP-ответа: ${msg}`)
+      server.transport = transport
+      server.ready = true
+      server.nextRequestId = 0
+      server.pendingRequests = new Map()
+
+      transport.on(MCP_TRANSPORT_EVENTS.message, (data: string) => {
+        const pending = server.pendingRequests
+        if (!pending) return
+        try {
+          const resp = JSON.parse(data) as { id: number; result?: unknown; error?: { message: string } }
+          const req = pending.get(resp.id)
+          if (req) {
+            pending.delete(resp.id)
+            if (resp.error) {
+              req.reject(new ExecutionError(resp.error.message))
+            } else {
+              req.resolve(resp.result)
             }
-          })
-        }
-
-        addTrackedListener(server.listeners, proc, "error", () => {
-          server.ready = false
-        })
-
-        addTrackedListener(server.listeners, proc, "exit", () => {
-          server.ready = false
-          server.process = null
-          const pending = server.pendingRequests
-          if (pending) {
-            for (const req of pending.values()) {
-              req.reject(new ExecutionError("MCP-процесс завершил работу"))
-            }
-            pending.clear()
           }
-          server.pendingRequests = null
-        })
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err)
+          log.error(`Ошибка разбора MCP-ответа: ${msg}`)
+        }
+      })
+
+      transport.on(MCP_TRANSPORT_EVENTS.error, () => {
+        server.ready = false
+      })
+
+      transport.on(MCP_TRANSPORT_EVENTS.close, () => {
+        server.ready = false
+        server.transport = null
+        const pending = server.pendingRequests
+        if (pending) {
+          for (const req of pending.values()) {
+            req.reject(new ExecutionError("MCP-процесс завершил работу"))
+          }
+          pending.clear()
+        }
+        server.pendingRequests = null
+      })
+
+      try {
+        await transport.connect()
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`MCP-сервер недоступен: ${msg}`)
+        log.error(`MCP-сервер недоступен: ${msg}`)
         server.ready = false
       }
     }
@@ -156,7 +145,7 @@ export class MCPManager implements IMCPManager {
   async discover(): Promise<MCPTool[]> {
     const all: MCPTool[] = []
     for (const server of this.servers) {
-      if (!server.ready || !server.process) continue
+      if (!server.ready || !server.transport) continue
       try {
         const result = await this.sendJSONRPC<Record<string, unknown>>(server, "tools/list", {})
         if (result && typeof result === "object" && Array.isArray((result as Record<string, unknown>).tools)) {
@@ -165,7 +154,7 @@ export class MCPManager implements IMCPManager {
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`MCP-сервер не поддерживает tools/list: ${msg}`)
+        log.error(`MCP-сервер не поддерживает tools/list: ${msg}`)
       }
     }
     return all
@@ -177,7 +166,7 @@ export class MCPManager implements IMCPManager {
     args: Record<string, unknown>,
   ): Promise<{ output: string; success: boolean }> {
     const server = this.servers.find((s) => s.config.name === serverName)
-    if (!server || !server.ready || !server.process) {
+    if (!server || !server.ready || !server.transport) {
       return { output: `MCP-сервер "${serverName}" недоступен`, success: false }
     }
     try {
@@ -205,7 +194,7 @@ export class MCPManager implements IMCPManager {
 
   async syncWithRegistry(registry: ToolRegistry): Promise<void> {
     for (const server of this.servers) {
-      if (!server.ready || !server.process) continue
+      if (!server.ready || !server.transport) continue
       registry.registerMany(
         this.toolAdapter.adaptAll(server.tools, server.config.name, this.callTool.bind(this)),
       )
@@ -228,10 +217,10 @@ export class MCPManager implements IMCPManager {
 
   async disconnect(): Promise<void> {
     for (const server of this.servers) {
-      removeListeners(server.listeners)
-      if (server.process) {
-        server.process.kill()
-        server.process = null
+      if (server.transport) {
+        server.transport.removeAllListeners()
+        server.transport.close()
+        server.transport = null
       }
       server.ready = false
       server.tools = []
@@ -253,14 +242,9 @@ export class MCPManager implements IMCPManager {
     params: Record<string, unknown>,
   ): Promise<T> {
     return new Promise<T>((resolve, reject) => {
-      const proc = server.process
-      if (!proc) {
+      const transport = server.transport
+      if (!transport || !transport.isConnected()) {
         reject(new ExecutionError("Сервер не подключён"))
-        return
-      }
-
-      if (!proc.stdout) {
-        reject(new ExecutionError("stdout недоступен"))
         return
       }
 
@@ -305,8 +289,15 @@ export class MCPManager implements IMCPManager {
         }
       }, 10000)
 
-      if (proc.stdin) {
-        proc.stdin.write(request)
+      try {
+        transport.send(request)
+      } catch (err: unknown) {
+        if (timer !== undefined) {
+          clearTimeout(timer)
+          timer = undefined
+        }
+        pending.delete(id)
+        reject(err as Error)
       }
     })
   }

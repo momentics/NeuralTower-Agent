@@ -2,6 +2,9 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import { detectLanguageFull } from "../utils/LanguageDetector"
 import { walkDirectory } from "../utils/FileSystem"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("RepoAnalyzer")
 
 /**
  * Анализатор репозитория. Строит карту структуры, определяет
@@ -76,7 +79,7 @@ export class RepoAnalyzer {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Не удалось прочитать package.json: ${msg}`)
+      log.error(`Не удалось прочитать package.json: ${msg}`)
       return { packages: [], workspaces: false }
     }
   }

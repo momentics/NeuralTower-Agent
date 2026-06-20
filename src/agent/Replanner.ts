@@ -2,6 +2,9 @@ import type { IBackend } from "../core/IBackend"
 import type { ToolRegistry } from "../tools/ToolRegistry"
 import { Plan } from "./Plan"
 import type { PlanStep } from "./Plan"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("Replanner")
 
 /**
  * Результат репланирования.
@@ -55,7 +58,7 @@ export class Replanner {
       return { plan: newPlan, reason, attempt }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Повторное планирование не выполнено: ${msg}`)
+      log.error(`Повторное планирование не выполнено: ${msg}`)
       return { plan: this.fallbackPlan(plan, failedStep, error), reason, attempt }
     }
   }

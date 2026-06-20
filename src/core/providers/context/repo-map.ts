@@ -1,3 +1,4 @@
+import * as path from "path"
 import type { IndexEntry } from "../../../repo/FileIndex"
 import type { ContextProvider, ContextItem } from "./types"
 import { RepoSummary } from "../../../repo/RepoAnalyzer"
@@ -22,7 +23,6 @@ export function makeRepoMapProvider(
       priority: 87,
     },
     async resolve(_query: string): Promise<ContextItem[]> {
-      const path = await import("path")
       const summary = await getRepoSummary()
       const stats = getFileIndex().stats()
 
@@ -49,7 +49,7 @@ export function makeRepoMapProvider(
       if (summary.topDirs.length > 0) {
         parts.push("Директории верхнего уровня:")
         for (const d of summary.topDirs) {
-          const rel = path.default.relative(getWorkDir(), d) || d
+          const rel = path.relative(getWorkDir(), d) || d
           parts.push(`  ${rel}/`)
         }
         parts.push("")
@@ -58,7 +58,7 @@ export function makeRepoMapProvider(
       if (summary.notableFiles.length > 0) {
         parts.push("Заметные файлы:")
         for (const f of summary.notableFiles) {
-          const rel = path.default.relative(getWorkDir(), f)
+          const rel = path.relative(getWorkDir(), f)
           parts.push(`  ${rel}`)
         }
         parts.push("")
@@ -69,8 +69,8 @@ export function makeRepoMapProvider(
         parts.push("Источники (ключевые директории):")
         const dirSet = new Set<string>()
         for (const e of srcEntries) {
-          const rel = path.default.relative(getWorkDir(), e.path)
-          const dir = rel.split(path.default.sep).slice(0, 2).join(path.default.sep)
+          const rel = path.relative(getWorkDir(), e.path)
+          const dir = rel.split(path.sep).slice(0, 2).join(path.sep)
           dirSet.add(dir)
         }
         for (const d of [...dirSet].sort().slice(0, 30)) {

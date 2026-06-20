@@ -19,6 +19,7 @@ export function registerChatCommands(
   diffViewer: DiffViewerProvider | undefined,
   settingsProvider: SettingsProvider,
   _extUri: vscode.Uri,
+  _outputChannel: vscode.OutputChannel,
 ): void {
   app.registerCommand("neuralTowerAgent.newChat", () => {
     chatProvider.broadcastNewChat?.()

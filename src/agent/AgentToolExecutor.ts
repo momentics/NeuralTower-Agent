@@ -8,6 +8,9 @@ import { AgentMemory } from "./AgentMemory"
 import type { SessionContext } from "./SessionContext"
 
 import { AbortError } from "../core/errors"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("AgentToolExecutor")
 
 export class AgentToolExecutor {
   constructor(
@@ -162,7 +165,7 @@ const calls: AgentToolCall[] = []
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`Некорректные данные вызова инструмента: ${msg}`)
+        log.error(`Некорректные данные вызова инструмента: ${msg}`)
       }
     }
 
@@ -214,7 +217,7 @@ function parseBackendToolCalls(backendCalls: BackendToolCall[]): AgentToolCall[]
       args = JSON.parse(bc.arguments) as Record<string, unknown>
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Невалидный JSON аргументов: ${msg}`)
+      log.error(`Невалидный JSON аргументов: ${msg}`)
       continue
     }
     calls.push({

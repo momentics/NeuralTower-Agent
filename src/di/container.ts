@@ -77,6 +77,9 @@ import { CodebaseChunker, createDefaultChunkerConfig } from "../repo/CodebaseChu
 import type { ICodebaseChunker } from "../repo/CodebaseChunker"
 import { CodebaseIndexer } from "../services/indexing/CodebaseIndexer"
 import { IndexingStatusBar } from "../services/indexing/IndexingStatusBar"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("DI")
 
 // ── Публичные типы ────────────────────────────────────────
 
@@ -222,7 +225,7 @@ export async function createMCPChain(
     await mcpManager.connect()
     await mcpManager.syncWithRegistry(tools)
   } catch (err: unknown) {
-    console.warn(`MCP-инициализация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
+    log.warn(`MCP-инициализация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
   }
   return mcpManager
 }

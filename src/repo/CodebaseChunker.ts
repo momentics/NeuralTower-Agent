@@ -17,6 +17,9 @@ import type {
 import type { IChunker } from "./Chunker"
 import { LineChunker, TypeScriptChunker, createDefaultChunkerConfig } from "./Chunker"
 import { detectLanguageShort } from "../utils/LanguageDetector"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("CodebaseChunker")
 export { createDefaultChunkerConfig } from "./Chunker"
 
 /**
@@ -71,7 +74,7 @@ export class CodebaseChunker implements ICodebaseChunker {
         filesProcessed++
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`Не удалось прочитать файл ${entry.path}: ${msg}`)
+        log.error(`Не удалось прочитать файл ${entry.path}: ${msg}`)
         filesSkipped++
       }
     }
@@ -97,7 +100,7 @@ export class CodebaseChunker implements ICodebaseChunker {
       return result.chunks
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Не удалось обработать файл ${filePath}: ${msg}`)
+      log.error(`Не удалось обработать файл ${filePath}: ${msg}`)
       return []
     }
   }

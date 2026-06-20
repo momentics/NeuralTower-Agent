@@ -1,6 +1,9 @@
 import type { ContextProvider, ContextItem } from "./providers/context/types"
 import type { IGitService } from "../services/git/GitService"
 import type { AgentMemory } from "../agent/AgentMemory"
+import { createDomainLogger } from "./logger"
+
+const log = createDomainLogger("ContextSources")
 
 /**
  * Провайдер контекста: информация об окружении.
@@ -28,7 +31,7 @@ export function makeEnvironmentProvider(
           branch = info?.name ?? "unknown"
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err)
-          console.error(`Не удалось получить информацию о ветке: ${msg}`)
+          log.error(`Не удалось получить информацию о ветке: ${msg}`)
         }
       }
       return [{

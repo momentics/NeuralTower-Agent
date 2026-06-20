@@ -5,6 +5,9 @@ import type { IGitService } from "../services/git/GitService"
 import type { IContextManager } from "../core/ContextManager"
 import type { IFileIndex } from "../repo/FileIndex"
 import { AgentMemory } from "./AgentMemory"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("AgentContext")
 
 export class AgentContextBuilder {
   constructor(
@@ -45,7 +48,7 @@ export class AgentContextBuilder {
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`ContextManager недоступен: ${msg}`)
+        log.error(`ContextManager недоступен: ${msg}`)
       }
     }
 

@@ -1,5 +1,8 @@
 import { spawn, type SpawnOptions, type ChildProcess } from "child_process"
 import type { Plugin } from "../../shared/types"
+import { createDomainLogger } from "../../core/logger"
+
+const log = createDomainLogger("Git")
 
 const GIT_ROOT_TIMEOUT_MS = 5000
 const GIT_DIFF_TIMEOUT_MS = 10000
@@ -113,7 +116,7 @@ export class GitService implements Plugin, IGitService {
       return this.root
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Не удалось определить корень репозитория: ${msg}`)
+      log.error(`Не удалось определить корень репозитория: ${msg}`)
       this.root = cwd
       return null
     }
@@ -139,7 +142,7 @@ export class GitService implements Plugin, IGitService {
       return { changed, additions, deletions }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Не удалось получить изменения Git: ${msg}`)
+      log.error(`Не удалось получить изменения Git: ${msg}`)
       return { changed: [], additions: 0, deletions: 0 }
     }
   }
@@ -156,7 +159,7 @@ export class GitService implements Plugin, IGitService {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Не удалось получить информацию о ветке: ${msg}`)
+      log.error(`Не удалось получить информацию о ветке: ${msg}`)
       return null
     }
   }
@@ -173,7 +176,7 @@ export class GitService implements Plugin, IGitService {
       return `## Изменения Git (не добавленные)\n\`\`\`diff\n${stdout.slice(0, 10000)}\n\`\`\``
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Не удалось получить diff: ${msg}`)
+      log.error(`Не удалось получить diff: ${msg}`)
       return ""
     }
   }
@@ -189,7 +192,7 @@ export class GitService implements Plugin, IGitService {
       return stdout
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Не удалось получить staged diff: ${msg}`)
+      log.error(`Не удалось получить staged diff: ${msg}`)
       return ""
     }
   }

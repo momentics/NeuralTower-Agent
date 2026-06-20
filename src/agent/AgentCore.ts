@@ -15,7 +15,11 @@ import type { ToolResult } from "./AgentTypes"
 import type { AgentModeName } from "./AgentMode"
 import { TodoStore } from "./TodoStore"
 import type { Plan } from "./Plan"
+import { PlanRepository } from "./PlanRepository"
 import { AbortError, AgentError } from "../core/errors"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("AgentCore")
 
 /**
  * AgentCore — ядро выполнения агента.
@@ -131,9 +135,9 @@ export class AgentCore {
       // Сохранить план на диск
       if (workDir) {
         try {
-          await plan.save(workDir)
+          await new PlanRepository(workDir).save(plan)
         } catch (err: unknown) {
-          console.warn(`Не удалось сохранить план: ${err instanceof Error ? err.message : String(err)}`)
+          log.warn(`Не удалось сохранить план: ${err instanceof Error ? err.message : String(err)}`)
         }
       }
 

@@ -1,13 +1,16 @@
+import * as fs from "fs/promises"
+import * as path from "path"
 import type { ContextProvider, ContextItem } from "./types"
+import { createDomainLogger } from "../../logger"
+
+const log = createDomainLogger("RulesProvider")
 
 export async function loadRulesFiles(getWorkDir: () => string): Promise<Array<{ name: string; content: string }>> {
-  const fs = await import("fs/promises")
-  const path = await import("path")
   const workDir = getWorkDir()
   const rules: Array<{ name: string; content: string }> = []
   const ruleDirs = [
-    path.default.join(workDir, ".neuraltower", "rules"),
-    path.default.join(workDir, ".kilo", "rules"),
+    path.join(workDir, ".neuraltower", "rules"),
+    path.join(workDir, ".kilo", "rules"),
   ]
 
   for (const dir of ruleDirs) {
@@ -15,22 +18,22 @@ export async function loadRulesFiles(getWorkDir: () => string): Promise<Array<{ 
       const entries = await fs.readdir(dir)
       const mdFiles = entries.filter((e) => e.endsWith(".md")).sort()
       for (const fname of mdFiles) {
-        const content = await fs.readFile(path.default.join(dir, fname), "utf-8")
+        const content = await fs.readFile(path.join(dir, fname), "utf-8")
         rules.push({ name: fname, content: content.trim() })
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Не удалось прочитать директорию правил: ${msg}`)
+      log.error(`Не удалось прочитать директорию правил: ${msg}`)
     }
   }
 
   for (const fname of ["AGENTS.md", "CLAUDE.md"]) {
     try {
-      const content = await fs.readFile(path.default.join(workDir, fname), "utf-8")
+      const content = await fs.readFile(path.join(workDir, fname), "utf-8")
       rules.push({ name: fname, content: content.trim() })
-   } catch (err: unknown) {
+    } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Не удалось прочитать ${fname}: ${msg}`)
+      log.error(`Не удалось прочитать ${fname}: ${msg}`)
     }
   }
 

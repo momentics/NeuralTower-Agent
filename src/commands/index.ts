@@ -19,6 +19,7 @@ export function createEditorCommand(
   agent: IAgentOrchestrator,
   gitService: IGitService,
   diffViewer: DiffViewerProvider | undefined,
+  outputChannel: vscode.OutputChannel,
 ): void {
   app.registerCommand(`neuralTowerAgent.${action.name}`, async () => {
     const editor = vscode.window.activeTextEditor
@@ -37,6 +38,6 @@ export function createEditorCommand(
 
     const lang = detectLanguageDisplay(filePath)
     const prompt = action.promptTemplate(text, lang, filePath)
-    await sendAgentQuery(prompt, filePath, agent, gitService, diffViewer)
+    await sendAgentQuery(prompt, filePath, agent, gitService, diffViewer, outputChannel)
   })
 }

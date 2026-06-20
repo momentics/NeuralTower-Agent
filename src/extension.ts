@@ -4,13 +4,19 @@ import { AgentCodeActionProvider, codeActionProviderMetadata } from "./services/
 import { DiffViewerProvider } from "./providers/DiffViewerProvider"
 import { createDeps } from "./di/container"
 import { registerAllCommands } from "./commands/command-bus"
-import { disposeOutputChannel } from "./commands/utils"
+import { createOutputChannel } from "./commands/utils"
+import { createDomainLogger } from "./core/logger"
+
+const log = createDomainLogger("Extension")
 
 let app: App | undefined
 
 export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   app = new App(ctx)
   const deps = await createDeps(ctx)
+
+  // ── Канал вывода ────────────────────────────────────────
+  const outputChannel = createOutputChannel()
 
   // ── Провайдеры ──────────────────────────────────────────
   app.registerProvider(deps.chatProvider)
@@ -38,6 +44,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
     commitMessageService: deps.commitMessageService,
     extUri: ctx.extensionUri,
     codebaseIndexer: deps.codebaseIndexer,
+    outputChannel,
   })
 
   // ── Сериализаторы панелей Webview ─────────────────────────────
@@ -89,7 +96,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
         () => deps.codebaseIndexer.dispose(),
         () => deps.mcpManager.disconnect(),
         () => deps.telemetry.dispose(),
-        () => disposeOutputChannel(),
+        () => outputChannel.dispose(),
       ]
 
       for (const fn of toDispose) {
@@ -97,7 +104,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
           fn()
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err)
-          console.error(`Ошибка при освобождении ресурса: ${msg}`)
+          log.error(`Ошибка при освобождении ресурса: ${msg}`)
         }
       }
     },

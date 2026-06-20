@@ -1,3 +1,5 @@
+import * as fs from "fs/promises"
+import * as path from "path"
 import type { ContextProvider, ContextItem } from "./types"
 import { detectLanguageDisplay } from "../../../utils/LanguageDetector"
 
@@ -16,14 +18,12 @@ export function makeFileProvider(
       type: "query",
     },
     async resolve(query: string): Promise<ContextItem[]> {
-      const fs = await import("fs/promises")
-      const path = await import("path")
       const trimmed = query.trim()
       if (!trimmed) return []
 
       let filePath = trimmed
-      if (!path.default.isAbsolute(trimmed)) {
-        filePath = path.default.join(getWorkDir(), trimmed)
+      if (!path.isAbsolute(trimmed)) {
+        filePath = path.join(getWorkDir(), trimmed)
       }
 
       try {
@@ -38,7 +38,7 @@ export function makeFileProvider(
         const lang = detectLanguageDisplay(filePath)
         return [{
           content: `Файл: ${filePath}\n\n\`\`\`${lang}\n${content.slice(0, CONTEXT_MAX_CONTENT_CHARS)}\n\`\`\``,
-          name: path.default.basename(filePath),
+          name: path.basename(filePath),
           description: `${(stat.size / 1024).toFixed(1)} КБ, ${lang}`,
         }]
       } catch (err: unknown) {

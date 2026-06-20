@@ -1,6 +1,9 @@
 import type { ContextProvider, ContextItem } from "./providers/context/types"
 import { estimateTokens } from "./token-utils"
 import { loadDefaultContextConfig } from "./config"
+import { createDomainLogger } from "./logger"
+
+const log = createDomainLogger("ContextManager")
 
 /**
  * Неподвижный снимок провайдера контекста на момент
@@ -185,7 +188,7 @@ export class ContextManager implements IContextManager {
         })
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`Провайдер контекста недоступен: ${msg}`)
+        log.error(`Провайдер контекста недоступен: ${msg}`)
       }
     }
 
@@ -254,7 +257,7 @@ export class ContextManager implements IContextManager {
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`Провайдер контекста недоступен при обновлении: ${msg}`)
+        log.error(`Провайдер контекста недоступен при обновлении: ${msg}`)
       }
     }
 

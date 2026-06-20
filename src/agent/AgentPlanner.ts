@@ -6,6 +6,10 @@ import { Plan } from "./Plan"
 import type { SessionContext } from "./SessionContext"
 import { PlanError } from "../core/errors"
 import { Replanner } from "./Replanner"
+import { PlanRepository } from "./PlanRepository"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("AgentPlanner")
 
 /** Специальный префикс для системного сообщения с сериализованным планом. */
 const PLAN_MESSAGE_PREFIX = "__PLAN__"
@@ -99,7 +103,7 @@ export class AgentPlanner {
       return plan
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Планирование не выполнено: ${msg}`)
+      log.error(`Планирование не выполнено: ${msg}`)
       return null
     }
   }
@@ -121,14 +125,10 @@ export class AgentPlanner {
    */
   async restorePlanFromFile(workDir: string): Promise<Plan | null> {
     try {
-      const fs = await import("fs/promises")
-      const path = await import("path")
-      const planDir = path.join(workDir, ".neuraltower", "plans")
-      const entries = await fs.readdir(planDir)
-      const jsonFiles = entries.filter((e) => e.endsWith(".json")).sort().reverse()
-      if (jsonFiles.length === 0) return null
-      const latest = path.join(planDir, jsonFiles[0])
-      const plan = await Plan.load(latest)
+      const repo = new PlanRepository(workDir)
+      const latest = await repo.findLatest()
+      if (!latest) return null
+      const plan = await repo.load(latest)
       if (plan && (plan.status === "running" || plan.status === "paused")) {
         this.currentPlan = plan
         if (this.sessionContext) {
@@ -138,7 +138,7 @@ export class AgentPlanner {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Файл плана не найден или повреждён: ${msg}`)
+      log.error(`Файл плана не найден или повреждён: ${msg}`)
     }
     return null
   }

@@ -1,6 +1,9 @@
 import type { IBackend, BackendConfig, ChatMessage, ToolCall, ToolDefinition } from "../core/IBackend"
 import { BackendError, ConnectionError, TimeoutError } from "../core/errors"
 import { loadDefaultBackendConfig } from "../core/config"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("Backend")
 
 const RETRY_BASE_DELAY_MS = 1000
 const RETRY_MAX_DELAY_MS = 10000
@@ -50,7 +53,7 @@ export class NeuralTowerBackend implements IBackend {
       return true
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Проверка здоровья бэкенда не выполнена: ${msg}`)
+      log.error(`Проверка здоровья бэкенда не выполнена: ${msg}`)
       return false
     }
   }
@@ -146,7 +149,7 @@ export class NeuralTowerBackend implements IBackend {
               }
             } catch (err: unknown) {
               const msg = err instanceof Error ? err.message : String(err)
-              console.error(`Некорректные данные SSE: ${msg}`)
+              log.error(`Некорректные данные SSE: ${msg}`)
             }
           }
         }
@@ -198,8 +201,9 @@ export class NeuralTowerBackend implements IBackend {
 
     for (let attempt = 0; attempt <= cfg.maxRetries; attempt++) {
       if (attempt > 0) {
-        const delay = Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1), RETRY_MAX_DELAY_MS)
-        await new Promise((r) => setTimeout(r, delay))
+        const baseDelay = Math.min(RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1), RETRY_MAX_DELAY_MS)
+        const jitter = baseDelay * (0.5 + Math.random() * 0.5)
+        await new Promise((r) => setTimeout(r, jitter))
       }
 
       try {

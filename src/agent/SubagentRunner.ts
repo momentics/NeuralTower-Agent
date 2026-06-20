@@ -76,6 +76,7 @@ export interface SubagentConfig {
 export class SubagentRunner {
   private running: Map<string, SubagentHandle> = new Map()
   private nextId = 0
+  private readonly maxConcurrent: number
 
   constructor(
     private readonly backend: IBackend,
@@ -84,7 +85,10 @@ export class SubagentRunner {
     private readonly deps: AgentDependencies,
     private readonly spawnFactory: AgentSpawnFactory,
     private readonly todoStore: TodoStore,
-  ) {}
+    maxConcurrent = 4,
+  ) {
+    this.maxConcurrent = maxConcurrent
+  }
 
   /**
    * Запустить подагент.
@@ -94,6 +98,21 @@ export class SubagentRunner {
     onChunk?: (text: string) => void,
     onDone?: (result: SubagentResult) => void,
   ): Promise<SubagentHandle> {
+    if (this.running.size >= this.maxConcurrent) {
+      const result: SubagentResult = {
+        id: "",
+        name: config.name,
+        task: config.task,
+        mode: config.mode,
+        status: "failed",
+        output: "",
+        error: `Превышен лимит одновременных подагентов: ${this.maxConcurrent}`,
+        durationMs: 0,
+      }
+      onDone?.(result)
+      throw new Error(result.error)
+    }
+
     const id = `subagent-${Date.now()}-${this.nextId++}`
     const startTime = Date.now()
 

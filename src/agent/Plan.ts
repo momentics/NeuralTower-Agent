@@ -1,5 +1,3 @@
-import * as fs from "fs/promises"
-import * as path from "path"
 import { PlanError } from "../core/errors"
 
 /**
@@ -55,8 +53,9 @@ export type PlanStatus = "draft" | "running" | "paused" | "completed" | "failed"
 /**
  * План задачи с полным отслеживанием состояния.
  *
- * План создаётся, сохраняется в файл, отслеживает прогресс
- * шагов и поддерживает передачу управления между сессиями.
+ * Управляет прогрессом шагов и поддерживает передачу
+ * управления между сессиями. Файловый ввод-вывод
+ * вынесен в PlanRepository (SRP).
  */
 export class Plan {
   /** Уникальный идентификатор плана. */
@@ -125,9 +124,9 @@ export class Plan {
     return this.steps.filter((s) => s.status === "done").length
   }
 
- /**
-    * Вернуть количество проваленных шагов.
-    */
+  /**
+   * Вернуть количество проваленных шагов.
+   */
   get failedCount(): number {
     return this.steps.filter((s) => s.status === "failed").length
   }
@@ -333,41 +332,6 @@ export class Plan {
       plan.steps[i].result = step.result
       plan.steps[i].error = step.error
     }
-    return plan
-  }
-
-  /**
-   * Сохранить план в файл.
-   */
-  async save(dir: string): Promise<string> {
-    const planDir = path.join(dir, ".neuraltower", "plans")
-    await fs.mkdir(planDir, { recursive: true })
-    const safeId = path.basename(this.id)
-    const filePath = path.join(planDir, `${safeId}.json`)
-    await fs.writeFile(filePath, JSON.stringify(this.toJSON(), null, 2), "utf-8")
-    this.filePath = filePath
-    return filePath
-  }
-
-  /**
-   * Загрузить план из файла.
-   */
-  static async load(filePath: string): Promise<Plan> {
-    const raw = await fs.readFile(filePath, "utf-8")
-    let data: unknown
-  try {
-      data = JSON.parse(raw)
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
-      throw new PlanError(`Невалидный файл плана: ${filePath} (${msg})`)
-    }
-
-    if (!data || typeof data !== "object" || !Array.isArray((data as any).steps)) {
-      throw new PlanError(`Невалидный файл плана: ${filePath}`)
-    }
-
-    const plan = Plan.fromJSON(data as PlanSerialized)
-    plan.filePath = filePath
     return plan
   }
 

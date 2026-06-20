@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { Plan } from "./Plan"
+import { PlanRepository } from "./PlanRepository"
 
 vi.mock("fs/promises", () => ({
   mkdir: vi.fn().mockResolvedValue(undefined),
   writeFile: vi.fn().mockResolvedValue(undefined),
   readFile: vi.fn().mockResolvedValue("{}"),
+  readdir: vi.fn().mockResolvedValue([]),
 }))
 
 import * as fs from "fs/promises"
@@ -300,17 +302,15 @@ describe("Plan", () => {
     expect(restored.maxRetries).toBe(5)
   })
 
-  it("save writes to file", async () => {
-    vi.mocked(fs.mkdir).mockResolvedValue(undefined)
-    vi.mocked(fs.writeFile).mockResolvedValue(undefined)
+it("save writes to file", async () => {
     const plan = new Plan({
       title: "T",
       reasoning: "R",
-      steps: [],
+      steps: [{ description: "S1", suggestedTools: [] }],
     })
-    const p = await plan.save("/work")
+    const repo = new PlanRepository("/work")
+    const p = await repo.save(plan)
     expect(p).toMatch(/\.neuraltower[\\/]+plans/)
-    expect(plan.filePath).toBe(p)
   })
 
   it("load reads from file", async () => {
@@ -326,19 +326,21 @@ describe("Plan", () => {
       updatedAt: 2000,
     }
     vi.mocked(fs.readFile).mockResolvedValueOnce(JSON.stringify(data))
-    const plan = await Plan.load("/work/test.json")
+    const repo = new PlanRepository("/work")
+    const plan = await repo.load("/work/test.json")
     expect(plan.id).toBe("test-1")
-    expect(plan.filePath).toBe("/work/test.json")
   })
 
   it("load throws for invalid file", async () => {
     vi.mocked(fs.readFile).mockResolvedValueOnce("not json")
-    await expect(Plan.load("/work/test.json")).rejects.toThrow(/Невалидный файл плана/)
+    const repo = new PlanRepository("/work")
+    await expect(repo.load("/work/test.json")).rejects.toThrow(/Невалидный файл плана/)
   })
 
   it("load throws for missing steps", async () => {
     vi.mocked(fs.readFile).mockResolvedValueOnce(JSON.stringify({ id: "1" }))
-    await expect(Plan.load("/work/test.json")).rejects.toThrow(/Невалидный файл плана/)
+    const repo = new PlanRepository("/work")
+    await expect(repo.load("/work/test.json")).rejects.toThrow(/Невалидный файл плана/)
   })
 
   it("replanHistory is empty by default", () => {

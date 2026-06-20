@@ -1,6 +1,10 @@
+import * as os from "os"
 import * as path from "path"
 import * as vscode from "vscode"
 import type { ContextProvider, ContextItem } from "./providers/context/types"
+import { createDomainLogger } from "./logger"
+
+const log = createDomainLogger("VSCodeContext")
 
 const MAX_CONTENT_LINES = 300
 const SELECTION_TEXT_LIMIT = 2000
@@ -228,7 +232,7 @@ export function makeClipboardProvider(): ContextProvider {
         }]
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`Не удалось прочитать буфер обмена: ${msg}`)
+        log.error(`Не удалось прочитать буфер обмена: ${msg}`)
         return []
       }
     },
@@ -281,7 +285,7 @@ export function makeDebuggerProvider(): ContextProvider {
         }]
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`Не удалось получить стек отладки: ${msg}`)
+        log.error(`Не удалось получить стек отладки: ${msg}`)
         return [{
           content: `## Отладчик\n  Сессия: ${session.name}\n  Поток: error`,
           name: "Отладчик",
@@ -331,7 +335,6 @@ export function makeOSProvider(): ContextProvider {
       priority: 98,
     },
     async resolve(_query: string): Promise<ContextItem[]> {
-      const os = await import("os")
       const shell = process.env.SHELL ?? process.env.COMSPEC ?? "unknown"
       return [{
         content: `## Система\n  Платформа: ${os.platform()} ${os.arch()}\n  Релиз: ${os.release()}\n  Shell: ${shell}\n  Память: ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(1)} ГБ\n  CPU: ${os.cpus()[0]?.model ?? "unknown"}`,

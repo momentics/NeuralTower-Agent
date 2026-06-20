@@ -12,6 +12,9 @@ import type { AgentToolExecutor } from "./AgentToolExecutor"
 import type { AgentPlanner } from "./AgentPlanner"
 import { AbortError } from "../core/errors"
 import { loadDefaultAgentConfig } from "../core/config"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("AgentLoop")
 
 export class AgentLoop {
   private readonly maxIterations: number
@@ -88,7 +91,7 @@ export class AgentLoop {
         systemPrompt,
       )
     } catch (err: unknown) {
-      console.warn(`Компактизация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
+      log.warn(`Компактизация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
       compactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
     }
 
@@ -122,7 +125,7 @@ export class AgentLoop {
           systemPrompt,
         )
       } catch (err: unknown) {
-        console.warn(`Компактизация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
+ log.warn(`Компактизация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
         loopCompactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
       }
 

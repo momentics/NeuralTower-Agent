@@ -10,6 +10,9 @@
 
 import type { IEmbeddingProvider, EmbeddingProviderConfig } from "./IEmbeddingProvider"
 import { BackendError, ConnectionError } from "../core/errors"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("Embedding")
 
 const DEFAULT_EMBEDDING_DIMENSION = 1536
 const DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
@@ -118,7 +121,7 @@ export class NeuralTowerEmbeddingProvider implements IEmbeddingProvider {
       }
    } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Проверка доступности эмбеддингов не выполнена: ${msg}`)
+      log.error(`Проверка доступности эмбеддингов не выполнена: ${msg}`)
       this._available = false
     }
   }

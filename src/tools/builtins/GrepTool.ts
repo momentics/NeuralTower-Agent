@@ -6,6 +6,9 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import { walkDirectory } from "../../utils/FileSystem"
+import { createDomainLogger } from "../../core/logger"
+
+const log = createDomainLogger("Grep")
 
 const execFileAsync = promisify(execFile)
 
@@ -59,7 +62,7 @@ export class GrepTool implements ITool {
           return rgResult
         } catch (err: unknown) {
           const msg = err instanceof Error ? err.message : String(err)
-          console.error(`ripgrep недоступен: ${msg}`)
+          log.error(`ripgrep недоступен: ${msg}`)
           this.rgAvailable = false
         }
       }
@@ -112,7 +115,7 @@ export class GrepTool implements ITool {
         }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`Не удалось прочитать файл при поиске: ${full} — ${msg}`)
+        log.error(`Не удалось прочитать файл при поиске: ${full} — ${msg}`)
       }
     }
 

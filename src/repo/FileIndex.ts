@@ -13,6 +13,9 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import { detectLanguageShort } from "../utils/LanguageDetector"
 import { walkDirectory } from "../utils/FileSystem"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("FileIndex")
 
 export interface IndexEntry {
   path: string
@@ -58,7 +61,7 @@ export class FileIndex implements IFileIndex {
         size = stat.size
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
-        console.error(`Не удалось получить размер файла ${f}: ${msg}`)
+        log.error(`Не удалось получить размер файла ${f}: ${msg}`)
       }
 
       const entry: IndexEntry = { path: f, language: lang, size }

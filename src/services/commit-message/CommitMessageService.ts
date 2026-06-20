@@ -1,6 +1,9 @@
 import type { IBackend } from "../../core/IBackend"
 import type { IGitService } from "../../services/git/GitService"
 import type { Plugin } from "../../shared/types"
+import { createDomainLogger } from "../../core/logger"
+
+const log = createDomainLogger("CommitMessage")
 
 /** Сервис генерации сообщений коммита на основе git diff через бэкенд. */
 export class CommitMessageService implements Plugin {
@@ -39,7 +42,7 @@ export class CommitMessageService implements Plugin {
       return this.clean(result.content)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Генерация сообщения коммита не выполнена: ${msg}`)
+      log.error(`Генерация сообщения коммита не выполнена: ${msg}`)
       return this.fallbackMessage(diff)
     }
   }

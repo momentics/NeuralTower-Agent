@@ -1,6 +1,9 @@
 import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs/promises"
+import { createDomainLogger } from "../core/logger"
+
+const log = createDomainLogger("LSP")
 
 const LSP_TIMEOUT_MS = 10_000
 const MAX_SYMBOL_RESULTS = 50
@@ -100,7 +103,7 @@ async function openDocumentForLsp(uri: vscode.Uri): Promise<void> {
     await vscode.workspace.openTextDocument(uri)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error(`Не удалось открыть документ для LSP: ${msg}`)
+    log.error(`Не удалось открыть документ для LSP: ${msg}`)
   }
 }
 
@@ -474,7 +477,7 @@ export async function getLineSnippet(location: vscode.Location): Promise<string>
     return line.text.trim().slice(0, LSP_SNIPPET_LENGTH)
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err)
-    console.error(`Не удалось получить сниппет строки: ${msg}`)
+    log.error(`Не удалось получить сниппет строки: ${msg}`)
     return ""
   }
 }

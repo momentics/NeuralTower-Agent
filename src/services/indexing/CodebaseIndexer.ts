@@ -14,6 +14,11 @@ import type { IFileIndex } from "../../repo/FileIndex"
 import type { ICodebaseChunker } from "../../repo/CodebaseChunker"
 import type { ICodebaseSearch } from "../../repo/CodebaseSearch"
 import type { IEmbeddingProvider } from "../../backend/IEmbeddingProvider"
+import { createDomainLogger } from "../../core/logger"
+
+const log = createDomainLogger("CodebaseIndexer")
+
+const FILE_EVENT_DEBOUNCE_MS = 300
 
 /**
  * Состояние индексации.
@@ -42,6 +47,9 @@ export class CodebaseIndexer implements ICodebaseIndexer {
   private readonly _onDidChangeState = new vscode.EventEmitter<IndexingState>()
   readonly onDidChangeState = this._onDidChangeState.event
 
+  private debounceTimer: ReturnType<typeof setTimeout> | null = null
+  private pendingPaths: string[] = []
+
   constructor(
     private readonly fileIndex: IFileIndex,
     private readonly chunker: ICodebaseChunker,
@@ -56,13 +64,13 @@ export class CodebaseIndexer implements ICodebaseIndexer {
     this.disposables.push(
       vscode.workspace.onDidSaveTextDocument(async (doc) => {
         if (this.isDisposed) return
-        await this.onFileChanged(doc.uri.fsPath)
+        this.scheduleFileChange(doc.uri.fsPath)
       }),
 
       vscode.workspace.onDidDeleteFiles(async (e) => {
         if (this.isDisposed) return
         for (const file of e.files) {
-          await this.onFileDeleted(file.fsPath)
+          this.scheduleFileDelete(file.fsPath)
         }
       }),
       vscode.workspace.onDidCreateFiles(async (e) => {
@@ -115,9 +123,43 @@ export class CodebaseIndexer implements ICodebaseIndexer {
       this.setState("idle")
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Индексация кодовой базы не выполнена: ${msg}`)
+      log.error(`Индексация кодовой базы не выполнена: ${msg}`)
       this.setState("error")
     }
+  }
+
+  /**
+   * Запланировать обработку изменения файла с дебаунсом.
+   */
+  private scheduleFileChange(filePath: string): void {
+    this.pendingPaths.push(filePath)
+    if (this.debounceTimer) return
+    this.debounceTimer = setTimeout(async () => {
+      this.debounceTimer = null
+      const paths = this.pendingPaths.splice(0)
+      for (const p of paths) {
+        await this.onFileChanged(p)
+      }
+    }, FILE_EVENT_DEBOUNCE_MS)
+  }
+
+  /**
+   * Запланировать обработку удаления файла с дебаунсом.
+   */
+  private scheduleFileDelete(filePath: string): void {
+    this.pendingPaths.push(`__DELETE__${filePath}`)
+    if (this.debounceTimer) return
+    this.debounceTimer = setTimeout(async () => {
+      this.debounceTimer = null
+      const paths = this.pendingPaths.splice(0)
+      for (const raw of paths) {
+        if (raw.startsWith("__DELETE__")) {
+          await this.onFileDeleted(raw.slice(10))
+        } else {
+          await this.onFileChanged(raw)
+        }
+      }
+    }, FILE_EVENT_DEBOUNCE_MS)
   }
 
   /**
@@ -134,7 +176,7 @@ export class CodebaseIndexer implements ICodebaseIndexer {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Ошибка при индексации файла ${filePath}: ${msg}`)
+      log.error(`Ошибка при индексации файла ${filePath}: ${msg}`)
     }
   }
 
@@ -146,7 +188,7 @@ export class CodebaseIndexer implements ICodebaseIndexer {
       await this.search.deleteByFile(filePath)
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
-      console.error(`Ошибка при удалении индекса файла ${filePath}: ${msg}`)
+      log.error(`Ошибка при удалении индекса файла ${filePath}: ${msg}`)
     }
   }
 
@@ -169,6 +211,11 @@ export class CodebaseIndexer implements ICodebaseIndexer {
    */
   dispose(): void {
     this.isDisposed = true
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer)
+      this.debounceTimer = null
+    }
+    this.pendingPaths = []
     this._onDidChangeState.dispose()
     for (const d of this.disposables) {
       d.dispose()

@@ -49,7 +49,7 @@ describe("App", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {})
     const app = new App(ctx)
     app.init()
-    expect(logSpy).toHaveBeenCalledWith("[NeuralTower Agent] инициализация версии 1.0.0")
+    expect(logSpy).toHaveBeenCalledWith("[App] [NeuralTower Agent] инициализация версии 1.0.0")
     logSpy.mockRestore()
   })
 
@@ -71,7 +71,7 @@ describe("App", () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {})
     const app = new App(ctx)
     app.init()
-    expect(logSpy).toHaveBeenCalledWith("[NeuralTower Agent] инициализация версии неизвестно")
+    expect(logSpy).toHaveBeenCalledWith("[App] [NeuralTower Agent] инициализация версии неизвестно")
     logSpy.mockRestore()
   })
 })

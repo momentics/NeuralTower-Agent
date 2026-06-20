@@ -1,3 +1,4 @@
+import * as vscode from "vscode"
 import type { App } from "../core/App"
 import { sendAgentQuery, detectLanguageDisplay } from "./utils"
 import type { IAgentOrchestrator } from "../core/IAgent"
@@ -10,6 +11,7 @@ export function registerCodeActionCommands(
   agent: IAgentOrchestrator,
   gitService: IGitService,
   diffViewer: DiffViewerProvider | undefined,
+  outputChannel: vscode.OutputChannel,
 ): void {
   for (const action of EDITOR_ACTIONS) {
     app.registerCommand(action.codeActionCommandId, async (...args: unknown[]) => {
@@ -19,7 +21,7 @@ export function registerCodeActionCommands(
       const prompt = action.codeActionWithDiagnosticsPromptTemplate
         ? action.codeActionWithDiagnosticsPromptTemplate(text, lang, filePath, diagnostics ?? "")
         : action.codeActionPromptTemplate(text, lang, filePath)
-      await sendAgentQuery(prompt, filePath, agent, gitService, diffViewer)
+      await sendAgentQuery(prompt, filePath, agent, gitService, diffViewer, outputChannel)
     })
   }
 }
