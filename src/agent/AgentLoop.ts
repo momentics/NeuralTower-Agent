@@ -4,7 +4,7 @@ import type { AgentTurnResult, ToolResult } from "./AgentTypes"
 import { AgentMemory } from "./AgentMemory"
 import type { AgentModeManager } from "./AgentMode"
 import type { AgentModeName } from "./AgentMode"
-import { Compactor } from "./Compactor"
+import { Compactor, type CompactionResult } from "./Compactor"
 import type { SessionContext } from "./SessionContext"
 import type { Plan } from "./Plan"
 import type { AgentContextBuilder } from "./AgentContextBuilder"
@@ -78,12 +78,7 @@ export class AgentLoop {
 
     this.pushSessionMessage(conversation[conversation.length - 1])
 
-    let compactionResult: {
-      needsCompaction: boolean
-      compactedHistory?: ChatMessage[]
-      tokensBefore?: number
-      tokensAfter?: number
-    } = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
+    let compactionResult: CompactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
 
     try {
       compactionResult = await this.compactor.compactIfNeeded(
@@ -117,12 +112,7 @@ export class AgentLoop {
       }
 
       // Периодическая компактизация контекста перед каждым вызовом бэкенда
-      let loopCompactionResult: {
-        needsCompaction: boolean
-        compactedHistory?: ChatMessage[]
-        tokensBefore?: number
-        tokensAfter?: number
-      } = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
+      let loopCompactionResult: CompactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
 
       try {
         loopCompactionResult = await this.compactor.compactIfNeeded(

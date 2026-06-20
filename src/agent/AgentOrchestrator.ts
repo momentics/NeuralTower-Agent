@@ -125,9 +125,14 @@ export class AgentOrchestrator {
       this.toolRegistry,
       this.skillManager,
     )
-    const handle = await subagent.run(task, () => {})
-    subagent.dispose()
-    return handle.content
+    try {
+      const handle = await subagent.run(task, () => {})
+      subagent.dispose()
+      return handle.content
+    } catch (err) {
+      subagent.dispose()
+      return `Ошибка субагента: ${err instanceof Error ? err.message : String(err)}`
+    }
   }
 
   // ── Жизненный цикл ─────────────────────────────────────

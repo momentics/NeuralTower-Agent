@@ -1,4 +1,4 @@
-﻿import * as vscode from "vscode"
+import * as vscode from "vscode"
 import { NeuralTowerBackend } from "../backend/NeuralTowerBackend"
 import { AgentOrchestrator } from "../agent/AgentOrchestrator"
 import { ToolRegistry } from "../tools/ToolRegistry"
@@ -35,6 +35,7 @@ import { SubagentRunner } from "../agent/SubagentRunner"
 import { loadAppConfig } from "../core/config"
 import type { AppConfig, SessionConfig } from "../core/config"
 import type { AgentDependencies, AgentSpawnFactory } from "../agent/AgentDependencies"
+import type { TodoStore } from "../agent/TodoStore"
 import type { IBackend } from "../core/IBackend"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IProvider } from "../core/IProvider"
@@ -77,7 +78,7 @@ import { IndexingStatusBar } from "../services/indexing/IndexingStatusBar"
 export interface ExtensionDeps {
   backend: IBackend
   agent: IAgentOrchestrator
-  todoStore: ReturnType<AgentOrchestrator["getTodoStore"]>
+  todoStore: TodoStore
   chatProvider: IProvider
   diffViewer: DiffViewerProvider
   healthMonitor: BackendHealthMonitor
@@ -93,7 +94,7 @@ export interface ExtensionDeps {
   config: AppConfig
   agentDeps: AgentDependencies
   fileIndex: FileIndex
- codebaseSearch: CodebaseSearch
+  codebaseSearch: CodebaseSearch
   codebaseIndexer: CodebaseIndexer
   indexingStatusBar: IndexingStatusBar
   setWorkDir: (dir: string) => void
@@ -184,7 +185,7 @@ export function createToolRegistry(
   codebaseSearch: CodebaseSearch | null,
 ): ToolRegistry {
   const tools = new ToolRegistry()
-tools.register(new ReadFileTool(workspaceRoot))
+  tools.register(new ReadFileTool(workspaceRoot))
   tools.register(new WriteFileTool(workspaceRoot))
   tools.register(new BashTool())
   tools.register(new EditFileTool(workspaceRoot))
@@ -209,8 +210,12 @@ export async function createMCPChain(
   tools: ToolRegistry,
 ): Promise<MCPManager> {
   const mcpManager = new MCPManager()
-  await mcpManager.connect()
-  await mcpManager.syncWithRegistry(tools)
+  try {
+    await mcpManager.connect()
+    await mcpManager.syncWithRegistry(tools)
+  } catch (err) {
+    console.warn(`MCP-инициализация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
+  }
   return mcpManager
 }
 
@@ -268,13 +273,12 @@ function registerContextProviders(
     () => backend.getConfig().then((c) => c.model),
     gitService,
   )))
- providers.push(register(makeGitDiffProvider(getWorkDir, gitService)))
+  providers.push(register(makeGitDiffProvider(getWorkDir, gitService)))
 
   // ── Специализированные провайдеры ───────────────────────
   providers.push(register(makeUrlProvider()))
   providers.push(register(makeWebSearchProvider()))
   providers.push(register(makeFileProvider(getWorkDir)))
- 
   providers.push(register(makeTreeProvider(getWorkDir)))
   providers.push(register(makeRepoMapProvider(
     getWorkDir,
@@ -290,7 +294,7 @@ function registerContextProviders(
         tool: {
           name: t.name,
           description: t.description ?? "",
-          schema: (t as any).inputSchema ?? {},
+          schema: t.schema ?? {},
         },
       })),
     )
@@ -333,7 +337,7 @@ export function createAgentChain(
   skills: SkillManager,
   agentDeps: AgentDependencies,
   spawnFactory: AgentSpawnFactory,
-): { agent: AgentOrchestrator; todoStore: ReturnType<AgentOrchestrator["getTodoStore"]> } {
+): { agent: AgentOrchestrator; todoStore: TodoStore } {
   const agent = new AgentOrchestrator(backend, tools, skills, agentDeps, spawnFactory)
   const todoStore = agent.getTodoStore()
   return { agent, todoStore }
@@ -409,12 +413,12 @@ export async function createDeps(
   const contextManager = new ContextManager(config.context.tokenBudget)
   const contextProviderRegistry = new ContextProviderRegistry()
 
-  const workDirRef = {
+  const workDirState = {
     current: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "",
   }
 
   const agentDeps: AgentDependencies = {
-    getWorkDir: () => workDirRef.current,
+    getWorkDir: () => workDirState.current,
     config,
     contextProviderRegistry,
     contextManager,
@@ -431,12 +435,12 @@ export async function createDeps(
   const subagentRunner = new SubagentRunner(backend, tools, skills, agentDeps, spawnFactory)
 
   if (vscode.workspace.workspaceFolders?.[0]) {
-    workDirRef.current = vscode.workspace.workspaceFolders[0].uri.fsPath
+    workDirState.current = vscode.workspace.workspaceFolders[0].uri.fsPath
     await gitService.findRoot(vscode.workspace.workspaceFolders[0].uri.fsPath)
   }
 
-  if (workDirRef.current) {
-    await fileIndex.build(workDirRef.current)
+  if (workDirState.current) {
+    await fileIndex.build(workDirState.current)
   }
 
   createContextChain(
@@ -448,7 +452,7 @@ export async function createDeps(
     fileIndex,
     repoAnalyzer,
     codebaseSearch,
-    () => workDirRef.current,
+    () => workDirState.current,
   )
 
   const { chatProvider, diffViewer } = createUIProviders(
@@ -472,7 +476,7 @@ export async function createDeps(
   )
 
   // Запустить индексацию (если есть рабочая область)
- if (vscode.workspace.workspaceFolders?.[0]) {
+  if (vscode.workspace.workspaceFolders?.[0]) {
     await codebaseIndexer.start(vscode.workspace.workspaceFolders[0].uri)
   }
 
@@ -498,9 +502,9 @@ export async function createDeps(
     config,
     agentDeps,
     fileIndex,
-codebaseSearch,
+    codebaseSearch,
     codebaseIndexer,
     indexingStatusBar,
-    setWorkDir: (dir: string) => { workDirRef.current = dir },
+    setWorkDir: (dir: string) => { workDirState.current = dir },
   }
 }

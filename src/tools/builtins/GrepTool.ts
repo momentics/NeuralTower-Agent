@@ -4,7 +4,6 @@ import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import * as fs from "fs/promises"
 import * as path from "path"
-import { ExecutionError } from "../../core/errors"
 import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 
 const execFileAsync = promisify(execFile)

@@ -4,10 +4,10 @@ import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
 import * as path from "path"
 
-/** Чтение содержимого файла. Поддерживает текст и бинарные данные (base64). */
+/** Чтение содержимого текстового файла. */
 export class ReadFileTool implements ITool {
   name = "read_file"
-  description = "Прочитать содержимое файла. Возвращает текст для текстовых файлов, base64 для бинарных."
+  description = "Прочитать содержимое текстового файла."
   category = "filesystem"
   isSafe = true
 

@@ -16,7 +16,7 @@ export class CreateDirTool implements ITool {
     description: "Создать директорию",
     parameters: {
       path: { type: "string", description: "Путь к создаваемой директории" },
-      recursive: { type: "boolean", description: "Создать родительские директории", default: true },
+      recursive: { type: "boolean", description: "Создать родительские директории", default: false },
     },
     required: ["path"],
   }
@@ -31,7 +31,7 @@ export class CreateDirTool implements ITool {
       return { output: "Доступ запрещён: путь выходит за пределы рабочей директории", success: false }
     }
     try {
-      await fs.mkdir(resolved, { recursive: Boolean(args.recursive ?? true) })
+      await fs.mkdir(resolved, { recursive: Boolean(args.recursive ?? false) })
       return { output: `Директория создана: ${p}`, success: true }
     } catch (err) {
       return {
