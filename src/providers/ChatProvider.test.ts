@@ -14,7 +14,6 @@ const createMockAgent = (): IAgentOrchestrator => ({
   switchMode: vi.fn(() => true),
   getMode: vi.fn(() => "agent"),
   resolveContextProvider: vi.fn(async () => []),
-  getProviderRegistry: vi.fn(() => ({})),
   createPlan: vi.fn(async () => ({})),
   clearPlan: vi.fn(),
   getPlan: vi.fn(() => null),

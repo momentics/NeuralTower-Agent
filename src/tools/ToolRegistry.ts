@@ -20,7 +20,7 @@ export interface IToolRegistry {
 /**
  * Преобразовать ToolSchema в формат OpenAI JSON Schema.
  */
-function toOpenAISchema(schema: import("./ITool").ToolSchema): Record<string, unknown> {
+export function toOpenAISchema(schema: import("./ITool").ToolSchema): Record<string, unknown> {
   const result: Record<string, unknown> = {
     type: "object",
   }

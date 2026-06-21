@@ -15,6 +15,7 @@ vi.mock("./core/App", () => ({
     }),
     init: vi.fn().mockResolvedValue(undefined),
     dispose: vi.fn(),
+    version: vi.fn(() => "0.1.1"),
   })),
 }))
 
@@ -113,11 +114,9 @@ vi.mock("./services/permission/PermissionManager", () => ({
 
 vi.mock("./services/git/GitService", () => ({
   GitService: vi.fn().mockImplementation(() => ({
-    init: vi.fn().mockResolvedValue(undefined),
     findRoot: vi.fn().mockResolvedValue("/work"),
     getDiff: vi.fn().mockResolvedValue({ changed: [], additions: 0, deletions: 0 }),
     resetRoot: vi.fn(),
-    dispose: vi.fn(),
   })),
 }))
 
@@ -450,6 +449,7 @@ describe("extension", () => {
         registerBoundCommand: vi.fn(),
         init: vi.fn().mockRejectedValue(new Error("init failed")),
         dispose: vi.fn(),
+        version: vi.fn(() => "0.1.1"),
       }))
       await expect(activate(ctx)).rejects.toThrow("init failed")
     })

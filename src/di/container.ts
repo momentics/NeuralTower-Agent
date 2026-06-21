@@ -185,7 +185,6 @@ export async function createServices(): Promise<{
   notificationService: INotificationService
 }> {
   const gitService = new GitService()
-  await gitService.init()
   const notificationService = new NotificationService()
   await notificationService.init()
   return { gitService, notificationService }

@@ -1,4 +1,4 @@
-import type { Plugin } from "../../shared/types"
+import type { Service } from "../../shared/types"
 import { createDomainLogger } from "../../core/logger"
 import { errorMessage } from "../../core/errors"
 import { runProcess } from "../../utils/ProcessRunner"
@@ -40,7 +40,6 @@ export interface IGitService {
   getCachedDiff(dir: string): Promise<string>
   findRoot(cwd: string): Promise<string | null>
   resetRoot(): void
-  dispose(): void
 }
 
 /**
@@ -64,11 +63,9 @@ async function gitSpawn(
  * Git-сервис. Предоставляет различия, статус, информацию о ветке
  * и внедрение контекста различий для агента.
  */
-export class GitService implements Plugin, IGitService {
+export class GitService implements Service, IGitService {
   name = "git"
   private root: string | null = null
-
-  async init(): Promise<void> {}
 
   async findRoot(cwd: string): Promise<string | null> {
     if (this.root) return this.root
@@ -161,6 +158,4 @@ export class GitService implements Plugin, IGitService {
       return ""
     }
   }
-
-  dispose(): void {}
 }

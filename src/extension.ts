@@ -73,7 +73,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 
   // ── Запуск ──────────────────────────────────────────────
   await app.init()
-  deps.telemetry.capture("session_started", { version: "0.1.1" })
+  deps.telemetry.capture("session_started", { version: app.version() })
 
   // ── Сохранить объекты для освобождения ──────────────────
   ctx.subscriptions.push({
@@ -93,7 +93,6 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
         () => deps.notificationService.dispose(),
         () => deps.permissionManager.dispose(),
         () => deps.sessionStore.dispose(),
-        () => deps.gitService.dispose(),
         // Инфраструктура
         () => deps.codebaseIndexer.dispose(),
         () => deps.mcpManager.disconnect(),

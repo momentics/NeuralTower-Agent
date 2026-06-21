@@ -138,13 +138,7 @@ describe("AgentOrchestrator", () => {
     expect(result).toEqual([])
   })
 
-  it("getProviderRegistry returns registry", () => {
-    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps, null, new TodoStore())
-    const registry = orchestrator.getProviderRegistry()
-    expect(registry).toBeDefined()
-  })
-
-  it("spawnExplore returns message when spawnFactory not set", async () => {
+ it("spawnExplore returns message when spawnFactory not set", async () => {
     const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps, null, new TodoStore())
     const result = await orchestrator.spawnExplore("test task")
     expect(result).toBe("SubagentRunner не настроен")

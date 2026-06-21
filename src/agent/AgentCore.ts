@@ -92,10 +92,10 @@ export class AgentCore {
       contextBuilder,
       this.toolExecutor,
       this.planner,
-      undefined,
-      undefined,
-      deps.config.agent.replanOnFailure,
-      deps.config.agent.maxReplanAttempts,
+      {
+        replanOnFailure: deps.config.agent.replanOnFailure,
+        maxReplanAttempts: deps.config.agent.maxReplanAttempts,
+      },
     )
   }
 
@@ -226,10 +226,14 @@ export class AgentCore {
     this.deps.contextManager.reset()
   }
 
-  /**
-   * Освободить ресурсы.
-   */
+ /**
+    * Освободить ресурсы.
+    */
   dispose(): void {
     this.disposed = true
+    this.memory.clear()
+    this.sessionContext.reset()
+    this.planner.clearPlan()
+    this.deps.contextManager.reset()
   }
 }

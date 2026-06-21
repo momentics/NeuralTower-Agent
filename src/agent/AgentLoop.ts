@@ -19,6 +19,14 @@ const log = createDomainLogger("AgentLoop")
 const PLAN_STEP_RESULT_MAX_CHARS = 500
 const DEFAULT_MAX_COMPACTIONS = 5
 
+export interface AgentLoopConfig {
+  maxIterations?: number
+  maxRecoveryAttempts?: number
+  replanOnFailure?: boolean
+  maxReplanAttempts?: number
+  maxCompactions?: number
+}
+
 export class AgentLoop {
   private readonly maxIterations: number
   private readonly maxRecoveryAttempts: number
@@ -69,18 +77,14 @@ export class AgentLoop {
     private readonly contextBuilder: AgentContextBuilder,
     private readonly toolExecutor: AgentToolExecutor,
     private readonly planner: AgentPlanner,
-    maxIterations?: number,
-    maxRecoveryAttempts?: number,
-    replanOnFailure?: boolean,
-    maxReplanAttempts?: number,
-    maxCompactions?: number,
+    config: AgentLoopConfig = {},
   ) {
     const defaults = loadDefaultAgentConfig()
-    this.maxIterations = maxIterations ?? defaults.maxIterations
-    this.maxRecoveryAttempts = maxRecoveryAttempts ?? defaults.maxRecoveryAttempts
-    this.replanOnFailure = replanOnFailure ?? defaults.replanOnFailure
-    this.maxReplanAttempts = maxReplanAttempts ?? defaults.maxReplanAttempts
-    this.maxCompactions = maxCompactions ?? DEFAULT_MAX_COMPACTIONS
+    this.maxIterations = config.maxIterations ?? defaults.maxIterations
+    this.maxRecoveryAttempts = config.maxRecoveryAttempts ?? defaults.maxRecoveryAttempts
+    this.replanOnFailure = config.replanOnFailure ?? defaults.replanOnFailure
+    this.maxReplanAttempts = config.maxReplanAttempts ?? defaults.maxReplanAttempts
+    this.maxCompactions = config.maxCompactions ?? DEFAULT_MAX_COMPACTIONS
   }
 
   async run(

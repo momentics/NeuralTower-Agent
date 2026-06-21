@@ -123,8 +123,5 @@ describe("GitService", () => {
     expect(result).toBe("")
   })
 
-  it("init and dispose are no-ops", async () => {
-    await service.init()
-    service.dispose()
-  })
+ 
 })

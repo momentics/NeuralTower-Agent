@@ -1,6 +1,4 @@
 /** Общие типы, используемые во всех модулях. */
-export type { ChatMessage } from "../core/IBackend"
-export type { BackendConfig } from "../core/IBackend"
 
 /**
  * Сервис — базовый компонент с именем, без жизненного цикла.

@@ -7,6 +7,7 @@ const log = createDomainLogger("Backend")
 
 const RETRY_BASE_DELAY_MS = 1000
 const RETRY_MAX_DELAY_MS = 10000
+const SSE_MAX_RESPONSE_CHARS = 5_000_000
 
 /**
  * Бэкенд Neural Tower. Подключается к локальному серверу
@@ -31,7 +32,12 @@ export class NeuralTowerBackend implements IBackend {
   }
 
   async updateConfig(partial: Partial<BackendConfig>): Promise<void> {
-    if (partial.url !== undefined) this.config.url = partial.url
+    if (partial.url !== undefined) {
+      if (!validateUrl(partial.url)) {
+        throw new BackendError(`Неверный URL: ${partial.url}`)
+      }
+      this.config.url = partial.url
+    }
     if (partial.model !== undefined) this.config.model = partial.model
     if (partial.maxRetries !== undefined) this.config.maxRetries = partial.maxRetries
     if (partial.timeoutMs !== undefined) this.config.timeoutMs = partial.timeoutMs
@@ -78,7 +84,7 @@ export class NeuralTowerBackend implements IBackend {
         function: {
           name: t.name,
           description: t.description,
-          parameters: toOpenAIParameters(t.parameters),
+          parameters: t.parameters,
         },
       }))
     }
@@ -126,11 +132,14 @@ export class NeuralTowerBackend implements IBackend {
               const delta = p.choices?.[0]?.delta
               if (!delta) continue
 
-              const content = delta.content
-              if (content) {
-                full += content
-                onChunk(content)
-              }
+             const content = delta.content
+               if (content) {
+                 if (full.length + content.length > SSE_MAX_RESPONSE_CHARS) {
+                   throw new BackendError("Ответ бэкенда превышает лимит размера")
+                 }
+                 full += content
+                 onChunk(content)
+               }
 
               if (delta.tool_calls) {
                 for (const tc of delta.tool_calls) {
@@ -239,23 +248,17 @@ export class NeuralTowerBackend implements IBackend {
   }
 }
 
-/**
- * Преобразовать параметры ToolDefinition в формат OpenAI JSON Schema.
- */
-function toOpenAIParameters(parameters: object): object {
-  const schema = parameters as { parameters?: Record<string, unknown>; required?: string[]; type?: string }
-  const result: Record<string, unknown> = {}
-  if (schema.parameters) {
-    result.properties = schema.parameters
-  }
-  if (schema.required) {
-    result.required = schema.required
-  }
-  result.type = schema.type ?? "object"
-  return result
-}
-
 /** Преобразовать ChatMessage[] в формат API (без timestamp и toolCalls). */
 function mapMessages(messages: ChatMessage[]): Array<{ role: string; content: string }> {
   return messages.map((m) => ({ role: m.role, content: m.content }))
+}
+
+/** Проверить, что URL валидный и использует HTTP/HTTPS протокол. */
+function validateUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+  } catch {
+    return false
+  }
 }

@@ -48,7 +48,7 @@ export class App {
     log.info("[NeuralTower Agent] ресурсы освобождены")
   }
 
-  private version(): string {
+  version(): string {
     return this.ctx.extension.packageJSON.version ?? "неизвестно"
   }
 }

@@ -265,11 +265,10 @@ describe("AgentLoop", () => {
       failedTools: [{ name: "read", error: "file not found" }],
     })
 
-    const loop = new AgentLoop(
+const loop = new AgentLoop(
       backend, memory, compactor, modeManager, sessionContext,
       contextBuilder, mockToolExecutor, mockPlanner,
-      undefined,
-      0,
+      { maxRecoveryAttempts: 2 },
     )
     await loop.run("test query", [], () => {})
 
@@ -438,13 +437,10 @@ describe("AgentLoop", () => {
       failedTools: [{ name: "read", error: "file not found" }],
     })
 
-    const loop = new AgentLoop(
+const loop = new AgentLoop(
       backend, memory, compactor, modeManager, sessionContext,
       contextBuilder, mockToolExecutor, mockPlanner,
-      undefined,
-      undefined,
-      false,
-      2,
+      { replanOnFailure: false, maxReplanAttempts: 2 },
     )
     await loop.run("test query", [], () => {})
 
@@ -480,10 +476,7 @@ describe("AgentLoop", () => {
     const loop = new AgentLoop(
       backend, memory, compactor, modeManager, sessionContext,
       contextBuilder, mockToolExecutor, mockPlanner,
-      undefined,
-      undefined,
-      true,
-      2,
+      { replanOnFailure: true, maxReplanAttempts: 2 },
     )
     const result = await loop.run("test query", [], () => {})
 

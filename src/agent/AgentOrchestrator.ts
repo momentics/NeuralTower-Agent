@@ -9,7 +9,6 @@ import type { AgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
 import type { Plan } from "./Plan"
 import type { TodoStore } from "./TodoStore"
 import type { ToolResult } from "./AgentTypes"
-import type { IContextProviderRegistry } from "../core/providers/context/registry"
 import type { ContextItem } from "../core/providers/context/types"
 import { errorMessage } from "../core/errors"
 
@@ -111,10 +110,6 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     const provider = this.deps.contextProviderRegistry.get(name)
     if (!provider) return []
     return provider.resolve(query)
-  }
-
-  getProviderRegistry(): IContextProviderRegistry {
-    return this.deps.contextProviderRegistry
   }
 
   // ── Субагенты ──────────────────────────────────────────
