@@ -10,7 +10,6 @@
  * соответствуют смысловым единицам кода.
  */
 
-
 import { detectLanguageShort } from "../utils/LanguageDetector"
 import type {
   ChunkerConfig,
