@@ -49,7 +49,7 @@ export class CodebaseIndexer implements ICodebaseIndexer {
   readonly onDidChangeState = this._onDidChangeState.event
 
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
-  private pendingPaths: string[] = []
+  private pendingOps: Array<{ type: "change"; path: string } | { type: "delete"; path: string }> = []
 
   constructor(
     private readonly fileIndex: IFileIndex,
@@ -133,14 +133,18 @@ export class CodebaseIndexer implements ICodebaseIndexer {
    * Запланировать обработку изменения файла с дебаунсом.
    */
   private scheduleFileChange(filePath: string): void {
-    this.pendingPaths.push(filePath)
+    this.pendingOps.push({ type: "change", path: filePath })
     if (this.debounceTimer) return
     this.debounceTimer = setTimeout(async () => {
       this.debounceTimer = null
-      const paths = this.pendingPaths.splice(0)
-      for (const p of paths) {
+      const ops = this.pendingOps.splice(0)
+      for (const op of ops) {
         if (this.isDisposed) return
-        await this.onFileChanged(p)
+        if (op.type === "change") {
+          await this.onFileChanged(op.path)
+        } else {
+          await this.onFileDeleted(op.path)
+        }
       }
     }, FILE_EVENT_DEBOUNCE_MS)
   }
@@ -149,17 +153,17 @@ export class CodebaseIndexer implements ICodebaseIndexer {
    * Запланировать обработку удаления файла с дебаунсом.
    */
   private scheduleFileDelete(filePath: string): void {
-    this.pendingPaths.push(`__DELETE__${filePath}`)
+    this.pendingOps.push({ type: "delete", path: filePath })
     if (this.debounceTimer) return
     this.debounceTimer = setTimeout(async () => {
       this.debounceTimer = null
-      const paths = this.pendingPaths.splice(0)
-      for (const raw of paths) {
+      const ops = this.pendingOps.splice(0)
+      for (const op of ops) {
         if (this.isDisposed) return
-        if (raw.startsWith("__DELETE__")) {
-          await this.onFileDeleted(raw.slice(10))
+        if (op.type === "change") {
+          await this.onFileChanged(op.path)
         } else {
-          await this.onFileChanged(raw)
+          await this.onFileDeleted(op.path)
         }
       }
     }, FILE_EVENT_DEBOUNCE_MS)
@@ -219,7 +223,7 @@ export class CodebaseIndexer implements ICodebaseIndexer {
       clearTimeout(this.debounceTimer)
       this.debounceTimer = null
     }
-    this.pendingPaths = []
+    this.pendingOps = []
     this._onDidChangeState.dispose()
     for (const d of this.disposables) {
       d.dispose()
