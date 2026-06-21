@@ -79,7 +79,6 @@ export class GitService implements Plugin, IGitService {
     } catch (err: unknown) {
       const msg = errorMessage(err)
       log.error(`Не удалось определить корень репозитория: ${msg}`)
-      this.root = cwd
       return null
     }
   }

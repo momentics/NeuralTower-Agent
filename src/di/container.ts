@@ -168,12 +168,12 @@ export async function createSessionStore(
   return store
 }
 
-export function createPermissionManager(
+export async function createPermissionManager(
   vsCfg: vscode.WorkspaceConfiguration,
   globalState: vscode.Memento,
-): IPermissionManager {
+): Promise<IPermissionManager> {
   const pm = new PermissionManager(globalState)
-  pm.init()
+  await pm.init()
   const autoApproveEnabled = vsCfg.get<boolean>("autoApprove.enabled", false)
   const autoApproveTools = vsCfg.get<string[]>("autoApprove.tools", [])
   pm.setAutoApprove({ enabled: autoApproveEnabled, tools: autoApproveTools, maxCost: 0 })
@@ -411,7 +411,7 @@ export async function createDeps(
     if (partial.timeoutMs !== undefined) await vsCfg.update("timeoutMs", partial.timeoutMs, true)
   })
   const sessionStore = await createSessionStore(ctx, config.session)
-  const permissionManager = createPermissionManager(vsCfg, ctx.globalState)
+  const permissionManager = await createPermissionManager(vsCfg, ctx.globalState)
   const { gitService, notificationService } = await createServices()
 
   const { fileIndex, repoAnalyzer } = createRepoInfrastructure()

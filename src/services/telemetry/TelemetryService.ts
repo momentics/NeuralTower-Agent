@@ -31,6 +31,6 @@ export class TelemetryService implements Plugin, ITelemetryService {
   }
 
   dispose(): void {
-    this.events = []
+    this.events.length = 0
   }
 }

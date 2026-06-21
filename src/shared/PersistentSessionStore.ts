@@ -7,6 +7,7 @@ import type {
   PersistedSession,
   PersistedMessage,
 } from "./SessionTypes"
+import type { Plugin } from "./types"
 import { createDomainLogger } from "../core/logger"
 import { Mutex } from "./Mutex"
 import { errorMessage } from "../core/errors"
@@ -18,7 +19,6 @@ const DEFAULT_SESSION_TITLE = "Без названия"
 const DEFAULT_MAX_SESSIONS = 50
 
 export interface ISessionStore {
-  init(): Promise<void>
   push(message: ChatMessage): Promise<void>
   newSession(): Promise<string>
   deleteSession(id: string): Promise<boolean>
@@ -28,11 +28,10 @@ export interface ISessionStore {
   setActive(id: string): void
   getActiveMessages(): ChatMessage[]
   get activeId(): string
-  dispose(): void
-  save(): Promise<void>
   getSession(id: string): PersistedSession | undefined
   getMessagesForSession(id: string): ChatMessage[]
   clearActive(): Promise<void>
+  dispose(): void
 }
 
 const DEFAULT_DATA: SessionData = {
@@ -41,7 +40,8 @@ const DEFAULT_DATA: SessionData = {
   activeId: "",
 }
 
-export class PersistentSessionStore implements ISessionStore {
+export class PersistentSessionStore implements Plugin, ISessionStore {
+  name = "session-store"
   private data: SessionData = { ...DEFAULT_DATA }
   private readonly storagePath: string
   private readonly maxSessions: number

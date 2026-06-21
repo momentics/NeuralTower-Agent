@@ -14,6 +14,7 @@ import type { IFileIndex } from "../../repo/FileIndex"
 import type { ICodebaseChunker } from "../../repo/CodebaseChunker"
 import type { ICodebaseSearch } from "../../repo/CodebaseSearch"
 import type { IEmbeddingProvider } from "../../backend/IEmbeddingProvider"
+import type { Plugin } from "../../shared/types"
 import { createDomainLogger } from "../../core/logger"
 import { errorMessage } from "../../core/errors"
 
@@ -34,14 +35,14 @@ export interface ICodebaseIndexer {
   reindex(workspacePath: string, signal?: AbortSignal): Promise<void>
   getState(): IndexingState
   stats(): { vectorChunks: number; ftsChunks: number; embeddingAvailable: boolean }
-  dispose(): void
   onDidChangeState: vscode.Event<IndexingState>
 }
 
 /**
  * Сервис инкрементальной индексации.
  */
-export class CodebaseIndexer implements ICodebaseIndexer {
+export class CodebaseIndexer implements Plugin, ICodebaseIndexer {
+  name = "codebase-indexer"
   private state: IndexingState = "idle"
   private disposables: vscode.Disposable[] = []
   private isDisposed = false
@@ -57,6 +58,9 @@ export class CodebaseIndexer implements ICodebaseIndexer {
     private readonly search: ICodebaseSearch,
     private readonly embeddingProvider: IEmbeddingProvider | null
   ) {}
+
+  /** Инициализация не требуется — подписка на события происходит при start(). */
+  async init(): Promise<void> {}
 
   /**
    * Начать индексацию и подписаться на события VS Code.

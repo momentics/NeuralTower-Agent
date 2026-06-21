@@ -1,6 +1,7 @@
 import * as vscode from "vscode"
 import type { ITool } from "../../tools/ITool"
 import type { PermissionLevel, ToolPermission, PermissionRequest, AutoApproveConfig } from "../../shared/PermissionTypes"
+import type { Plugin } from "../../shared/types"
 
 const PERMISSION_TIMEOUT_MS = 30000
 
@@ -14,7 +15,8 @@ export interface IPermissionManager {
   dispose(): void
 }
 
-export class PermissionManager implements IPermissionManager {
+export class PermissionManager implements Plugin, IPermissionManager {
+  name = "permission-manager"
   private static readonly KEY_PERMISSIONS = "neuralTowerAgent.permissions"
   private static readonly KEY_AUTO_APPROVE = "neuralTowerAgent.autoApprove"
 
@@ -32,10 +34,10 @@ export class PermissionManager implements IPermissionManager {
     this.memento = memento ?? null
   }
 
-  /**
+ /**
    * Инициализировать менеджер разрешений — загрузить сохранённые данные из Memento.
    */
-  init(): void {
+  async init(): Promise<void> {
     if (!this.memento) return
 
     this.permissions.clear()
@@ -185,6 +187,7 @@ export class PermissionManager implements IPermissionManager {
     return true
   }
 
+  /** Освободить ресурсы: отменить все ожидающие запросы и остановить эмиттер. */
   dispose(): void {
     for (const req of this.pendingRequests) {
       if (req.timer) {

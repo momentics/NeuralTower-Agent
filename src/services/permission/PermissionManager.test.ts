@@ -163,35 +163,35 @@ describe("PermissionManager — persistence", () => {
     expect(memento.update).toHaveBeenCalledWith("neuralTowerAgent.permissions", {})
   })
 
-  it("loads permissions from Memento on init", () => {
+  it("loads permissions from Memento on init", async () => {
     const memento = createMockMemento({
       "neuralTowerAgent.permissions": { bash: "allow", read: "deny" },
     })
     const pm2 = new PermissionManager(memento)
-    pm2.init()
+    await pm2.init()
     expect(pm2.getPermissionLevel("bash")).toBe("allow")
     expect(pm2.getPermissionLevel("read")).toBe("deny")
     expect(pm2.getPermissionLevel("unknown")).toBe("ask")
   })
 
-  it("loads autoApprove from Memento on init", () => {
+  it("loads autoApprove from Memento on init", async () => {
     const memento = createMockMemento({
       "neuralTowerAgent.autoApprove": { enabled: true, tools: ["bash"], maxCost: 50 },
     })
     const pm2 = new PermissionManager(memento)
-    pm2.init()
+    await pm2.init()
     const cfg = pm2.getAutoApprove()
     expect(cfg.enabled).toBe(true)
     expect(cfg.tools).toContain("bash")
     expect(cfg.maxCost).toBe(50)
   })
 
-  it("skips invalid levels when loading from Memento", () => {
+  it("skips invalid levels when loading from Memento", async () => {
     const memento = createMockMemento({
       "neuralTowerAgent.permissions": { bash: "allow", read: "invalid" as any },
     })
     const pm2 = new PermissionManager(memento)
-    pm2.init()
+    await pm2.init()
     expect(pm2.getPermissionLevel("bash")).toBe("allow")
     expect(pm2.getPermissionLevel("read")).toBe("ask")
   })
@@ -204,20 +204,20 @@ describe("PermissionManager — persistence", () => {
     expect(pm2.getPermissionLevel("bash")).toBe("ask")
   })
 
-  it("does not load without Memento on init", () => {
+  it("does not load without Memento on init", async () => {
     const pm2 = new PermissionManager()
-    pm2.init()
+    await pm2.init()
     expect(pm2.getPermissionLevel("bash")).toBe("ask")
   })
 
-  it("permissions survive across new instance", () => {
+  it("permissions survive across new instance", async () => {
     const memento = createMockMemento()
     const pm1 = new PermissionManager(memento)
     pm1.setPermission("bash", "allow")
     pm1.setPermission("read", "deny")
 
     const pm2 = new PermissionManager(memento)
-    pm2.init()
+    await pm2.init()
 
     expect(pm2.getPermissionLevel("bash")).toBe("allow")
     expect(pm2.getPermissionLevel("read")).toBe("deny")

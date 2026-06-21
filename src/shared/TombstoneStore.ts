@@ -7,21 +7,21 @@
 export class TombstoneStore<T> {
   protected items: (T | null)[] = []
   protected deleted = new Set<number>()
+  private freeSlots: number[] = []
 
   /**
    * Найти свободный слот для нового элемента.
-   * Сначала пытается переиспользовать удалённый слот, иначе создаёт новый.
+   * Сначала пытается переиспользовать удалённый слот (O(1) через стек), иначе создаёт новый.
    */
   acquireSlot(): number {
-    for (const d of this.deleted) {
-      if (d < this.items.length) {
-        this.deleted.delete(d)
-        return d
-      }
+    const idx = this.freeSlots.pop()
+    if (idx !== undefined) {
+      this.deleted.delete(idx)
+      return idx
     }
-    const idx = this.items.length
+    const newIdx = this.items.length
     this.items.push(null)
-    return idx
+    return newIdx
   }
 
   /**
@@ -37,6 +37,7 @@ export class TombstoneStore<T> {
   tombstone(idx: number): void {
     this.items[idx] = null
     this.deleted.add(idx)
+    this.freeSlots.push(idx)
   }
 
   /**
@@ -73,6 +74,7 @@ export class TombstoneStore<T> {
   clear(): void {
     this.items = []
     this.deleted.clear()
+    this.freeSlots = []
   }
 
   /**
@@ -96,6 +98,7 @@ export class TombstoneStore<T> {
 
     this.items = compacted
     this.deleted.clear()
+    this.freeSlots = []
     return true
   }
 }
