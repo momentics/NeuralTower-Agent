@@ -32,6 +32,9 @@ export class ChatProvider implements IProvider {
     _ctx: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken,
   ): Promise<void> {
+    if (this.panel) {
+      return
+    }
     this.panel = view
     view.webview.options = { enableScripts: true, localResourceRoots: [this.extUri] }
     view.webview.html = this.html()

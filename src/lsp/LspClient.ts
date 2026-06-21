@@ -3,6 +3,7 @@ import * as path from "path"
 import * as fs from "fs/promises"
 import { createDomainLogger } from "../core/logger"
 import { errorMessage } from "../core/errors"
+import { withTimeoutAndSignal } from "../shared/withTimeoutAndSignal"
 
 const log = createDomainLogger("LSP")
 
@@ -70,28 +71,6 @@ export function formatDocumentSymbols(
   return results
 }
 
-/** Выполнить асинхронную функцию с таймаутом и возможностью отмены. */
-export async function withTimeout<T>(fn: () => Promise<T>, label: string, timeoutMs: number = LSP_TIMEOUT_MS, signal?: AbortSignal): Promise<T> {
-  const signals: AbortSignal[] = [AbortSignal.timeout(timeoutMs)]
-
-  if (signal) {
-    signals.push(signal)
-  }
-
-  const combined = AbortSignal.any(signals)
-
-  return await Promise.race([
-    fn(),
-    new Promise<never>((_, reject) => {
-      if (combined.aborted) {
-        reject(combined.reason ?? new Error(`LSP ${label}: отменено`))
-        return
-      }
-      combined.addEventListener("abort", () => reject(combined.reason ?? new Error(`LSP ${label}: отменено`)), { once: true })
-    }),
-  ])
-}
-
 // ── Приватные вспомогательные функции ────────────────────
 
 function resolveFilePath(filePathRaw: string, getWorkDir: () => string): string {
@@ -150,10 +129,10 @@ async function executeLspCommand<T>(
   const uri = vscode.Uri.file(filePath)
   await openDocumentForLsp(uri)
 
-  const results = await withTimeout(
+  const results = await withTimeoutAndSignal(
     () => Promise.resolve(vscode.commands.executeCommand<T[]>(command, ...args)).then((r) => r ?? []),
-    label,
     LSP_TIMEOUT_MS,
+    label,
     signal,
   )
 
@@ -185,10 +164,10 @@ async function executeLspPositionCommand<T>(
   const uri = vscode.Uri.file(filePath)
   await openDocumentForLsp(uri)
 
-  const results = await withTimeout(
+  const results = await withTimeoutAndSignal(
     () => Promise.resolve(vscode.commands.executeCommand<T[]>(command, uri, position)).then((r) => r ?? []),
-    label,
     LSP_TIMEOUT_MS,
+    label,
     signal,
   )
 
@@ -231,13 +210,13 @@ export async function executeWorkspaceSymbol(
   maxResults: number = MAX_SYMBOL_RESULTS,
   signal?: AbortSignal,
 ): Promise<{ output: string; success: boolean }> {
-  const results = await withTimeout(
+  const results = await withTimeoutAndSignal(
     () => Promise.resolve(vscode.commands.executeCommand<vscode.SymbolInformation[]>(
       "vscode.executeWorkspaceSymbolProvider",
       query,
     )).then((r) => r ?? []),
-    "workspaceSymbol",
     LSP_TIMEOUT_MS,
+    "workspaceSymbol",
     signal,
   )
 
@@ -334,15 +313,15 @@ export async function executeFindReferences(
   const uri = vscode.Uri.file(filePath)
   await openDocumentForLsp(uri)
 
-  const references = await withTimeout(
+  const references = await withTimeoutAndSignal(
     () => Promise.resolve(vscode.commands.executeCommand<vscode.Location[]>(
       "vscode.executeReferenceProvider",
       uri,
       position,
       { includeDeclaration: true },
     )).then((r) => r ?? []),
-    "references",
     LSP_TIMEOUT_MS,
+    "references",
     signal,
   )
 
@@ -378,14 +357,14 @@ export async function executeHover(
   const uri = vscode.Uri.file(filePath)
   await openDocumentForLsp(uri)
 
-  const hovers = await withTimeout(
+  const hovers = await withTimeoutAndSignal(
     () => Promise.resolve(vscode.commands.executeCommand<vscode.Hover[]>(
       "vscode.executeHoverProvider",
       uri,
       position,
     )).then((r) => r ?? []),
-    "hover",
     LSP_TIMEOUT_MS,
+    "hover",
     signal,
   )
 
@@ -423,15 +402,15 @@ export async function executeSignatureHelp(
   const uri = vscode.Uri.file(filePath)
   await openDocumentForLsp(uri)
 
-  const help = await withTimeout(
+  const help = await withTimeoutAndSignal(
     () => Promise.resolve(vscode.commands.executeCommand<vscode.SignatureHelp | undefined>(
       "vscode.executeSignatureHelpProvider",
       uri,
       position,
       "\n",
     )).then((r) => r),
-    "signatureHelp",
     LSP_TIMEOUT_MS,
+    "signatureHelp",
     signal,
   )
 

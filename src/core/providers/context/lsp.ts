@@ -4,10 +4,10 @@ import type { ContextProvider, ContextItem } from "./types"
 import {
   lspSymbolKindLabel,
   formatDocumentSymbols,
-  withTimeout,
   executeWorkspaceSymbol,
   executeDocumentSymbol,
 } from "../../../lsp/LspClient"
+import { withTimeoutAndSignal } from "../../../shared/withTimeoutAndSignal"
 import { errorMessage } from "../../errors"
 
 const LSP_PROVIDER_MAX_SYMBOLS = 30
@@ -68,22 +68,25 @@ export function makeLspProvider(
             const position = new vscode.Position(line - 1, character - 1)
 
             const [definitions, references, hovers] = await Promise.all([
-              withTimeout(
+              withTimeoutAndSignal(
                 () => Promise.resolve(vscode.commands.executeCommand<vscode.Location[]>(
                   "vscode.executeDefinitionProvider", uri, position,
                 )).then((r) => r ?? []),
+                10_000,
                 "definition",
               ),
-              withTimeout(
+              withTimeoutAndSignal(
                 () => Promise.resolve(vscode.commands.executeCommand<vscode.Location[]>(
                   "vscode.executeReferenceProvider", uri, position, { includeDeclaration: true },
                 )).then((r) => r ?? []),
+                10_000,
                 "references",
               ),
-              withTimeout(
+              withTimeoutAndSignal(
                 () => Promise.resolve(vscode.commands.executeCommand<vscode.Hover[]>(
                   "vscode.executeHoverProvider", uri, position,
                 )).then((r) => r ?? []),
+                10_000,
                 "hover",
               ),
             ])

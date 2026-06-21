@@ -7,6 +7,7 @@ export class IndexingStatusBar extends StatusBarIndicator implements Plugin {
   name = "indexing-status"
 
   private state: IndexingState = "idle"
+  private stateDisposable: vscode.Disposable | null = null
 
   constructor(private readonly indexer: CodebaseIndexer) {
     super(
@@ -15,7 +16,7 @@ export class IndexingStatusBar extends StatusBarIndicator implements Plugin {
       "neuralTowerAgent.reindex",
       "Индекс кодовой базы",
     )
-    this.indexer.onDidChangeState((s) => {
+    this.stateDisposable = this.indexer.onDidChangeState((s) => {
       this.state = s
       this.syncBar()
     })
@@ -24,6 +25,12 @@ export class IndexingStatusBar extends StatusBarIndicator implements Plugin {
   async init(): Promise<void> {
     this.state = this.indexer.getState()
     this.syncBar()
+  }
+
+  override dispose(): void {
+    this.stateDisposable?.dispose()
+    this.stateDisposable = null
+    super.dispose()
   }
 
   private syncBar(): void {

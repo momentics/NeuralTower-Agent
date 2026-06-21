@@ -158,6 +158,9 @@ export class NeuralTowerBackend implements IBackend {
       }
     } finally {
       reader.releaseLock()
+      if (typeof res.body.cancel === "function") {
+        res.body.cancel().catch(() => {})
+      }
     }
 
     const result: ChatMessage = { role: "assistant", content: full, timestamp: Date.now() }

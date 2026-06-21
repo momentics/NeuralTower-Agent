@@ -32,6 +32,9 @@ export const MCP_TRANSPORT_EVENTS = {
 export class StdioMCPTransport extends EventEmitter implements IMCPTransport {
   private process: ChildProcess | null = null
   private connected = false
+  private stdoutListener: ((data: Buffer) => void) | null = null
+  private errorListener: ((err: Error) => void) | null = null
+  private exitListener: ((code: number | null, signal: string | null) => void) | null = null
 
   constructor(private readonly config: MCPServerConfig) {
     super()
@@ -43,6 +46,8 @@ export class StdioMCPTransport extends EventEmitter implements IMCPTransport {
         resolve()
         return
       }
+
+      this.cleanupListeners()
 
       const env: Record<string, string> = {
         ...(process.env as Record<string, string>),
@@ -57,26 +62,31 @@ export class StdioMCPTransport extends EventEmitter implements IMCPTransport {
       this.process = proc
       this.connected = true
 
-      if (proc.stdout) {
-        proc.stdout.on("data", (data: Buffer) => {
-          this.emit(MCP_TRANSPORT_EVENTS.message, data.toString())
-        })
+      this.stdoutListener = (data: Buffer) => {
+        this.emit(MCP_TRANSPORT_EVENTS.message, data.toString())
       }
 
-      proc.on("error", (err: Error) => {
+      this.errorListener = (err: Error) => {
         log.error(`Ошибка stdio-транспорта: ${err.message}`)
         this.emit(MCP_TRANSPORT_EVENTS.error, err)
         reject(new ExecutionError(`MCP-процесс не запущен: ${err.message}`))
-      })
+      }
 
-      proc.on("exit", (code, signal) => {
+      this.exitListener = (code, signal) => {
         this.process = null
         this.connected = false
         this.emit(
           MCP_TRANSPORT_EVENTS.close,
           new ExecutionError(`MCP-процесс завершён (code: ${code}, signal: ${signal})`),
         )
-      })
+      }
+
+      if (proc.stdout) {
+        proc.stdout.on("data", this.stdoutListener)
+      }
+
+      proc.on("error", this.errorListener)
+      proc.on("exit", this.exitListener)
 
       resolve()
     })
@@ -97,8 +107,25 @@ export class StdioMCPTransport extends EventEmitter implements IMCPTransport {
     return this.connected && this.process !== null && this.process.exitCode == null
   }
 
+  private cleanupListeners(): void {
+    const proc = this.process
+    if (proc && proc.stdout && this.stdoutListener && typeof proc.stdout.removeListener === "function") {
+      proc.stdout.removeListener("data", this.stdoutListener)
+    }
+    if (proc && this.errorListener && typeof proc.removeListener === "function") {
+      proc.removeListener("error", this.errorListener)
+    }
+    if (proc && this.exitListener && typeof proc.removeListener === "function") {
+      proc.removeListener("exit", this.exitListener)
+    }
+    this.stdoutListener = null
+    this.errorListener = null
+    this.exitListener = null
+  }
+
   close(): void {
     this.connected = false
+    this.cleanupListeners()
     const proc = this.process
     if (proc) {
       proc.kill()
