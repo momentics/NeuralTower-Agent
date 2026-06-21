@@ -103,10 +103,10 @@ export class LineChunker implements IChunker {
 
       let fullContent = chunkContent
       if (contextBefore) {
-        fullContent = `\`\`\`context\n${contextBefore}\n\`\`\`\n${chunkContent}`
+        fullContent = `\`\`\`\`context\n${contextBefore}\n\`\`\`\`\n${chunkContent}`
       }
       if (contextAfter) {
-        fullContent = `${fullContent}\n\`\`\`context\n${contextAfter}\n\`\`\``
+        fullContent = `${fullContent}\n\`\`\`\`context\n${contextAfter}\n\`\`\`\``
       }
 
       chunks.push({
