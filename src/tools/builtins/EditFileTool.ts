@@ -2,8 +2,10 @@ import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import * as fs from "fs/promises"
 import { FilesystemTool } from "./FilesystemTool"
+import { str, bool } from "../ToolArgs"
 
 const EDIT_PREVIEW_TRUNCATE = 60
+const MAX_EDIT_CONTENT_LENGTH = 1_000_000
 
 /**
  * Расширения бинарных файлов, которые нельзя редактировать как текст.
@@ -44,11 +46,16 @@ export class EditFileTool extends FilesystemTool {
   }
 
   protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
-    const fp = String(args.filepath ?? "")
-    const oldStr = String(args.oldString ?? "")
-    const newStr = String(args.newString ?? "")
-    const all = Boolean(args.replaceAll ?? false)
-    if (!fp || !oldStr) return { output: "Не указаны обязательные аргументы", success: false }
+    const fp = str(args, "filepath")
+    const oldStr = str(args, "oldString")
+    const newStr = str(args, "newString")
+    const all = bool(args, "replaceAll", false)
+
+    if (!fp) return { output: "Не указан путь к файлу", success: false }
+    if (!oldStr) return { output: "Не указан текст для поиска", success: false }
+    if (newStr.length > MAX_EDIT_CONTENT_LENGTH) {
+      return { output: `Текст замены слишком велик (макс. ${MAX_EDIT_CONTENT_LENGTH} символов)`, success: false }
+    }
 
     const result = this.resolvePath(fp)
     if ("error" in result) return { output: result.error, success: false }

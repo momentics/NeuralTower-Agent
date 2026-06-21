@@ -6,7 +6,7 @@ import type { IProvider } from "../core/IProvider"
 import type { TodoStore } from "../agent/TodoStore"
 import type { IBackend } from "../core/IBackend"
 import type { IGitService } from "../services/git/GitService"
-import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
+import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
 import type { CommitMessageService } from "../services/commit-message/CommitMessageService"
 import type { CodebaseIndexer } from "../services/indexing/CodebaseIndexer"
 import type { SettingsProvider } from "../providers/SettingsProvider"
@@ -22,7 +22,7 @@ export interface CommandDeps {
   todoStore: TodoStore
   backend: IBackend
   gitService: IGitService
-  diffViewer: DiffViewerProvider
+  diffViewer: IDiffViewerProvider
   settingsProvider: SettingsProvider
   commitMessageService: CommitMessageService
   extUri: vscode.Uri

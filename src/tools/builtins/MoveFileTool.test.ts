@@ -90,7 +90,7 @@ describe("MoveFileTool", () => {
   it("returns error for empty source", async () => {
     const result = await tool.execute({ source: "", destination: "dest" })
     expect(result.success).toBe(false)
-    expect(result.output).toContain("Не указаны")
+    expect(result.output).toContain("Не указан исходный путь")
   })
 
   it("returns error for empty destination", async () => {
@@ -98,7 +98,7 @@ describe("MoveFileTool", () => {
     await fs.writeFile(srcPath, "data")
     const result = await tool.execute({ source: srcPath, destination: "" })
     expect(result.success).toBe(false)
-    expect(result.output).toContain("Не указаны")
+    expect(result.output).toContain("Не указан путь назначения")
   })
 
   it("blocks move outside workspace when workDir is set (source)", async () => {

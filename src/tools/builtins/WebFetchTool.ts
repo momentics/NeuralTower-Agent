@@ -1,14 +1,18 @@
-import type { ITool, ToolSchema } from "../ITool"
+import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import { fetchUrl, htmlToText } from "../../network/UrlFetcher"
+import { BaseTool } from "./BaseTool"
+import { str, strOpt, num, clamp } from "../ToolArgs"
 
 const FETCH_DEFAULT_TIMEOUT_S = 30
 const FETCH_MAX_LENGTH = 8000
+const FETCH_MIN_TIMEOUT_S = 1
+const FETCH_MAX_TIMEOUT_S = 120
 
 /**
  * Получить содержимое URL и вернуть в формате Markdown или текста.
  */
-export class WebFetchTool implements ITool {
+export class WebFetchTool extends BaseTool {
   name = "web_fetch"
   description = "Получить содержимое по URL. Форматы ответа: markdown, text, html."
   category = "network"
@@ -25,13 +29,13 @@ export class WebFetchTool implements ITool {
     required: ["url"],
   }
 
-  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
-    if (signal?.aborted) return { output: "Операция отменена", success: false }
-    const url = String(args.url ?? "")
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    const url = str(args, "url")
     if (!url) return { output: "Не указан URL", success: false }
 
-    const format = (args.format as string | undefined) ?? "markdown"
-    const timeoutSec = Number(args.timeout ?? FETCH_DEFAULT_TIMEOUT_S) || FETCH_DEFAULT_TIMEOUT_S
+    const format = strOpt(args, "format") ?? "markdown"
+    const rawTimeout = num(args, "timeout", FETCH_DEFAULT_TIMEOUT_S)
+    const timeoutSec = clamp(rawTimeout, FETCH_MIN_TIMEOUT_S, FETCH_MAX_TIMEOUT_S)
 
     const result = await fetchUrl(url, {
       timeout: timeoutSec * 1000,

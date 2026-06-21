@@ -15,6 +15,7 @@ import { detectLanguageShort } from "../utils/LanguageDetector"
 import { walkDirectory } from "../utils/FileSystem"
 import { errorMessage } from "../core/errors"
 import { createDomainLogger } from "../core/logger"
+import { LRUCache } from "../shared/LRUCache"
 
 const log = createDomainLogger("FileIndex")
 
@@ -40,7 +41,7 @@ export class FileIndex implements IFileIndex {
   private entries: IndexEntry[] = []
   private nameMap = new Map<string, string[]>()
   private langMap = new Map<string, string[]>()
-  private regexCache = new Map<string, RegExp>()
+  private regexCache = new LRUCache<string, RegExp>(50)
 
   /**
    * Построить индекс для директории. Сканирует только имена

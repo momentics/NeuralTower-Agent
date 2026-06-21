@@ -18,6 +18,60 @@ export interface IToolRegistry {
 }
 
 /**
+ * Преобразовать ToolSchema в формат OpenAI JSON Schema.
+ */
+function toOpenAISchema(schema: import("./ITool").ToolSchema): Record<string, unknown> {
+  const result: Record<string, unknown> = {
+    type: "object",
+  }
+  if (Object.keys(schema.parameters).length > 0) {
+    result.properties = schema.parameters
+  }
+  if (schema.required && schema.required.length > 0) {
+    result.required = schema.required
+  }
+  return result
+}
+
+/**
+ * Проверить типы аргументов по схеме.
+ * @returns массив сообщений об ошибках (пустой, если всё верно)
+ */
+function validateArgs(
+  args: Record<string, unknown>,
+  parameters: Record<string, import("./ITool").ToolParam>,
+): string[] {
+  const errors: string[] = []
+  for (const [key, param] of Object.entries(parameters)) {
+    const value = args[key]
+    if (value === undefined || value === null) continue
+    switch (param.type) {
+      case "string":
+        if (typeof value !== "string") {
+          errors.push(`${key}: ожидался string, получен ${typeof value}`)
+        }
+        break
+      case "number":
+        if (typeof value !== "number" || !isFinite(value)) {
+          errors.push(`${key}: ожидался числовой тип, получен ${typeof value}`)
+        }
+        break
+      case "boolean":
+        if (typeof value !== "boolean") {
+          errors.push(`${key}: ожидался boolean, получен ${typeof value}`)
+        }
+        break
+      case "array":
+        if (!Array.isArray(value)) {
+          errors.push(`${key}: ожидался массив, получен ${typeof value}`)
+        }
+        break
+    }
+  }
+  return errors
+}
+
+/**
  * Центральный реестр всех доступных инструментов.
  * Инструменты загружаются из встроенных, MCP-серверов
  * или пакетов навыков.
@@ -70,6 +124,14 @@ export class ToolRegistry implements IToolRegistry {
       }
     }
 
+    const typeErrors = validateArgs(args, tool.schema.parameters)
+    if (typeErrors.length > 0) {
+      return {
+        output: `Инструмент "${name}": неверные типы аргументов: ${typeErrors.join("; ")}`,
+        success: false,
+      }
+    }
+
     const start = Date.now()
     try {
       const result = await tool.execute(args, signal)
@@ -108,7 +170,7 @@ export class ToolRegistry implements IToolRegistry {
     return this.list().map((t) => ({
       name: t.name,
       description: t.description,
-      parameters: t.schema as unknown as Record<string, unknown>,
+      parameters: toOpenAISchema(t.schema),
     }))
   }
 

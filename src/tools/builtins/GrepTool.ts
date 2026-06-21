@@ -8,6 +8,7 @@ import { walkDirectory } from "../../utils/FileSystem"
 import { createDomainLogger } from "../../core/logger"
 import { errorMessage } from "../../core/errors"
 import { FilesystemTool } from "./FilesystemTool"
+import { str, strOpt } from "../ToolArgs"
 
 const log = createDomainLogger("Grep")
 
@@ -44,9 +45,10 @@ export class GrepTool extends FilesystemTool {
   private readonly MAX_RG_FAILURES = 3
 
   protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
-    const pattern = String(args.pattern ?? "")
-    const root = String(args.path ?? ".")
-    const include = args.include ? String(args.include) : undefined
+    const pattern = str(args, "pattern")
+    const root = str(args, "path") || "."
+    const include = strOpt(args, "include")
+
     if (!pattern) return { output: "Не указан шаблон поиска", success: false }
 
     const result = this.resolvePath(root)
@@ -88,7 +90,13 @@ export class GrepTool extends FilesystemTool {
     include: string | undefined,
     signal?: AbortSignal,
   ): Promise<ToolResult> {
-    const re = new RegExp(pattern, "i")
+    let re: RegExp
+    try {
+      re = new RegExp(pattern, "i")
+    } catch {
+      return { output: `Неверное регулярное выражение: ${pattern}`, success: false }
+    }
+
     const results: string[] = []
 
     const files = await walkDirectory(root, { maxFiles: RG_MAX_FILES, signal })

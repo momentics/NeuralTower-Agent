@@ -75,13 +75,13 @@ describe("EditFileTool", () => {
   it("returns error for missing required args", async () => {
     const result = await tool.execute({ filepath: "test.txt" })
     expect(result.success).toBe(false)
-    expect(result.output).toContain("Не указаны")
+    expect(result.output).toContain("Не указан текст для поиска")
   })
 
   it("returns error for empty oldString", async () => {
     const result = await tool.execute({ filepath: "test.txt", oldString: "", newString: "x" })
     expect(result.success).toBe(false)
-    expect(result.output).toContain("Не указаны")
+    expect(result.output).toContain("Не указан текст для поиска")
   })
 
   it("blocks edit outside workspace when workDir is set", async () => {

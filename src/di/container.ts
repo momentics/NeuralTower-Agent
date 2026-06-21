@@ -89,7 +89,7 @@ export interface ExtensionDeps {
   agent: IAgentOrchestrator
   todoStore: TodoStore
   chatProvider: IProvider
-  diffViewer: DiffViewerProvider
+  diffViewer: IDiffViewerProvider
   settingsProvider: SettingsProvider
   healthMonitor: BackendHealthMonitor
   commitMessageService: CommitMessageService
@@ -98,12 +98,12 @@ export interface ExtensionDeps {
   sessionStore: ISessionStore
   notificationService: INotificationService
   permissionManager: IPermissionManager
-  mcpManager: MCPManager
-  contextManager: ContextManager
+  mcpManager: IMCPManager
+  contextManager: IContextManager
   subagentRunner: SubagentRunner
   config: AppConfig
   agentDeps: AgentDependencies
-  fileIndex: FileIndex
+  fileIndex: IFileIndex
   codebaseSearch: ICodebaseSearch
   codebaseIndexer: CodebaseIndexer
   indexingStatusBar: IndexingStatusBar

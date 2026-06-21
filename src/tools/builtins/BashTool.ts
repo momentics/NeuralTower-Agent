@@ -1,10 +1,14 @@
-import type { ITool, ToolSchema } from "../ITool"
+import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import { errorMessage } from "../../core/errors"
 import { runProcess } from "../../utils/ProcessRunner"
+import { BaseTool } from "./BaseTool"
+import { str, strOpt, num, clamp } from "../ToolArgs"
 
 const BASH_DEFAULT_TIMEOUT_MS = 30_000
 const BASH_MAX_BUFFER = 1024 * 1024
+const BASH_MIN_TIMEOUT_MS = 1000
+const BASH_MAX_TIMEOUT_MS = 300_000
 
 /**
  * Команды, запрещённые для выполнения из-за высокого риска повреждения системы.
@@ -60,7 +64,7 @@ const DENIED_PATTERNS = [
  * - Regex-фильтрация опасных паттернов (curl|bash, rm -rf и др.)
  * - Максимальный таймаут ограничен для предотвращения DoS
  */
-export class BashTool implements ITool {
+export class BashTool extends BaseTool {
   name = "bash"
   description = "Выполнить команду оболочки и вернуть вывод stdout/stderr."
   category = "process"
@@ -98,16 +102,16 @@ export class BashTool implements ITool {
     return null
   }
 
-  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
-    if (signal?.aborted) return { output: "Операция отменена", success: false }
-    const cmd = String(args.command ?? "")
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    const cmd = str(args, "command")
     if (!cmd) return { output: "Не указана команда", success: false }
 
     const denial = this.validateCommand(cmd)
     if (denial) return { output: `Команда заблокирована: ${denial}`, success: false }
 
-    const timeout = Math.min(Number(args.timeout ?? BASH_DEFAULT_TIMEOUT_MS), 300_000)
-    const workdir = args.workdir ? String(args.workdir) : undefined
+    const rawTimeout = num(args, "timeout", BASH_DEFAULT_TIMEOUT_MS)
+    const timeout = clamp(rawTimeout, BASH_MIN_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS)
+    const workdir = strOpt(args, "workdir")
 
     try {
       const isWindows = process.platform === "win32"

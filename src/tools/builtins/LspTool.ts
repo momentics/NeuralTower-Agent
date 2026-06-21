@@ -1,4 +1,4 @@
-import type { ITool, ToolSchema } from "../ITool"
+import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import {
   executeDocumentSymbol,
@@ -12,6 +12,8 @@ import {
   MAX_SYMBOL_RESULTS,
 } from "../../lsp/LspClient"
 import { errorMessage } from "../../core/errors"
+import { BaseTool } from "./BaseTool"
+import { str, strOpt, numOpt } from "../ToolArgs"
 
 const OPERATIONS = [
   "goToDefinition",
@@ -27,7 +29,7 @@ const OPERATIONS = [
 type LspOperation = (typeof OPERATIONS)[number]
 
 /** Инструмент для семантического анализа кода через LSP: определение, ссылки, символы, hover и т.д. */
-export class LspTool implements ITool {
+export class LspTool extends BaseTool {
   name = "lsp"
   description = "LSP-операции для семантического анализа кода: переход к определению, поиск ссылок, символы документа/workspace, всплывающая подсказка, реализация, сигнатура, тип"
   category = "lsp"
@@ -62,27 +64,30 @@ export class LspTool implements ITool {
     required: ["operation"],
   }
 
-  constructor(private readonly getWorkDir = () => process.cwd()) {}
+  constructor(private readonly getWorkDir = () => process.cwd()) {
+    super()
+  }
 
-  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
-    const operation = args.operation as LspOperation | undefined
-    const filePathRaw = args.filePath as string | undefined
-
-    if (!operation) {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    const operationRaw = str(args, "operation")
+    if (!operationRaw) {
       return { output: "Не указана операция", success: false }
     }
 
-    if (!OPERATIONS.includes(operation)) {
-      return { output: `Неподдерживаемая операция: ${operation}. Доступно: ${OPERATIONS.join(", ")}`, success: false }
+    if (!OPERATIONS.includes(operationRaw as LspOperation)) {
+      return { output: `Неподдерживаемая операция: ${operationRaw}. Доступно: ${OPERATIONS.join(", ")}`, success: false }
     }
+
+    const operation = operationRaw as LspOperation
+    const filePathRaw = strOpt(args, "filePath")
 
     if (!filePathRaw && operation !== "workspaceSymbol") {
       return { output: "Не указан путь к файлу (требуется для всех операций кроме workspaceSymbol)", success: false }
     }
 
-    const line = args.line ? Number(args.line) : undefined
-    const character = args.character ? Number(args.character) : undefined
-    const query = args.query ? String(args.query) : undefined
+    const line = numOpt(args, "line")
+    const character = numOpt(args, "character")
+    const query = strOpt(args, "query")
 
     try {
       switch (operation) {

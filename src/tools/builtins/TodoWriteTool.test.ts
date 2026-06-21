@@ -27,22 +27,22 @@ describe("TodoWriteTool", () => {
   it("returns error for empty todos", async () => {
     const tool = new TodoWriteTool(new TodoStore())
     const result = await tool.execute({ todos: [] })
-    expect(result.success).toBe(true)
-    expect(result.output).toContain("0 активных")
+    expect(result.success).toBe(false)
+    expect(result.output).toContain("должен быть непустым")
   })
 
   it("returns error for missing todos", async () => {
     const tool = new TodoWriteTool(new TodoStore())
     const result = await tool.execute({})
     expect(result.success).toBe(false)
-    expect(result.output).toContain("должен быть массивом")
+    expect(result.output).toContain("должен быть непустым массивом")
   })
 
   it("returns error for invalid todos type", async () => {
     const tool = new TodoWriteTool(new TodoStore())
     const result = await tool.execute({ todos: "not an array" })
     expect(result.success).toBe(false)
-    expect(result.output).toContain("должен быть массивом")
+    expect(result.output).toContain("должен быть непустым массивом")
   })
 
   it("formats all status types", async () => {

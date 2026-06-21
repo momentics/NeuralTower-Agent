@@ -3,6 +3,7 @@ import type { ToolResult } from "../../agent/AgentTypes"
 import * as fs from "fs/promises"
 import * as path from "path"
 import { FilesystemTool } from "./FilesystemTool"
+import { str } from "../ToolArgs"
 
 /** Перемещение или переименование файла или директории. */
 export class MoveFileTool extends FilesystemTool {
@@ -22,11 +23,15 @@ export class MoveFileTool extends FilesystemTool {
   }
 
   protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
-    const src = String(args.source ?? "")
-    const dst = String(args.destination ?? "")
-    if (!src || !dst) return { output: "Не указаны обязательные аргументы", success: false }
+    const src = str(args, "source")
+    const dst = str(args, "destination")
+
+    if (!src) return { output: "Не указан исходный путь", success: false }
+    if (!dst) return { output: "Не указан путь назначения", success: false }
+
     const result = this.resolveTwoPaths(src, dst)
     if ("error" in result) return { output: result.error, success: false }
+
     await fs.stat(result.source)
     const dstDir = path.dirname(result.destination)
     await fs.mkdir(dstDir, { recursive: true })

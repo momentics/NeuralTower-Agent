@@ -5,18 +5,23 @@
  * по смыслу, а не только по ключевым словам.
  */
 
-import type { ITool, ToolSchema } from "../ITool"
+import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import type { ICodebaseSearch } from "../../repo/CodebaseSearch"
 import { errorMessage } from "../../core/errors"
+import { BaseTool } from "./BaseTool"
+import { str, strOpt, num, clamp } from "../ToolArgs"
 
 const SEARCH_DEFAULT_MAX_RESULTS = 5
 const SEARCH_MAX_RESULTS = 20
+const SEARCH_MIN_RESULTS = 1
+
+const VALID_MODES = new Set(["semantic", "keyword", "hybrid"])
 
 /**
  * Инструмент поиска по репозиторию.
  */
-export class CodebaseSearchTool implements ITool {
+export class CodebaseSearchTool extends BaseTool {
   name = "codebase_search"
   description =
     "Семантический поиск по коду. Ищет релевантные фрагменты кода по смыслу запроса. Например: 'функция для авторизации', 'класс для работы с базой данных'."
@@ -46,17 +51,20 @@ export class CodebaseSearchTool implements ITool {
     required: ["query"],
   }
 
-  constructor(private readonly search: ICodebaseSearch) {}
+  constructor(private readonly search: ICodebaseSearch) {
+    super()
+  }
 
-  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
-    if (signal?.aborted) return { output: "Операция отменена", success: false }
-    const query = String(args.query ?? "").trim()
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    const query = str(args, "query").trim()
     if (!query) {
       return { output: "Не указан запрос для поиска", success: false }
     }
 
-    const maxResults = Math.min(Number(args.maxResults ?? SEARCH_DEFAULT_MAX_RESULTS), SEARCH_MAX_RESULTS)
-    const mode = (args.mode as string) ?? "hybrid"
+    const rawMax = num(args, "maxResults", SEARCH_DEFAULT_MAX_RESULTS)
+    const maxResults = clamp(rawMax, SEARCH_MIN_RESULTS, SEARCH_MAX_RESULTS)
+    const modeRaw = strOpt(args, "mode") ?? "hybrid"
+    const mode = VALID_MODES.has(modeRaw) ? modeRaw : "hybrid"
 
     try {
       const results = await this.search.search(query, {

@@ -3,14 +3,14 @@ import type { App } from "../core/App"
 import { sendAgentQuery, detectLanguageDisplay } from "./utils"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IGitService } from "../services/git/GitService"
-import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
+import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
 import { EDITOR_ACTIONS } from "./action-definitions"
 
 export function registerCodeActionCommands(
   app: App,
   agent: IAgentOrchestrator,
   gitService: IGitService,
-  diffViewer: DiffViewerProvider | undefined,
+  diffViewer: IDiffViewerProvider | undefined,
   outputChannel: vscode.OutputChannel,
 ): void {
   for (const action of EDITOR_ACTIONS) {

@@ -2,7 +2,7 @@ import * as vscode from "vscode"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import { handleBackendError } from "../core/errors"
 import type { IGitService } from "../services/git/GitService"
-import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
+import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
 import { detectLanguageDisplay } from "../utils/LanguageDetector"
 
 const LOG_TRUNCATE_LENGTH = 80
@@ -21,7 +21,7 @@ export async function sendAgentQuery(
   workDir: string,
   agent: IAgentOrchestrator,
   gitService: IGitService,
-  diffViewer: DiffViewerProvider | undefined,
+  diffViewer: IDiffViewerProvider | undefined,
   channel: vscode.OutputChannel,
 ): Promise<void> {
   channel.show()

@@ -5,7 +5,7 @@ import type { IAgentOrchestrator } from "../core/IAgent"
 import type { TodoStore } from "../agent/TodoStore"
 import type { IBackend } from "../core/IBackend"
 import type { IGitService } from "../services/git/GitService"
-import type { DiffViewerProvider } from "../providers/DiffViewerProvider"
+import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
 import type { SettingsProvider } from "../providers/SettingsProvider"
 
 /** Зарегистрировать команды чата: новый чат, фокус ввода, настройки, список сессий, diff-viewer. */
@@ -16,7 +16,7 @@ export function registerChatCommands(
   agent: IAgentOrchestrator,
   _backend: IBackend,
   gitService: IGitService | undefined,
-  diffViewer: DiffViewerProvider | undefined,
+  diffViewer: IDiffViewerProvider | undefined,
   settingsProvider: SettingsProvider,
   _extUri: vscode.Uri,
   _outputChannel: vscode.OutputChannel,

@@ -2,6 +2,7 @@ import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import { glob as globFn } from "glob"
 import { FilesystemTool } from "./FilesystemTool"
+import { str, strOpt } from "../ToolArgs"
 
 /**
  * Найти файлы по шаблону glob.
@@ -23,10 +24,13 @@ export class GlobTool extends FilesystemTool {
   }
 
   protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
-    const pattern = String(args.pattern ?? "")
-    const root = args.path ? String(args.path) : "."
+    const pattern = str(args, "pattern")
+    if (!pattern) return { output: "Не указан шаблон glob", success: false }
+
+    const root = strOpt(args, "path") ?? "."
     const result = this.resolvePath(root)
     if ("error" in result) return { output: result.error, success: false }
+
     const files = await globFn(pattern, { cwd: result.resolved, absolute: true })
     return {
       output: files.length > 0 ? files.join("\n") : "Совпадений не найдено",

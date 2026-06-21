@@ -58,8 +58,8 @@ describe("GlobTool", () => {
 
   it("returns error for empty pattern", async () => {
     const result = await tool.execute({ pattern: "" })
-    expect(result.success).toBe(true)
-    expect(result.output).toContain("Совпадений не найдено")
+    expect(result.success).toBe(false)
+    expect(result.output).toContain("Не указан шаблон")
   })
 
   it("uses default path of current directory", async () => {

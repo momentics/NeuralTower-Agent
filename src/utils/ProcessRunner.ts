@@ -1,4 +1,5 @@
 import { spawn, type SpawnOptions, type ChildProcess } from "child_process"
+import type { IProcessRunner, ProcessRunOptions, ProcessRunResult } from "../core/IProcessRunner"
 
 export interface ProcessRunnerOptions {
   cwd?: string
@@ -13,6 +14,20 @@ export interface ProcessResult {
   stdout: string
   stderr: string
   code: number | null
+}
+
+/**
+ * Реализация IProcessRunner через child_process.spawn.
+ * Поддерживает лимиты буфера, таймаут и корректную очистку.
+ */
+export class DefaultProcessRunner implements IProcessRunner {
+  async run(
+    command: string,
+    args: string[],
+    options: ProcessRunOptions = {},
+  ): Promise<ProcessRunResult> {
+    return runProcess(command, args, options as ProcessRunnerOptions)
+  }
 }
 
 /**

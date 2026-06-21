@@ -2,6 +2,9 @@ import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import * as fs from "fs/promises"
 import { FilesystemTool } from "./FilesystemTool"
+import { str, bool } from "../ToolArgs"
+
+const MAX_DELETE_FILE_COUNT = 100
 
 /** Удаление файла или директории. Поддерживает рекурсивное удаление директорий. */
 export class DeleteFileTool extends FilesystemTool {
@@ -20,18 +23,20 @@ export class DeleteFileTool extends FilesystemTool {
     required: ["filepath"],
   }
 
-  protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
-    const fp = String(args.filepath ?? "")
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    const fp = str(args, "filepath")
     const result = this.resolvePath(fp)
     if ("error" in result) return { output: result.error, success: false }
 
+    if (signal?.aborted) return { output: "Операция отменена", success: false }
+
     const stat = await fs.stat(result.resolved)
     const isDir = stat.isDirectory()
-    const isRecursive = isDir || Boolean(args.recursive)
+    const isRecursive = isDir || bool(args, "recursive", false)
 
     if (isRecursive) {
-      const fileCount = await this.countFiles(result.resolved)
-      if (fileCount > 100) {
+      const fileCount = await this.countFiles(result.resolved, signal)
+      if (fileCount > MAX_DELETE_FILE_COUNT) {
         return {
           output: `Рекурсивное удаление заблокировано: директория содержит ${fileCount} файлов. Это слишком много для автоматического удаления.`,
           success: false,
@@ -49,12 +54,14 @@ export class DeleteFileTool extends FilesystemTool {
     }
   }
 
-  private async countFiles(dir: string): Promise<number> {
+  private async countFiles(dir: string, signal?: AbortSignal): Promise<number> {
+    if (signal?.aborted) return 0
     let count = 0
     const entries = await fs.readdir(dir, { withFileTypes: true })
     for (const entry of entries) {
+      if (signal?.aborted) return count
       if (entry.isDirectory()) {
-        count += await this.countFiles(`${dir}/${entry.name}`)
+        count += await this.countFiles(`${dir}/${entry.name}`, signal)
       } else {
         count++
       }
