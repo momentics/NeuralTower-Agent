@@ -2,6 +2,7 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import type { ContextProvider, ContextItem } from "./types"
 import { detectLanguageDisplay } from "../../../utils/LanguageDetector"
+import { errorMessage } from "../../errors"
 
 const CONTEXT_MAX_FILE_SIZE = 200_000
 const CONTEXT_MAX_CONTENT_CHARS = 100000
@@ -42,7 +43,7 @@ export function makeFileProvider(
           description: `${(stat.size / 1024).toFixed(1)} КБ, ${lang}`,
         }]
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         return [{ content: `Не удалось прочитать файл ${filePath}: ${msg}`, name: "file", description: "error" }]
       }
     },

@@ -1,7 +1,7 @@
 import type { ITool } from "../tools/ITool"
-import { ToolRegistry } from "../tools/ToolRegistry"
+import type { IToolRegistry } from "../tools/ToolRegistry"
 import { MCPToolAdapter } from "./MCPToolAdapter"
-import { ExecutionError, TimeoutError } from "../core/errors"
+import { ExecutionError, TimeoutError, errorMessage } from "../core/errors"
 import { createDomainLogger } from "../core/logger"
 import type { IMCPTransport } from "./MCPTransport"
 import { StdioMCPTransport, MCP_TRANSPORT_EVENTS } from "./MCPTransport"
@@ -46,7 +46,7 @@ export interface IMCPManager {
   connect(): Promise<void>
   discover(): Promise<MCPTool[]>
   callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<{ output: string; success: boolean }>
-  syncWithRegistry(registry: ToolRegistry): Promise<void>
+ syncWithRegistry(registry: IToolRegistry): Promise<void>
   listServers(): MCPServerConfig[]
   getReadyServers(): string[]
   getToolsByServer(): Array<{ server: string; tools: MCPTool[] }>
@@ -110,7 +110,7 @@ export class MCPManager implements IMCPManager {
             }
           }
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err)
+          const msg = errorMessage(err)
           log.error(`Ошибка разбора MCP-ответа: ${msg}`)
         }
       })
@@ -135,7 +135,7 @@ export class MCPManager implements IMCPManager {
       try {
         await transport.connect()
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         log.error(`MCP-сервер недоступен: ${msg}`)
         server.ready = false
       }
@@ -153,7 +153,7 @@ export class MCPManager implements IMCPManager {
           all.push(...server.tools)
         }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         log.error(`MCP-сервер не поддерживает tools/list: ${msg}`)
       }
     }
@@ -186,13 +186,13 @@ export class MCPManager implements IMCPManager {
       return { output: "Содержимое не возвращено", success: true }
     } catch (err: unknown) {
       return {
-        output: `Вызов MCP-инструмента не выполнен: ${err instanceof Error ? err.message : String(err)}`,
+        output: `Вызов MCP-инструмента не выполнен: ${errorMessage(err)}`,
         success: false,
       }
     }
   }
 
-  async syncWithRegistry(registry: ToolRegistry): Promise<void> {
+  async syncWithRegistry(registry: IToolRegistry): Promise<void> {
     for (const server of this.servers) {
       if (!server.ready || !server.transport) continue
       registry.registerMany(

@@ -1,6 +1,7 @@
 import { spawn, type SpawnOptions, type ChildProcess } from "child_process"
 import type { Plugin } from "../../shared/types"
 import { createDomainLogger } from "../../core/logger"
+import { errorMessage } from "../../core/errors"
 
 const log = createDomainLogger("Git")
 
@@ -9,10 +10,18 @@ const GIT_DIFF_TIMEOUT_MS = 10000
 const GIT_MAX_BUFFER = 512 * 1024
 
 export interface GitDiffResult {
+  ok: true
   changed: string[]
   additions: number
   deletions: number
 }
+
+export interface GitDiffError {
+  ok: false
+  error: string
+}
+
+export type GitDiffOutcome = GitDiffResult | GitDiffError
 
 export interface GitBranchInfo {
   name: string
@@ -26,7 +35,7 @@ export interface GitBranchInfo {
 export interface IGitService {
   getDiffContext(dir: string): Promise<string>
   getBranchInfo(dir: string): Promise<GitBranchInfo | null>
-  getDiff(dir: string): Promise<GitDiffResult>
+  getDiff(dir: string): Promise<GitDiffOutcome>
   getCachedDiff(dir: string): Promise<string>
   findRoot(cwd: string): Promise<string | null>
   dispose(): void
@@ -115,14 +124,14 @@ export class GitService implements Plugin, IGitService {
       this.root = stdout.trim()
       return this.root
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Не удалось определить корень репозитория: ${msg}`)
       this.root = cwd
       return null
     }
   }
 
-  async getDiff(dir: string): Promise<GitDiffResult> {
+  async getDiff(dir: string): Promise<GitDiffOutcome> {
     try {
       const { stdout } = await gitSpawn(dir, ["diff", "--stat", "--numstat"], GIT_DIFF_TIMEOUT_MS)
       const lines = stdout.trim().split("\n")
@@ -139,11 +148,11 @@ export class GitService implements Plugin, IGitService {
         }
       }
 
-      return { changed, additions, deletions }
+      return { ok: true, changed, additions, deletions }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Не удалось получить изменения Git: ${msg}`)
-      return { changed: [], additions: 0, deletions: 0 }
+      return { ok: false, error: msg }
     }
   }
 
@@ -158,7 +167,7 @@ export class GitService implements Plugin, IGitService {
         behind: behindAhead?.[2] ? Number(behindAhead[2]) : 0,
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Не удалось получить информацию о ветке: ${msg}`)
       return null
     }
@@ -175,7 +184,7 @@ export class GitService implements Plugin, IGitService {
       if (!stdout.trim()) return ""
       return `## Изменения Git (не добавленные)\n\`\`\`diff\n${stdout.slice(0, 10000)}\n\`\`\``
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Не удалось получить diff: ${msg}`)
       return ""
     }
@@ -191,7 +200,7 @@ export class GitService implements Plugin, IGitService {
       )
       return stdout
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Не удалось получить staged diff: ${msg}`)
       return ""
     }

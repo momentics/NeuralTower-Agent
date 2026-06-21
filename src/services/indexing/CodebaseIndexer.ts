@@ -15,6 +15,7 @@ import type { ICodebaseChunker } from "../../repo/CodebaseChunker"
 import type { ICodebaseSearch } from "../../repo/CodebaseSearch"
 import type { IEmbeddingProvider } from "../../backend/IEmbeddingProvider"
 import { createDomainLogger } from "../../core/logger"
+import { errorMessage } from "../../core/errors"
 
 const log = createDomainLogger("CodebaseIndexer")
 
@@ -122,7 +123,7 @@ export class CodebaseIndexer implements ICodebaseIndexer {
 
       this.setState("idle")
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Индексация кодовой базы не выполнена: ${msg}`)
       this.setState("error")
     }
@@ -138,6 +139,7 @@ export class CodebaseIndexer implements ICodebaseIndexer {
       this.debounceTimer = null
       const paths = this.pendingPaths.splice(0)
       for (const p of paths) {
+        if (this.isDisposed) return
         await this.onFileChanged(p)
       }
     }, FILE_EVENT_DEBOUNCE_MS)
@@ -153,6 +155,7 @@ export class CodebaseIndexer implements ICodebaseIndexer {
       this.debounceTimer = null
       const paths = this.pendingPaths.splice(0)
       for (const raw of paths) {
+        if (this.isDisposed) return
         if (raw.startsWith("__DELETE__")) {
           await this.onFileDeleted(raw.slice(10))
         } else {
@@ -166,7 +169,7 @@ export class CodebaseIndexer implements ICodebaseIndexer {
    * Обработка изменения файла (сохранение).
    */
   private async onFileChanged(filePath: string): Promise<void> {
-    if (this.state === "indexing") return
+    if (this.isDisposed || this.state === "indexing") return
 
     try {
       await this.search.deleteByFile(filePath)
@@ -175,7 +178,7 @@ export class CodebaseIndexer implements ICodebaseIndexer {
         await this.search.indexChunks(chunks)
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Ошибка при индексации файла ${filePath}: ${msg}`)
     }
   }
@@ -184,10 +187,11 @@ export class CodebaseIndexer implements ICodebaseIndexer {
    * Обработка удаления файла.
    */
   private async onFileDeleted(filePath: string): Promise<void> {
+    if (this.isDisposed) return
     try {
       await this.search.deleteByFile(filePath)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Ошибка при удалении индекса файла ${filePath}: ${msg}`)
     }
   }

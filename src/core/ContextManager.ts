@@ -2,6 +2,8 @@ import type { ContextProvider, ContextItem } from "./providers/context/types"
 import { estimateTokens } from "./token-utils"
 import { loadDefaultContextConfig } from "./config"
 import { createDomainLogger } from "./logger"
+import { Mutex } from "../shared/Mutex"
+import { errorMessage } from "./errors"
 
 const log = createDomainLogger("ContextManager")
 
@@ -48,34 +50,6 @@ export interface IContextManager {
   reset(): void
   list(): ContextProvider[]
   dispose(): void
-}
-
-/**
- * Простой мютекс на основе Promise для защиты от гонки данных.
- */
-class Mutex {
-  private locked = false
-  private queue: Array<() => void> = []
-
-  acquire(): Promise<void> {
-    return new Promise((resolve) => {
-      if (!this.locked) {
-        this.locked = true
-        resolve()
-      } else {
-        this.queue.push(resolve)
-      }
-    })
-  }
-
-  release(): void {
-    if (this.queue.length > 0) {
-      const next = this.queue.shift()!
-      next()
-    } else {
-      this.locked = false
-    }
-  }
 }
 
 /**
@@ -146,12 +120,7 @@ export class ContextManager implements IContextManager {
    * Вызывается один раз на начало этапа сессии.
    */
   async initialize(): Promise<PreparedContext> {
-    await this.mutex.acquire()
-    try {
-      return await this.doInitialize()
-    } finally {
-      this.mutex.release()
-    }
+    return await this.mutex.withLock(() => this.doInitialize())
   }
 
   private async doInitialize(): Promise<PreparedContext> {
@@ -187,7 +156,7 @@ export class ContextManager implements IContextManager {
           revision: this.revision,
         })
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         log.error(`Провайдер контекста недоступен: ${msg}`)
       }
     }
@@ -212,12 +181,7 @@ export class ContextManager implements IContextManager {
    * Если провайдеры не изменились — возвращает базовый текст без изменений.
    */
   async prepare(): Promise<PreparedContext> {
-    await this.mutex.acquire()
-    try {
-      return await this.doPrepare()
-    } finally {
-      this.mutex.release()
-    }
+    return await this.mutex.withLock(() => this.doPrepare())
   }
 
   private async doPrepare(): Promise<PreparedContext> {
@@ -256,7 +220,7 @@ export class ContextManager implements IContextManager {
           newContent.delete(provider.description.name)
         }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         log.error(`Провайдер контекста недоступен при обновлении: ${msg}`)
       }
     }

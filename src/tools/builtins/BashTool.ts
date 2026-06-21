@@ -1,6 +1,7 @@
 import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import { spawn } from "node:child_process"
+import { errorMessage } from "../../core/errors"
 
 const BASH_DEFAULT_TIMEOUT_MS = 30000
 const BASH_MAX_BUFFER = 1024 * 1024
@@ -38,7 +39,7 @@ export class BashTool implements ITool {
       const out = (outTrimmed ? stdout : "") + (stderr ? `\nВЫВОД ОШИБОК:\n${stderr}` : "")
       return { output: out || "(нет вывода)", success: true }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       return { output: `Команда не выполнена: ${msg}`, success: false }
     }
   }

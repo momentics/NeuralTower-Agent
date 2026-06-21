@@ -2,6 +2,8 @@ import * as vscode from "vscode"
 import type { IBackend } from "../../core/IBackend"
 import type { Plugin } from "../../shared/types"
 import { createDomainLogger } from "../../core/logger"
+import { stripCodeFences } from "../../utils/stripCodeFences"
+import { errorMessage } from "../../core/errors"
 
 const log = createDomainLogger("Autocomplete")
 
@@ -200,7 +202,7 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
           }
           resolve(items)
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err)
+          const msg = errorMessage(err)
           log.error(`Автодополнение не выполнено: ${msg}`)
           resolve(undefined)
         }
@@ -252,7 +254,7 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
       const item = new vscode.InlineCompletionItem(cleaned, range)
       return [item]
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Встроенное автодополнение не выполнено: ${msg}`)
       return undefined
     } finally {
@@ -355,15 +357,7 @@ export class AutocompleteService implements Plugin, vscode.InlineCompletionItemP
   // ── Очистка завершения ──────────────────────────────────
 
   private cleanCompletion(content: string): string {
-    let result = content.trim()
-
-    // Удалить маркеры кода
-    result = result.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "")
-
-    // Удалить кавычки
-    result = result.replace(/^["']|["']$/g, "")
-
-    return result.trim()
+    return stripCodeFences(content)
   }
 
   // ── Внутренние утилиты ──────────────────────────────────

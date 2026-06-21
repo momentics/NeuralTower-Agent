@@ -3,6 +3,7 @@ import type { ToolResult } from "../../agent/AgentTypes"
 import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
 import * as path from "path"
+import { errorMessage } from "../../core/errors"
 
 /** Перемещение или переименование файла или директории. */
 export class MoveFileTool implements ITool {
@@ -43,7 +44,7 @@ export class MoveFileTool implements ITool {
       return { output: `Перемещено: ${src} -> ${dst}`, success: true }
     } catch (err: unknown) {
       return {
-        output: `Не удалось переместить: ${err instanceof Error ? err.message : String(err)}`,
+        output: `Не удалось переместить: ${errorMessage(err)}`,
         success: false,
       }
     }

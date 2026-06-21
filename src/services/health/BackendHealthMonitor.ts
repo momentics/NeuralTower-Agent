@@ -4,6 +4,7 @@ import type { IContextManager } from "../../core/ContextManager"
 import type { Plugin } from "../../shared/types"
 import { createDomainLogger } from "../../core/logger"
 import { StatusBarIndicator } from "../../services/StatusBarIndicator"
+import { errorMessage } from "../../core/errors"
 
 const log = createDomainLogger("BackendHealth")
 
@@ -41,7 +42,11 @@ export class BackendHealthMonitor extends StatusBarIndicator implements Plugin {
     this.healthTimer = setInterval(async () => {
       await this.check()
     }, HEALTH_CHECK_INTERVAL_MS)
-    if (this.healthTimer) { this.healthTimer.unref?.() }
+    try {
+      (this.healthTimer as NodeJS.Timer).unref()
+    } catch {
+      /* unref не поддерживается в окружении */
+    }
   }
 
   /** Вернуть текущий статус подключения. */
@@ -61,7 +66,7 @@ export class BackendHealthMonitor extends StatusBarIndicator implements Plugin {
       this.syncBar()
       return ok
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Проверка здоровья бэкенда не выполнена: ${msg}`)
       this.connected = false
       this.checking = false

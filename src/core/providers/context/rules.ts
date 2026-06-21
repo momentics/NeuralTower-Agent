@@ -2,6 +2,7 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import type { ContextProvider, ContextItem } from "./types"
 import { createDomainLogger } from "../../logger"
+import { errorMessage } from "../../errors"
 
 const log = createDomainLogger("RulesProvider")
 
@@ -22,7 +23,7 @@ export async function loadRulesFiles(getWorkDir: () => string): Promise<Array<{ 
         rules.push({ name: fname, content: content.trim() })
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Не удалось прочитать директорию правил: ${msg}`)
     }
   }
@@ -32,7 +33,7 @@ export async function loadRulesFiles(getWorkDir: () => string): Promise<Array<{ 
       const content = await fs.readFile(path.join(workDir, fname), "utf-8")
       rules.push({ name: fname, content: content.trim() })
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Не удалось прочитать ${fname}: ${msg}`)
     }
   }

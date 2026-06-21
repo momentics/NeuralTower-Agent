@@ -1,4 +1,5 @@
 import type { ContextProvider, ContextItem } from "./types"
+import { errorMessage } from "../../errors"
 
 const CONTEXT_TIMEOUT_MS = 15000
 const WEB_SEARCH_MAX_TOPICS = 8
@@ -51,7 +52,7 @@ export function makeWebSearchProvider(): ContextProvider {
 
         return items
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         return [{ content: `Ошибка поиска: ${msg}`, name: "web", description: "error" }]
       }
     },

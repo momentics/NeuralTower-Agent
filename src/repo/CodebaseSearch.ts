@@ -13,6 +13,7 @@
 import type { IEmbeddingProvider } from "../backend/IEmbeddingProvider"
 import type { IVectorStore } from "./IVectorStore"
 import type { CodeChunk, SearchConfig, SearchMode } from "./ChunkTypes"
+import { errorMessage } from "../core/errors"
 import type { IFullTextSearch } from "./FullTextSearch"
 import { createDomainLogger } from "../core/logger"
 
@@ -107,7 +108,7 @@ export class CodebaseSearch implements ICodebaseSearch {
           source: "semantic" as const,
         }))
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.warn(`Семантический поиск не выполнен: ${msg}`)
       return []
     }
@@ -217,7 +218,7 @@ export class CodebaseSearch implements ICodebaseSearch {
 
         await this.vectorStore.add(chunkEmbeddings)
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         log.warn(`Эмбеддинги недоступны: ${msg}`)
       }
     }

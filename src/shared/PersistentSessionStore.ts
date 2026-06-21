@@ -8,6 +8,8 @@ import type {
   PersistedMessage,
 } from "./SessionTypes"
 import { createDomainLogger } from "../core/logger"
+import { Mutex } from "./Mutex"
+import { errorMessage } from "../core/errors"
 
 const log = createDomainLogger("SessionStore")
 
@@ -38,29 +40,6 @@ const DEFAULT_DATA: SessionData = {
   activeId: "",
 }
 
-/**
- * Асинхронный мютекс для предотвращения параллельных гонок чтения-модификации-записи.
- */
-class Mutex {
-  private promise: Promise<void> = Promise.resolve()
-
-  acquire(): Promise<() => void> {
-    let releaseResolve: () => void
-    const prev = this.promise
-    this.promise = new Promise((resolve) => { releaseResolve = resolve })
-    return prev.then(() => () => { releaseResolve!() })
-  }
-
-  async withLock<T>(fn: () => Promise<T>): Promise<T> {
-    const release = await this.acquire()
-    try {
-      return await fn()
-    } finally {
-      release()
-    }
-  }
-}
-
 export class PersistentSessionStore implements ISessionStore {
   private data: SessionData = { ...DEFAULT_DATA }
   private readonly storagePath: string
@@ -88,7 +67,7 @@ export class PersistentSessionStore implements ISessionStore {
           this.createDefault()
         }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         log.error(`Не удалось загрузить хранилище сессий: ${msg}`)
         this.data = { ...DEFAULT_DATA }
         this.createDefault()

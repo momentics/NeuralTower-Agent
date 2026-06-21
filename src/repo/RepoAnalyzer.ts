@@ -3,6 +3,7 @@ import * as path from "path"
 import { detectLanguageFull } from "../utils/LanguageDetector"
 import { walkDirectory } from "../utils/FileSystem"
 import { createDomainLogger } from "../core/logger"
+import { errorMessage } from "../core/errors"
 
 const log = createDomainLogger("RepoAnalyzer")
 
@@ -78,7 +79,7 @@ export class RepoAnalyzer {
         workspaces: !!pkg.workspaces,
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Не удалось прочитать package.json: ${msg}`)
       return { packages: [], workspaces: false }
     }

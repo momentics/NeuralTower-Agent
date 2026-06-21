@@ -3,6 +3,7 @@ import * as path from "path"
 import * as vscode from "vscode"
 import type { ContextProvider, ContextItem } from "./providers/context/types"
 import { createDomainLogger } from "./logger"
+import { errorMessage } from "./errors"
 
 const log = createDomainLogger("VSCodeContext")
 
@@ -231,7 +232,7 @@ export function makeClipboardProvider(): ContextProvider {
           description: `${text.length} символов`,
         }]
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         log.error(`Не удалось прочитать буфер обмена: ${msg}`)
         return []
       }
@@ -284,7 +285,7 @@ export function makeDebuggerProvider(): ContextProvider {
           description: `${session.name}: ${mainThread.name}`,
         }]
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         log.error(`Не удалось получить стек отладки: ${msg}`)
         return [{
           content: `## Отладчик\n  Сессия: ${session.name}\n  Поток: error`,

@@ -3,6 +3,7 @@ import type { ToolResult } from "../../agent/AgentTypes"
 import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
 import * as path from "path"
+import { errorMessage } from "../../core/errors"
 
 const DEFAULT_READ_LIMIT = 2000
 
@@ -42,7 +43,7 @@ export class ReadFileTool implements ITool {
       return { output: slice.join("\n"), success: true }
     } catch (err: unknown) {
       return {
-        output: `Не удалось прочитать файл: ${err instanceof Error ? err.message : String(err)}`,
+        output: `Не удалось прочитать файл: ${errorMessage(err)}`,
         success: false,
       }
     }

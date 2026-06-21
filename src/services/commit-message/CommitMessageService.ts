@@ -2,6 +2,8 @@ import type { IBackend } from "../../core/IBackend"
 import type { IGitService } from "../../services/git/GitService"
 import type { Plugin } from "../../shared/types"
 import { createDomainLogger } from "../../core/logger"
+import { stripCodeFences } from "../../utils/stripCodeFences"
+import { errorMessage } from "../../core/errors"
 
 const log = createDomainLogger("CommitMessage")
 
@@ -41,7 +43,7 @@ export class CommitMessageService implements Plugin {
       const result = await this.backend.chat(messages, () => {})
       return this.clean(result.content)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Генерация сообщения коммита не выполнена: ${msg}`)
       return this.fallbackMessage(diff)
     }
@@ -50,11 +52,8 @@ export class CommitMessageService implements Plugin {
   /** Освобождение ресурсов не требуется. */
   dispose(): void {}
 
-  private clean(content: string): string {
-    let msg = content.trim()
-    msg = msg.replace(/^```[\w]*\n?/, "").replace(/\n?```$/, "")
-    msg = msg.replace(/^["']|["']$/g, "")
-    return msg.trim()
+ private clean(content: string): string {
+    return stripCodeFences(content)
   }
 
   private fallbackMessage(diff: string): string {

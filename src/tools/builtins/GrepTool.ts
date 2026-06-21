@@ -7,6 +7,7 @@ import * as path from "path"
 import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import { walkDirectory } from "../../utils/FileSystem"
 import { createDomainLogger } from "../../core/logger"
+import { errorMessage } from "../../core/errors"
 
 const log = createDomainLogger("Grep")
 
@@ -61,7 +62,7 @@ export class GrepTool implements ITool {
           const rgResult = await this.executeRg(pattern, resolved, include)
           return rgResult
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err)
+          const msg = errorMessage(err)
           log.error(`ripgrep недоступен: ${msg}`)
           this.rgAvailable = false
         }
@@ -70,7 +71,7 @@ export class GrepTool implements ITool {
       return await this.executeFallback(pattern, resolved, include, signal)
     } catch (err: unknown) {
       return {
-        output: `Поиск не выполнен: ${err instanceof Error ? err.message : String(err)}`,
+        output: `Поиск не выполнен: ${errorMessage(err)}`,
         success: false,
       }
     }
@@ -114,7 +115,7 @@ export class GrepTool implements ITool {
           }
         }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         log.error(`Не удалось прочитать файл при поиске: ${full} — ${msg}`)
       }
     }

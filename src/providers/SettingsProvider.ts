@@ -3,7 +3,15 @@ import * as crypto from "crypto"
 import type { IBackend } from "../core/IBackend"
 import type { SettingsToExt, ExtToSettings } from "../shared/messages"
 
-export class SettingsProvider {
+/**
+ * Интерфейс провайдера настроек.
+ */
+export interface ISettingsProvider {
+  show(): void
+  dispose(): void
+}
+
+export class SettingsProvider implements ISettingsProvider {
   private _panel: vscode.WebviewPanel | undefined
   private disposables: vscode.Disposable[] = []
 
@@ -69,10 +77,27 @@ export class SettingsProvider {
     const disposable = this.getWebview().onDidReceiveMessage(async (msg: SettingsToExt) => {
       switch (msg.type) {
         case "settingsSave": {
-          await this.backend.updateConfig({ url: msg.url, model: msg.model })
-          if (msg.maxRetries !== undefined) await this.backend.updateConfig({ maxRetries: msg.maxRetries })
-          if (msg.timeoutMs !== undefined) await this.backend.updateConfig({ timeoutMs: msg.timeoutMs })
-          if (msg.autoApprove !== undefined) {
+          const url = typeof msg.url === "string" && msg.url.trim() ? msg.url.trim() : undefined
+          const model = typeof msg.model === "string" && msg.model.trim() ? msg.model.trim() : undefined
+          if (!url && !model) {
+            this.getWebview().postMessage({
+              type: "settingsTestResult",
+              success: false,
+              message: "Укажите адрес сервера или модель",
+            } as ExtToSettings)
+            break
+          }
+          const config: Record<string, unknown> = {}
+          if (url) config.url = url
+          if (model) config.model = model
+          await this.backend.updateConfig(config)
+          if (typeof msg.maxRetries === "number" && msg.maxRetries >= 0 && msg.maxRetries <= 10) {
+            await this.backend.updateConfig({ maxRetries: msg.maxRetries })
+          }
+          if (typeof msg.timeoutMs === "number" && msg.timeoutMs >= 1000) {
+            await this.backend.updateConfig({ timeoutMs: msg.timeoutMs })
+          }
+          if (typeof msg.autoApprove === "boolean") {
             await vscode.workspace.getConfiguration("neuralTowerAgent").update(
               "autoApprove.enabled",
               msg.autoApprove,

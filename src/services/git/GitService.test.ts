@@ -68,16 +68,21 @@ describe("GitService", () => {
   it("getDiff returns changed files", async () => {
     mockSpawn.mockReturnValue(createMockSpawn("1\t2\tfile1.ts\n3\t4\tfile2.ts\n"))
     const result = await service.getDiff("/work")
-    expect(result.changed).toEqual(["file1.ts", "file2.ts"])
-    expect(result.additions).toBe(4)
-    expect(result.deletions).toBe(6)
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.changed).toEqual(["file1.ts", "file2.ts"])
+      expect(result.additions).toBe(4)
+      expect(result.deletions).toBe(6)
+    }
   })
 
-  it("getDiff returns empty on error", async () => {
+  it("getDiff returns error on failure", async () => {
     mockSpawn.mockReturnValue(createMockSpawnError("fail"))
     const result = await service.getDiff("/work")
-    expect(result.changed).toEqual([])
-    expect(result.additions).toBe(0)
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error).toBeDefined()
+    }
   })
 
   it("getBranchInfo returns branch info", async () => {

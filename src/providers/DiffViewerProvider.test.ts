@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { DiffViewerProvider } from "./DiffViewerProvider"
-import type { GitDiffResult } from "../services/git/GitService"
+import type { GitDiffOutcome } from "../services/git/GitService"
 
 describe("DiffViewerProvider", () => {
   let provider: DiffViewerProvider
@@ -19,7 +19,8 @@ describe("DiffViewerProvider", () => {
   })
 
   it("opens panel with diff", () => {
-    const diff: GitDiffResult = {
+    const diff: GitDiffOutcome = {
+      ok: true,
       changed: ["file1.ts", "file2.ts"],
       additions: 10,
       deletions: 5,
@@ -29,7 +30,8 @@ describe("DiffViewerProvider", () => {
 
   it("reveals existing panel on second open", () => {
     provider.openPanel()
-    const diff: GitDiffResult = {
+    const diff: GitDiffOutcome = {
+      ok: true,
       changed: ["file1.ts"],
       additions: 3,
       deletions: 1,

@@ -1,6 +1,6 @@
 import type { IBackend, ChatMessage } from "../core/IBackend"
-import type { ToolRegistry } from "../tools/ToolRegistry"
-import type { SkillManager } from "../skills/SkillManager"
+import type { IToolRegistry } from "../tools/ToolRegistry"
+import type { ISkillManager } from "../skills/SkillManager"
 import type { ISkill } from "../skills/ISkill"
 import { AgentLoop } from "./AgentLoop"
 import { AgentMemory } from "./AgentMemory"
@@ -16,7 +16,7 @@ import type { AgentModeName } from "./AgentMode"
 import { TodoStore } from "./TodoStore"
 import type { Plan } from "./Plan"
 import { PlanRepository } from "./PlanRepository"
-import { AbortError, AgentError } from "../core/errors"
+import { AbortError, AgentError, errorMessage } from "../core/errors"
 import { createDomainLogger } from "../core/logger"
 
 const log = createDomainLogger("AgentCore")
@@ -40,8 +40,8 @@ export class AgentCore {
 
   constructor(
     private readonly backend: IBackend,
-    private readonly toolRegistry: ToolRegistry,
-    private readonly skillManager: SkillManager,
+    private readonly toolRegistry: IToolRegistry,
+    private readonly skillManager: ISkillManager,
     private readonly deps: AgentDependencies,
     todoStore: TodoStore,
   ) {
@@ -137,7 +137,7 @@ export class AgentCore {
         try {
           await new PlanRepository(workDir).save(plan)
         } catch (err: unknown) {
-          log.warn(`Не удалось сохранить план: ${err instanceof Error ? err.message : String(err)}`)
+          log.warn(`Не удалось сохранить план: ${errorMessage(err)}`)
         }
       }
 

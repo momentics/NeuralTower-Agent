@@ -3,6 +3,7 @@ import type { ToolResult } from "../../agent/AgentTypes"
 import { glob as globFn } from "glob"
 import * as path from "path"
 import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
+import { errorMessage } from "../../core/errors"
 
 /**
  * Найти файлы по шаблону glob.
@@ -40,7 +41,7 @@ export class GlobTool implements ITool {
       }
     } catch (err: unknown) {
       return {
-        output: `Поиск не выполнен: ${err instanceof Error ? err.message : String(err)}`,
+        output: `Поиск не выполнен: ${errorMessage(err)}`,
         success: false,
       }
     }

@@ -94,6 +94,7 @@ describe("ContextSources", () => {
     beforeEach(() => {
       mockGit = {
         getDiff: vi.fn(async () => ({
+          ok: true,
           changed: ["file1.ts", "file2.ts"],
           additions: 10,
           deletions: 5,
@@ -126,7 +127,7 @@ describe("ContextSources", () => {
     })
 
     it("returns empty for no changes", async () => {
-      mockGit.getDiff = vi.fn(async () => ({ changed: [], additions: 0, deletions: 0 }))
+      mockGit.getDiff = vi.fn(async () => ({ ok: true, changed: [], additions: 0, deletions: 0 }))
       const provider = makeGitDiffProvider(() => "/test", mockGit)
       const items = await provider.resolve("")
       expect(items).toHaveLength(0)

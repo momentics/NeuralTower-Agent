@@ -1,8 +1,17 @@
 import * as vscode from "vscode"
 import * as crypto from "crypto"
-import type { GitDiffResult } from "../services/git/GitService"
+import type { GitDiffOutcome } from "../services/git/GitService"
 
-export class DiffViewerProvider implements vscode.Disposable {
+/**
+ * Интерфейс просмотрщика diff.
+ */
+export interface IDiffViewerProvider {
+  openPanel(diff?: GitDiffOutcome): void
+  close(): void
+  dispose(): void
+}
+
+export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposable {
   public static readonly viewType = "neuralTowerAgent.diffViewer"
   public static readonly title = "Изменения агента"
 
@@ -11,7 +20,7 @@ export class DiffViewerProvider implements vscode.Disposable {
 
   constructor(private readonly extUri: vscode.Uri) {}
 
-  openPanel(diff?: GitDiffResult): void {
+  openPanel(diff?: GitDiffOutcome): void {
     if (this.panel) {
       this.panel.reveal(vscode.ViewColumn.Two)
       if (diff) this.updateDiff(diff)
@@ -44,8 +53,19 @@ export class DiffViewerProvider implements vscode.Disposable {
     this.panel?.dispose()
   }
 
-  private updateDiff(diff: GitDiffResult): void {
+  private updateDiff(diff: GitDiffOutcome): void {
     if (!this.panel) return
+    if (!diff.ok) {
+      this.panel.webview.postMessage({
+        type: "diffUpdate",
+        diff: {
+          changed: [`Ошибка: ${diff.error}`],
+          additions: 0,
+          deletions: 0,
+        },
+      })
+      return
+    }
     this.panel.webview.postMessage({
       type: "diffUpdate",
       diff: {

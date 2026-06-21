@@ -10,8 +10,19 @@ export interface NotificationServiceOptions {
   permissionRequests: boolean
 }
 
+/**
+ * Интерфейс сервиса уведомлений.
+ */
+export interface INotificationService {
+  show(type: NotificationType, message: string, actions?: string[]): Promise<void>
+  askPermission(toolName: string, description: string): Promise<"allow" | "deny" | "allowAlways">
+  setOptions(partial: Partial<NotificationServiceOptions>): void
+  getOptions(): NotificationServiceOptions
+  dispose(): void
+}
+
 /** Сервис уведомлений: отображение сообщений и запросы разрешений в VS Code. */
-export class NotificationService implements Plugin {
+export class NotificationService implements Plugin, INotificationService {
   name = "notifications"
   private options: NotificationServiceOptions = {
     enabled: true,

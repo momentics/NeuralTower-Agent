@@ -9,7 +9,7 @@
  */
 
 import type { IEmbeddingProvider, EmbeddingProviderConfig } from "./IEmbeddingProvider"
-import { BackendError, ConnectionError } from "../core/errors"
+import { BackendError, ConnectionError, errorMessage } from "../core/errors"
 import { createDomainLogger } from "../core/logger"
 
 const log = createDomainLogger("Embedding")
@@ -120,7 +120,7 @@ export class NeuralTowerEmbeddingProvider implements IEmbeddingProvider {
         this._dimension = testEmbedding[0].length
       }
    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Проверка доступности эмбеддингов не выполнена: ${msg}`)
       this._available = false
     }

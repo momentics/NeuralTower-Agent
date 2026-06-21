@@ -1,5 +1,5 @@
 import type { IBackend, BackendConfig, ChatMessage, ToolCall, ToolDefinition } from "../core/IBackend"
-import { BackendError, ConnectionError, TimeoutError } from "../core/errors"
+import { BackendError, ConnectionError, TimeoutError, errorMessage } from "../core/errors"
 import { loadDefaultBackendConfig } from "../core/config"
 import { createDomainLogger } from "../core/logger"
 
@@ -52,7 +52,7 @@ export class NeuralTowerBackend implements IBackend {
       await this.request(`${cfg.url}/v1/models`)
       return true
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Проверка здоровья бэкенда не выполнена: ${msg}`)
       return false
     }
@@ -148,7 +148,7 @@ export class NeuralTowerBackend implements IBackend {
                 }
               }
             } catch (err: unknown) {
-              const msg = err instanceof Error ? err.message : String(err)
+              const msg = errorMessage(err)
               log.error(`Некорректные данные SSE: ${msg}`)
             }
           }
@@ -188,7 +188,7 @@ export class NeuralTowerBackend implements IBackend {
     try {
       return JSON.parse(content) as T
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       throw new BackendError(`Бэкенд вернул не-JSON: ${content.slice(0, 200)} (${msg})`)
     }
   }

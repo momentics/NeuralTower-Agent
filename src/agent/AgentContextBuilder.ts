@@ -1,18 +1,19 @@
 import type { ISkill } from "../skills/ISkill"
-import type { ToolRegistry } from "../tools/ToolRegistry"
-import type { SkillManager } from "../skills/SkillManager"
+import type { IToolRegistry } from "../tools/ToolRegistry"
+import type { ISkillManager } from "../skills/SkillManager"
 import type { IGitService } from "../services/git/GitService"
 import type { IContextManager } from "../core/ContextManager"
 import type { IFileIndex } from "../repo/FileIndex"
 import { AgentMemory } from "./AgentMemory"
 import { createDomainLogger } from "../core/logger"
+import { errorMessage } from "../core/errors"
 
 const log = createDomainLogger("AgentContext")
 
 export class AgentContextBuilder {
   constructor(
-    private readonly toolRegistry: ToolRegistry,
-    private readonly skillManager: SkillManager,
+    private readonly toolRegistry: IToolRegistry,
+    private readonly skillManager: ISkillManager,
     private readonly memory: AgentMemory,
     private readonly fileIndex: IFileIndex,
     private readonly gitService: IGitService | null,
@@ -47,7 +48,7 @@ export class AgentContextBuilder {
           contextManagerContent = prepared.systemPrompt
         }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         log.error(`ContextManager недоступен: ${msg}`)
       }
     }

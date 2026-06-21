@@ -14,6 +14,7 @@ import type {
   CodeChunk,
   CodebaseChunkResult,
 } from "./ChunkTypes"
+import { errorMessage } from "../core/errors"
 import type { IChunker } from "./Chunker"
 import { LineChunker, TypeScriptChunker, createDefaultChunkerConfig } from "./Chunker"
 import { detectLanguageShort } from "../utils/LanguageDetector"
@@ -73,7 +74,7 @@ export class CodebaseChunker implements ICodebaseChunker {
         chunks.push(...result.chunks)
         filesProcessed++
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         log.error(`Не удалось прочитать файл ${entry.path}: ${msg}`)
         filesSkipped++
       }
@@ -99,7 +100,7 @@ export class CodebaseChunker implements ICodebaseChunker {
       const result = chunker.chunk(filePath, content)
       return result.chunks
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Не удалось обработать файл ${filePath}: ${msg}`)
       return []
     }

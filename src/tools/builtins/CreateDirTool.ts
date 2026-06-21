@@ -3,6 +3,7 @@ import type { ToolResult } from "../../agent/AgentTypes"
 import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
 import * as path from "path"
+import { errorMessage } from "../../core/errors"
 
 /** Создание директории. Поддерживает рекурсивное создание родительских директорий. */
 export class CreateDirTool implements ITool {
@@ -35,7 +36,7 @@ export class CreateDirTool implements ITool {
       return { output: `Директория создана: ${p}`, success: true }
     } catch (err: unknown) {
       return {
-        output: `Не удалось создать директорию: ${err instanceof Error ? err.message : String(err)}`,
+        output: `Не удалось создать директорию: ${errorMessage(err)}`,
         success: false,
       }
     }

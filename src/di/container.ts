@@ -1,16 +1,16 @@
 import * as vscode from "vscode"
 import { NeuralTowerBackend } from "../backend/NeuralTowerBackend"
 import { AgentOrchestrator } from "../agent/AgentOrchestrator"
-import { ToolRegistry } from "../tools/ToolRegistry"
-import { SkillManager } from "../skills/SkillManager"
+import { ToolRegistry, type IToolRegistry } from "../tools/ToolRegistry"
+import { SkillManager, type ISkillManager } from "../skills/SkillManager"
 import { BUILT_IN_SKILLS } from "../skills/builtInSkills"
 import { ChatProvider } from "../providers/ChatProvider"
-import { DiffViewerProvider } from "../providers/DiffViewerProvider"
+import { DiffViewerProvider, type IDiffViewerProvider } from "../providers/DiffViewerProvider"
 import { PersistentSessionStore } from "../shared/PersistentSessionStore"
-import { PermissionManager } from "../services/permission/PermissionManager"
+import { PermissionManager, type IPermissionManager } from "../services/permission/PermissionManager"
 import { GitService } from "../services/git/GitService"
 import type { IGitService } from "../services/git/GitService"
-import { NotificationService } from "../services/notification/NotificationService"
+import { NotificationService, type INotificationService } from "../services/notification/NotificationService"
 import { BackendHealthMonitor } from "../services/health/BackendHealthMonitor"
 import { CommitMessageService } from "../services/commit-message/CommitMessageService"
 import { AutocompleteService } from "../services/autocomplete/AutocompleteService"
@@ -18,6 +18,7 @@ import { TelemetryService } from "../services/telemetry/TelemetryService"
 import { MCPManager } from "../mcp/MCPManager"
 import { SettingsProvider } from "../providers/SettingsProvider"
 import { ReadFileTool } from "../tools/builtins/ReadFileTool"
+import { errorMessage } from "../core/errors"
 import { WriteFileTool } from "../tools/builtins/WriteFileTool"
 import { BashTool } from "../tools/builtins/BashTool"
 import { EditFileTool } from "../tools/builtins/EditFileTool"
@@ -95,8 +96,8 @@ export interface ExtensionDeps {
   autocompleteService: AutocompleteService
   gitService: IGitService
   sessionStore: ISessionStore
-  notificationService: NotificationService
-  permissionManager: PermissionManager
+  notificationService: INotificationService
+  permissionManager: IPermissionManager
   mcpManager: MCPManager
   contextManager: ContextManager
   subagentRunner: SubagentRunner
@@ -170,7 +171,7 @@ export async function createSessionStore(
 export function createPermissionManager(
   vsCfg: vscode.WorkspaceConfiguration,
   globalState: vscode.Memento,
-): PermissionManager {
+): IPermissionManager {
   const pm = new PermissionManager(globalState)
   pm.init()
   const autoApproveEnabled = vsCfg.get<boolean>("autoApprove.enabled", false)
@@ -181,7 +182,7 @@ export function createPermissionManager(
 
 export async function createServices(): Promise<{
   gitService: IGitService
-  notificationService: NotificationService
+  notificationService: INotificationService
 }> {
   const gitService = new GitService()
   await gitService.init()
@@ -194,7 +195,7 @@ export function createToolRegistry(
   workspaceRoot: string | undefined,
   codebaseSearch: ICodebaseSearch | undefined,
   todoStore: TodoStore,
-): ToolRegistry {
+): IToolRegistry {
   const tools = new ToolRegistry()
   tools.register(new ReadFileTool(workspaceRoot))
   tools.register(new WriteFileTool(workspaceRoot))
@@ -218,19 +219,19 @@ export function createToolRegistry(
 }
 
 export async function createMCPChain(
-  tools: ToolRegistry,
+  tools: IToolRegistry,
 ): Promise<MCPManager> {
   const mcpManager = new MCPManager()
   try {
     await mcpManager.connect()
     await mcpManager.syncWithRegistry(tools)
   } catch (err: unknown) {
-    log.warn(`MCP-инициализация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
+    log.warn(`MCP-инициализация не выполнена: ${errorMessage(err)}`)
   }
   return mcpManager
 }
 
-export function createSkillManager(): SkillManager {
+export function createSkillManager(): ISkillManager {
   const skills = new SkillManager()
   skills.registerMany(BUILT_IN_SKILLS)
   return skills
@@ -344,8 +345,8 @@ export function createContextChain(
 
 export function createAgentChain(
   backend: IBackend,
-  tools: ToolRegistry,
-  skills: SkillManager,
+  tools: IToolRegistry,
+  skills: ISkillManager,
   agentDeps: AgentDependencies,
   spawnFactory: AgentSpawnFactory,
   todoStore: TodoStore,
@@ -358,8 +359,8 @@ export function createUIProviders(
   extUri: vscode.Uri,
   agent: IAgentOrchestrator,
   sessionStore: ISessionStore,
-  notificationService: NotificationService,
-  permissionManager: PermissionManager,
+  notificationService: INotificationService,
+  permissionManager: IPermissionManager,
 ): { chatProvider: IProvider; diffViewer: DiffViewerProvider } {
   const chatProvider = new ChatProvider(extUri, agent, sessionStore, notificationService, permissionManager)
   const diffViewer = new DiffViewerProvider(extUri)

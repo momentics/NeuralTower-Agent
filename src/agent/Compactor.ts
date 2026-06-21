@@ -2,6 +2,7 @@ import type { IBackend, ChatMessage } from "../core/IBackend"
 import { estimateTokens } from "../core/token-utils"
 import { loadDefaultCompactorConfig } from "../core/config"
 import { createDomainLogger } from "../core/logger"
+import { errorMessage } from "../core/errors"
 
 const log = createDomainLogger("Compactor")
 
@@ -220,7 +221,7 @@ export class Compactor {
       ])
       return summary.summary || this.fallbackSummary(messages)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Компактизация не выполнена: ${msg}`)
       return this.fallbackSummary(messages)
     }

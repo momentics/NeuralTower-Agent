@@ -1,6 +1,7 @@
 import * as fs from "fs/promises"
 import * as path from "path"
 import type { ContextProvider, ContextItem } from "./types"
+import { errorMessage } from "../../errors"
 
 const CONTEXT_TREE_MAX_DEPTH = 4
 
@@ -79,7 +80,7 @@ export function makeTreeProvider(
           description: `${lines.split("\n").length} строк`,
         }]
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         return [{ content: `Не удалось построить дерево для ${targetDir}: ${msg}`, name: "tree", description: "error" }]
       }
     },

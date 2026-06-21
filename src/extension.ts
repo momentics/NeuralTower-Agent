@@ -6,6 +6,7 @@ import { createDeps } from "./di/container"
 import { registerAllCommands } from "./commands/command-bus"
 import { createOutputChannel } from "./commands/utils"
 import { createDomainLogger } from "./core/logger"
+import { errorMessage } from "./core/errors"
 
 const log = createDomainLogger("Extension")
 
@@ -103,7 +104,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
         try {
           fn()
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err)
+          const msg = errorMessage(err)
           log.error(`Ошибка при освобождении ресурса: ${msg}`)
         }
       }

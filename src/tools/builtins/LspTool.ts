@@ -10,6 +10,7 @@ import {
   executeHover,
   executeSignatureHelp,
 } from "../../lsp/LspClient"
+import { errorMessage } from "../../core/errors"
 
 const OPERATIONS = [
   "goToDefinition",
@@ -103,7 +104,7 @@ export class LspTool implements ITool {
       }
     } catch (err: unknown) {
       return {
-        output: `LSP-ошибка: ${err instanceof Error ? err.message : String(err)}`,
+        output: `LSP-ошибка: ${errorMessage(err)}`,
         success: false,
       }
     }

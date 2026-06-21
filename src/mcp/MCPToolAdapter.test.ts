@@ -19,7 +19,7 @@ describe("MCPToolAdapter", () => {
     expect(tool.name).toBe("server1:read_file")
     expect(tool.description).toBe("Read a file")
     expect(tool.category).toBe("mcp")
-    expect(tool.isSafe).toBe(true)
+    expect(tool.isSafe).toBe(false)
   })
 
   it("adapted tool execute calls callFn", async () => {

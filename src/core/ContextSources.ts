@@ -1,7 +1,8 @@
 import type { ContextProvider, ContextItem } from "./providers/context/types"
-import type { IGitService } from "../services/git/GitService"
+import type { IGitService, GitDiffError } from "../services/git/GitService"
 import type { AgentMemory } from "../agent/AgentMemory"
 import { createDomainLogger } from "./logger"
+import { errorMessage } from "./errors"
 
 const log = createDomainLogger("ContextSources")
 
@@ -30,7 +31,7 @@ export function makeEnvironmentProvider(
           const info = await gitService.getBranchInfo(dir)
           branch = info?.name ?? "unknown"
         } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err)
+          const msg = errorMessage(err)
           log.error(`Не удалось получить информацию о ветке: ${msg}`)
         }
       }
@@ -107,8 +108,8 @@ export function makeGitDiffProvider(
     },
     async resolve(_query: string): Promise<ContextItem[]> {
       const dir = workDir()
-      const diff = await gitService.getDiff(dir).catch(() => null)
-      if (!diff || diff.changed.length === 0) return []
+      const diff = await gitService.getDiff(dir).catch(() => ({ ok: false, error: "недоступно" } as GitDiffError))
+      if (!diff.ok || diff.changed.length === 0) return []
       return [{
         content: `## Git-различия\n  Файлов: ${diff.changed.length}, +${diff.additions} -${diff.deletions}\n${diff.changed
           .map((f: string) => `  ${f}`)

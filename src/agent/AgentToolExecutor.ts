@@ -7,7 +7,7 @@ import type { AgentTurnResult, AgentToolCall, ToolResult } from "./AgentTypes"
 import { AgentMemory } from "./AgentMemory"
 import type { SessionContext } from "./SessionContext"
 
-import { AbortError } from "../core/errors"
+import { AbortError, errorMessage } from "../core/errors"
 import { createDomainLogger } from "../core/logger"
 
 const log = createDomainLogger("AgentToolExecutor")
@@ -108,8 +108,8 @@ export class AgentToolExecutor {
       try {
         toolResult = await this.toolRegistry.invoke(tc.toolName, resolvedArgs, signal)
       } catch (err: unknown) {
-        const errorMessage = err instanceof Error ? err.message : String(err)
-        toolResult = { output: `Ошибка выполнения: ${errorMessage}`, success: false }
+        const msg = errorMessage(err)
+        toolResult = { output: `Ошибка выполнения: ${msg}`, success: false }
       }
 
       onToolResult?.(tc.toolName, toolResult)
@@ -164,7 +164,7 @@ const calls: AgentToolCall[] = []
           })
         }
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         log.error(`Некорректные данные вызова инструмента: ${msg}`)
       }
     }
@@ -216,7 +216,7 @@ function parseBackendToolCalls(backendCalls: BackendToolCall[]): AgentToolCall[]
     try {
       args = JSON.parse(bc.arguments) as Record<string, unknown>
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Невалидный JSON аргументов: ${msg}`)
       continue
     }

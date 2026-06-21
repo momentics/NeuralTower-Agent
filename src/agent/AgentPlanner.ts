@@ -1,10 +1,10 @@
 import type { IBackend, ChatMessage } from "../core/IBackend"
-import type { ToolRegistry } from "../tools/ToolRegistry"
+import type { IToolRegistry } from "../tools/ToolRegistry"
 import type { ISkill } from "../skills/ISkill"
 import type { PlanStep } from "./Plan"
 import { Plan } from "./Plan"
 import type { SessionContext } from "./SessionContext"
-import { PlanError } from "../core/errors"
+import { PlanError, errorMessage } from "../core/errors"
 import { Replanner } from "./Replanner"
 import { PlanRepository } from "./PlanRepository"
 import { createDomainLogger } from "../core/logger"
@@ -20,7 +20,7 @@ export class AgentPlanner {
 
   constructor(
     private readonly backend: IBackend,
-    private readonly toolRegistry: ToolRegistry,
+    private readonly toolRegistry: IToolRegistry,
     private readonly sessionContext: SessionContext | null,
   ) {}
 
@@ -102,7 +102,7 @@ export class AgentPlanner {
       }
       return plan
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Планирование не выполнено: ${msg}`)
       return null
     }
@@ -137,7 +137,7 @@ export class AgentPlanner {
         return plan
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Файл плана не найден или повреждён: ${msg}`)
     }
     return null

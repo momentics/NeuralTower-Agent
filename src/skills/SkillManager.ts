@@ -1,6 +1,18 @@
 import type { ISkill } from "./ISkill"
 
 /**
+ * Интерфейс менеджера навыков.
+ */
+export interface ISkillManager {
+  register(skill: ISkill): void
+  registerMany(skills: ISkill[]): void
+  match(query: string): ISkill[]
+  buildContext(skills: ISkill[]): string
+  list(): ISkill[]
+  clear(): void
+}
+
+/**
  * Управление поиском, подбором и формированием контекста навыков.
  *
  * Подбор: по пользовательскому запросу находит подходящие навыки
@@ -8,7 +20,7 @@ import type { ISkill } from "./ISkill"
  * Формирование контекста: объединяет инструкции активных навыков
  * в системный запрос.
  */
-export class SkillManager {
+export class SkillManager implements ISkillManager {
   private skills: ISkill[] = []
 
   /** Зарегистрировать навык. */

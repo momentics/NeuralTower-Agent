@@ -3,6 +3,7 @@ import type { ToolResult } from "../../agent/AgentTypes"
 import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
 import * as path from "path"
+import { errorMessage } from "../../core/errors"
 
 /** Запись содержимого в файл. Создаёт родительские директории при необходимости. */
 export class WriteFileTool implements ITool {
@@ -38,7 +39,7 @@ export class WriteFileTool implements ITool {
       return { output: `Записано ${content.length} байт в ${fp}`, success: true }
     } catch (err: unknown) {
       return {
-        output: `Не удалось записать файл: ${err instanceof Error ? err.message : String(err)}`,
+        output: `Не удалось записать файл: ${errorMessage(err)}`,
         success: false,
       }
     }

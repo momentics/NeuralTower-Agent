@@ -8,6 +8,7 @@
 import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import type { ICodebaseSearch } from "../../repo/CodebaseSearch"
+import { errorMessage } from "../../core/errors"
 
 const SEARCH_DEFAULT_MAX_RESULTS = 5
 const SEARCH_MAX_RESULTS = 20
@@ -96,7 +97,7 @@ export class CodebaseSearchTool implements ITool {
       return { output, success: true }
     } catch (err: unknown) {
       return {
-        output: `Ошибка поиска: ${err instanceof Error ? err.message : String(err)}`,
+        output: `Ошибка поиска: ${errorMessage(err)}`,
         success: false,
       }
     }

@@ -10,7 +10,7 @@ import type { Plan } from "./Plan"
 import type { AgentContextBuilder } from "./AgentContextBuilder"
 import type { AgentToolExecutor } from "./AgentToolExecutor"
 import type { AgentPlanner } from "./AgentPlanner"
-import { AbortError } from "../core/errors"
+import { AbortError, errorMessage } from "../core/errors"
 import { loadDefaultAgentConfig } from "../core/config"
 import { createDomainLogger } from "../core/logger"
 
@@ -91,7 +91,7 @@ export class AgentLoop {
         systemPrompt,
       )
     } catch (err: unknown) {
-      log.warn(`Компактизация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
+      log.warn(`Компактизация не выполнена: ${errorMessage(err)}`)
       compactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
     }
 
@@ -125,7 +125,7 @@ export class AgentLoop {
           systemPrompt,
         )
       } catch (err: unknown) {
- log.warn(`Компактизация не выполнена: ${err instanceof Error ? err.message : String(err)}`)
+ log.warn(`Компактизация не выполнена: ${errorMessage(err)}`)
         loopCompactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
       }
 
@@ -228,12 +228,12 @@ export class AgentLoop {
         }
       } catch (err: unknown) {
         anyFailed = true
-        const errorMessage = err instanceof Error ? err.message : String(err)
-        failedTools = [{ name: "backend", error: errorMessage }]
+        const msg = errorMessage(err)
+        failedTools = [{ name: "backend", error: msg }]
 
         currentPlan = this.planner.getPlan()
         if (currentPlan) {
-          currentPlan.markFailed(errorMessage)
+          currentPlan.markFailed(msg)
         }
       }
 

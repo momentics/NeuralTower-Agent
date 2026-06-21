@@ -5,10 +5,13 @@ import type { PermissionLevel, ToolPermission, PermissionRequest, AutoApproveCon
 const PERMISSION_TIMEOUT_MS = 30000
 
 /**
- * Интерфейс PermissionManager — только методы, используемые через AgentDependencies.
+ * Интерфейс PermissionManager — публичный API.
  */
 export interface IPermissionManager {
   checkPermission(tool: ITool, args: Record<string, unknown>, timeoutMs?: number): Promise<boolean>
+  onDidRequestPermission(handler: (req: PermissionRequest) => void): vscode.Disposable
+  resolveRequest(requestId: string, allowed: boolean, always: boolean): boolean
+  dispose(): void
 }
 
 export class PermissionManager implements IPermissionManager {
@@ -34,6 +37,13 @@ export class PermissionManager implements IPermissionManager {
    */
   init(): void {
     if (!this.memento) return
+
+    this.permissions.clear()
+    this.autoApprove = {
+      enabled: false,
+      tools: [],
+      maxCost: 0,
+    }
 
     const stored = this.memento.get<Record<string, PermissionLevel>>(
       PermissionManager.KEY_PERMISSIONS,

@@ -29,6 +29,9 @@ function safeToolParamType(raw: unknown): ToolParamType {
  * Адаптер инструментов MCP к интерфейсу ITool.
  * Инструменты MCP работают удалённо; этот адаптер оборачивает
  * их в локальный прокси, пересылающий вызовы на MCP-сервер.
+ *
+ * По умолчанию MCP-инструменты считаются небезопасными (isSafe: false),
+ * что требует явного разрешения пользователя для каждого вызова.
  */
 export class MCPToolAdapter {
   /**
@@ -45,7 +48,7 @@ export class MCPToolAdapter {
       description: mcpTool.description || `MCP-инструмент из ${serverName}`,
       category: "mcp",
       schema: this.toSchema(mcpTool, serverName),
-      isSafe: true,
+      isSafe: false,
       execute: async (args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> => {
         const start = Date.now()
         const result = await callToolFn(serverName, mcpTool.name, args)

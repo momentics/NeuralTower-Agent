@@ -1,6 +1,6 @@
 import type { IBackend } from "../core/IBackend"
-import type { ToolRegistry } from "../tools/ToolRegistry"
-import type { SkillManager } from "../skills/SkillManager"
+import type { IToolRegistry } from "../tools/ToolRegistry"
+import type { ISkillManager } from "../skills/SkillManager"
 import type { IContextProviderRegistry } from "../core/providers/context/registry"
 import type { IContextManager } from "../core/ContextManager"
 import type { IGitService } from "../services/git/GitService"
@@ -18,8 +18,8 @@ import type { TodoStore } from "./TodoStore"
 export type AgentSpawnFactory = (
   deps: AgentDependencies,
   backend: IBackend,
-  toolRegistry: ToolRegistry,
-  skillManager: SkillManager,
+  toolRegistry: IToolRegistry,
+  skillManager: ISkillManager,
   todoStore: TodoStore,
 ) => import("./AgentOrchestrator").AgentOrchestrator
 

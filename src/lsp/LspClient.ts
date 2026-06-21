@@ -2,6 +2,7 @@ import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs/promises"
 import { createDomainLogger } from "../core/logger"
+import { errorMessage } from "../core/errors"
 
 const log = createDomainLogger("LSP")
 
@@ -93,7 +94,7 @@ async function ensureFileExists(filePath: string): Promise<void> {
   try {
     await fs.access(filePath)
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = errorMessage(err)
     throw new Error(`Файл не найден: ${filePath} (${msg})`)
   }
 }
@@ -102,7 +103,7 @@ async function openDocumentForLsp(uri: vscode.Uri): Promise<void> {
   try {
     await vscode.workspace.openTextDocument(uri)
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = errorMessage(err)
     log.error(`Не удалось открыть документ для LSP: ${msg}`)
   }
 }
@@ -476,7 +477,7 @@ export async function getLineSnippet(location: vscode.Location): Promise<string>
     const line = doc.lineAt(location.range.start.line)
     return line.text.trim().slice(0, LSP_SNIPPET_LENGTH)
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = errorMessage(err)
     log.error(`Не удалось получить сниппет строки: ${msg}`)
     return ""
   }

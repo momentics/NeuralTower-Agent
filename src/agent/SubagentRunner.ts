@@ -1,10 +1,11 @@
 import type { IBackend, ChatMessage } from "../core/IBackend"
-import type { ToolRegistry } from "../tools/ToolRegistry"
-import type { SkillManager } from "../skills/SkillManager"
+import type { IToolRegistry } from "../tools/ToolRegistry"
+import type { ISkillManager } from "../skills/SkillManager"
 import type { AgentModeName } from "./AgentMode"
 import type { AgentOrchestrator } from "./AgentOrchestrator"
 import type { AgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
 import type { TodoStore } from "./TodoStore"
+import { errorMessage } from "../core/errors"
 
 /**
  * Состояние подагента.
@@ -80,8 +81,8 @@ export class SubagentRunner {
 
   constructor(
     private readonly backend: IBackend,
-    private readonly toolRegistry: ToolRegistry,
-    private readonly skillManager: SkillManager,
+    private readonly toolRegistry: IToolRegistry,
+    private readonly skillManager: ISkillManager,
     private readonly deps: AgentDependencies,
     private readonly spawnFactory: AgentSpawnFactory,
     private readonly todoStore: TodoStore,
@@ -160,7 +161,7 @@ export class SubagentRunner {
           mode: config.mode,
           status: isCancelled ? "cancelled" : "failed",
           output: "",
-          error: err instanceof Error ? err.message : String(err),
+          error: errorMessage(err),
           durationMs: duration,
         }
         onDone?.(result)

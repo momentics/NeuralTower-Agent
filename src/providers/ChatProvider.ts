@@ -4,8 +4,8 @@ import type { ChatMessage } from "../core/IBackend"
 import type { IProvider } from "../core/IProvider"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
-import type { NotificationService } from "../services/notification/NotificationService"
-import type { PermissionManager } from "../services/permission/PermissionManager"
+import type { INotificationService } from "../services/notification/NotificationService"
+import type { IPermissionManager } from "../services/permission/PermissionManager"
 import type { WebviewToExt, ExtToWebview } from "../shared/messages"
 import { handleBackendError } from "../core/errors"
 
@@ -17,13 +17,14 @@ export class ChatProvider implements IProvider {
   private panel: vscode.WebviewView | undefined
   private streaming = false
   private abortController: AbortController | null = null
+  private disposables: vscode.Disposable[] = []
 
   constructor(
     private readonly extUri: vscode.Uri,
     private readonly agent: IAgentOrchestrator,
     private readonly sessionStore: ISessionStore,
-    private readonly notificationService: NotificationService,
-    private readonly permissionManager: PermissionManager,
+    private readonly notificationService: INotificationService,
+    private readonly permissionManager: IPermissionManager,
   ) {}
 
   async resolveWebviewView(
@@ -51,6 +52,10 @@ export class ChatProvider implements IProvider {
   dispose(): void {
     this.abortController?.abort()
     this.abortController = null
+    for (const d of this.disposables) {
+      d.dispose()
+    }
+    this.disposables = []
     this.panel = undefined
   }
 
@@ -64,13 +69,16 @@ export class ChatProvider implements IProvider {
   // ── Обработка сообщений ─────────────────────────────────
 
   private setupHandler(): void {
-    this.getWebview().onDidReceiveMessage(async (msg: WebviewToExt) => {
+    const disposable = this.getWebview().onDidReceiveMessage(async (msg: WebviewToExt) => {
       if (this.streaming && msg.type !== "permissionResponse" && msg.type !== "stopAgent") return
 
       switch (msg.type) {
-        case "sendMessage":
-          await this.handleMessage(msg.content)
+        case "sendMessage": {
+          const content = msg.content?.trim()
+          if (!content) return
+          await this.handleMessage(content)
           break
+        }
         case "switchSession":
           this.sessionStore.setActive(msg.sessionId)
           const messages = this.sessionStore.getActiveMessages()
@@ -105,10 +113,11 @@ export class ChatProvider implements IProvider {
           break
       }
     })
+    this.disposables.push(disposable)
   }
 
   private setupPermissionHandler(): void {
-    this.permissionManager.onDidRequestPermission(async (req) => {
+    const disposable = this.permissionManager.onDidRequestPermission(async (req) => {
       if (this.panel) {
         this.panel.webview.postMessage({
           type: "permissionRequest",
@@ -124,6 +133,7 @@ export class ChatProvider implements IProvider {
         req.resolve(result !== "deny")
       }
     })
+    this.disposables.push(disposable)
   }
 
   private handlePermissionResponse(msg: WebviewToExt & { requestId: string; allowed: boolean; always: boolean }): void {
@@ -137,6 +147,7 @@ export class ChatProvider implements IProvider {
   }
 
   private async handleMessage(content: string): Promise<void> {
+    if (this.streaming) return
     this.streaming = true
     this.abortController = new AbortController()
     this.getWebview().postMessage({ type: "messageConfirmed", content } as ExtToWebview)

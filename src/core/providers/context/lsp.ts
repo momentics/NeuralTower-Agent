@@ -8,6 +8,7 @@ import {
   executeWorkspaceSymbol,
   executeDocumentSymbol,
 } from "../../../lsp/LspClient"
+import { errorMessage } from "../../errors"
 
 const LSP_PROVIDER_MAX_SYMBOLS = 30
 const LSP_PROVIDER_MAX_DEFS = 5
@@ -136,7 +137,7 @@ export function makeLspProvider(
 
         return [{ content: `Некорректный запрос: ${trimmed}`, name: "lsp", description: "error" }]
       } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err)
+        const msg = errorMessage(err)
         return [{ content: `LSP-ошибка: ${msg}`, name: "lsp", description: "error" }]
       }
     },

@@ -1,8 +1,9 @@
 import type { IBackend } from "../core/IBackend"
-import type { ToolRegistry } from "../tools/ToolRegistry"
+import type { IToolRegistry } from "../tools/ToolRegistry"
 import { Plan } from "./Plan"
 import type { PlanStep } from "./Plan"
 import { createDomainLogger } from "../core/logger"
+import { errorMessage } from "../core/errors"
 
 const log = createDomainLogger("Replanner")
 
@@ -34,7 +35,7 @@ export interface ReplanResult {
 export class Replanner {
   constructor(
     private readonly backend: IBackend,
-    private readonly toolRegistry: ToolRegistry,
+    private readonly toolRegistry: IToolRegistry,
   ) {}
 
   /**
@@ -57,7 +58,7 @@ export class Replanner {
       const newPlan = await this.requestReplan(plan, failedStep, error, attempt)
       return { plan: newPlan, reason, attempt }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       log.error(`Повторное планирование не выполнено: ${msg}`)
       return { plan: this.fallbackPlan(plan, failedStep, error), reason, attempt }
     }

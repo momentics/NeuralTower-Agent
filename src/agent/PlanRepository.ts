@@ -2,7 +2,7 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import type { PlanSerialized } from "./Plan"
 import { Plan } from "./Plan"
-import { PlanError } from "../core/errors"
+import { PlanError, errorMessage } from "../core/errors"
 
 /**
  * Репозиторий для сохранения и загрузки планов.
@@ -34,7 +34,7 @@ export class PlanRepository {
     try {
       data = JSON.parse(raw)
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err)
+      const msg = errorMessage(err)
       throw new PlanError(`Невалидный файл плана: ${filePath} (${msg})`)
     }
 

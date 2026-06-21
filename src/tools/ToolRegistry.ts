@@ -60,6 +60,16 @@ export class ToolRegistry implements IToolRegistry {
     if (!tool) {
       return { output: `Инструмент "${name}" не найден`, success: false }
     }
+
+    const required = tool.schema.required ?? []
+    const missing = required.filter((k) => args[k] === undefined || args[k] === null)
+    if (missing.length > 0) {
+      return {
+        output: `Инструмент "${name}": отсутствуют обязательные аргументы: ${missing.join(", ")}`,
+        success: false,
+      }
+    }
+
     const start = Date.now()
     try {
       const result = await tool.execute(args, signal)

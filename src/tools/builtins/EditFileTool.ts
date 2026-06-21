@@ -3,6 +3,7 @@ import type { ToolResult } from "../../agent/AgentTypes"
 import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
 import * as path from "path"
+import { errorMessage } from "../../core/errors"
 
 const EDIT_PREVIEW_TRUNCATE = 60
 
@@ -65,7 +66,7 @@ export class EditFileTool implements ITool {
       }
     } catch (err: unknown) {
       return {
-        output: `Редактирование не выполнено: ${err instanceof Error ? err.message : String(err)}`,
+        output: `Редактирование не выполнено: ${errorMessage(err)}`,
         success: false,
       }
     }

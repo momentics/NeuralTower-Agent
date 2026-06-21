@@ -1,7 +1,7 @@
 import type { IBackend, ChatMessage } from "../core/IBackend"
 import type { IAgentOrchestrator } from "../core/IAgent"
-import type { ToolRegistry } from "../tools/ToolRegistry"
-import type { SkillManager } from "../skills/SkillManager"
+import type { IToolRegistry } from "../tools/ToolRegistry"
+import type { ISkillManager } from "../skills/SkillManager"
 import type { ISkill } from "../skills/ISkill"
 import { AgentCore } from "./AgentCore"
 import type { AgentModeName } from "./AgentMode"
@@ -11,6 +11,7 @@ import type { TodoStore } from "./TodoStore"
 import type { ToolResult } from "./AgentTypes"
 import type { IContextProviderRegistry } from "../core/providers/context/registry"
 import type { ContextItem } from "../core/providers/context/types"
+import { errorMessage } from "../core/errors"
 
 /**
  * AgentOrchestrator — тонкий фасад над AgentCore.
@@ -27,8 +28,8 @@ export class AgentOrchestrator implements IAgentOrchestrator {
 
   constructor(
     private readonly backend: IBackend,
-    private readonly toolRegistry: ToolRegistry,
-    private readonly skillManager: SkillManager,
+    private readonly toolRegistry: IToolRegistry,
+    private readonly skillManager: ISkillManager,
     private readonly deps: AgentDependencies,
     private readonly spawnFactory: AgentSpawnFactory | null = null,
     private readonly todoStore: TodoStore,
@@ -135,7 +136,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
       return handle.content
     } catch (err: unknown) {
       subagent.dispose()
-      return `Ошибка субагента: ${err instanceof Error ? err.message : String(err)}`
+      return `Ошибка субагента: ${errorMessage(err)}`
     }
   }
 

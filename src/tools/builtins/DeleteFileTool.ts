@@ -3,6 +3,7 @@ import type { ToolResult } from "../../agent/AgentTypes"
 import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
 import * as path from "path"
+import { errorMessage } from "../../core/errors"
 
 /** Удаление файла или директории. Поддерживает рекурсивное удаление директорий. */
 export class DeleteFileTool implements ITool {
@@ -42,7 +43,7 @@ export class DeleteFileTool implements ITool {
       }
     } catch (err: unknown) {
       return {
-        output: `Не удалось удалить: ${err instanceof Error ? err.message : String(err)}`,
+        output: `Не удалось удалить: ${errorMessage(err)}`,
         success: false,
       }
     }

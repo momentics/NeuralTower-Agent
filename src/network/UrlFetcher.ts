@@ -7,6 +7,8 @@ export interface FetchUrlOptions {
   maxLength?: number
 }
 
+import { errorMessage } from "../core/errors"
+
 export interface FetchUrlResult {
   /** Содержимое ответа */
   text: string
@@ -84,7 +86,7 @@ export async function fetchUrl(
     }
   } catch (err: unknown) {
     return {
-      text: `Ошибка загрузки: ${err instanceof Error ? err.message : String(err)}`,
+      text: `Ошибка загрузки: ${errorMessage(err)}`,
       title: null,
       status: 0,
       ok: false,
