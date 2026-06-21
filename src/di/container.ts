@@ -1,50 +1,56 @@
 import * as vscode from "vscode"
-import { NeuralTowerBackend } from "../backend/NeuralTowerBackend"
-import { AgentOrchestrator } from "../agent/AgentOrchestrator"
-import { ToolRegistry, type IToolRegistry } from "../tools/ToolRegistry"
-import { SkillManager, type ISkillManager } from "../skills/SkillManager"
-import { BUILT_IN_SKILLS } from "../skills/builtInSkills"
-import { ChatProvider } from "../providers/ChatProvider"
-import { DiffViewerProvider, type IDiffViewerProvider } from "../providers/DiffViewerProvider"
-import { PersistentSessionStore } from "../shared/PersistentSessionStore"
-import { PermissionManager, type IPermissionManager } from "../services/permission/PermissionManager"
-import { GitService } from "../services/git/GitService"
-import type { IGitService } from "../services/git/GitService"
-import { NotificationService, type INotificationService } from "../services/notification/NotificationService"
-import { BackendHealthMonitor } from "../services/health/BackendHealthMonitor"
-import { CommitMessageService } from "../services/commit-message/CommitMessageService"
-import { AutocompleteService } from "../services/autocomplete/AutocompleteService"
-import { TelemetryService } from "../services/telemetry/TelemetryService"
-import { MCPManager, type IMCPManager } from "../mcp/MCPManager"
-import { SettingsProvider } from "../providers/SettingsProvider"
-import { ReadFileTool } from "../tools/builtins/ReadFileTool"
-import { errorMessage } from "../core/errors"
-import { WriteFileTool } from "../tools/builtins/WriteFileTool"
-import { BashTool } from "../tools/builtins/BashTool"
-import { EditFileTool } from "../tools/builtins/EditFileTool"
-import { DeleteFileTool } from "../tools/builtins/DeleteFileTool"
-import { CreateDirTool } from "../tools/builtins/CreateDirTool"
-import { MoveFileTool } from "../tools/builtins/MoveFileTool"
-import { GlobTool } from "../tools/builtins/GlobTool"
-import { GrepTool } from "../tools/builtins/GrepTool"
-import { WebFetchTool } from "../tools/builtins/WebFetchTool"
-import { TodoWriteTool } from "../tools/builtins/TodoWriteTool"
-import { LspTool } from "../tools/builtins/LspTool"
-import { CodebaseSearchTool } from "../tools/builtins/CodebaseSearchTool"
-import { ContextManager, type IContextManager } from "../core/ContextManager"
-import { ContextProviderRegistry } from "../core/providers/context/registry"
-import { FileIndex, type IFileIndex } from "../repo/FileIndex"
-import { RepoAnalyzer } from "../repo/RepoAnalyzer"
-import { SubagentRunner } from "../agent/SubagentRunner"
-import { loadAppConfig } from "../core/config"
 import type { AppConfig, SessionConfig } from "../core/config"
-import type { AgentDependencies, AgentSpawnFactory } from "../agent/AgentDependencies"
-import { TodoStore } from "../agent/TodoStore"
+import type { IGitService } from "../services/git/GitService"
+import type { ICodebaseSearch } from "../repo/CodebaseSearch"
+import type { ICodebaseChunker } from "../repo/CodebaseChunker"
+import type { IFileIndex } from "../repo/FileIndex"
 import type { IBackend, BackendConfig } from "../core/IBackend"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IProvider } from "../core/IProvider"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
+import type { IPermissionManager } from "../services/permission/PermissionManager"
+import type { IMCPManager } from "../mcp/MCPManager"
+import type { IContextManager } from "../core/ContextManager"
+import type { IToolRegistry } from "../tools/ToolRegistry"
+import type { ISkillManager } from "../skills/SkillManager"
+import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
+import type { INotificationService } from "../services/notification/NotificationService"
+import type { AgentDependencies, AgentSpawnFactory } from "../agent/AgentDependencies"
 import type { ContextProvider } from "../core/providers/context/types"
+import {
+  NeuralTowerBackend,
+  NeuralTowerEmbeddingProvider,
+} from "../backend"
+import { AgentOrchestrator } from "../agent"
+import { ToolRegistry } from "../tools"
+import { SkillManager, BUILT_IN_SKILLS } from "../skills"
+import { ChatProvider } from "../providers/ChatProvider"
+import { DiffViewerProvider } from "../providers/DiffViewerProvider"
+import { PersistentSessionStore } from "../shared"
+import { PermissionManager } from "../services/permission/PermissionManager"
+import { GitService } from "../services/git/GitService"
+import { NotificationService } from "../services/notification/NotificationService"
+import { BackendHealthMonitor } from "../services/health/BackendHealthMonitor"
+import { CommitMessageService } from "../services/commit-message/CommitMessageService"
+import { AutocompleteService } from "../services/autocomplete/AutocompleteService"
+import { TelemetryService } from "../services/telemetry/TelemetryService"
+import { MCPManager } from "../mcp"
+import { SettingsProvider } from "../providers/SettingsProvider"
+import { ContextManager } from "../core/ContextManager"
+import { ContextProviderRegistry } from "../core/providers/context/registry"
+import { FileIndex } from "../repo/FileIndex"
+import { RepoAnalyzer } from "../repo/RepoAnalyzer"
+import { SubagentRunner } from "../agent/SubagentRunner"
+import { TodoStore } from "../agent/TodoStore"
+import { InMemoryVectorStore } from "../repo/InMemoryVectorStore"
+import { FullTextSearch } from "../repo/FullTextSearch"
+import { CodebaseSearch } from "../repo/CodebaseSearch"
+import { CodebaseChunker, createDefaultChunkerConfig } from "../repo/CodebaseChunker"
+import { CodebaseIndexer } from "../services/indexing/CodebaseIndexer"
+import { IndexingStatusBar } from "../services/indexing/IndexingStatusBar"
+import { loadAppConfig } from "../core/config"
+import { createDomainLogger } from "../core/logger"
+import { errorMessage } from "../core/errors"
 import {
   makeUrlProvider,
   makeWebSearchProvider,
@@ -69,16 +75,21 @@ import {
   makeGitDiffProvider,
 } from "../core/ContextSources"
 import { makeCodebaseProvider } from "../core/providers/context/codebase"
-import { NeuralTowerEmbeddingProvider } from "../backend/NeuralTowerEmbeddingProvider"
-import { InMemoryVectorStore } from "../repo/InMemoryVectorStore"
-import { FullTextSearch } from "../repo/FullTextSearch"
-import { CodebaseSearch } from "../repo/CodebaseSearch"
-import type { ICodebaseSearch } from "../repo/CodebaseSearch"
-import { CodebaseChunker, createDefaultChunkerConfig } from "../repo/CodebaseChunker"
-import type { ICodebaseChunker } from "../repo/CodebaseChunker"
-import { CodebaseIndexer } from "../services/indexing/CodebaseIndexer"
-import { IndexingStatusBar } from "../services/indexing/IndexingStatusBar"
-import { createDomainLogger } from "../core/logger"
+import {
+  ReadFileTool,
+  WriteFileTool,
+  EditFileTool,
+  DeleteFileTool,
+  CreateDirTool,
+  MoveFileTool,
+  GlobTool,
+  GrepTool,
+  BashTool,
+  WebFetchTool,
+  LspTool,
+  TodoWriteTool,
+  CodebaseSearchTool,
+} from "../tools"
 
 const log = createDomainLogger("DI")
 
@@ -111,7 +122,60 @@ export interface ExtensionDeps {
   setWorkDir: (dir: string) => void
 }
 
-// ── Фабричные функции ─────────────────────────────────────
+// ── Результаты композиции доменов ─────────────────────────
+
+export interface SearchInfrastructureDeps {
+  fileIndex: FileIndex
+  repoAnalyzer: RepoAnalyzer
+  embeddingProvider: NeuralTowerEmbeddingProvider
+  vectorStore: InMemoryVectorStore
+  fts: FullTextSearch
+  codebaseSearch: CodebaseSearch
+  chunker: CodebaseChunker
+}
+
+export interface ServicesDeps {
+  sessionStore: ISessionStore
+  permissionManager: IPermissionManager
+  gitService: IGitService
+  notificationService: INotificationService
+}
+
+export interface ToolsDeps {
+  tools: IToolRegistry
+  mcpManager: IMCPManager
+  skills: ISkillManager
+}
+
+export interface AgentDepsResult {
+  agent: IAgentOrchestrator
+  subagentRunner: SubagentRunner
+  todoStore: TodoStore
+  agentDeps: AgentDependencies
+}
+
+export interface ContextDepsResult {
+  contextManager: ContextManager
+  contextProviderRegistry: ContextProviderRegistry
+  providers: ContextProvider[]
+}
+
+export interface UIDepsResult {
+  chatProvider: IProvider
+  diffViewer: IDiffViewerProvider
+  settingsProvider: SettingsProvider
+}
+
+export interface MonitoringDepsResult {
+  healthMonitor: BackendHealthMonitor
+  commitMessageService: CommitMessageService
+  autocompleteService: AutocompleteService
+  codebaseIndexer: CodebaseIndexer
+  indexingStatusBar: IndexingStatusBar
+  telemetry: TelemetryService
+}
+
+// ── Независимые фабрики ───────────────────────────────────
 
 export function createBackend(config: AppConfig, onConfigChange?: (partial: Partial<BackendConfig>) => void): IBackend {
   return new NeuralTowerBackend(config.backend, onConfigChange)
@@ -159,42 +223,58 @@ export function createIndexingStatusBar(
   return new IndexingStatusBar(indexer)
 }
 
-export async function createSessionStore(
-  ctx: vscode.ExtensionContext,
-  sessionConfig: SessionConfig,
-): Promise<ISessionStore> {
-  const store = new PersistentSessionStore(ctx.globalStorageUri, sessionConfig.maxSessions)
-  await store.init()
-  return store
+// ── Домен: Инфраструктура поиска ──────────────────────────
+
+export function createSearchInfrastructure(config: AppConfig): SearchInfrastructureDeps {
+  const fileIndex = new FileIndex()
+  const repoAnalyzer = new RepoAnalyzer()
+  const embeddingProvider = createEmbeddingProvider(config)
+  const vectorStore = createVectorStore()
+  const fts = createFullTextSearch()
+  const codebaseSearch = createCodebaseSearch(vectorStore, embeddingProvider, fts)
+  const chunker = createCodebaseChunker(fileIndex)
+
+  return {
+    fileIndex,
+    repoAnalyzer,
+    embeddingProvider,
+    vectorStore,
+    fts,
+    codebaseSearch,
+    chunker,
+  }
 }
 
-export async function createPermissionManager(
+// ── Домен: Сервисы ────────────────────────────────────────
+
+export async function createServicesDomain(
+  ctx: vscode.ExtensionContext,
   vsCfg: vscode.WorkspaceConfiguration,
-  globalState: vscode.Memento,
-): Promise<IPermissionManager> {
-  const pm = new PermissionManager(globalState)
-  await pm.init()
+  sessionConfig: SessionConfig,
+): Promise<ServicesDeps> {
+  const sessionStore = new PersistentSessionStore(ctx.globalStorageUri, sessionConfig.maxSessions)
+  await sessionStore.init()
+
+  const permissionManager = new PermissionManager(ctx.globalState)
+  await permissionManager.init()
   const autoApproveEnabled = vsCfg.get<boolean>("autoApprove.enabled", false)
   const autoApproveTools = vsCfg.get<string[]>("autoApprove.tools", [])
-  pm.setAutoApprove({ enabled: autoApproveEnabled, tools: autoApproveTools, maxCost: 0 })
-  return pm
-}
+  permissionManager.setAutoApprove({ enabled: autoApproveEnabled, tools: autoApproveTools, maxCost: 0 })
 
-export async function createServices(): Promise<{
-  gitService: IGitService
-  notificationService: INotificationService
-}> {
   const gitService = new GitService()
   const notificationService = new NotificationService()
   await notificationService.init()
-  return { gitService, notificationService }
+
+  return { sessionStore, permissionManager, gitService, notificationService }
 }
 
-export function createToolRegistry(
+// ── Домен: Инструменты ────────────────────────────────────
+
+export function createToolsDomain(
   workspaceRoot: string | undefined,
   codebaseSearch: ICodebaseSearch | undefined,
   todoStore: TodoStore,
-): IToolRegistry {
+): ToolsDeps {
   const tools = new ToolRegistry()
 
   if (workspaceRoot) {
@@ -213,50 +293,52 @@ export function createToolRegistry(
   tools.register(new LspTool())
   tools.register(new TodoWriteTool(todoStore))
 
-  // Добавить инструмент семантического поиска (если доступен)
   if (codebaseSearch) {
     tools.register(new CodebaseSearchTool(codebaseSearch))
   }
 
-  return tools
+  const mcpManager = new MCPManager()
+  try {
+    // Подключение MCP обрабатывается здесь; синхронизация происходит в createDeps после готовности инструментов
+  } catch (err: unknown) {
+    log.warn(`MCP-инициализация не выполнена: ${errorMessage(err)}`)
+  }
+
+  const skills = new SkillManager()
+  skills.registerMany(BUILT_IN_SKILLS)
+
+  return { tools, mcpManager, skills }
 }
 
-export async function createMCPChain(
-  tools: IToolRegistry,
-): Promise<MCPManager> {
-  const mcpManager = new MCPManager()
+export async function syncMCP(mcpManager: IMCPManager, tools: IToolRegistry): Promise<void> {
   try {
     await mcpManager.connect()
     await mcpManager.syncWithRegistry(tools)
   } catch (err: unknown) {
     log.warn(`MCP-инициализация не выполнена: ${errorMessage(err)}`)
   }
-  return mcpManager
 }
 
-export function createSkillManager(): ISkillManager {
-  const skills = new SkillManager()
-  skills.registerMany(BUILT_IN_SKILLS)
-  return skills
+// ── Домен: Агент ──────────────────────────────────────────
+
+export function createAgentDomain(
+  backend: IBackend,
+  tools: IToolRegistry,
+  skills: ISkillManager,
+  agentDeps: AgentDependencies,
+  spawnFactory: AgentSpawnFactory,
+  todoStore: TodoStore,
+): AgentDepsResult {
+  const agent = new AgentOrchestrator(backend, tools, skills, agentDeps, spawnFactory, todoStore)
+  const subagentRunner = new SubagentRunner(backend, tools, skills, agentDeps, spawnFactory, todoStore)
+
+  return { agent, subagentRunner, todoStore, agentDeps }
 }
 
-export function createRepoInfrastructure(): {
-  fileIndex: FileIndex
-  repoAnalyzer: RepoAnalyzer
-} {
-  return {
-    fileIndex: new FileIndex(),
-    repoAnalyzer: new RepoAnalyzer(),
-  }
-}
+// ── Домен: Контекст ───────────────────────────────────────
 
-/**
- * Зарегистрировать все провайдеры контекста в ContextManager
- * и ContextProviderRegistry.
- */
-function registerContextProviders(
-  contextManager: ContextManager,
-  contextProviderRegistry: ContextProviderRegistry,
+export function createContextDomain(
+  config: AppConfig,
   backend: IBackend,
   gitService: IGitService,
   mcpManager: IMCPManager,
@@ -264,8 +346,11 @@ function registerContextProviders(
   repoAnalyzer: RepoAnalyzer,
   codebaseSearch: ICodebaseSearch,
   getWorkDir: () => string,
-): ContextProvider[] {
-  const register = (p: ContextProvider) => {
+): ContextDepsResult {
+  const contextManager = new ContextManager(config.context.tokenBudget)
+  const contextProviderRegistry = new ContextProviderRegistry()
+
+  const register = (p: ContextProvider): ContextProvider => {
     contextManager.register(p)
     contextProviderRegistry.register(p)
     return p
@@ -273,7 +358,7 @@ function registerContextProviders(
 
   const providers: ContextProvider[] = []
 
-  // ── VS Code провайдеры ──────────────────────────────────
+  // VS Code провайдеры
   providers.push(register(makeCurrentFileProvider()))
   providers.push(register(makeOpenFilesProvider()))
   providers.push(register(makeProblemsProvider(getWorkDir)))
@@ -282,7 +367,7 @@ function registerContextProviders(
   providers.push(register(makeTerminalProvider()))
   providers.push(register(makeOSProvider()))
 
-  // ── Платформенно-независимые провайдеры ─────────────────
+  // Платформенно-независимые провайдеры
   providers.push(register(makeEnvironmentProvider(
     getWorkDir,
     () => backend.getConfig().then((c) => c.model),
@@ -290,7 +375,7 @@ function registerContextProviders(
   )))
   providers.push(register(makeGitDiffProvider(getWorkDir, gitService)))
 
-  // ── Специализированные провайдеры ───────────────────────
+  // Специализированные провайдеры
   providers.push(register(makeUrlProvider()))
   providers.push(register(makeWebSearchProvider()))
   providers.push(register(makeFileProvider(getWorkDir)))
@@ -316,84 +401,70 @@ function registerContextProviders(
   })))
   providers.push(register(makeLspProvider(getWorkDir)))
 
-  // ── Семантический поиск по коду ────────────────────────
+  // Семантический поиск по коду
   providers.push(register(makeCodebaseProvider(codebaseSearch)))
 
-  return providers
+  return { contextManager, contextProviderRegistry, providers }
 }
 
-export function createContextChain(
-  contextManager: ContextManager,
-  contextProviderRegistry: ContextProviderRegistry,
-  backend: IBackend,
-  gitService: IGitService,
-  mcpManager: IMCPManager,
-  fileIndex: IFileIndex,
-  repoAnalyzer: RepoAnalyzer,
-  codebaseSearch: ICodebaseSearch,
-  getWorkDir: () => string,
-): ContextProvider[] {
-  return registerContextProviders(
-    contextManager,
-    contextProviderRegistry,
-    backend,
-    gitService,
-    mcpManager,
-    fileIndex,
-    repoAnalyzer,
-    codebaseSearch,
-    getWorkDir,
-  )
-}
+// ── Домен: Интерфейс ──────────────────────────────────────
 
-export function createAgentChain(
-  backend: IBackend,
-  tools: IToolRegistry,
-  skills: ISkillManager,
-  agentDeps: AgentDependencies,
-  spawnFactory: AgentSpawnFactory,
-  todoStore: TodoStore,
-): { agent: AgentOrchestrator; todoStore: TodoStore } {
-  const agent = new AgentOrchestrator(backend, tools, skills, agentDeps, spawnFactory, todoStore)
-  return { agent, todoStore }
-}
-
-export function createUIProviders(
+export function createUIDomain(
   extUri: vscode.Uri,
   agent: IAgentOrchestrator,
   sessionStore: ISessionStore,
   notificationService: INotificationService,
   permissionManager: IPermissionManager,
-): { chatProvider: IProvider; diffViewer: DiffViewerProvider } {
+  backend: IBackend,
+): UIDepsResult {
   const chatProvider = new ChatProvider(extUri, agent, sessionStore, notificationService, permissionManager)
   const diffViewer = new DiffViewerProvider(extUri)
-  return { chatProvider, diffViewer }
+  const settingsProvider = new SettingsProvider(extUri, backend)
+
+  return { chatProvider, diffViewer, settingsProvider }
 }
 
-export async function createMonitoringChain(
+// ── Домен: Мониторинг ─────────────────────────────────────
+
+export async function createMonitoringDomain(
   backend: IBackend,
   contextManager: ContextManager,
-): Promise<BackendHealthMonitor> {
+  gitService: IGitService,
+  fileIndex: FileIndex,
+  chunker: ICodebaseChunker,
+  codebaseSearch: ICodebaseSearch,
+  embeddingProvider: NeuralTowerEmbeddingProvider,
+): Promise<MonitoringDepsResult> {
   const healthMonitor = new BackendHealthMonitor(backend, contextManager)
   await healthMonitor.init()
-  return healthMonitor
-}
 
-export async function createCommitService(
-  backend: IBackend,
-  gitService: IGitService,
-): Promise<CommitMessageService> {
   const commitMessageService = new CommitMessageService(backend, gitService)
   await commitMessageService.init()
-  return commitMessageService
-}
 
-export async function createAutocompleteService(
-  backend: IBackend,
-): Promise<AutocompleteService> {
   const autocompleteService = new AutocompleteService(backend)
   await autocompleteService.init()
-  return autocompleteService
+
+  const codebaseIndexer = createCodebaseIndexer(
+    fileIndex,
+    chunker,
+    codebaseSearch,
+    embeddingProvider,
+  )
+
+  const indexingStatusBar = createIndexingStatusBar(codebaseIndexer)
+  await indexingStatusBar.init()
+
+  const telemetry = new TelemetryService()
+  await telemetry.init()
+
+  return {
+    healthMonitor,
+    commitMessageService,
+    autocompleteService,
+    codebaseIndexer,
+    indexingStatusBar,
+    telemetry,
+  }
 }
 
 // ── Главный оркестратор ───────────────────────────────────
@@ -403,42 +474,49 @@ export async function createDeps(
 ): Promise<ExtensionDeps> {
   const config = loadAppConfig()
   const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
+
   const backend = createBackend(config, async (partial) => {
     if (partial.url !== undefined) await vsCfg.update("neuralTowerUrl", partial.url, true)
     if (partial.model !== undefined) await vsCfg.update("model", partial.model, true)
     if (partial.maxRetries !== undefined) await vsCfg.update("maxRetries", partial.maxRetries, true)
     if (partial.timeoutMs !== undefined) await vsCfg.update("timeoutMs", partial.timeoutMs, true)
   })
-  const sessionStore = await createSessionStore(ctx, config.session)
-  const permissionManager = await createPermissionManager(vsCfg, ctx.globalState)
-  const { gitService, notificationService } = await createServices()
 
-  const { fileIndex, repoAnalyzer } = createRepoInfrastructure()
+  // ── Сервисы ─────────────────────────────────────────────
+  const { sessionStore, permissionManager, gitService, notificationService } =
+    await createServicesDomain(ctx, vsCfg, config.session)
+
+  // ── Инфраструктура поиска ───────────────────────────────
+  const { fileIndex, repoAnalyzer, embeddingProvider, codebaseSearch, chunker } =
+    createSearchInfrastructure(config)
+
+  // ── Инструменты ─────────────────────────────────────────
   const todoStore = new TodoStore()
-
-  // ── Инфраструктура семантического поиска ────────────────
-  const embeddingProvider = createEmbeddingProvider(config)
-  const vectorStore = createVectorStore()
-  const fts = createFullTextSearch()
-  const codebaseSearch = createCodebaseSearch(vectorStore, embeddingProvider, fts)
-  const chunker = createCodebaseChunker(fileIndex)
-
-  // ── Инструменты (после создания codebaseSearch) ────────
-  const tools = createToolRegistry(
+  const { tools, mcpManager, skills } = createToolsDomain(
     vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
     codebaseSearch,
     todoStore,
   )
-  const mcpManager = await createMCPChain(tools)
-  const skills = createSkillManager()
+  await syncMCP(mcpManager, tools)
 
-  const contextManager = new ContextManager(config.context.tokenBudget)
-  const contextProviderRegistry = new ContextProviderRegistry()
-
+  // ── Состояние рабочей директории ────────────────────────
   const workDirState = {
     current: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "",
   }
 
+  // ── Контекст (должен создаваться до агента) ─────────────
+  const { contextManager, contextProviderRegistry } = createContextDomain(
+    config,
+    backend,
+    gitService,
+    mcpManager,
+    fileIndex,
+    repoAnalyzer,
+    codebaseSearch,
+    () => workDirState.current,
+  )
+
+  // ── Агент ───────────────────────────────────────────────
   const agentDeps: AgentDependencies = {
     getWorkDir: () => workDirState.current,
     config,
@@ -453,9 +531,22 @@ export async function createDeps(
   const spawnFactory: AgentSpawnFactory = (deps, b, t, s, ts) =>
     new AgentOrchestrator(b, t, s, deps, null, ts)
 
-  const { agent } = createAgentChain(backend, tools, skills, agentDeps, spawnFactory, todoStore)
-  const subagentRunner = new SubagentRunner(backend, tools, skills, agentDeps, spawnFactory, todoStore)
+  const { agent, subagentRunner } = createAgentDomain(
+    backend, tools, skills, agentDeps, spawnFactory, todoStore,
+  )
 
+  // ── Интерфейс ───────────────────────────────────────────
+  const { chatProvider, diffViewer, settingsProvider } = createUIDomain(
+    ctx.extensionUri, agent, sessionStore, notificationService, permissionManager, backend,
+  )
+
+  // ── Мониторинг ──────────────────────────────────────────
+  const { healthMonitor, commitMessageService, autocompleteService, codebaseIndexer, indexingStatusBar, telemetry } =
+    await createMonitoringDomain(
+      backend, contextManager, gitService, fileIndex, chunker, codebaseSearch, embeddingProvider,
+    )
+
+  // ── Постинициализация: определение рабочей директории, построение индекса, запуск индексации ──
   if (vscode.workspace.workspaceFolders?.[0]) {
     workDirState.current = vscode.workspace.workspaceFolders[0].uri.fsPath
     await gitService.findRoot(vscode.workspace.workspaceFolders[0].uri.fsPath)
@@ -465,50 +556,9 @@ export async function createDeps(
     await fileIndex.build(workDirState.current)
   }
 
-  createContextChain(
-    contextManager,
-    contextProviderRegistry,
-    backend,
-    gitService,
-    mcpManager,
-    fileIndex,
-    repoAnalyzer,
-    codebaseSearch,
-    () => workDirState.current,
-  )
-
-  const { chatProvider, diffViewer } = createUIProviders(
-    ctx.extensionUri,
-    agent,
-    sessionStore,
-    notificationService,
-    permissionManager,
-  )
-
-  const settingsProvider = new SettingsProvider(ctx.extensionUri, backend)
-
-  const healthMonitor = await createMonitoringChain(backend, contextManager)
-  const commitMessageService = await createCommitService(backend, gitService)
-  const autocompleteService = await createAutocompleteService(backend)
-
-  // ── Индексация репозитория ─────────────────────────────
-  const codebaseIndexer = createCodebaseIndexer(
-    fileIndex,
-    chunker,
-    codebaseSearch,
-    embeddingProvider,
-  )
-
-  // Запустить индексацию (если есть рабочая область)
   if (vscode.workspace.workspaceFolders?.[0]) {
     await codebaseIndexer.start(vscode.workspace.workspaceFolders[0].uri)
   }
-
-  const indexingStatusBar = createIndexingStatusBar(codebaseIndexer)
-  await indexingStatusBar.init()
-
-  const telemetry = new TelemetryService()
-  await telemetry.init()
 
   return {
     backend,
