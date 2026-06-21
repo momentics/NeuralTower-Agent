@@ -14,7 +14,7 @@ describe("GrepTool", () => {
     await fs.writeFile(path.join(tmpDir, "a.ts"), "const foo = 1\nconst bar = 2\n")
     await fs.writeFile(path.join(tmpDir, "b.js"), "function foo() {}\n")
     await fs.writeFile(path.join(tmpDir, "c.txt"), "no match here\n")
-    tool = new GrepTool()
+    tool = new GrepTool(tmpDir)
   })
 
   afterAll(async () => {

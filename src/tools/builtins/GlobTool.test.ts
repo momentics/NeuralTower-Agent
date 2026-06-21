@@ -15,7 +15,7 @@ describe("GlobTool", () => {
     await fs.writeFile(path.join(tmpDir, "a.ts"), "const a = 1")
     await fs.writeFile(path.join(tmpDir, "b.js"), "const b = 2")
     await fs.writeFile(path.join(tmpDir, "sub", "c.ts"), "const c = 3")
-    tool = new GlobTool()
+    tool = new GlobTool(tmpDir)
   })
 
   afterAll(async () => {
@@ -78,11 +78,12 @@ describe("GlobTool", () => {
       pattern: "**/*.ts",
       path: "/nonexistent/path/that/does/not/exist",
     })
-    // На некоторых платформах glob возвращает пустой результат, на других — выбрасывает исключение
+    // На некоторых платформах glob возвращает пустой результат, на других — выбрасывает исключение.
+    // С workDir enforcement путь вне рабочей директории будет отклонён с "Доступ запрещён".
     if (result.success) {
       expect(result.output).toContain("Совпадений не найдено")
     } else {
-      expect(result.output).toContain("не выполнен")
+      expect(result.output).toMatch(/не выполнен|Доступ запрещён/)
     }
   })
 })

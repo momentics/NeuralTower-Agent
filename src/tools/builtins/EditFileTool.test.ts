@@ -8,9 +8,10 @@ describe("EditFileTool", () => {
   let tmpDir: string
   let tool: EditFileTool
 
-  beforeAll(() => {
+  beforeAll(async () => {
     tmpDir = path.join(os.tmpdir(), `editfile-test-${Date.now()}`)
-    tool = new EditFileTool()
+    await fs.mkdir(tmpDir, { recursive: true })
+    tool = new EditFileTool(tmpDir)
   })
 
   afterAll(async () => {

@@ -197,15 +197,19 @@ export function createToolRegistry(
   todoStore: TodoStore,
 ): IToolRegistry {
   const tools = new ToolRegistry()
-  tools.register(new ReadFileTool(workspaceRoot))
-  tools.register(new WriteFileTool(workspaceRoot))
+
+  if (workspaceRoot) {
+    tools.register(new ReadFileTool(workspaceRoot))
+    tools.register(new WriteFileTool(workspaceRoot))
+    tools.register(new EditFileTool(workspaceRoot))
+    tools.register(new DeleteFileTool(workspaceRoot))
+    tools.register(new CreateDirTool(workspaceRoot))
+    tools.register(new MoveFileTool(workspaceRoot))
+    tools.register(new GlobTool(workspaceRoot))
+    tools.register(new GrepTool(workspaceRoot))
+  }
+
   tools.register(new BashTool())
-  tools.register(new EditFileTool(workspaceRoot))
-  tools.register(new DeleteFileTool(workspaceRoot))
-  tools.register(new CreateDirTool(workspaceRoot))
-  tools.register(new MoveFileTool(workspaceRoot))
-  tools.register(new GlobTool(workspaceRoot))
-  tools.register(new GrepTool(workspaceRoot))
   tools.register(new WebFetchTool())
   tools.register(new LspTool())
   tools.register(new TodoWriteTool(todoStore))

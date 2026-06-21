@@ -11,7 +11,7 @@ describe("DeleteFileTool", () => {
   beforeAll(async () => {
     tmpDir = path.join(os.tmpdir(), `deletefile-test-${Date.now()}`)
     await fs.mkdir(tmpDir, { recursive: true })
-    tool = new DeleteFileTool()
+    tool = new DeleteFileTool(tmpDir)
   })
 
   afterAll(async () => {

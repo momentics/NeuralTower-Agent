@@ -24,12 +24,44 @@ export interface FetchUrlResult {
   statusText?: string
 }
 
-const DEFAULT_TIMEOUT = 15000
-const DEFAULT_MAX_LENGTH = 12000
+const DEFAULT_TIMEOUT_MS = 15_000
+const DEFAULT_MAX_LENGTH = 12_000
 const DEFAULT_USER_AGENT = "NeuralTower-Agent/0.1"
+const MAX_REDIRECTS = 5
 
 /** Разрешённые протоколы для загрузки. */
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"])
+
+/**
+ * Проверить, является ли IP-адрес приватным или зарезервированным.
+ * Защищает от SSRF-атак через redirect на внутренние ресурсы.
+ */
+function isPrivateOrReservedIp(host: string): boolean {
+  if (!host) return false
+
+  const ipMatch = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (ipMatch) {
+    const [, a, b] = ipMatch.map(Number)
+
+    if (a === 10) return true
+    if (a === 172 && b >= 16 && b <= 31) return true
+    if (a === 192 && b === 168) return true
+    if (a === 127) return true
+    if (a === 0) return true
+    if (a === 169 && b === 254) return true
+    if (a === 100 && b >= 64 && b <= 127) return true
+    if (a >= 224) return true
+    return false
+  }
+
+  const hostname = host.toLowerCase()
+  if (hostname === "localhost") return true
+  if (hostname.endsWith(".local")) return true
+  if (hostname.endsWith(".internal")) return true
+  if (hostname.endsWith(".arpa")) return true
+
+  return false
+}
 
 export async function fetchUrl(
   urlString: string,
@@ -44,7 +76,7 @@ export async function fetchUrl(
     }
   }
 
-  const timeout = options.timeout ?? DEFAULT_TIMEOUT
+  const timeout = options.timeout ?? DEFAULT_TIMEOUT_MS
   const maxLength = options.maxLength ?? DEFAULT_MAX_LENGTH
   const headers: Record<string, string> = {
     "User-Agent": DEFAULT_USER_AGENT,
@@ -76,6 +108,15 @@ export async function fetchUrl(
     }
   }
 
+  if (isPrivateOrReservedIp(url.hostname)) {
+    return {
+      text: `Доступ к внутренним адресам запрещён: ${url.hostname}`,
+      title: null,
+      status: 0,
+      ok: false,
+    }
+  }
+
   try {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeout)
@@ -84,11 +125,54 @@ export async function fetchUrl(
     if (options.signal) signals.push(options.signal)
     const combinedSignal = AbortSignal.any(signals)
 
-    const response = await fetch(url.toString(), {
+    let redirectCount = 0
+    let response = await fetch(url.toString(), {
       signal: combinedSignal,
       headers,
-      redirect: "follow",
+      redirect: "manual",
     }).finally(() => clearTimeout(timer))
+
+    while (response.status === 301 || response.status === 302 || response.status === 307 || response.status === 308) {
+      redirectCount++
+      if (redirectCount > MAX_REDIRECTS) {
+        return {
+          text: `Превышено число редиректов (${MAX_REDIRECTS})`,
+          title: null,
+          status: 0,
+          ok: false,
+        }
+      }
+
+      const location = response.headers.get("location")
+      if (!location) break
+
+      let redirectUrl: URL
+      try {
+        redirectUrl = new URL(location, url.toString())
+      } catch {
+        break
+      }
+
+      if (!ALLOWED_PROTOCOLS.has(redirectUrl.protocol)) break
+      if (isPrivateOrReservedIp(redirectUrl.hostname)) {
+        return {
+          text: `Редирект на внутренний адрес запрещён: ${redirectUrl.hostname}`,
+          title: null,
+          status: 0,
+          ok: false,
+        }
+      }
+
+      const nextSignals: AbortSignal[] = [controller.signal]
+      if (options.signal) nextSignals.push(options.signal)
+      const nextSignal = AbortSignal.any(nextSignals)
+
+      response = await fetch(redirectUrl.toString(), {
+        signal: nextSignal,
+        headers,
+        redirect: "manual",
+      })
+    }
 
     const text = await response.text()
     const title = extractTitle(text)

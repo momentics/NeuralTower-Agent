@@ -14,14 +14,14 @@ import type {
   SearchResult,
   IVectorStore,
 } from "./IVectorStore"
+import { TombstoneStore } from "../shared/TombstoneStore"
 
 /**
  * Векторное хранилище в памяти.
- * Использует tombstone-подход для O(1) удаления.
+ * Использует TombstoneStore для O(1) удаления.
  */
 export class InMemoryVectorStore implements IVectorStore {
-  private embeddings: (ChunkEmbedding | null)[] = []
-  private deleted = new Set<number>()
+  private store = new TombstoneStore<ChunkEmbedding>()
   private idIndex = new Map<string, number>()
   private fileIndex = new Map<string, Set<number>>()
 
@@ -30,21 +30,8 @@ export class InMemoryVectorStore implements IVectorStore {
    */
   async add(embeddings: ChunkEmbedding[]): Promise<void> {
     for (const emb of embeddings) {
-      let idx: number | undefined
-      // Переиспользовать слот удалённого эмбеддинга
-      for (const d of this.deleted) {
-        if (d >= this.embeddings.length) continue
-        idx = d
-        this.deleted.delete(d)
-        break
-      }
-      // Новый слот
-      if (idx === undefined) {
-        idx = this.embeddings.length
-        this.embeddings.push(null)
-      }
-
-      this.embeddings[idx] = emb
+      const idx = this.store.acquireSlot()
+      this.store.put(idx, emb)
       this.idIndex.set(emb.id, idx)
 
       const fileSet = this.fileIndex.get(emb.chunk.filePath) ?? new Set<number>()
@@ -58,13 +45,13 @@ export class InMemoryVectorStore implements IVectorStore {
    * косинусного сходства.
    */
   async search(queryEmbedding: number[], topK: number): Promise<SearchResult[]> {
-    if (this.embeddings.length === 0) return []
+    const items = this.store.getItems()
+    if (items.length === 0) return []
 
     const scores: Array<{ index: number; score: number }> = []
 
-    for (let i = 0; i < this.embeddings.length; i++) {
-      if (this.deleted.has(i)) continue
-      const emb = this.embeddings[i]
+    for (let i = 0; i < items.length; i++) {
+      const emb = items[i]
       if (!emb) continue
 
       const similarity = cosineSimilarity(queryEmbedding, emb.embedding)
@@ -80,10 +67,13 @@ export class InMemoryVectorStore implements IVectorStore {
 
     for (let i = 0; i < limit; i++) {
       const entry = scores[i]
-      results.push({
-        chunk: this.embeddings[entry.index]!.chunk,
-        score: entry.score,
-      })
+      const emb = items[entry.index]
+      if (emb) {
+        results.push({
+          chunk: emb.chunk,
+          score: entry.score,
+        })
+      }
     }
 
     return results
@@ -97,11 +87,10 @@ export class InMemoryVectorStore implements IVectorStore {
     if (!indices) return
 
     for (const idx of indices) {
-      const emb = this.embeddings[idx]
+      const emb = this.store.get(idx)
       if (emb) {
         this.idIndex.delete(emb.id)
-        this.embeddings[idx] = null
-        this.deleted.add(idx)
+        this.store.tombstone(idx)
       }
     }
 
@@ -115,7 +104,7 @@ export class InMemoryVectorStore implements IVectorStore {
     const idx = this.idIndex.get(id)
     if (idx === undefined) return
 
-    const emb = this.embeddings[idx]
+    const emb = this.store.get(idx)
     if (!emb) return
 
     this.idIndex.delete(id)
@@ -128,16 +117,14 @@ export class InMemoryVectorStore implements IVectorStore {
       }
     }
 
-    this.embeddings[idx] = null
-    this.deleted.add(idx)
+    this.store.tombstone(idx)
   }
 
   /**
    * Очистить хранилище.
    */
   async clear(): Promise<void> {
-    this.embeddings = []
-    this.deleted.clear()
+    this.store.clear()
     this.idIndex.clear()
     this.fileIndex.clear()
   }
@@ -146,7 +133,7 @@ export class InMemoryVectorStore implements IVectorStore {
    * Число хранимых эмбеддингов.
    */
   count(): number {
-    return this.embeddings.length - this.deleted.size
+    return this.store.count()
   }
 
   /**
@@ -156,9 +143,9 @@ export class InMemoryVectorStore implements IVectorStore {
     let totalChunks = 0
     let totalSize = 0
 
-    for (let i = 0; i < this.embeddings.length; i++) {
-      const emb = this.embeddings[i]
-      if (emb && !this.deleted.has(i)) {
+    const items = this.store.getItems()
+    for (const emb of items) {
+      if (emb) {
         totalChunks++
         totalSize += emb.chunk.charLength
       }
@@ -169,6 +156,13 @@ export class InMemoryVectorStore implements IVectorStore {
       filesIndexed: this.fileIndex.size,
       avgChunkSize: totalChunks > 0 ? Math.round(totalSize / totalChunks) : 0,
     }
+  }
+
+  /**
+   * Выполнить compaction если tombstone превышает порог.
+   */
+  compactIfNeeded(threshold = 0.5): boolean {
+    return this.store.compact(threshold)
   }
 }
 

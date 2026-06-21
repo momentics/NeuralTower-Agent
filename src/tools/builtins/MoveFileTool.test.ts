@@ -11,7 +11,7 @@ describe("MoveFileTool", () => {
   beforeAll(async () => {
     tmpDir = path.join(os.tmpdir(), `movefile-test-${Date.now()}`)
     await fs.mkdir(tmpDir, { recursive: true })
-    tool = new MoveFileTool()
+    tool = new MoveFileTool(tmpDir)
   })
 
   afterAll(async () => {

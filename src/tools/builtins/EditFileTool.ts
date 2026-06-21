@@ -6,6 +6,21 @@ import { FilesystemTool } from "./FilesystemTool"
 const EDIT_PREVIEW_TRUNCATE = 60
 
 /**
+ * Расширения бинарных файлов, которые нельзя редактировать как текст.
+ */
+const BINARY_EXTENSIONS = new Set([
+  ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".svg",
+  ".woff", ".woff2", ".ttf", ".eot",
+  ".zip", ".tar", ".gz", ".rar", ".7z",
+  ".exe", ".dll", ".so", ".dylib",
+  ".class", ".pyc", ".o", ".a", ".lib",
+  ".db", ".sqlite", ".sqlite3",
+  ".pdf", ".doc", ".docx", ".xls", ".xlsx",
+  ".mp3", ".mp4", ".avi", ".mov", ".wav",
+  ".psd", ".ai", ".sketch",
+])
+
+/**
  * Точная замена текста в файле. Ищет старую строку,
  * заменяет новой. Работает на уровне всего файла или отдельных строк.
  */
@@ -37,6 +52,11 @@ export class EditFileTool extends FilesystemTool {
 
     const result = this.resolvePath(fp)
     if ("error" in result) return { output: result.error, success: false }
+
+    const ext = fp.split(".").pop()?.toLowerCase() ?? ""
+    if (ext && BINARY_EXTENSIONS.has(`.${ext}`)) {
+      return { output: `Редактирование бинарных файлов запрещено: .${ext}`, success: false }
+    }
 
     const content = await fs.readFile(result.resolved, "utf-8")
     const count = content.split(oldStr).length - 1

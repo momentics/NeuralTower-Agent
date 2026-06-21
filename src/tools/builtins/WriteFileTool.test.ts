@@ -8,9 +8,10 @@ describe("WriteFileTool", () => {
   let tmpDir: string
   let tool: WriteFileTool
 
-  beforeAll(() => {
+  beforeAll(async () => {
     tmpDir = path.join(os.tmpdir(), `writefile-test-${Date.now()}`)
-    tool = new WriteFileTool()
+    await fs.mkdir(tmpDir, { recursive: true })
+    tool = new WriteFileTool(tmpDir)
   })
 
   afterAll(async () => {

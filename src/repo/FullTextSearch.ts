@@ -9,9 +9,10 @@
  */
 
 import type { CodeChunk } from "./ChunkTypes"
+import { TombstoneStore } from "../shared/TombstoneStore"
 
 const FTS_MIN_TOKEN_LENGTH = 2
-const FTS_LENGTH_PENALTY = 2000
+const FTS_LENGTH_PENALTY = 2_000
 const FTS_MAX_MATCH_COUNT = 10
 
 /**
@@ -41,33 +42,24 @@ export interface IFullTextSearch {
 
 /**
  * Полнотекстовый поиск по фрагментам кода.
- * Использует tombstone-подход для O(1) удаления без перестроения индекса.
+ * Использует TombstoneStore для O(1) удаления и fileIndex для O(1) поиска по файлу.
  */
 export class FullTextSearch implements IFullTextSearch {
-  private chunks: (CodeChunk | null)[] = []
-  private deleted = new Set<number>()
+  private store = new TombstoneStore<CodeChunk>()
   private tokenIndex = new Map<string, Set<number>>()
+  private fileIndex = new Map<string, Set<number>>()
 
   /**
- * Добавить фрагменты для индексации.
- */
+  * Добавить фрагменты для индексации.
+  */
   add(chunks: CodeChunk[]): void {
     for (const chunk of chunks) {
-      let idx: number | undefined
-      // Переиспользовать слот удалённого фрагмента
-      for (const d of this.deleted) {
-        if (d >= this.chunks.length) continue
-        idx = d
-        this.deleted.delete(d)
-        break
-      }
-      // Новый слот
-      if (idx === undefined) {
-        idx = this.chunks.length
-        this.chunks.push(null)
-      }
+      const idx = this.store.acquireSlot()
+      this.store.put(idx, chunk)
 
-      this.chunks[idx] = chunk
+      const fileSet = this.fileIndex.get(chunk.filePath) ?? new Set<number>()
+      fileSet.add(idx)
+      this.fileIndex.set(chunk.filePath, fileSet)
 
       const tokens = this.tokenize(chunk.content)
       for (const token of tokens) {
@@ -93,7 +85,7 @@ export class FullTextSearch implements IFullTextSearch {
       const indices = this.tokenIndex.get(token)
       if (indices) {
         for (const idx of indices) {
-          if (!this.deleted.has(idx)) {
+          if (!this.store.isDeleted(idx)) {
             candidateIndices.add(idx)
           }
         }
@@ -103,7 +95,7 @@ export class FullTextSearch implements IFullTextSearch {
     const scores: Array<{ index: number; score: number; matchCount: number }> = []
 
     for (const idx of candidateIndices) {
-      const chunk = this.chunks[idx]
+      const chunk = this.store.get(idx)
       if (!chunk) continue
 
       let matchCount = 0
@@ -135,33 +127,28 @@ export class FullTextSearch implements IFullTextSearch {
 
     for (let i = 0; i < limit; i++) {
       const entry = scores[i]
-      results.push({
-        chunk: this.chunks[entry.index]!,
-        score: entry.score,
-        matchCount: entry.matchCount,
-      })
+      const chunk = this.store.get(entry.index)
+      if (chunk) {
+        results.push({
+          chunk,
+          score: entry.score,
+          matchCount: entry.matchCount,
+        })
+      }
     }
 
     return results
   }
 
   /**
-   * Удалить фрагменты для файла — O(1) через tombstone.
+   * Удалить фрагменты для файла — O(1) через fileIndex + tombstone.
    */
   deleteByFile(filePath: string): void {
-    const indicesToRemove: number[] = []
+    const indices = this.fileIndex.get(filePath)
+    if (!indices) return
 
-    for (let i = 0; i < this.chunks.length; i++) {
-      const chunk = this.chunks[i]
-      if (chunk && chunk.filePath === filePath) {
-        indicesToRemove.push(i)
-      }
-    }
-
-    if (indicesToRemove.length === 0) return
-
-    for (const idx of indicesToRemove) {
-      const chunk = this.chunks[idx]
+    for (const idx of indices) {
+      const chunk = this.store.get(idx)
       if (chunk) {
         const tokens = this.tokenize(chunk.content)
         for (const token of tokens) {
@@ -174,25 +161,33 @@ export class FullTextSearch implements IFullTextSearch {
           }
         }
       }
-      this.chunks[idx] = null
-      this.deleted.add(idx)
+      this.store.tombstone(idx)
     }
+
+    this.fileIndex.delete(filePath)
   }
 
   /**
    * Очистить индекс.
    */
   clear(): void {
-    this.chunks = []
-    this.deleted.clear()
+    this.store.clear()
     this.tokenIndex.clear()
+    this.fileIndex.clear()
   }
 
   /**
    * Число фрагментов в индексе.
    */
   count(): number {
-    return this.chunks.length - this.deleted.size
+    return this.store.count()
+  }
+
+  /**
+   * Выполнить compaction если tombstone превышает порог.
+   */
+  compactIfNeeded(threshold = 0.5): boolean {
+    return this.store.compact(threshold)
   }
 
   /**

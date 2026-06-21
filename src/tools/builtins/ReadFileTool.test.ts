@@ -13,7 +13,7 @@ describe("ReadFileTool", () => {
     await fs.mkdir(tmpDir, { recursive: true })
     const testFile = path.join(tmpDir, "test.txt")
     await fs.writeFile(testFile, "line1\nline2\nline3\nline4\nline5")
-    tool = new ReadFileTool()
+    tool = new ReadFileTool(tmpDir)
   })
 
   afterAll(async () => {
@@ -70,12 +70,6 @@ describe("ReadFileTool", () => {
     expect(lines.length).toBe(2)
     expect(lines[0]).toContain("line2")
     expect(lines[1]).toContain("line3")
-  })
-
-  it("allows read when workDir is not set", async () => {
-    const unrestrictedTool = new ReadFileTool()
-    const result = await unrestrictedTool.execute({ filepath: path.join(tmpDir, "test.txt") })
-    expect(result.success).toBe(true)
   })
 
   it("blocks read outside workspace when workDir is set", async () => {

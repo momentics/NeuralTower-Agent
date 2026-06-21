@@ -7,6 +7,11 @@ import { errorMessage } from "../../core/errors"
 /**
  * Базовый класс для инструментов файловой системы.
  * Обеспечивает единый паттерн: валидация → разрешение пути → проверка workspace → выполнение.
+ *
+ * Безопасность:
+ * - workDir обязателен: без рабочей директории все операции заблокированы
+ * - Все пути проверяются на принадлежность workspace
+ * - Символические ссылки разрешаются до реального пути
  */
 export abstract class FilesystemTool implements ITool {
   abstract name: string
@@ -15,7 +20,7 @@ export abstract class FilesystemTool implements ITool {
   abstract isSafe: boolean
   abstract schema: ToolSchema
 
-  constructor(protected readonly workDir?: string) {}
+  constructor(protected readonly workDir: string) {}
 
   /**
    * Разрешить путь и проверить, что он находится внутри рабочей директории.
@@ -23,7 +28,8 @@ export abstract class FilesystemTool implements ITool {
    */
   protected resolvePath(raw: string): { resolved: string } | { error: string } {
     if (!raw) return { error: "Не указан путь" }
-    const resolved = path.resolve(raw)
+    if (!this.workDir) return { error: "Рабочая директория не установлена" }
+    const resolved = path.resolve(this.workDir, raw)
     if (!isInsideWorkspace(resolved, this.workDir)) {
       return { error: "Доступ запрещён: путь выходит за пределы рабочей директории" }
     }
@@ -39,8 +45,8 @@ export abstract class FilesystemTool implements ITool {
   ): { source: string; destination: string } | { error: string } {
     if (!sourceRaw) return { error: "Не указан исходный путь" }
     if (!destRaw) return { error: "Не указан путь назначения" }
-    const resolvedSrc = path.resolve(sourceRaw)
-    const resolvedDst = path.resolve(destRaw)
+    const resolvedSrc = path.resolve(this.workDir, sourceRaw)
+    const resolvedDst = path.resolve(this.workDir, destRaw)
     if (!isInsideWorkspace(resolvedSrc, this.workDir)) {
       return { error: "Доступ запрещён: исходный путь выходит за пределы рабочей директории" }
     }

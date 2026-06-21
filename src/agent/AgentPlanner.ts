@@ -22,6 +22,7 @@ export class AgentPlanner {
     private readonly backend: IBackend,
     private readonly toolRegistry: IToolRegistry,
     private readonly sessionContext: SessionContext | null,
+    private readonly replanner: Replanner,
   ) {}
 
   /**
@@ -44,8 +45,7 @@ export class AgentPlanner {
 
     this.replanAttemptCount++
 
-    const replanner = new Replanner(this.backend, this.toolRegistry)
-    const result = await replanner.replan(plan, failedStep, error, this.replanAttemptCount)
+    const result = await this.replanner.replan(plan, failedStep, error, this.replanAttemptCount)
 
     if (result.plan) {
       plan.recordReplan(result.reason, result.attempt)

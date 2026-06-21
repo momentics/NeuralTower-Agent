@@ -24,14 +24,41 @@ export class DeleteFileTool extends FilesystemTool {
     const fp = String(args.filepath ?? "")
     const result = this.resolvePath(fp)
     if ("error" in result) return { output: result.error, success: false }
+
     const stat = await fs.stat(result.resolved)
+    const isDir = stat.isDirectory()
+    const isRecursive = isDir || Boolean(args.recursive)
+
+    if (isRecursive) {
+      const fileCount = await this.countFiles(result.resolved)
+      if (fileCount > 100) {
+        return {
+          output: `Рекурсивное удаление заблокировано: директория содержит ${fileCount} файлов. Это слишком много для автоматического удаления.`,
+          success: false,
+        }
+      }
+    }
+
     await fs.rm(result.resolved, {
-      recursive: stat.isDirectory() || Boolean(args.recursive),
+      recursive: isRecursive,
       force: true,
     })
     return {
-      output: `Удалено: ${fp}${stat.isDirectory() ? " (директория)" : ""}`,
+      output: `Удалено: ${fp}${isDir ? " (директория)" : ""}`,
       success: true,
     }
+  }
+
+  private async countFiles(dir: string): Promise<number> {
+    let count = 0
+    const entries = await fs.readdir(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        count += await this.countFiles(`${dir}/${entry.name}`)
+      } else {
+        count++
+      }
+    }
+    return count
   }
 }

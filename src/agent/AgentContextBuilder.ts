@@ -32,26 +32,31 @@ export class AgentContextBuilder {
         ? `\nИндекс файлов: ${indexStats.totalFiles} файлов, ${indexStats.languages} языков`
         : ""
 
-    let gitContext = ""
-    if (this.gitService && this.injectDiffContext) {
-      const workDir = this.getWorkDir()
-      if (workDir) {
-        gitContext = await this.gitService.getDiffContext(workDir)
-      }
-    }
-
-    let contextManagerContent = ""
-    if (this.contextManager) {
-      try {
-        const prepared = await this.contextManager.prepare()
-        if (prepared.systemPrompt) {
-          contextManagerContent = prepared.systemPrompt
+    const gitPromise = (async () => {
+      if (this.gitService && this.injectDiffContext) {
+        const workDir = this.getWorkDir()
+        if (workDir) {
+          return this.gitService.getDiffContext(workDir)
         }
-      } catch (err: unknown) {
-        const msg = errorMessage(err)
-        log.error(`ContextManager недоступен: ${msg}`)
       }
-    }
+      return ""
+    })()
+
+    const contextManagerPromise = (async () => {
+      if (this.contextManager) {
+        try {
+          const prepared = await this.contextManager.prepare()
+          return prepared.systemPrompt ?? ""
+        } catch (err: unknown) {
+          const msg = errorMessage(err)
+          log.error(`ContextManager недоступен: ${msg}`)
+          return ""
+        }
+      }
+      return ""
+    })()
+
+    const [gitContext, contextManagerContent] = await Promise.all([gitPromise, contextManagerPromise])
 
     const parts = [contextManagerContent, base, projectCtx, skillCtx, indexInfo, gitContext].filter(Boolean)
     return parts.join("\n\n")

@@ -11,7 +11,7 @@ describe("CreateDirTool", () => {
   beforeAll(async () => {
     tmpDir = path.join(os.tmpdir(), `createdir-test-${Date.now()}`)
     await fs.mkdir(tmpDir, { recursive: true })
-    tool = new CreateDirTool()
+    tool = new CreateDirTool(tmpDir)
   })
 
   afterAll(async () => {

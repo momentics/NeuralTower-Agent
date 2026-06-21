@@ -9,6 +9,7 @@ import { AgentModeManager } from "./AgentMode"
 import { AgentContextBuilder } from "./AgentContextBuilder"
 import { AgentToolExecutor } from "./AgentToolExecutor"
 import { AgentPlanner } from "./AgentPlanner"
+import { Replanner } from "./Replanner"
 import { SessionContext } from "./SessionContext"
 import type { AgentDependencies } from "./AgentDependencies"
 import type { ToolResult } from "./AgentTypes"
@@ -77,6 +78,7 @@ export class AgentCore {
       backend,
       toolRegistry,
       this.sessionContext,
+      new Replanner(backend, toolRegistry),
     )
 
     const compactor = new Compactor(backend, deps.config.compactor)
