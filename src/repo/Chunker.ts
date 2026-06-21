@@ -537,5 +537,3 @@ export class TypeScriptChunker implements IChunker {
     return sigLines.join(" ").trim()
   }
 }
-
-
