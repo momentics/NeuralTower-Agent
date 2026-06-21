@@ -2,22 +2,22 @@ import * as vscode from "vscode"
 import type { App } from "../core/App"
 import type { IProvider } from "../core/IProvider"
 import type { IAgentOrchestrator } from "../core/IAgent"
-import type { TodoStore } from "../agent/TodoStore"
+import type { ITodoStore } from "../agent/TodoStore"
 import type { IBackend } from "../core/IBackend"
 import type { IGitService } from "../services/git/GitService"
 import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
-import type { SettingsProvider } from "../providers/SettingsProvider"
+import type { ISettingsProvider } from "../providers/SettingsProvider"
 
 /** Зарегистрировать команды чата: новый чат, фокус ввода, настройки, список сессий, diff-viewer. */
 export function registerChatCommands(
   app: App,
   chatProvider: IProvider,
-  todoStore: TodoStore,
+  todoStore: ITodoStore,
   agent: IAgentOrchestrator,
   _backend: IBackend,
   gitService: IGitService | undefined,
   diffViewer: IDiffViewerProvider | undefined,
-  settingsProvider: SettingsProvider,
+  settingsProvider: ISettingsProvider,
   _extUri: vscode.Uri,
   _outputChannel: vscode.OutputChannel,
 ): void {

@@ -7,8 +7,13 @@ import { errorMessage } from "../../core/errors"
 
 const log = createDomainLogger("CommitMessage")
 
+/** Интерфейс сервиса генерации сообщений коммита. */
+export interface ICommitMessageService {
+  generate(dir: string): Promise<string>
+}
+
 /** Сервис генерации сообщений коммита на основе git diff через бэкенд. */
-export class CommitMessageService implements Plugin {
+export class CommitMessageService implements Plugin, ICommitMessageService {
   name = "commit-message"
 
   private readonly systemPrompt = `Ты — генератор сообщений коммитов. 

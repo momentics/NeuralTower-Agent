@@ -3,13 +3,13 @@ import * as vscode from "vscode"
 import type { App } from "../core/App"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IProvider } from "../core/IProvider"
-import type { TodoStore } from "../agent/TodoStore"
+import type { ITodoStore } from "../agent/TodoStore"
 import type { IBackend } from "../core/IBackend"
 import type { IGitService } from "../services/git/GitService"
 import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
-import type { CommitMessageService } from "../services/commit-message/CommitMessageService"
-import type { CodebaseIndexer } from "../services/indexing/CodebaseIndexer"
-import type { SettingsProvider } from "../providers/SettingsProvider"
+import type { ICommitMessageService } from "../services/commit-message/CommitMessageService"
+import type { ICodebaseIndexer } from "../services/indexing/CodebaseIndexer"
+import type { ISettingsProvider } from "../providers/SettingsProvider"
 import { registerEditorCommands } from "./editor-commands"
 import { registerGitCommands } from "./git-commands"
 import { registerChatCommands } from "./chat-commands"
@@ -19,14 +19,14 @@ export interface CommandDeps {
   app: App
   agent: IAgentOrchestrator
   chatProvider: IProvider
-  todoStore: TodoStore
+  todoStore: ITodoStore
   backend: IBackend
   gitService: IGitService
   diffViewer: IDiffViewerProvider
-  settingsProvider: SettingsProvider
-  commitMessageService: CommitMessageService
+  settingsProvider: ISettingsProvider
+  commitMessageService: ICommitMessageService
   extUri: vscode.Uri
-  codebaseIndexer: CodebaseIndexer
+  codebaseIndexer: ICodebaseIndexer
   outputChannel: vscode.OutputChannel
 }
 

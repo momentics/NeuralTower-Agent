@@ -11,8 +11,13 @@ export interface TelemetryProps {
   [key: string]: string | number | boolean
 }
 
+/** Интерфейс сервиса телеметрии. */
+export interface ITelemetryService {
+  capture(name: TelemetryEventName, props?: TelemetryProps): void
+}
+
 /** Заглушка: собирает события только в памяти с ограничением размера. */
-export class TelemetryService implements Plugin {
+export class TelemetryService implements Plugin, ITelemetryService {
   name = "telemetry"
   private events: Array<{ name: TelemetryEventName; props: TelemetryProps }> = []
 

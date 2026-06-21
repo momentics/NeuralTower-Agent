@@ -57,7 +57,7 @@ export class EditFileTool extends FilesystemTool {
       return { output: `Текст замены слишком велик (макс. ${MAX_EDIT_CONTENT_LENGTH} символов)`, success: false }
     }
 
-    const result = this.resolvePath(fp)
+    const result = await this.resolvePath(fp)
     if ("error" in result) return { output: result.error, success: false }
 
     const ext = fp.split(".").pop()?.toLowerCase() ?? ""

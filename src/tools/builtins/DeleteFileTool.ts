@@ -25,7 +25,7 @@ export class DeleteFileTool extends FilesystemTool {
 
   protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const fp = str(args, "filepath")
-    const result = this.resolvePath(fp)
+    const result = await this.resolvePath(fp)
     if ("error" in result) return { output: result.error, success: false }
 
     if (signal?.aborted) return { output: "Операция отменена", success: false }

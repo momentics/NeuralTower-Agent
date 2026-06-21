@@ -70,7 +70,9 @@ describe("GlobTool", () => {
   it("returns absolute paths", async () => {
     const result = await tool.execute({ pattern: "a.ts", path: tmpDir })
     expect(result.success).toBe(true)
-    expect(result.output).toContain(tmpDir)
+    // resolveToReal нормализует DOS short paths (MOMENT~1 → momentics), поэтому проверяем по имени теста
+    expect(result.output).toContain("glob-test-")
+    expect(result.output).toContain("a.ts")
   })
 
   it("handles invalid path gracefully", async () => {

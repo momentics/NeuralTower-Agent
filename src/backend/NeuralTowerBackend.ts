@@ -67,7 +67,7 @@ export class NeuralTowerBackend implements IBackend {
 
     const body: Record<string, unknown> = {
       model: cfg.model,
-      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      messages: mapMessages(messages),
       stream: true,
     }
 
@@ -175,7 +175,7 @@ export class NeuralTowerBackend implements IBackend {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: cfg.model,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+        messages: mapMessages(messages),
         response_format: { type: "json_object" },
       }),
     })
@@ -225,9 +225,7 @@ export class NeuralTowerBackend implements IBackend {
           lastError = new TimeoutError("Запрос прерван по таймауту")
         } else {
           const e = err instanceof Error ? err : new Error(String(err))
-          lastError = e.cause instanceof Error
-            ? new ConnectionError(`${e.message}`)
-            : new ConnectionError(`${e.message}`)
+          lastError = new ConnectionError(e.message)
         }
       }
     }
@@ -250,4 +248,9 @@ function toOpenAIParameters(parameters: object): object {
   }
   result.type = schema.type ?? "object"
   return result
+}
+
+/** Преобразовать ChatMessage[] в формат API (без timestamp и toolCalls). */
+function mapMessages(messages: ChatMessage[]): Array<{ role: string; content: string }> {
+  return messages.map((m) => ({ role: m.role, content: m.content }))
 }

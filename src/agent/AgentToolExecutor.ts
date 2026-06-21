@@ -9,6 +9,7 @@ import type { SessionContext } from "./SessionContext"
 
 import { AbortError, errorMessage } from "../core/errors"
 import { createDomainLogger } from "../core/logger"
+import { extractJsonBlocks } from "../utils/extractJsonBlocks"
 
 const log = createDomainLogger("AgentToolExecutor")
 
@@ -147,7 +148,7 @@ export class AgentToolExecutor {
   private extractToolCalls(content: string): AgentToolCall[] | null {
 const calls: AgentToolCall[] = []
 
-    const jsonBlocks = this.extractJsonBlocks(content)
+    const jsonBlocks = extractJsonBlocks(content)
 
     for (const block of jsonBlocks) {
       try {
@@ -170,39 +171,6 @@ const calls: AgentToolCall[] = []
     }
 
     return calls.length > 0 ? calls : null
-  }
-
-  private extractJsonBlocks(content: string): string[] {
-    const blocks: string[] = []
-
-    const cleaned = content
-      .replace(/```(?:json)?\s*\n?/g, "")
-      .replace(/```\s*\n?/g, "")
-
-    let depth = 0
-    let start = -1
-    for (let i = 0; i < cleaned.length; i++) {
-      const ch = cleaned[i]
-      if (ch === "{") {
-        if (depth === 0) start = i
-        depth++
-      } else if (ch === "}") {
-        depth--
-        if (depth === 0 && start !== -1) {
-          blocks.push(cleaned.slice(start, i + 1))
-          start = -1
-        }
-      } else if (ch === '"') {
-        i++
-        while (i < cleaned.length && cleaned[i] !== '"') {
-          if (cleaned[i] === "\\") i++
-          i++
-        }
-      }
-      if (depth < 0) depth = 0
-    }
-
-    return blocks
   }
 }
 

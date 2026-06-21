@@ -72,12 +72,7 @@ export function formatDocumentSymbols(
 
 /** Выполнить асинхронную функцию с таймаутом и возможностью отмены. */
 export async function withTimeout<T>(fn: () => Promise<T>, label: string, timeoutMs: number = LSP_TIMEOUT_MS, signal?: AbortSignal): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const signals: AbortSignal[] = []
-
-  const timeoutController = new AbortController()
-  timer = setTimeout(() => timeoutController.abort(new Error(`LSP ${label}: таймаут ${timeoutMs}ms`)), timeoutMs)
-  signals.push(timeoutController.signal)
+  const signals: AbortSignal[] = [AbortSignal.timeout(timeoutMs)]
 
   if (signal) {
     signals.push(signal)
@@ -85,18 +80,16 @@ export async function withTimeout<T>(fn: () => Promise<T>, label: string, timeou
 
   const combined = AbortSignal.any(signals)
 
-  try {
-    return await Promise.race([fn(), new Promise<never>((_, reject) => {
+  return await Promise.race([
+    fn(),
+    new Promise<never>((_, reject) => {
       if (combined.aborted) {
         reject(combined.reason ?? new Error(`LSP ${label}: отменено`))
         return
       }
       combined.addEventListener("abort", () => reject(combined.reason ?? new Error(`LSP ${label}: отменено`)), { once: true })
-    })])
-  } finally {
-    if (timer) clearTimeout(timer)
-    timeoutController.abort()
-  }
+    }),
+  ])
 }
 
 // ── Приватные вспомогательные функции ────────────────────
@@ -213,31 +206,23 @@ export async function executeDocumentSymbol(
   getWorkDir: () => string,
   signal?: AbortSignal,
 ): Promise<{ output: string; success: boolean }> {
-  const filePath = resolveFilePath(filePathRaw, getWorkDir)
-  await ensureFileExists(filePath)
-  const uri = vscode.Uri.file(filePath)
-  await openDocumentForLsp(uri)
-
-  const symbols = await withTimeout(
-    () => Promise.resolve(vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-      "vscode.executeDocumentSymbolProvider",
-      uri,
-    )).then((r) => r ?? []),
+  return executeLspCommand<vscode.DocumentSymbol>(
+    filePathRaw,
+    "vscode.executeDocumentSymbolProvider",
     "documentSymbol",
-    LSP_TIMEOUT_MS,
+    [vscode.Uri.file(resolveFilePath(filePathRaw, getWorkDir))],
+    getWorkDir,
+    (symbols) => {
+      const lines = formatDocumentSymbols(symbols, 0, [])
+      const output = lines.slice(0, MAX_SYMBOL_RESULTS)
+      return {
+        output: `Символы файла ${resolveFilePath(filePathRaw, getWorkDir)}:\n\n${output.join("\n")}`,
+        success: true,
+      }
+    },
+    (filePath) => `Символы не найдены для ${filePath}`,
     signal,
   )
-
-  if (symbols.length === 0) {
-    return { output: `Символы не найдены для ${filePath}`, success: true }
-  }
-
-  const lines = formatDocumentSymbols(symbols, 0, [])
-  const output = lines.slice(0, MAX_SYMBOL_RESULTS)
-  return {
-    output: `Символы файла ${filePath}:\n\n${output.join("\n")}`,
-    success: true,
-  }
 }
 
 export async function executeWorkspaceSymbol(
@@ -295,65 +280,46 @@ export async function executeWorkspaceSymbol(
   }
 }
 
-export async function executeGoToDefinition(
-  filePathRaw: string,
-  line: number | undefined,
-  character: number | undefined,
-  getWorkDir: () => string,
-  signal?: AbortSignal,
-): Promise<{ output: string; success: boolean }> {
-  return executeLspPositionCommand<vscode.Location>(
-    filePathRaw,
-    line,
-    character,
-    "vscode.executeDefinitionProvider",
-    "definition",
-    getWorkDir,
-    (locations) => formatLocations(locations, "Определение", getWorkDir),
-    (fp, pos) => `Определение не найдено в ${fp}:${pos.line + 1}:${pos.character + 1}`,
-    signal,
-  )
+/**
+ * Фабрика для создания LSP-команд навигации (GoTo).
+ * Устраняет дублирование между executeGoToDefinition, executeGoToTypeDefinition, executeGoToImplementation.
+ */
+function createGoToCommand(
+  command: string,
+  label: string,
+  title: string,
+): (filePathRaw: string, line: number | undefined, character: number | undefined, getWorkDir: () => string, signal?: AbortSignal) => Promise<{ output: string; success: boolean }> {
+  return (filePathRaw, line, character, getWorkDir, signal) =>
+    executeLspPositionCommand<vscode.Location>(
+      filePathRaw,
+      line,
+      character,
+      command,
+      label,
+      getWorkDir,
+      (locations) => formatLocations(locations, title, getWorkDir),
+      (fp, pos) => `${title} не найдено в ${fp}:${pos.line + 1}:${pos.character + 1}`,
+      signal,
+    )
 }
 
-export async function executeGoToTypeDefinition(
-  filePathRaw: string,
-  line: number | undefined,
-  character: number | undefined,
-  getWorkDir: () => string,
-  signal?: AbortSignal,
-): Promise<{ output: string; success: boolean }> {
-  return executeLspPositionCommand<vscode.Location>(
-    filePathRaw,
-    line,
-    character,
-    "vscode.executeTypeDefinitionProvider",
-    "typeDefinition",
-    getWorkDir,
-    (locations) => formatLocations(locations, "Определение типа", getWorkDir),
-    (fp, pos) => `Определение типа не найдено в ${fp}:${pos.line + 1}:${pos.character + 1}`,
-    signal,
-  )
-}
+export const executeGoToDefinition = createGoToCommand(
+  "vscode.executeDefinitionProvider",
+  "definition",
+  "Определение",
+)
 
-export async function executeGoToImplementation(
-  filePathRaw: string,
-  line: number | undefined,
-  character: number | undefined,
-  getWorkDir: () => string,
-  signal?: AbortSignal,
-): Promise<{ output: string; success: boolean }> {
-  return executeLspPositionCommand<vscode.Location>(
-    filePathRaw,
-    line,
-    character,
-    "vscode.executeImplementationProvider",
-    "implementation",
-    getWorkDir,
-    (locations) => formatLocations(locations, "Реализация", getWorkDir),
-    (fp, pos) => `Реализация не найдена в ${fp}:${pos.line + 1}:${pos.character + 1}`,
-    signal,
-  )
-}
+export const executeGoToTypeDefinition = createGoToCommand(
+  "vscode.executeTypeDefinitionProvider",
+  "typeDefinition",
+  "Определение типа",
+)
+
+export const executeGoToImplementation = createGoToCommand(
+  "vscode.executeImplementationProvider",
+  "implementation",
+  "Реализация",
+)
 
 export async function executeFindReferences(
   filePathRaw: string,

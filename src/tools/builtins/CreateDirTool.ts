@@ -23,7 +23,7 @@ export class CreateDirTool extends FilesystemTool {
 
   protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
     const p = str(args, "path")
-    const result = this.resolvePath(p)
+    const result = await this.resolvePath(p)
     if ("error" in result) return { output: result.error, success: false }
 
     const recursive = bool(args, "recursive", false)

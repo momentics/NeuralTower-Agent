@@ -4,12 +4,20 @@ export interface TodoItem {
   priority: "high" | "medium" | "low"
 }
 
+/** Интерфейс хранилища задач. */
+export interface ITodoStore {
+  setItems(items: TodoItem[]): void
+  getItems(): TodoItem[]
+  clear(): void
+  formatItems(): string
+}
+
 /**
  * Сервис управления списком задач.
  * Вынесен из TodoWriteTool чтобы не нарушать контракт ITool
  * (инструменты не должны хранить состояние).
  */
-export class TodoStore {
+export class TodoStore implements ITodoStore {
   private items: TodoItem[] = []
 
   setItems(items: TodoItem[]): void {

@@ -1,13 +1,13 @@
 import * as vscode from "vscode"
 import type { App } from "../core/App"
-import type { CommitMessageService } from "../services/commit-message/CommitMessageService"
+import type { ICommitMessageService } from "../services/commit-message/CommitMessageService"
 
 const COMMIT_MSG_TRUNCATE = 50
 
 /** Зарегистрировать Git-команды: генерация сообщения коммита. */
 export function registerGitCommands(
   app: App,
-  commitMessageService: CommitMessageService,
+  commitMessageService: ICommitMessageService,
 ): void {
   app.registerCommand("neuralTowerAgent.generateCommitMessage", async () => {
     if (!vscode.workspace.workspaceFolders?.[0]) return

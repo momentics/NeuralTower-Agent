@@ -27,7 +27,7 @@ export class ReadFileTool extends FilesystemTool {
 
   protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
     const fp = str(args, "filepath")
-    const result = this.resolvePath(fp)
+    const result = await this.resolvePath(fp)
     if ("error" in result) return { output: result.error, success: false }
 
     const content = await fs.readFile(result.resolved, "utf-8")

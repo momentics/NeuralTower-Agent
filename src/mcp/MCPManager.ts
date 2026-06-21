@@ -48,7 +48,7 @@ export interface IMCPManager {
   connect(): Promise<void>
   discover(): Promise<MCPTool[]>
   callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<{ output: string; success: boolean }>
- syncWithRegistry(registry: IToolRegistry): Promise<void>
+  syncWithRegistry(registry: IToolRegistry): Promise<void>
   listServers(): MCPServerConfig[]
   getReadyServers(): string[]
   getToolsByServer(): Array<{ server: string; tools: MCPTool[] }>
@@ -56,33 +56,17 @@ export interface IMCPManager {
 }
 
 /**
- * Фабрика транспорта — регистрирует создатели для каждого типа транспорта.
- * Для добавления нового типа транспорта достаточно вызвать register() (OCP).
- */
-const transportFactories = new Map<string, (config: MCPServerConfig) => IMCPTransport>()
-
-transportFactories.set("stdio", (config) => new StdioMCPTransport(config))
-
-/**
- * Зарегистрировать новый тип транспорта (OCP).
- */
-export function registerTransportFactory(
-  type: string,
-  factory: (config: MCPServerConfig) => IMCPTransport,
-): void {
-  transportFactories.set(type, factory)
-}
-
-/**
  * Создать транспорт для конфигурации сервера.
+ * Для добавления нового типа транспорта достаточно расширить switch (KISS).
  */
 function createTransport(config: MCPServerConfig): IMCPTransport | null {
-  const factory = transportFactories.get(config.transport)
-  if (!factory) {
-    log.error(`Неподдерживаемый транспорт: ${config.transport}`)
-    return null
+  switch (config.transport) {
+    case "stdio":
+      return new StdioMCPTransport(config)
+    default:
+      log.error(`Неподдерживаемый транспорт: ${config.transport}`)
+      return null
   }
-  return factory(config)
 }
 
 export class MCPManager implements IMCPManager {
@@ -130,6 +114,10 @@ export class MCPManager implements IMCPManager {
         } catch (err: unknown) {
           const msg = errorMessage(err)
           log.error(`Ошибка разбора MCP-ответа: ${msg}`)
+          for (const req of pending.values()) {
+            req.reject(new ExecutionError(`Некорректный MCP-ответ: ${msg}`))
+          }
+          pending.clear()
         }
       })
 

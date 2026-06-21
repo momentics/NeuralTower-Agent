@@ -51,7 +51,7 @@ export class GrepTool extends FilesystemTool {
 
     if (!pattern) return { output: "Не указан шаблон поиска", success: false }
 
-    const result = this.resolvePath(root)
+    const result = await this.resolvePath(root)
     if ("error" in result) return { output: result.error, success: false }
 
     if (this.rgFailedCount < this.MAX_RG_FAILURES) {

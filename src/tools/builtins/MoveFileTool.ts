@@ -29,7 +29,7 @@ export class MoveFileTool extends FilesystemTool {
     if (!src) return { output: "Не указан исходный путь", success: false }
     if (!dst) return { output: "Не указан путь назначения", success: false }
 
-    const result = this.resolveTwoPaths(src, dst)
+    const result = await this.resolveTwoPaths(src, dst)
     if ("error" in result) return { output: result.error, success: false }
 
     await fs.stat(result.source)

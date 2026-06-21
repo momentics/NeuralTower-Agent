@@ -28,7 +28,7 @@ export class GlobTool extends FilesystemTool {
     if (!pattern) return { output: "Не указан шаблон glob", success: false }
 
     const root = strOpt(args, "path") ?? "."
-    const result = this.resolvePath(root)
+    const result = await this.resolvePath(root)
     if ("error" in result) return { output: result.error, success: false }
 
     const files = await globFn(pattern, { cwd: result.resolved, absolute: true })
