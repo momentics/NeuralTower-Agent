@@ -1,7 +1,7 @@
 import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
-import { spawn } from "node:child_process"
 import { errorMessage } from "../../core/errors"
+import { runProcess } from "../../utils/ProcessRunner"
 
 const BASH_DEFAULT_TIMEOUT_MS = 30000
 const BASH_MAX_BUFFER = 1024 * 1024
@@ -34,7 +34,12 @@ export class BashTool implements ITool {
     const timeout = Number(args.timeout ?? BASH_DEFAULT_TIMEOUT_MS)
     const workdir = args.workdir ? String(args.workdir) : undefined
     try {
-      const { stdout, stderr } = await this.runCommand(cmd, timeout, workdir)
+      const isWindows = process.platform === "win32"
+      const { stdout, stderr } = await runProcess(
+        isWindows ? "cmd.exe" : "sh",
+        isWindows ? ["/c", cmd] : ["-c", cmd],
+        { cwd: workdir, timeout, maxBuffer: BASH_MAX_BUFFER, signal },
+      )
       const outTrimmed = stdout.trim()
       const out = (outTrimmed ? stdout : "") + (stderr ? `\nВЫВОД ОШИБОК:\n${stderr}` : "")
       return { output: out || "(нет вывода)", success: true }
@@ -42,76 +47,5 @@ export class BashTool implements ITool {
       const msg = errorMessage(err)
       return { output: `Команда не выполнена: ${msg}`, success: false }
     }
-  }
-
-  private runCommand(
-    cmd: string,
-    timeout: number,
-    cwd: string | undefined,
-  ): Promise<{ stdout: string; stderr: string }> {
-    return new Promise((resolve, reject) => {
-      let settled = false
-      const trySettle = (value: { stdout: string; stderr: string } | undefined, error: Error | undefined) => {
-        if (settled) return
-        settled = true
-        if (error) {
-          reject(error)
-        } else if (value) {
-          resolve(value)
-        }
-      }
-
-      const isWindows = process.platform === "win32"
-      const proc = spawn(
-        isWindows ? "cmd.exe" : "sh",
-        isWindows ? ["/c", cmd] : ["-c", cmd],
-        {
-          cwd,
-          timeout,
-          shell: false,
-          env: process.env,
-        },
-      )
-
-      const stdoutChunks: Buffer[] = []
-      const stderrChunks: Buffer[] = []
-      const maxBuffer = BASH_MAX_BUFFER
-      let stdoutSize = 0
-      let stderrSize = 0
-
-      proc.stdout.on("data", (chunk: Buffer) => {
-        stdoutSize += chunk.length
-        if (stdoutSize > maxBuffer) {
-          proc.kill()
-          trySettle(undefined, new Error("Превышен лимит вывода (1 МБ)"))
-          return
-        }
-        stdoutChunks.push(chunk)
-      })
-
-      proc.stderr.on("data", (chunk: Buffer) => {
-        stderrSize += chunk.length
-        if (stderrSize > maxBuffer) {
-          proc.kill()
-          trySettle(undefined, new Error("Превышен лимит вывода ошибок (1 МБ)"))
-          return
-        }
-        stderrChunks.push(chunk)
-      })
-
-      proc.on("error", (err) => {
-        trySettle(undefined, err instanceof Error ? err : new Error(String(err)))
-      })
-
-      proc.on("close", (code) => {
-        const stdout = Buffer.concat(stdoutChunks).toString("utf-8")
-        const stderr = Buffer.concat(stderrChunks).toString("utf-8")
-        if (code === 0) {
-          trySettle({ stdout, stderr }, undefined)
-        } else {
-          trySettle(undefined, new Error(`Выходной код: ${code ?? -1}` + (stderr ? `\n${stderr}` : "")))
-        }
-      })
-    })
   }
 }

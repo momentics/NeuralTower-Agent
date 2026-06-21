@@ -5,6 +5,8 @@ export interface FetchUrlOptions {
   headers?: Record<string, string>
   /** Максимальная длина ответа */
   maxLength?: number
+  /** Сигнал отмены */
+  signal?: AbortSignal
 }
 
 import { errorMessage } from "../core/errors"
@@ -33,6 +35,15 @@ export async function fetchUrl(
   urlString: string,
   options: FetchUrlOptions = {},
 ): Promise<FetchUrlResult> {
+  if (options.signal?.aborted) {
+    return {
+      text: "Операция отменена",
+      title: null,
+      status: 0,
+      ok: false,
+    }
+  }
+
   const timeout = options.timeout ?? DEFAULT_TIMEOUT
   const maxLength = options.maxLength ?? DEFAULT_MAX_LENGTH
   const headers: Record<string, string> = {
@@ -68,8 +79,13 @@ export async function fetchUrl(
   try {
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeout)
+
+    const signals: AbortSignal[] = [controller.signal]
+    if (options.signal) signals.push(options.signal)
+    const combinedSignal = AbortSignal.any(signals)
+
     const response = await fetch(url.toString(), {
-      signal: controller.signal,
+      signal: combinedSignal,
       headers,
       redirect: "follow",
     }).finally(() => clearTimeout(timer))

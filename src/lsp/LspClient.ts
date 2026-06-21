@@ -7,7 +7,7 @@ import { errorMessage } from "../core/errors"
 const log = createDomainLogger("LSP")
 
 const LSP_TIMEOUT_MS = 10_000
-const MAX_SYMBOL_RESULTS = 50
+export const MAX_SYMBOL_RESULTS = 50
 const MAX_REFERENCE_RESULTS = 30
 const MAX_HOVER_CHARS = 4000
 const LSP_MAX_DEPTH = 4
@@ -70,16 +70,32 @@ export function formatDocumentSymbols(
   return results
 }
 
-/** Выполнить асинхронную функцию с таймаутом. */
-export async function withTimeout<T>(fn: () => Promise<T>, label: string, timeoutMs: number = LSP_TIMEOUT_MS): Promise<T> {
+/** Выполнить асинхронную функцию с таймаутом и возможностью отмены. */
+export async function withTimeout<T>(fn: () => Promise<T>, label: string, timeoutMs: number = LSP_TIMEOUT_MS, signal?: AbortSignal): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`LSP ${label}: таймаут ${timeoutMs}ms`)), timeoutMs)
-  })
+  const signals: AbortSignal[] = []
+
+  const timeoutController = new AbortController()
+  timer = setTimeout(() => timeoutController.abort(new Error(`LSP ${label}: таймаут ${timeoutMs}ms`)), timeoutMs)
+  signals.push(timeoutController.signal)
+
+  if (signal) {
+    signals.push(signal)
+  }
+
+  const combined = AbortSignal.any(signals)
+
   try {
-    return await Promise.race([fn(), timeoutPromise])
+    return await Promise.race([fn(), new Promise<never>((_, reject) => {
+      if (combined.aborted) {
+        reject(combined.reason ?? new Error(`LSP ${label}: отменено`))
+        return
+      }
+      combined.addEventListener("abort", () => reject(combined.reason ?? new Error(`LSP ${label}: отменено`)), { once: true })
+    })])
   } finally {
     if (timer) clearTimeout(timer)
+    timeoutController.abort()
   }
 }
 
@@ -134,6 +150,7 @@ async function executeLspCommand<T>(
   getWorkDir: () => string,
   format: (result: T[]) => Promise<{ output: string; success: boolean }> | { output: string; success: boolean },
   notFoundMsg: (filePath: string, position?: vscode.Position) => string,
+  signal?: AbortSignal,
 ): Promise<{ output: string; success: boolean }> {
   const filePath = resolveFilePath(filePathRaw, getWorkDir)
   await ensureFileExists(filePath)
@@ -143,6 +160,8 @@ async function executeLspCommand<T>(
   const results = await withTimeout(
     () => Promise.resolve(vscode.commands.executeCommand<T[]>(command, ...args)).then((r) => r ?? []),
     label,
+    LSP_TIMEOUT_MS,
+    signal,
   )
 
   if (results.length === 0) {
@@ -165,6 +184,7 @@ async function executeLspPositionCommand<T>(
   getWorkDir: () => string,
   format: (result: T[]) => Promise<{ output: string; success: boolean }> | { output: string; success: boolean },
   notFoundMsg: (filePath: string, position: vscode.Position) => string,
+  signal?: AbortSignal,
 ): Promise<{ output: string; success: boolean }> {
   const position = toPosition(line, character)
   const filePath = resolveFilePath(filePathRaw, getWorkDir)
@@ -175,6 +195,8 @@ async function executeLspPositionCommand<T>(
   const results = await withTimeout(
     () => Promise.resolve(vscode.commands.executeCommand<T[]>(command, uri, position)).then((r) => r ?? []),
     label,
+    LSP_TIMEOUT_MS,
+    signal,
   )
 
   if (results.length === 0) {
@@ -189,6 +211,7 @@ async function executeLspPositionCommand<T>(
 export async function executeDocumentSymbol(
   filePathRaw: string,
   getWorkDir: () => string,
+  signal?: AbortSignal,
 ): Promise<{ output: string; success: boolean }> {
   const filePath = resolveFilePath(filePathRaw, getWorkDir)
   await ensureFileExists(filePath)
@@ -201,6 +224,8 @@ export async function executeDocumentSymbol(
       uri,
     )).then((r) => r ?? []),
     "documentSymbol",
+    LSP_TIMEOUT_MS,
+    signal,
   )
 
   if (symbols.length === 0) {
@@ -219,6 +244,7 @@ export async function executeWorkspaceSymbol(
   query: string,
   getWorkDir: () => string,
   maxResults: number = MAX_SYMBOL_RESULTS,
+  signal?: AbortSignal,
 ): Promise<{ output: string; success: boolean }> {
   const results = await withTimeout(
     () => Promise.resolve(vscode.commands.executeCommand<vscode.SymbolInformation[]>(
@@ -226,6 +252,8 @@ export async function executeWorkspaceSymbol(
       query,
     )).then((r) => r ?? []),
     "workspaceSymbol",
+    LSP_TIMEOUT_MS,
+    signal,
   )
 
   if (results.length === 0) {
@@ -272,6 +300,7 @@ export async function executeGoToDefinition(
   line: number | undefined,
   character: number | undefined,
   getWorkDir: () => string,
+  signal?: AbortSignal,
 ): Promise<{ output: string; success: boolean }> {
   return executeLspPositionCommand<vscode.Location>(
     filePathRaw,
@@ -282,6 +311,7 @@ export async function executeGoToDefinition(
     getWorkDir,
     (locations) => formatLocations(locations, "Определение", getWorkDir),
     (fp, pos) => `Определение не найдено в ${fp}:${pos.line + 1}:${pos.character + 1}`,
+    signal,
   )
 }
 
@@ -290,6 +320,7 @@ export async function executeGoToTypeDefinition(
   line: number | undefined,
   character: number | undefined,
   getWorkDir: () => string,
+  signal?: AbortSignal,
 ): Promise<{ output: string; success: boolean }> {
   return executeLspPositionCommand<vscode.Location>(
     filePathRaw,
@@ -300,6 +331,7 @@ export async function executeGoToTypeDefinition(
     getWorkDir,
     (locations) => formatLocations(locations, "Определение типа", getWorkDir),
     (fp, pos) => `Определение типа не найдено в ${fp}:${pos.line + 1}:${pos.character + 1}`,
+    signal,
   )
 }
 
@@ -308,6 +340,7 @@ export async function executeGoToImplementation(
   line: number | undefined,
   character: number | undefined,
   getWorkDir: () => string,
+  signal?: AbortSignal,
 ): Promise<{ output: string; success: boolean }> {
   return executeLspPositionCommand<vscode.Location>(
     filePathRaw,
@@ -318,6 +351,7 @@ export async function executeGoToImplementation(
     getWorkDir,
     (locations) => formatLocations(locations, "Реализация", getWorkDir),
     (fp, pos) => `Реализация не найдена в ${fp}:${pos.line + 1}:${pos.character + 1}`,
+    signal,
   )
 }
 
@@ -326,6 +360,7 @@ export async function executeFindReferences(
   line: number | undefined,
   character: number | undefined,
   getWorkDir: () => string,
+  signal?: AbortSignal,
 ): Promise<{ output: string; success: boolean }> {
   const position = toPosition(line, character)
   const filePath = resolveFilePath(filePathRaw, getWorkDir)
@@ -341,6 +376,8 @@ export async function executeFindReferences(
       { includeDeclaration: true },
     )).then((r) => r ?? []),
     "references",
+    LSP_TIMEOUT_MS,
+    signal,
   )
 
   if (references.length === 0) {
@@ -367,6 +404,7 @@ export async function executeHover(
   line: number | undefined,
   character: number | undefined,
   getWorkDir: () => string,
+  signal?: AbortSignal,
 ): Promise<{ output: string; success: boolean }> {
   const position = toPosition(line, character)
   const filePath = resolveFilePath(filePathRaw, getWorkDir)
@@ -381,6 +419,8 @@ export async function executeHover(
       position,
     )).then((r) => r ?? []),
     "hover",
+    LSP_TIMEOUT_MS,
+    signal,
   )
 
   if (hovers.length === 0) {
@@ -409,6 +449,7 @@ export async function executeSignatureHelp(
   line: number | undefined,
   character: number | undefined,
   getWorkDir: () => string,
+  signal?: AbortSignal,
 ): Promise<{ output: string; success: boolean }> {
   const position = toPosition(line, character)
   const filePath = resolveFilePath(filePathRaw, getWorkDir)
@@ -424,6 +465,8 @@ export async function executeSignatureHelp(
       "\n",
     )).then((r) => r),
     "signatureHelp",
+    LSP_TIMEOUT_MS,
+    signal,
   )
 
   if (!help || help.signatures.length === 0) {

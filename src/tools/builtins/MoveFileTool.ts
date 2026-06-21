@@ -1,12 +1,11 @@
-import type { ITool, ToolSchema } from "../ITool"
+import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
-import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
 import * as path from "path"
-import { errorMessage } from "../../core/errors"
+import { FilesystemTool } from "./FilesystemTool"
 
 /** Перемещение или переименование файла или директории. */
-export class MoveFileTool implements ITool {
+export class MoveFileTool extends FilesystemTool {
   name = "move_file"
   description = "Переместить или переименовать файл или директорию."
   category = "filesystem"
@@ -22,31 +21,16 @@ export class MoveFileTool implements ITool {
     required: ["source", "destination"],
   }
 
-  constructor(private readonly workDir?: string) {}
-
-  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
     const src = String(args.source ?? "")
     const dst = String(args.destination ?? "")
     if (!src || !dst) return { output: "Не указаны обязательные аргументы", success: false }
-    const resolvedSrc = path.resolve(src)
-    const resolvedDst = path.resolve(dst)
-    if (!isInsideWorkspace(resolvedSrc, this.workDir)) {
-      return { output: "Доступ запрещён: исходный путь выходит за пределы рабочей директории", success: false }
-    }
-    if (!isInsideWorkspace(resolvedDst, this.workDir)) {
-      return { output: "Доступ запрещён: путь назначения выходит за пределы рабочей директории", success: false }
-    }
-    try {
-      await fs.stat(resolvedSrc)
-      const dstDir = path.dirname(resolvedDst)
-      await fs.mkdir(dstDir, { recursive: true })
-      await fs.rename(resolvedSrc, resolvedDst)
-      return { output: `Перемещено: ${src} -> ${dst}`, success: true }
-    } catch (err: unknown) {
-      return {
-        output: `Не удалось переместить: ${errorMessage(err)}`,
-        success: false,
-      }
-    }
+    const result = this.resolveTwoPaths(src, dst)
+    if ("error" in result) return { output: result.error, success: false }
+    await fs.stat(result.source)
+    const dstDir = path.dirname(result.destination)
+    await fs.mkdir(dstDir, { recursive: true })
+    await fs.rename(result.source, result.destination)
+    return { output: `Перемещено: ${src} -> ${dst}`, success: true }
   }
 }

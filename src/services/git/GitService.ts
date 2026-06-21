@@ -1,7 +1,7 @@
-import { spawn, type SpawnOptions, type ChildProcess } from "child_process"
 import type { Plugin } from "../../shared/types"
 import { createDomainLogger } from "../../core/logger"
 import { errorMessage } from "../../core/errors"
+import { runProcess } from "../../utils/ProcessRunner"
 
 const log = createDomainLogger("Git")
 
@@ -44,67 +44,18 @@ export interface IGitService {
 /**
  * Выполнить команду git через spawn (без оболочки) для защиты от инъекций.
  */
-function gitSpawn(
+async function gitSpawn(
   dir: string,
   args: string[],
   timeout: number,
   maxBuffer = GIT_MAX_BUFFER,
 ): Promise<{ stdout: string; stderr: string }> {
-  return new Promise((resolve, reject) => {
-    let settled = false
-    const settle = (
-      value: { stdout: string; stderr: string } | undefined,
-      error: Error | undefined,
-    ) => {
-      if (settled) return
-      settled = true
-      if (error) reject(error)
-      else if (value) resolve(value)
-    }
-
-    const opts: SpawnOptions = {
-      cwd: process.cwd(),
-      timeout,
-      shell: false,
-    }
-
-    const proc: ChildProcess = spawn("git", ["-C", dir, ...args], opts)
-
-    const stdoutChunks: Buffer[] = []
-    const stderrChunks: Buffer[] = []
-    let stdoutSize = 0
-    let stderrSize = 0
-
-    proc.stdout?.on("data", (chunk: Buffer) => {
-      stdoutSize += chunk.length
-      if (stdoutSize > maxBuffer) {
-        proc.kill()
-        return settle(undefined, new Error("Превышен лимит вывода"))
-      }
-      stdoutChunks.push(chunk)
-    })
-
-    proc.stderr?.on("data", (chunk: Buffer) => {
-      stderrSize += chunk.length
-      if (stderrSize > maxBuffer) {
-        proc.kill()
-        return settle(undefined, new Error("Превышен лимит вывода ошибок"))
-      }
-      stderrChunks.push(chunk)
-    })
-
-    proc.on("error", (err: Error) => settle(undefined, err))
-
-    proc.on("close", (code: number | null) => {
-      const stdout = Buffer.concat(stdoutChunks).toString("utf-8")
-      const stderr = Buffer.concat(stderrChunks).toString("utf-8")
-      if (code === 0) {
-        settle({ stdout, stderr }, undefined)
-      } else {
-        settle(undefined, new Error(`Выходной код: ${code ?? -1}` + (stderr ? `\n${stderr}` : "")))
-      }
-    })
+  const result = await runProcess("git", ["-C", dir, ...args], {
+    cwd: process.cwd(),
+    timeout,
+    maxBuffer,
   })
+  return { stdout: result.stdout, stderr: result.stderr }
 }
 
 /**

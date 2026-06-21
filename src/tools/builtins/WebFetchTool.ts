@@ -25,7 +25,8 @@ export class WebFetchTool implements ITool {
     required: ["url"],
   }
 
-  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    if (signal?.aborted) return { output: "Операция отменена", success: false }
     const url = String(args.url ?? "")
     if (!url) return { output: "Не указан URL", success: false }
 
@@ -35,6 +36,7 @@ export class WebFetchTool implements ITool {
     const result = await fetchUrl(url, {
       timeout: timeoutSec * 1000,
       maxLength: FETCH_MAX_LENGTH,
+      signal,
     })
 
     if (!result.ok) {

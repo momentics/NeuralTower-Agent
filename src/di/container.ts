@@ -15,7 +15,7 @@ import { BackendHealthMonitor } from "../services/health/BackendHealthMonitor"
 import { CommitMessageService } from "../services/commit-message/CommitMessageService"
 import { AutocompleteService } from "../services/autocomplete/AutocompleteService"
 import { TelemetryService } from "../services/telemetry/TelemetryService"
-import { MCPManager } from "../mcp/MCPManager"
+import { MCPManager, type IMCPManager } from "../mcp/MCPManager"
 import { SettingsProvider } from "../providers/SettingsProvider"
 import { ReadFileTool } from "../tools/builtins/ReadFileTool"
 import { errorMessage } from "../core/errors"
@@ -31,9 +31,9 @@ import { WebFetchTool } from "../tools/builtins/WebFetchTool"
 import { TodoWriteTool } from "../tools/builtins/TodoWriteTool"
 import { LspTool } from "../tools/builtins/LspTool"
 import { CodebaseSearchTool } from "../tools/builtins/CodebaseSearchTool"
-import { ContextManager } from "../core/ContextManager"
+import { ContextManager, type IContextManager } from "../core/ContextManager"
 import { ContextProviderRegistry } from "../core/providers/context/registry"
-import { FileIndex } from "../repo/FileIndex"
+import { FileIndex, type IFileIndex } from "../repo/FileIndex"
 import { RepoAnalyzer } from "../repo/RepoAnalyzer"
 import { SubagentRunner } from "../agent/SubagentRunner"
 import { loadAppConfig } from "../core/config"
@@ -254,10 +254,10 @@ export function createRepoInfrastructure(): {
 function registerContextProviders(
   contextManager: ContextManager,
   contextProviderRegistry: ContextProviderRegistry,
-  backend: NeuralTowerBackend,
+  backend: IBackend,
   gitService: IGitService,
-  mcpManager: MCPManager,
-  fileIndex: FileIndex,
+  mcpManager: IMCPManager,
+  fileIndex: IFileIndex,
   repoAnalyzer: RepoAnalyzer,
   codebaseSearch: ICodebaseSearch,
   getWorkDir: () => string,
@@ -322,10 +322,10 @@ function registerContextProviders(
 export function createContextChain(
   contextManager: ContextManager,
   contextProviderRegistry: ContextProviderRegistry,
-  backend: NeuralTowerBackend,
+  backend: IBackend,
   gitService: IGitService,
-  mcpManager: MCPManager,
-  fileIndex: FileIndex,
+  mcpManager: IMCPManager,
+  fileIndex: IFileIndex,
   repoAnalyzer: RepoAnalyzer,
   codebaseSearch: ICodebaseSearch,
   getWorkDir: () => string,
@@ -465,7 +465,7 @@ export async function createDeps(
   createContextChain(
     contextManager,
     contextProviderRegistry,
-    backend as NeuralTowerBackend,
+    backend,
     gitService,
     mcpManager,
     fileIndex,

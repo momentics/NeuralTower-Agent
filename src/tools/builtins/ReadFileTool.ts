@@ -1,14 +1,12 @@
-import type { ITool, ToolSchema } from "../ITool"
+import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
-import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
-import * as path from "path"
-import { errorMessage } from "../../core/errors"
+import { FilesystemTool } from "./FilesystemTool"
 
 const DEFAULT_READ_LIMIT = 2000
 
 /** Чтение содержимого текстового файла. */
-export class ReadFileTool implements ITool {
+export class ReadFileTool extends FilesystemTool {
   name = "read_file"
   description = "Прочитать содержимое текстового файла."
   category = "filesystem"
@@ -25,27 +23,15 @@ export class ReadFileTool implements ITool {
     required: ["filepath"],
   }
 
-  constructor(private readonly workDir?: string) {}
-
-  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
     const fp = String(args.filepath ?? "")
-    if (!fp) return { output: "Не указан путь к файлу", success: false }
-    const resolved = path.resolve(fp)
-    if (!isInsideWorkspace(resolved, this.workDir)) {
-      return { output: "Доступ запрещён: путь выходит за пределы рабочей директории", success: false }
-    }
-    try {
-      const content = await fs.readFile(resolved, "utf-8")
-      const offset = Number(args.offset ?? 0)
-      const limit = Number(args.limit ?? DEFAULT_READ_LIMIT)
-      const lines = content.split("\n")
-      const slice = offset > 0 ? lines.slice(offset - 1, offset - 1 + limit) : lines.slice(0, limit)
-      return { output: slice.join("\n"), success: true }
-    } catch (err: unknown) {
-      return {
-        output: `Не удалось прочитать файл: ${errorMessage(err)}`,
-        success: false,
-      }
-    }
+    const result = this.resolvePath(fp)
+    if ("error" in result) return { output: result.error, success: false }
+    const content = await fs.readFile(result.resolved, "utf-8")
+    const offset = Number(args.offset ?? 0)
+    const limit = Number(args.limit ?? DEFAULT_READ_LIMIT)
+    const lines = content.split("\n")
+    const slice = offset > 0 ? lines.slice(offset - 1, offset - 1 + limit) : lines.slice(0, limit)
+    return { output: slice.join("\n"), success: true }
   }
 }

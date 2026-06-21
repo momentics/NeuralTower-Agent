@@ -1,13 +1,13 @@
-import type { ITool, ToolSchema } from "../ITool"
+import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import * as fs from "fs/promises"
 import * as path from "path"
-import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import { walkDirectory } from "../../utils/FileSystem"
 import { createDomainLogger } from "../../core/logger"
 import { errorMessage } from "../../core/errors"
+import { FilesystemTool } from "./FilesystemTool"
 
 const log = createDomainLogger("Grep")
 
@@ -23,7 +23,7 @@ const GREP_OUTPUT_TRUNCATE = 10000
  * Поиск содержимого файлов с помощью ripgrep (rg).
  * При отсутствии rg используется рекурсивный поиск по файлам.
  */
-export class GrepTool implements ITool {
+export class GrepTool extends FilesystemTool {
   name = "grep"
   description = "Поиск содержимого файлов по регулярному выражению. Использует ripgrep, если доступно."
   category = "filesystem"
@@ -40,41 +40,31 @@ export class GrepTool implements ITool {
     required: ["pattern"],
   }
 
-  private rgAvailable = true
+  private rgFailedCount = 0
+  private readonly MAX_RG_FAILURES = 3
 
-  constructor(private readonly workDir?: string) {}
-
-  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
-    if (signal?.aborted) return { output: "Операция отменена", success: false }
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const pattern = String(args.pattern ?? "")
     const root = String(args.path ?? ".")
     const include = args.include ? String(args.include) : undefined
     if (!pattern) return { output: "Не указан шаблон поиска", success: false }
 
-    const resolved = path.resolve(root)
-    if (!isInsideWorkspace(resolved, this.workDir)) {
-      return { output: "Доступ запрещён: путь выходит за пределы рабочей директории", success: false }
-    }
+    const result = this.resolvePath(root)
+    if ("error" in result) return { output: result.error, success: false }
 
-    try {
-      if (this.rgAvailable) {
-        try {
-          const rgResult = await this.executeRg(pattern, resolved, include)
-          return rgResult
-        } catch (err: unknown) {
-          const msg = errorMessage(err)
-          log.error(`ripgrep недоступен: ${msg}`)
-          this.rgAvailable = false
-        }
-      }
-
-      return await this.executeFallback(pattern, resolved, include, signal)
-    } catch (err: unknown) {
-      return {
-        output: `Поиск не выполнен: ${errorMessage(err)}`,
-        success: false,
+    if (this.rgFailedCount < this.MAX_RG_FAILURES) {
+      try {
+        const rgResult = await this.executeRg(pattern, result.resolved, include)
+        this.rgFailedCount = 0
+        return rgResult
+      } catch (err: unknown) {
+        const msg = errorMessage(err)
+        log.error(`ripgrep недоступен: ${msg}`)
+        this.rgFailedCount++
       }
     }
+
+    return await this.executeFallback(pattern, result.resolved, include, signal)
   }
 
   private async executeRg(

@@ -1,12 +1,10 @@
-import type { ITool, ToolSchema } from "../ITool"
+import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
-import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
-import * as path from "path"
-import { errorMessage } from "../../core/errors"
+import { FilesystemTool } from "./FilesystemTool"
 
 /** Удаление файла или директории. Поддерживает рекурсивное удаление директорий. */
-export class DeleteFileTool implements ITool {
+export class DeleteFileTool extends FilesystemTool {
   name = "delete_file"
   description = "Удалить файл или директорию. При recursive=true удаляет директорию со всем содержимым."
   category = "filesystem"
@@ -22,30 +20,18 @@ export class DeleteFileTool implements ITool {
     required: ["filepath"],
   }
 
-  constructor(private readonly workDir?: string) {}
-
-  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
     const fp = String(args.filepath ?? "")
-    if (!fp) return { output: "Не указан путь к файлу или директории", success: false }
-    const resolved = path.resolve(fp)
-    if (!isInsideWorkspace(resolved, this.workDir)) {
-      return { output: "Доступ запрещён: путь выходит за пределы рабочей директории", success: false }
-    }
-    try {
-      const stat = await fs.stat(resolved)
-      await fs.rm(resolved, {
-        recursive: stat.isDirectory() || Boolean(args.recursive),
-        force: true,
-      })
-      return {
-        output: `Удалено: ${fp}${stat.isDirectory() ? " (директория)" : ""}`,
-        success: true,
-      }
-    } catch (err: unknown) {
-      return {
-        output: `Не удалось удалить: ${errorMessage(err)}`,
-        success: false,
-      }
+    const result = this.resolvePath(fp)
+    if ("error" in result) return { output: result.error, success: false }
+    const stat = await fs.stat(result.resolved)
+    await fs.rm(result.resolved, {
+      recursive: stat.isDirectory() || Boolean(args.recursive),
+      force: true,
+    })
+    return {
+      output: `Удалено: ${fp}${stat.isDirectory() ? " (директория)" : ""}`,
+      success: true,
     }
   }
 }

@@ -1,12 +1,10 @@
-import type { ITool, ToolSchema } from "../ITool"
+import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
-import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as fs from "fs/promises"
-import * as path from "path"
-import { errorMessage } from "../../core/errors"
+import { FilesystemTool } from "./FilesystemTool"
 
 /** Создание директории. Поддерживает рекурсивное создание родительских директорий. */
-export class CreateDirTool implements ITool {
+export class CreateDirTool extends FilesystemTool {
   name = "create_dir"
   description = "Создать директорию. При recursive=true создаёт все родительские директории."
   category = "filesystem"
@@ -22,23 +20,11 @@ export class CreateDirTool implements ITool {
     required: ["path"],
   }
 
-  constructor(private readonly workDir?: string) {}
-
-  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
     const p = String(args.path ?? "")
-    if (!p) return { output: "Не указан путь к директории", success: false }
-    const resolved = path.resolve(p)
-    if (!isInsideWorkspace(resolved, this.workDir)) {
-      return { output: "Доступ запрещён: путь выходит за пределы рабочей директории", success: false }
-    }
-    try {
-      await fs.mkdir(resolved, { recursive: Boolean(args.recursive ?? false) })
-      return { output: `Директория создана: ${p}`, success: true }
-    } catch (err: unknown) {
-      return {
-        output: `Не удалось создать директорию: ${errorMessage(err)}`,
-        success: false,
-      }
-    }
+    const result = this.resolvePath(p)
+    if ("error" in result) return { output: result.error, success: false }
+    await fs.mkdir(result.resolved, { recursive: Boolean(args.recursive ?? false) })
+    return { output: `Директория создана: ${p}`, success: true }
   }
 }

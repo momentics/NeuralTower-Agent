@@ -9,6 +9,7 @@ import {
   executeFindReferences,
   executeHover,
   executeSignatureHelp,
+  MAX_SYMBOL_RESULTS,
 } from "../../lsp/LspClient"
 import { errorMessage } from "../../core/errors"
 
@@ -63,7 +64,7 @@ export class LspTool implements ITool {
 
   constructor(private readonly getWorkDir = () => process.cwd()) {}
 
-  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const operation = args.operation as LspOperation | undefined
     const filePathRaw = args.filePath as string | undefined
 
@@ -86,21 +87,21 @@ export class LspTool implements ITool {
     try {
       switch (operation) {
         case "documentSymbol":
-          return await executeDocumentSymbol(filePathRaw!, this.getWorkDir)
+          return await executeDocumentSymbol(filePathRaw!, this.getWorkDir, signal)
         case "workspaceSymbol":
-          return await executeWorkspaceSymbol(query ?? "", this.getWorkDir)
+          return await executeWorkspaceSymbol(query ?? "", this.getWorkDir, MAX_SYMBOL_RESULTS, signal)
         case "goToDefinition":
-          return await executeGoToDefinition(filePathRaw!, line, character, this.getWorkDir)
+          return await executeGoToDefinition(filePathRaw!, line, character, this.getWorkDir, signal)
         case "findReferences":
-          return await executeFindReferences(filePathRaw!, line, character, this.getWorkDir)
+          return await executeFindReferences(filePathRaw!, line, character, this.getWorkDir, signal)
         case "hover":
-          return await executeHover(filePathRaw!, line, character, this.getWorkDir)
+          return await executeHover(filePathRaw!, line, character, this.getWorkDir, signal)
         case "goToImplementation":
-          return await executeGoToImplementation(filePathRaw!, line, character, this.getWorkDir)
+          return await executeGoToImplementation(filePathRaw!, line, character, this.getWorkDir, signal)
         case "signatureHelp":
-          return await executeSignatureHelp(filePathRaw!, line, character, this.getWorkDir)
+          return await executeSignatureHelp(filePathRaw!, line, character, this.getWorkDir, signal)
         case "goToTypeDefinition":
-          return await executeGoToTypeDefinition(filePathRaw!, line, character, this.getWorkDir)
+          return await executeGoToTypeDefinition(filePathRaw!, line, character, this.getWorkDir, signal)
       }
     } catch (err: unknown) {
       return {

@@ -1,14 +1,12 @@
-import type { ITool, ToolSchema } from "../ITool"
+import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import { glob as globFn } from "glob"
-import * as path from "path"
-import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
-import { errorMessage } from "../../core/errors"
+import { FilesystemTool } from "./FilesystemTool"
 
 /**
  * Найти файлы по шаблону glob.
  */
-export class GlobTool implements ITool {
+export class GlobTool extends FilesystemTool {
   name = "glob"
   description = "Найти файлы, соответствующие шаблону glob."
   category = "filesystem"
@@ -24,26 +22,15 @@ export class GlobTool implements ITool {
     required: ["pattern"],
   }
 
-  constructor(private readonly workDir?: string) {}
-
-  async execute(args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
     const pattern = String(args.pattern ?? "")
     const root = args.path ? String(args.path) : "."
-    const resolved = path.resolve(root)
-    if (!isInsideWorkspace(resolved, this.workDir)) {
-      return { output: "Доступ запрещён: путь выходит за пределы рабочей директории", success: false }
-    }
-    try {
-      const files = await globFn(pattern, { cwd: resolved, absolute: true })
-      return {
-        output: files.length > 0 ? files.join("\n") : "Совпадений не найдено",
-        success: true,
-      }
-    } catch (err: unknown) {
-      return {
-        output: `Поиск не выполнен: ${errorMessage(err)}`,
-        success: false,
-      }
+    const result = this.resolvePath(root)
+    if ("error" in result) return { output: result.error, success: false }
+    const files = await globFn(pattern, { cwd: result.resolved, absolute: true })
+    return {
+      output: files.length > 0 ? files.join("\n") : "Совпадений не найдено",
+      success: true,
     }
   }
 }
