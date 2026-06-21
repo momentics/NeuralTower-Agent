@@ -66,8 +66,7 @@ export class CodebaseSearchTool extends BaseTool {
     const modeRaw = strOpt(args, "mode") ?? "hybrid"
     const mode = VALID_MODES.has(modeRaw) ? modeRaw : "hybrid"
 
-    try {
-      const results = await this.search.search(query, {
+    const results = await this.search.search(query, {
         topK: maxResults,
         searchMode: mode as "semantic" | "keyword" | "hybrid",
       }, signal)
@@ -103,11 +102,5 @@ export class CodebaseSearchTool extends BaseTool {
       }
 
       return { output, success: true }
-    } catch (err: unknown) {
-      return {
-        output: `Ошибка поиска: ${errorMessage(err)}`,
-        success: false,
-      }
-    }
   }
 }

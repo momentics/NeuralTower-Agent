@@ -31,6 +31,7 @@ export const MCP_TRANSPORT_EVENTS = {
  */
 export class StdioMCPTransport extends EventEmitter implements IMCPTransport {
   private process: ChildProcess | null = null
+  private connected = false
 
   constructor(private readonly config: MCPServerConfig) {
     super()
@@ -38,7 +39,7 @@ export class StdioMCPTransport extends EventEmitter implements IMCPTransport {
 
   connect(): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-      if (this.process) {
+      if (this.connected) {
         resolve()
         return
       }
@@ -54,6 +55,7 @@ export class StdioMCPTransport extends EventEmitter implements IMCPTransport {
       })
 
       this.process = proc
+      this.connected = true
 
       if (proc.stdout) {
         proc.stdout.on("data", (data: Buffer) => {
@@ -69,6 +71,7 @@ export class StdioMCPTransport extends EventEmitter implements IMCPTransport {
 
       proc.on("exit", (code, signal) => {
         this.process = null
+        this.connected = false
         this.emit(
           MCP_TRANSPORT_EVENTS.close,
           new ExecutionError(`MCP-процесс завершён (code: ${code}, signal: ${signal})`),
@@ -91,10 +94,11 @@ export class StdioMCPTransport extends EventEmitter implements IMCPTransport {
   }
 
   isConnected(): boolean {
-    return this.process !== null && this.process.exitCode == null
+    return this.connected && this.process !== null && this.process.exitCode == null
   }
 
   close(): void {
+    this.connected = false
     const proc = this.process
     if (proc) {
       proc.kill()

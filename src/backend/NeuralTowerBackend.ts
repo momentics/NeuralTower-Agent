@@ -62,6 +62,7 @@ export class NeuralTowerBackend implements IBackend {
     messages: ChatMessage[],
     onChunk: (text: string) => void,
     tools?: ToolDefinition[],
+    signal?: AbortSignal,
   ): Promise<ChatMessage> {
     const cfg = await this.getConfig()
 
@@ -97,6 +98,7 @@ export class NeuralTowerBackend implements IBackend {
 
     try {
       while (true) {
+        if (signal?.aborted) throw new DOMException("Запрос прерван", "AbortError")
         const { done, value } = await reader.read()
         if (done) break
         const chunk = dec.decode(value, { stream: true })

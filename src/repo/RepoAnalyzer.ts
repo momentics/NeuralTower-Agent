@@ -7,6 +7,8 @@ import { errorMessage } from "../core/errors"
 
 const log = createDomainLogger("RepoAnalyzer")
 
+const REPO_ANALYZER_MAX_FILES = 5000
+
 /**
  * Анализатор репозитория. Строит карту структуры, определяет
  * языки, выявляет системы сборки и формирует краткую сводку
@@ -48,7 +50,7 @@ export class RepoAnalyzer {
    * содержимое файлов не читается.
    */
   async analyze(dir: string): Promise<RepoSummary> {
-    const files = await walkDirectory(dir, { maxFiles: 5000 })
+    const files = await walkDirectory(dir, { maxFiles: REPO_ANALYZER_MAX_FILES })
     const languages = this.detectLanguages(files)
     const buildSystems = this.detectBuildSystems(files)
     const topDirs = this.topDirectories(files)

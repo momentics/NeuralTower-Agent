@@ -116,6 +116,7 @@ vi.mock("./services/git/GitService", () => ({
     init: vi.fn().mockResolvedValue(undefined),
     findRoot: vi.fn().mockResolvedValue("/work"),
     getDiff: vi.fn().mockResolvedValue({ changed: [], additions: 0, deletions: 0 }),
+    resetRoot: vi.fn(),
     dispose: vi.fn(),
   })),
 }))

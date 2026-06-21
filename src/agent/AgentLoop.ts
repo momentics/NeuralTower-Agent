@@ -16,6 +16,9 @@ import { createDomainLogger } from "../core/logger"
 
 const log = createDomainLogger("AgentLoop")
 
+const PLAN_STEP_RESULT_MAX_CHARS = 500
+const DEFAULT_MAX_COMPACTIONS = 5
+
 export class AgentLoop {
   private readonly maxIterations: number
   private readonly maxRecoveryAttempts: number
@@ -27,6 +30,34 @@ export class AgentLoop {
     if (this.sessionContext) {
       this.sessionContext.pushMessage(msg)
     }
+  }
+
+  /** Попытка компактизации с обработкой ошибок. */
+  private async tryCompact(
+    messages: ChatMessage[],
+    systemPrompt: string,
+  ): Promise<CompactionResult> {
+    const emptyResult: CompactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
+    try {
+      return await this.compactor.compactIfNeeded(messages.slice(1), systemPrompt)
+    } catch (err: unknown) {
+      log.warn(`Компактизация не выполнена: ${errorMessage(err)}`)
+      return emptyResult
+    }
+  }
+
+  /** Применение результата компактизации к рабочему контексту. */
+  private applyCompaction(
+    result: CompactionResult,
+    systemPrompt: string,
+  ): ChatMessage[] | null {
+    if (result.needsCompaction && result.compactedHistory) {
+      return [
+        { role: "system", content: systemPrompt, timestamp: Date.now() },
+        ...result.compactedHistory,
+      ]
+    }
+    return null
   }
 
   constructor(
@@ -49,7 +80,7 @@ export class AgentLoop {
     this.maxRecoveryAttempts = maxRecoveryAttempts ?? defaults.maxRecoveryAttempts
     this.replanOnFailure = replanOnFailure ?? defaults.replanOnFailure
     this.maxReplanAttempts = maxReplanAttempts ?? defaults.maxReplanAttempts
-    this.maxCompactions = maxCompactions ?? 5
+    this.maxCompactions = maxCompactions ?? DEFAULT_MAX_COMPACTIONS
   }
 
   async run(
@@ -83,27 +114,8 @@ export class AgentLoop {
 
     this.pushSessionMessage(conversation[conversation.length - 1])
 
-    let compactionResult: CompactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
-
-    try {
-      compactionResult = await this.compactor.compactIfNeeded(
-        conversation.slice(1),
-        systemPrompt,
-      )
-    } catch (err: unknown) {
-      log.warn(`Компактизация не выполнена: ${errorMessage(err)}`)
-      compactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
-    }
-
-    let workingConversation: ChatMessage[]
-    if (compactionResult.needsCompaction && compactionResult.compactedHistory) {
-      workingConversation = [
-        { role: "system", content: systemPrompt, timestamp: Date.now() },
-        ...compactionResult.compactedHistory,
-      ]
-    } else {
-      workingConversation = conversation
-    }
+    const compactionResult = await this.tryCompact(conversation, systemPrompt)
+    let workingConversation: ChatMessage[] = this.applyCompaction(compactionResult, systemPrompt) ?? conversation
 
     let iterations = 0
     let recoveryAttempts = 0
@@ -116,20 +128,10 @@ export class AgentLoop {
         throw new AbortError()
       }
 
-      // Периодическая компактизация контекста перед каждым вызовом бэкенда
-      let loopCompactionResult: CompactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
-
-      try {
-        loopCompactionResult = await this.compactor.compactIfNeeded(
-          workingConversation.slice(1),
-          systemPrompt,
-        )
-      } catch (err: unknown) {
- log.warn(`Компактизация не выполнена: ${errorMessage(err)}`)
-        loopCompactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
-      }
-
-      if (loopCompactionResult.needsCompaction && loopCompactionResult.compactedHistory) {
+     // Периодическая компактизация контекста перед каждым вызовом бэкенда
+      const loopCompactionResult = await this.tryCompact(workingConversation, systemPrompt)
+      const compactedConversation = this.applyCompaction(loopCompactionResult, systemPrompt)
+      if (compactedConversation) {
         if (compactionCount >= this.maxCompactions) {
           // Слишком много компактизаций — контекст превышает допустимые пределы
           return {
@@ -140,10 +142,7 @@ export class AgentLoop {
         }
 
         compactionCount++
-        workingConversation = [
-          { role: "system", content: systemPrompt, timestamp: Date.now() },
-          ...loopCompactionResult.compactedHistory,
-        ]
+        workingConversation = compactedConversation
 
         onCompaction?.(loopCompactionResult.tokensBefore ?? 0, loopCompactionResult.tokensAfter ?? 0)
 
@@ -188,7 +187,7 @@ export class AgentLoop {
 
             currentPlan = this.planner.getPlan()
             if (currentPlan && currentPlan.status === "running") {
-              currentPlan.markDone(result.content.slice(0, 500))
+              currentPlan.markDone(result.content.slice(0, PLAN_STEP_RESULT_MAX_CHARS))
               if (currentPlan.status === "running") {
                 continue
               }

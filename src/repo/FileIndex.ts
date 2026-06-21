@@ -19,6 +19,8 @@ import { LRUCache } from "../shared/LRUCache"
 
 const log = createDomainLogger("FileIndex")
 
+const FILE_INDEX_DEFAULT_MAX_FILES = 20000
+
 export interface IndexEntry {
   path: string
   language: string
@@ -41,13 +43,14 @@ export class FileIndex implements IFileIndex {
   private entries: IndexEntry[] = []
   private nameMap = new Map<string, string[]>()
   private langMap = new Map<string, string[]>()
+  private pathToEntry = new Map<string, IndexEntry>()
   private regexCache = new LRUCache<string, RegExp>(50)
 
   /**
    * Построить индекс для директории. Сканирует только имена
    * файлов и размеры, не читает содержимое.
    */
-  async build(dir: string, maxFiles = 20000, signal?: AbortSignal): Promise<void> {
+  async build(dir: string, maxFiles = FILE_INDEX_DEFAULT_MAX_FILES, signal?: AbortSignal): Promise<void> {
     this.entries = []
     this.nameMap.clear()
     this.langMap.clear()
@@ -68,6 +71,7 @@ export class FileIndex implements IFileIndex {
 
       const entry: IndexEntry = { path: f, language: lang, size }
       this.entries.push(entry)
+      this.pathToEntry.set(f, entry)
 
       const name = path.basename(f)
       const names = this.nameMap.get(name) ?? []
@@ -92,7 +96,14 @@ export class FileIndex implements IFileIndex {
 
   /** Найти файлы по языку. */
   findByLanguage(lang: string): IndexEntry[] {
-    return this.entries.filter((e) => e.language === lang)
+    const paths = this.langMap.get(lang)
+    if (!paths) return []
+    const result: IndexEntry[] = []
+    for (const p of paths) {
+      const entry = this.pathToEntry.get(p)
+      if (entry) result.push(entry)
+    }
+    return result
   }
 
   /** Найти файлы по точному имени файла. */
@@ -114,6 +125,7 @@ export class FileIndex implements IFileIndex {
     this.entries = []
     this.nameMap.clear()
     this.langMap.clear()
+    this.pathToEntry.clear()
     this.regexCache.clear()
   }
 

@@ -113,8 +113,7 @@ export class BashTool extends BaseTool {
     const timeout = clamp(rawTimeout, BASH_MIN_TIMEOUT_MS, BASH_MAX_TIMEOUT_MS)
     const workdir = strOpt(args, "workdir")
 
-    try {
-      const isWindows = process.platform === "win32"
+    const isWindows = process.platform === "win32"
       const { stdout, stderr } = await runProcess(
         isWindows ? "cmd.exe" : "sh",
         isWindows ? ["/c", cmd] : ["-c", cmd],
@@ -123,9 +122,5 @@ export class BashTool extends BaseTool {
       const outTrimmed = stdout.trim()
       const out = (outTrimmed ? stdout : "") + (stderr ? `\nВЫВОД ОШИБОК:\n${stderr}` : "")
       return { output: out || "(нет вывода)", success: true }
-    } catch (err: unknown) {
-      const msg = errorMessage(err)
-      return { output: `Команда не выполнена: ${msg}`, success: false }
-    }
   }
 }

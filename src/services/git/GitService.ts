@@ -7,6 +7,7 @@ const log = createDomainLogger("Git")
 
 const GIT_ROOT_TIMEOUT_MS = 5000
 const GIT_DIFF_TIMEOUT_MS = 10000
+const GIT_DIFF_CONTEXT_MAX_CHARS = 10000
 const GIT_MAX_BUFFER = 512 * 1024
 
 export interface GitDiffResult {
@@ -38,6 +39,7 @@ export interface IGitService {
   getDiff(dir: string): Promise<GitDiffOutcome>
   getCachedDiff(dir: string): Promise<string>
   findRoot(cwd: string): Promise<string | null>
+  resetRoot(): void
   dispose(): void
 }
 
@@ -80,6 +82,10 @@ export class GitService implements Plugin, IGitService {
       this.root = cwd
       return null
     }
+  }
+
+  resetRoot(): void {
+    this.root = null
   }
 
   async getDiff(dir: string): Promise<GitDiffOutcome> {
@@ -133,7 +139,7 @@ export class GitService implements Plugin, IGitService {
         GIT_MAX_BUFFER,
       )
       if (!stdout.trim()) return ""
-      return `## Изменения Git (не добавленные)\n\`\`\`diff\n${stdout.slice(0, 10000)}\n\`\`\``
+      return `## Изменения Git (не добавленные)\n\`\`\`diff\n${stdout.slice(0, GIT_DIFF_CONTEXT_MAX_CHARS)}\n\`\`\``
     } catch (err: unknown) {
       const msg = errorMessage(err)
       log.error(`Не удалось получить diff: ${msg}`)

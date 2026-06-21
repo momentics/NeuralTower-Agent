@@ -1,5 +1,7 @@
 import { PlanError } from "../core/errors"
 
+const DEFAULT_PLAN_MAX_RETRIES = 3
+
 /**
  * Состояние шага плана.
  */
@@ -111,7 +113,7 @@ export class Plan {
     }))
     this.status = "draft"
     this.currentStepIndex = 0
-    this.maxRetries = input.maxRetries ?? 3
+    this.maxRetries = input.maxRetries ?? DEFAULT_PLAN_MAX_RETRIES
     this.createdAt = Date.now()
     this.updatedAt = this.createdAt
     this.replanHistory = []

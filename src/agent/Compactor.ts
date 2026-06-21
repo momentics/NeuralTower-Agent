@@ -1,30 +1,17 @@
 import type { IBackend, ChatMessage } from "../core/IBackend"
 import { estimateTokens } from "../core/token-utils"
-import { loadDefaultCompactorConfig } from "../core/config"
+import { loadDefaultCompactorConfig, type CompactorConfig } from "../core/config"
 import { createDomainLogger } from "../core/logger"
 import { errorMessage } from "../core/errors"
 
 const log = createDomainLogger("Compactor")
 
+const FALLBACK_SUMMARY_MAX_CHARS = 500
+
 /**
- * Настройки сжатия контекста.
+ * Настройки сжатия контекста — алиас для CompactorConfig.
  */
-export interface CompactorOptions {
-  /** Лимит контекстных токенов модели. */
-  contextLimit: number
-
-  /** Буфер токенов до порога сжатия. */
-  bufferTokens: number
-
-  /** Токенов для сохранения хвоста истории. */
-  keepTokens: number
-
-  /** Максимальная длина вывода инструмента для сжатия. */
-  maxToolOutputChars: number
-
-  /** Целевой размер сводки в токенах. */
-  summaryMaxTokens: number
-}
+export type CompactorOptions = CompactorConfig
 
 /**
  * Настройки по умолчанию для сжатия контекста.
@@ -230,7 +217,7 @@ export class Compactor {
   private fallbackSummary(messages: ChatMessage[]): string {
     const userMsgs = messages.filter((m) => m.role === "user")
     const lastUser = userMsgs[userMsgs.length - 1]
-    return `## Цель\n${lastUser?.content.slice(0, 500) ?? "Неизвестно"}\n\n## Прогресс\nОбработано ${messages.length} сообщений. Контекст сжат.`
+    return `## Цель\n${lastUser?.content.slice(0, FALLBACK_SUMMARY_MAX_CHARS) ?? "Неизвестно"}\n\n## Прогресс\nОбработано ${messages.length} сообщений. Контекст сжат.`
   }
 }
 

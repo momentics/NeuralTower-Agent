@@ -15,6 +15,7 @@ const log = createDomainLogger("SessionStore")
 
 const SESSION_TITLE_TRUNCATE = 60
 const DEFAULT_SESSION_TITLE = "Без названия"
+const DEFAULT_MAX_SESSIONS = 50
 
 export interface ISessionStore {
   init(): Promise<void>
@@ -49,7 +50,7 @@ export class PersistentSessionStore implements ISessionStore {
 
   constructor(
     storageUri: vscode.Uri,
-    maxSessions = 50,
+    maxSessions = DEFAULT_MAX_SESSIONS,
   ) {
     this.storagePath = path.join(
       storageUri.fsPath,
@@ -76,6 +77,13 @@ export class PersistentSessionStore implements ISessionStore {
   }
 
   async save(): Promise<void> {
+    await this.mutex.withLock(async () => {
+      await this._save()
+    })
+  }
+
+  /** Сохранение без мьютекса — для вызова изнутри withLock. */
+  private async _save(): Promise<void> {
     await fs.writeFile(this.storagePath, JSON.stringify(this.data, null, 2), "utf-8")
   }
 
@@ -115,7 +123,7 @@ export class PersistentSessionStore implements ISessionStore {
       if (this.data.sessions.length > this.maxSessions) {
         this.trimOldSessions()
       }
-      await this.save()
+      await this._save()
     })
   }
 
@@ -140,7 +148,7 @@ export class PersistentSessionStore implements ISessionStore {
         }
       }
       this.data.activeId = id
-      await this.save()
+      await this._save()
       return id
     })
   }
@@ -157,7 +165,7 @@ export class PersistentSessionStore implements ISessionStore {
         this.data.activeId = this.data.sessions[0]?.id ?? ""
         if (!this.data.activeId) this.createDefault()
       }
-      await this.save()
+      await this._save()
       return true
     })
   }
@@ -167,7 +175,7 @@ export class PersistentSessionStore implements ISessionStore {
       const session = this.data.sessions.find((s) => s.id === id)
       if (session) {
         session.pinned = !session.pinned
-        await this.save()
+        await this._save()
       }
     })
   }
@@ -177,7 +185,7 @@ export class PersistentSessionStore implements ISessionStore {
       const session = this.data.sessions.find((s) => s.id === id)
       if (session) {
         session.title = title
-        await this.save()
+        await this._save()
       }
     })
   }
@@ -203,7 +211,7 @@ export class PersistentSessionStore implements ISessionStore {
       )
       const session = this.data.sessions.find((s) => s.id === this.data.activeId)
       if (session) session.messageCount = 0
-      await this.save()
+      await this._save()
     })
   }
 

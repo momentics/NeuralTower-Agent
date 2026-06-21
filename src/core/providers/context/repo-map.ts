@@ -1,6 +1,8 @@
 import * as path from "path"
 import type { IndexEntry } from "../../../repo/FileIndex"
 import type { ContextProvider, ContextItem } from "./types"
+
+const REPO_MAP_MAX_DIRS = 30
 import { RepoSummary } from "../../../repo/RepoAnalyzer"
 
 export interface FileIndexStats {
@@ -73,7 +75,7 @@ export function makeRepoMapProvider(
           const dir = rel.split(path.sep).slice(0, 2).join(path.sep)
           dirSet.add(dir)
         }
-        for (const d of [...dirSet].sort().slice(0, 30)) {
+        for (const d of [...dirSet].sort().slice(0, REPO_MAP_MAX_DIRS)) {
           parts.push(`  ${d}/`)
         }
       }

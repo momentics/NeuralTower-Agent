@@ -18,6 +18,7 @@ const DEFAULT_EMBEDDING_DIMENSION = 1536
 const DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
 const DEFAULT_BACKEND_URL = "http://localhost:30000"
 const EMBEDDING_TIMEOUT_MS = 30000
+const DEFAULT_EMBEDDING_BATCH_SIZE = 256
 
 /**
  * Провайдер эмбеддингов Neural Tower.
@@ -32,7 +33,7 @@ export class NeuralTowerEmbeddingProvider implements IEmbeddingProvider {
     this.config = {
       baseUrl: config?.baseUrl ?? DEFAULT_BACKEND_URL,
       model: config?.model ?? DEFAULT_EMBEDDING_MODEL,
-      batchSize: config?.batchSize ?? 256,
+      batchSize: config?.batchSize ?? DEFAULT_EMBEDDING_BATCH_SIZE,
       timeoutMs: config?.timeoutMs ?? EMBEDDING_TIMEOUT_MS,
     }
     this._modelName = this.config.model

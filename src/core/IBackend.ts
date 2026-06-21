@@ -14,8 +14,9 @@ export interface IBackend {
    * Обработчик `onChunk` вызывается для каждого токена.
    * По завершении возвращается полное сообщение помощника.
    * Параметр `tools` передаёт определения инструментов для нативного function calling.
+   * Параметр `signal` позволяет прервать запрос извне.
    */
-  chat(messages: ChatMessage[], onChunk: (text: string) => void, tools?: ToolDefinition[]): Promise<ChatMessage>
+  chat(messages: ChatMessage[], onChunk: (text: string) => void, tools?: ToolDefinition[], signal?: AbortSignal): Promise<ChatMessage>
 
   /**
    * Отправить чат-запрос с ожиданием структурированного JSON-ответа.

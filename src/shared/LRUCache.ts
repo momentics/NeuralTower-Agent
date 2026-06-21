@@ -3,11 +3,13 @@
  * Используется для кэширования регулярных выражений и других
  * вычисляемых значений с ограничением по памяти.
  */
+const DEFAULT_LRU_CACHE_SIZE = 100
+
 export class LRUCache<K, V> {
   private cache = new Map<K, V>()
   private readonly max: number
 
-  constructor(max = 100) {
+  constructor(max = DEFAULT_LRU_CACHE_SIZE) {
     this.max = max
   }
 

@@ -1,6 +1,8 @@
 import { spawn, type SpawnOptions, type ChildProcess } from "child_process"
 import type { IProcessRunner, ProcessRunOptions, ProcessRunResult } from "../core/IProcessRunner"
 
+const DEFAULT_PROCESS_MAX_BUFFER = 1024 * 1024
+
 export interface ProcessRunnerOptions {
   cwd?: string
   timeout?: number
@@ -42,7 +44,7 @@ export function runProcess(
   const {
     cwd,
     timeout,
-    maxBuffer = 1024 * 1024,
+    maxBuffer = DEFAULT_PROCESS_MAX_BUFFER,
     shell = false,
     env = process.env,
     signal,

@@ -11,6 +11,8 @@ export interface ISettingsProvider {
   dispose(): void
 }
 
+const MIN_BACKEND_TIMEOUT_MS = 1000
+
 export class SettingsProvider implements ISettingsProvider {
   private _panel: vscode.WebviewPanel | undefined
   private disposables: vscode.Disposable[] = []
@@ -94,7 +96,7 @@ export class SettingsProvider implements ISettingsProvider {
           if (typeof msg.maxRetries === "number" && msg.maxRetries >= 0 && msg.maxRetries <= 10) {
             await this.backend.updateConfig({ maxRetries: msg.maxRetries })
           }
-          if (typeof msg.timeoutMs === "number" && msg.timeoutMs >= 1000) {
+          if (typeof msg.timeoutMs === "number" && msg.timeoutMs >= MIN_BACKEND_TIMEOUT_MS) {
             await this.backend.updateConfig({ timeoutMs: msg.timeoutMs })
           }
           if (typeof msg.autoApprove === "boolean") {

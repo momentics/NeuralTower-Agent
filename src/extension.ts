@@ -64,6 +64,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
     if (vscode.workspace.workspaceFolders?.[0]) {
       const newDir = vscode.workspace.workspaceFolders[0].uri.fsPath
       deps.setWorkDir(newDir)
+      deps.gitService.resetRoot()
       await deps.gitService.findRoot(newDir)
       await deps.fileIndex.build(newDir)
       await deps.agent.reload()

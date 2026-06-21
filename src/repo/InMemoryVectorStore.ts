@@ -42,31 +42,37 @@ export class InMemoryVectorStore implements IVectorStore {
 
   /**
    * Поиск по вектору запроса с использованием
-   * косинусного сходства.
+   * косинусного сходства. Использует частичный top-K
+   * для избежания сортировки всех результатов.
    */
   async search(queryEmbedding: number[], topK: number): Promise<SearchResult[]> {
     const items = this.store.getItems()
     if (items.length === 0) return []
 
-    const scores: Array<{ index: number; score: number }> = []
+    const top: Array<{ index: number; score: number }> = []
+    let threshold = 0
 
     for (let i = 0; i < items.length; i++) {
       const emb = items[i]
       if (!emb) continue
 
       const similarity = cosineSimilarity(queryEmbedding, emb.embedding)
-      if (similarity > 0) {
-        scores.push({ index: i, score: similarity })
+      if (similarity <= threshold) continue
+
+      if (top.length < topK) {
+        top.push({ index: i, score: similarity })
+        top.sort((a, b) => b.score - a.score)
+        threshold = top[top.length - 1].score
+      } else if (similarity > top[top.length - 1].score) {
+        top[top.length - 1] = { index: i, score: similarity }
+        top.sort((a, b) => b.score - a.score)
+        threshold = top[top.length - 1].score
       }
     }
 
-    scores.sort((a, b) => b.score - a.score)
-
     const results: SearchResult[] = []
-    const limit = Math.min(topK, scores.length)
-
-    for (let i = 0; i < limit; i++) {
-      const entry = scores[i]
+    for (let i = 0; i < top.length; i++) {
+      const entry = top[i]
       const emb = items[entry.index]
       if (emb) {
         results.push({
