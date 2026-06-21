@@ -176,7 +176,7 @@ export class TypeScriptChunker implements IChunker {
         filePath,
         content: chunkContent,
         startLine: def.startLine + 1,
-        endLine: def.endLine,
+        endLine: def.endLine + 1,
         nodeKind: def.kind,
         symbolName: def.name,
         parentName: def.parentName,
@@ -328,7 +328,7 @@ export class TypeScriptChunker implements IChunker {
 
       // Стрелочные функции и константы (top-level)
       const constMatch = line.match(
-        /^(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?(?:\((([^)]*\)))|[^=])\s*=>/
+        /^(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?(?:\([^)]*\)\s*=>|[^\s=]+\s*=>)/
       )
       if (constMatch && classDepth === 0) {
         let endLine = i
@@ -385,12 +385,12 @@ export class TypeScriptChunker implements IChunker {
 
       // Методы класса
       const methodMatch = line.match(
-        /^(?:public|private|protected|static|async|abstract|override)\s+(\w+)\s*\(/
+        /^(?:(?:public|private|protected|static|async|abstract|override)\s+)?(\w+)\s*\(/
       )
       if (methodMatch && !line.startsWith("//")) {
         const methodName = methodMatch[1]
         if (
-          ["if", "for", "while", "switch", "catch", "return"].includes(
+          ["if", "for", "while", "switch", "catch", "return", "typeof", "instanceof", "new", "delete", "void", "throw", "yield", "await", "import", "export", "require", "super", "this", "get", "set"].includes(
             methodName
           )
         ) {
