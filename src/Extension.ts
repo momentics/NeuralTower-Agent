@@ -93,11 +93,16 @@ function registerWorkspaceListeners(deps: Awaited<ReturnType<typeof createDeps>>
   vscode.workspace.onDidChangeWorkspaceFolders(async () => {
     if (vscode.workspace.workspaceFolders?.[0]) {
       const newDir = vscode.workspace.workspaceFolders[0].uri.fsPath
-      deps.setWorkDir(newDir)
-      deps.gitService.resetRoot()
-      await deps.gitService.findRoot(newDir)
-      await deps.fileIndex.build(newDir)
-      await deps.agent.reload()
+      try {
+        deps.setWorkDir(newDir)
+        deps.gitService.resetRoot()
+        await deps.gitService.findRoot(newDir)
+        await deps.fileIndex.build(newDir)
+        await deps.agent.reload()
+      } catch (err: unknown) {
+        const msg = errorMessage(err)
+        log.error(`Ошибка при изменении рабочей области: ${msg}`)
+      }
     }
   })
 }
@@ -180,5 +185,6 @@ async function initInBackground(deps: Awaited<ReturnType<typeof createDeps>>): P
 }
 
 export function deactivate(): void {
+  initInProgress = false
   app?.dispose()
 }

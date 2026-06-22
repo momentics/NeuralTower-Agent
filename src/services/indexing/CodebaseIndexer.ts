@@ -144,16 +144,21 @@ export class CodebaseIndexer implements IPlugin, ICodebaseIndexer {
     this.pendingOps.push({ type, path: filePath })
     if (this.debounceTimer) return
     this.debounceTimer = setTimeout(async () => {
-      this.debounceTimer = null
-      const ops = this.pendingOps.splice(0)
-      this.pendingPaths.clear()
-      for (const op of ops) {
-        if (this.isDisposed) return
-        if (op.type === "change") {
-          await this.onFileChanged(op.path)
-        } else {
-          await this.onFileDeleted(op.path)
+      try {
+        this.debounceTimer = null
+        const ops = this.pendingOps.splice(0)
+        this.pendingPaths.clear()
+        for (const op of ops) {
+          if (this.isDisposed) return
+          if (op.type === "change") {
+            await this.onFileChanged(op.path)
+          } else {
+            await this.onFileDeleted(op.path)
+          }
         }
+      } catch (err: unknown) {
+        const msg = errorMessage(err)
+        log.error(`Ошибка при обработке событий файлов: ${msg}`)
       }
     }, INDEX_FILE_EVENT_DEBOUNCE_MS)
   }

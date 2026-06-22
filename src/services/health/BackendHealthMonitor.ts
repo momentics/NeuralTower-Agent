@@ -38,8 +38,11 @@ export class BackendHealthMonitor extends StatusBarIndicator implements IPlugin 
         log.warn("ContextManager: провайдеры контекста не зарегистрированы. Агент будет работать без контекста проекта.")
       }
     }
-    this.healthTimer = setInterval(async () => {
-      await this.check()
+    this.healthTimer = setInterval(() => {
+      this.check().catch((err: unknown) => {
+        const msg = errorMessage(err)
+        log.error(`Проверка здоровья бэкенда (таймер): ${msg}`)
+      })
     }, HEALTH_CHECK_INTERVAL_MS)
     try {
       (this.healthTimer as NodeJS.Timer).unref()
