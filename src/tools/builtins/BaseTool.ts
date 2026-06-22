@@ -1,6 +1,6 @@
 import type { ITool, IToolSchema } from "../ITool"
 import type { IToolResult } from "../../agent/AgentTypes"
-import { errorMessage } from "../../core/Errors"
+import { safeExecute } from "../../core/Errors"
 
 /**
  * Базовый класс для инструментов, которые не работают с файловой системой.
@@ -27,13 +27,11 @@ export abstract class BaseTool implements ITool {
    */
   async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     if (signal?.aborted) return { output: "Операция отменена", success: false }
-    try {
-      return await this.doExecute(args, signal)
-    } catch (err: unknown) {
-      return {
-        output: `Не удалось выполнить ${this.name}: ${errorMessage(err)}`,
-        success: false,
-      }
+    const result = await safeExecute(() => this.doExecute(args, signal))
+    if (result.ok) return result.value
+    return {
+      output: `Не удалось выполнить ${this.name}: ${result.error}`,
+      success: false,
     }
   }
 }

@@ -24,10 +24,12 @@ export interface IFetchUrlResult {
   statusText?: string
 }
 
-const DEFAULT_TIMEOUT_MS = 15_000
-const DEFAULT_MAX_LENGTH = 12_000
-const DEFAULT_USER_AGENT = "NeuralTower-Agent/0.1"
-const MAX_REDIRECTS = 5
+import { NET_DEFAULT_TIMEOUT_MS, NET_DEFAULT_MAX_LENGTH, NET_DEFAULT_USER_AGENT, NET_MAX_REDIRECTS } from "../core/Config"
+
+const DEFAULT_TIMEOUT_MS = NET_DEFAULT_TIMEOUT_MS
+const DEFAULT_MAX_LENGTH = NET_DEFAULT_MAX_LENGTH
+const DEFAULT_USER_AGENT = NET_DEFAULT_USER_AGENT
+const MAX_REDIRECTS = NET_MAX_REDIRECTS
 
 /** Разрешённые протоколы для загрузки. */
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"])

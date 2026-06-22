@@ -9,8 +9,8 @@ import {
   executeFindReferences,
   executeHover,
   executeSignatureHelp,
-  MAX_SYMBOL_RESULTS,
 } from "../../lsp/LspClient"
+import { LSP_MAX_SYMBOL_RESULTS } from "../../core/Config"
 import { errorMessage } from "../../core/Errors"
 import { BaseTool } from "./BaseTool"
 import { str, strOpt, numOpt } from "../ToolArgs"
@@ -93,7 +93,7 @@ export class LspTool extends BaseTool {
       case "documentSymbol":
         return await executeDocumentSymbol(filePathRaw!, this.getWorkDir, signal)
       case "workspaceSymbol":
-        return await executeWorkspaceSymbol(query ?? "", this.getWorkDir, MAX_SYMBOL_RESULTS, signal)
+        return await executeWorkspaceSymbol(query ?? "", this.getWorkDir, LSP_MAX_SYMBOL_RESULTS, signal)
       case "goToDefinition":
         return await executeGoToDefinition(filePathRaw!, line, character, this.getWorkDir, signal)
       case "findReferences":

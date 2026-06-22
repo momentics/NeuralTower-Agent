@@ -1,7 +1,8 @@
 import * as vscode from "vscode"
-import * as crypto from "crypto"
 import type { IBackend } from "../core/IBackend"
 import type { SettingsToExt, ExtToSettings } from "../shared/Messages"
+import { UI_MIN_BACKEND_TIMEOUT_MS } from "../core/Config"
+import { buildWebviewHtml } from "../shared/WebviewBuilder"
 
 /**
  * Интерфейс провайдера настроек.
@@ -10,8 +11,6 @@ export interface ISettingsProvider {
   show(): void
   dispose(): void
 }
-
-const MIN_BACKEND_TIMEOUT_MS = 1000
 
 export class SettingsProvider implements ISettingsProvider {
   private _panel: vscode.WebviewPanel | undefined
@@ -96,7 +95,7 @@ export class SettingsProvider implements ISettingsProvider {
           if (typeof msg.maxRetries === "number" && msg.maxRetries >= 0 && msg.maxRetries <= 10) {
             await this.backend.updateConfig({ maxRetries: msg.maxRetries })
           }
-          if (typeof msg.timeoutMs === "number" && msg.timeoutMs >= MIN_BACKEND_TIMEOUT_MS) {
+          if (typeof msg.timeoutMs === "number" && msg.timeoutMs >= UI_MIN_BACKEND_TIMEOUT_MS) {
             await this.backend.updateConfig({ timeoutMs: msg.timeoutMs })
           }
           if (typeof msg.autoApprove === "boolean") {
@@ -124,24 +123,10 @@ export class SettingsProvider implements ISettingsProvider {
   }
 
   private html(): string {
-    const nonce = crypto.randomBytes(16).toString("hex")
-    const css = this.getWebview().asWebviewUri(
-      vscode.Uri.joinPath(this.extUri, "resources", "settings.css"),
-    )
-    const js = this.getWebview().asWebviewUri(
-      vscode.Uri.joinPath(this.extUri, "resources", "settings.js"),
-    )
-
-    return `<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src ${this.getWebview().cspSource};
-             script-src 'nonce-${nonce}';">
-  <link rel="stylesheet" href="${css}">
-</head>
-<body>
+    return buildWebviewHtml(this.getWebview(), this.extUri, {
+      css: "settings.css",
+      js: "settings.js",
+      body: `
 <div class="container">
   <h1>Настройки</h1>
   <section>
@@ -163,9 +148,7 @@ export class SettingsProvider implements ISettingsProvider {
     </div>
     <p id="status"></p>
   </section>
-</div>
-<script nonce="${nonce}" src="${js}"></script>
-</body>
-</html>`
+</div>`,
+    })
   }
 }

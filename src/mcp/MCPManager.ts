@@ -5,10 +5,9 @@ import { ExecutionError, TimeoutError, errorMessage } from "../core/Errors"
 import { createDomainLogger } from "../core/Logger"
 import type { IMCPTransport } from "./MCPTransport"
 import { StdioMCPTransport, MCP_TRANSPORT_EVENTS } from "./MCPTransport"
+import { MCP_REQUEST_TIMEOUT_MS } from "../core/Config"
 
 const log = createDomainLogger("MCP")
-
-const MCP_REQUEST_TIMEOUT_MS = 10000
 
 /** Конфигурация MCP-сервера для подключения. */
 export interface IMCPServerConfig {
@@ -57,17 +56,27 @@ export interface IMCPManager {
 
 /**
  * Создать транспорт для конфигурации сервера.
- * Для добавления нового типа транспорта достаточно расширить switch (KISS).
+ * Для добавления нового типа транспорта достаточно вызвать registerTransportFactory.
  */
-function createTransport(config: IMCPServerConfig): IMCPTransport | null {
-  switch (config.transport) {
-    case "stdio":
-      return new StdioMCPTransport(config)
-    default:
-      log.error(`Неподдерживаемый транспорт: ${config.transport}`)
-      return null
-  }
+const transportFactories = new Map<string, (config: IMCPServerConfig) => IMCPTransport>()
+
+/** Зарегистрировать фабрику транспорта для указанного типа. */
+export function registerTransportFactory(type: string, factory: (config: IMCPServerConfig) => IMCPTransport): void {
+  transportFactories.set(type, factory)
 }
+
+/** Создать транспорт для конфигурации сервера. */
+function createTransport(config: IMCPServerConfig): IMCPTransport | null {
+  const factory = transportFactories.get(config.transport)
+  if (!factory) {
+    log.error(`Неподдерживаемый транспорт: ${config.transport}`)
+    return null
+  }
+  return factory(config)
+}
+
+/** Регистрация встроенных транспортов. */
+registerTransportFactory("stdio", (config) => new StdioMCPTransport(config))
 
 export class MCPManager implements IMCPManager {
   private servers: IMCPServer[] = []

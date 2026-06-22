@@ -2,8 +2,7 @@ import * as vscode from "vscode"
 import type { ITool } from "../../tools/ITool"
 import type { PermissionLevel, IToolPermission, IPermissionRequest, IAutoApproveConfig } from "../../shared/PermissionTypes"
 import type { IPlugin } from "../../shared/Types"
-
-const PERMISSION_TIMEOUT_MS = 30000
+import { PERMISSION_TIMEOUT_MS } from "../../core/Config"
 
 /**
  * Интерфейс PermissionManager — публичный API.

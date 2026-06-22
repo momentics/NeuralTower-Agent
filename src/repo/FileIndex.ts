@@ -19,7 +19,9 @@ import { LRUCache } from "../shared/LRUCache"
 
 const log = createDomainLogger("FileIndex")
 
-const FILE_INDEX_DEFAULT_MAX_FILES = 20000
+import { INDEX_DEFAULT_MAX_FILES } from "../core/Config"
+
+const FILE_INDEX_DEFAULT_MAX_FILES = INDEX_DEFAULT_MAX_FILES
 
 export interface IIndexEntry {
   path: string

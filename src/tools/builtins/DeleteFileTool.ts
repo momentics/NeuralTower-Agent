@@ -3,8 +3,7 @@ import type { IToolResult } from "../../agent/AgentTypes"
 import * as fs from "fs/promises"
 import { FilesystemTool } from "./FilesystemTool"
 import { str, bool } from "../ToolArgs"
-
-const MAX_DELETE_FILE_COUNT = 100
+import { FS_MAX_DELETE_FILE_COUNT } from "../../core/Config"
 
 /** Удаление файла или директории. Поддерживает рекурсивное удаление директорий. */
 export class DeleteFileTool extends FilesystemTool {
@@ -36,7 +35,7 @@ export class DeleteFileTool extends FilesystemTool {
 
     if (isRecursive) {
       const fileCount = await this.countFiles(result.resolved, signal)
-      if (fileCount > MAX_DELETE_FILE_COUNT) {
+      if (fileCount > FS_MAX_DELETE_FILE_COUNT) {
         return {
           output: `Рекурсивное удаление заблокировано: директория содержит ${fileCount} файлов. Это слишком много для автоматического удаления.`,
           success: false,

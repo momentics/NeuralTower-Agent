@@ -3,9 +3,7 @@ import type { IToolResult } from "../../agent/AgentTypes"
 import * as fs from "fs/promises"
 import { FilesystemTool } from "./FilesystemTool"
 import { str, num, clamp } from "../ToolArgs"
-
-const DEFAULT_READ_LIMIT = 2000
-const MAX_READ_LIMIT = 10000
+import { FS_DEFAULT_READ_LIMIT, FS_MAX_READ_LIMIT } from "../../core/Config"
 
 /** Чтение содержимого текстового файла. */
 export class ReadFileTool extends FilesystemTool {
@@ -20,7 +18,7 @@ export class ReadFileTool extends FilesystemTool {
     parameters: {
       filepath: { type: "string", description: "Путь к файлу" },
       offset: { type: "number", description: "Номер начальной строки (с 1)", default: 0 },
-      limit: { type: "number", description: "Максимальное число строк", default: DEFAULT_READ_LIMIT },
+      limit: { type: "number", description: "Максимальное число строк", default: FS_DEFAULT_READ_LIMIT },
     },
     required: ["filepath"],
   }
@@ -33,8 +31,8 @@ export class ReadFileTool extends FilesystemTool {
     const content = await fs.readFile(result.resolved, "utf-8")
     const rawOffset = num(args, "offset", 0)
     const offset = rawOffset >= 0 ? rawOffset : 0
-    const rawLimit = num(args, "limit", DEFAULT_READ_LIMIT)
-    const limit = clamp(rawLimit, 1, MAX_READ_LIMIT)
+    const rawLimit = num(args, "limit", FS_DEFAULT_READ_LIMIT)
+    const limit = clamp(rawLimit, 1, FS_MAX_READ_LIMIT)
     const lines = content.split("\n")
     const slice = offset > 0 ? lines.slice(offset - 1, offset - 1 + limit) : lines.slice(0, limit)
     return { output: slice.join("\n"), success: true }

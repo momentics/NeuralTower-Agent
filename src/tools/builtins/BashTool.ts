@@ -4,11 +4,12 @@ import { errorMessage } from "../../core/Errors"
 import { runProcess } from "../../utils/ProcessRunner"
 import { BaseTool } from "./BaseTool"
 import { str, strOpt, num, clamp } from "../ToolArgs"
-
-const BASH_DEFAULT_TIMEOUT_MS = 30_000
-const BASH_MAX_BUFFER = 1024 * 1024
-const BASH_MIN_TIMEOUT_MS = 1000
-const BASH_MAX_TIMEOUT_MS = 300_000
+import {
+  BASH_DEFAULT_TIMEOUT_MS,
+  BASH_MAX_BUFFER,
+  BASH_MIN_TIMEOUT_MS,
+  BASH_MAX_TIMEOUT_MS,
+} from "../../core/Config"
 
 /**
  * Команды, запрещённые для выполнения из-за высокого риска повреждения системы.

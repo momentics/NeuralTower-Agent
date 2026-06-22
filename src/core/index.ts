@@ -73,3 +73,16 @@ export type {
   ISessionConfig,
   IAutocompleteConfig,
 } from "./Config"
+export {
+  VscodeCommandExecutor,
+  VscodeWorkspaceConfiguration,
+  VscodeDocumentService,
+  VscodeWindowService,
+} from "./VscodeApi"
+export type {
+  ICommandExecutor,
+  IWorkspaceConfiguration,
+  IWorkspaceConfigurationSection,
+  IDocumentService,
+  IWindowService,
+} from "./VscodeApi"

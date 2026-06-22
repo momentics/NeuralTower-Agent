@@ -3,9 +3,7 @@ import type { IToolResult } from "../../agent/AgentTypes"
 import * as fs from "fs/promises"
 import { FilesystemTool } from "./FilesystemTool"
 import { str, bool } from "../ToolArgs"
-
-const EDIT_PREVIEW_TRUNCATE = 60
-const MAX_EDIT_CONTENT_LENGTH = 1_000_000
+import { FS_EDIT_PREVIEW_TRUNCATE, FS_MAX_EDIT_CONTENT_LENGTH } from "../../core/Config"
 
 /**
  * Расширения бинарных файлов, которые нельзя редактировать как текст.
@@ -53,8 +51,8 @@ export class EditFileTool extends FilesystemTool {
 
     if (!fp) return { output: "Не указан путь к файлу", success: false }
     if (!oldStr) return { output: "Не указан текст для поиска", success: false }
-    if (newStr.length > MAX_EDIT_CONTENT_LENGTH) {
-      return { output: `Текст замены слишком велик (макс. ${MAX_EDIT_CONTENT_LENGTH} символов)`, success: false }
+    if (newStr.length > FS_MAX_EDIT_CONTENT_LENGTH) {
+      return { output: `Текст замены слишком велик (макс. ${FS_MAX_EDIT_CONTENT_LENGTH} символов)`, success: false }
     }
 
     const result = await this.resolvePath(fp)
@@ -69,7 +67,7 @@ export class EditFileTool extends FilesystemTool {
     const count = content.split(oldStr).length - 1
 
     if (count === 0) {
-      const preview = oldStr.length > EDIT_PREVIEW_TRUNCATE ? `${oldStr.slice(0, EDIT_PREVIEW_TRUNCATE)}...` : oldStr
+      const preview = oldStr.length > FS_EDIT_PREVIEW_TRUNCATE ? `${oldStr.slice(0, FS_EDIT_PREVIEW_TRUNCATE)}...` : oldStr
       return { output: `"${preview}" не найдено в файле`, success: false }
     }
     if (count > 1 && !all) {

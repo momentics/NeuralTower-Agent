@@ -1,21 +1,41 @@
 import type { ITool } from "./ITool"
 import type { IToolResult } from "../agent/AgentTypes"
-import { ToolError } from "../core/Errors"
+import { safeExecute } from "../core/Errors"
 
 /**
- * Интерфейс реестра инструментов.
+ * Интерфейс реестра инструментов — методы регистрации.
+ * Используется компонентами, которые только добавляют/удаляют инструменты.
  */
-export interface IToolRegistry {
+export interface IToolRegistrar {
   register(tool: ITool): void
   registerMany(tools: ITool[]): void
   unregister(name: string): void
-  list(): ITool[]
-  get(name: string): ITool | undefined
-  invoke(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult>
-  toSchemaList(): string
-  toToolDefinitions(): Array<{ name: string; description: string; parameters: Record<string, unknown> }>
   clear(): void
 }
+
+/**
+ * Интерфейс реестра инструментов — методы запроса.
+ * Используется компонентами, которые только читают список инструментов.
+ */
+export interface IToolQuerier {
+  list(): ITool[]
+  get(name: string): ITool | undefined
+  toSchemaList(): string
+  toToolDefinitions(): Array<{ name: string; description: string; parameters: Record<string, unknown> }>
+}
+
+/**
+ * Интерфейс реестра инструментов — вызов.
+ * Используется компонентами, которые только вызывают инструменты.
+ */
+export interface IToolInvoker {
+  invoke(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult>
+}
+
+/**
+ * Полный интерфейс реестра инструментов (объединение всех ролей).
+ */
+export interface IToolRegistry extends IToolRegistrar, IToolQuerier, IToolInvoker {}
 
 /**
  * Преобразовать IToolSchema в формат OpenAI JSON Schema.
@@ -138,16 +158,12 @@ export class ToolRegistry implements IToolRegistry {
     }
 
     const start = Date.now()
-    try {
-      const result = await tool.execute(args, signal)
-      return { ...result, durationMs: Date.now() - start }
-    } catch (err: unknown) {
-      const msg = err instanceof ToolError ? `${err.name}: ${err.message}` : err instanceof Error ? err.message : String(err)
-      return {
-        output: `Инструмент "${name}" не выполнен: ${msg}`,
-        success: false,
-        durationMs: Date.now() - start,
-      }
+    const result = await safeExecute(() => tool.execute(args, signal))
+    if (result.ok) return { ...result.value, durationMs: Date.now() - start }
+    return {
+      output: `Инструмент "${name}" не выполнен: ${result.error}`,
+      success: false,
+      durationMs: Date.now() - start,
     }
   }
 

@@ -1,5 +1,6 @@
-import * as vscode from "vscode"
 import type { IPlugin } from "../../shared/Types"
+import type { IWindowService } from "../../core/VscodeApi"
+import { VscodeWindowService } from "../../core/VscodeApi"
 
 export type NotificationType = "info" | "warning" | "error" | "agentDone" | "permissionRequest"
 
@@ -31,6 +32,8 @@ export class NotificationService implements IPlugin, INotificationService {
     permissionRequests: true,
   }
 
+  constructor(private readonly window: IWindowService = new VscodeWindowService()) {}
+
   /** Инициализация не требуется. */
   async init(): Promise<void> {}
 
@@ -40,22 +43,22 @@ export class NotificationService implements IPlugin, INotificationService {
     const opts = actions ?? []
     switch (type) {
       case "info":
-        await vscode.window.showInformationMessage(message, ...opts)
+        await this.window.showInformationMessage(message, ...opts)
         break
       case "warning":
-        await vscode.window.showWarningMessage(message, ...opts)
+        await this.window.showWarningMessage(message, ...opts)
         break
       case "error":
-        await vscode.window.showErrorMessage(message, ...opts)
+        await this.window.showErrorMessage(message, ...opts)
         break
       case "agentDone":
         if (this.options.agentCompletion) {
-          await vscode.window.showInformationMessage(message, ...opts)
+          await this.window.showInformationMessage(message, ...opts)
         }
         break
       case "permissionRequest":
         if (this.options.permissionRequests) {
-          await vscode.window.showWarningMessage(message, ...opts)
+          await this.window.showWarningMessage(message, ...opts)
         }
         break
     }
@@ -67,7 +70,7 @@ export class NotificationService implements IPlugin, INotificationService {
     description: string,
   ): Promise<"allow" | "deny" | "allowAlways"> {
     if (!this.options.enabled || !this.options.permissionRequests) return "deny"
-    const result = await vscode.window.showWarningMessage(
+    const result = await this.window.showWarningMessage(
       `[${toolName}] ${description}`,
       { modal: true },
       "Разрешить",

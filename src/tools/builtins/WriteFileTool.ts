@@ -4,8 +4,7 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import { FilesystemTool } from "./FilesystemTool"
 import { str } from "../ToolArgs"
-
-const MAX_WRITE_CONTENT_LENGTH = 10_000_000
+import { FS_MAX_WRITE_CONTENT_LENGTH } from "../../core/Config"
 
 /** Запись содержимого в файл. Создаёт родительские директории при необходимости. */
 export class WriteFileTool extends FilesystemTool {
@@ -29,8 +28,8 @@ export class WriteFileTool extends FilesystemTool {
     const content = str(args, "content")
 
     if (!fp) return { output: "Не указан путь к файлу", success: false }
-    if (content.length > MAX_WRITE_CONTENT_LENGTH) {
-      return { output: `Содержимое слишком велико (макс. ${MAX_WRITE_CONTENT_LENGTH} символов)`, success: false }
+    if (content.length > FS_MAX_WRITE_CONTENT_LENGTH) {
+      return { output: `Содержимое слишком велико (макс. ${FS_MAX_WRITE_CONTENT_LENGTH} символов)`, success: false }
     }
 
     const result = await this.resolvePath(fp)

@@ -17,10 +17,9 @@ import type { IEmbeddingProvider } from "../../backend/IEmbeddingProvider"
 import type { IPlugin } from "../../shared/Types"
 import { createDomainLogger } from "../../core/Logger"
 import { errorMessage } from "../../core/Errors"
+import { INDEX_FILE_EVENT_DEBOUNCE_MS } from "../../core/Config"
 
 const log = createDomainLogger("CodebaseIndexer")
-
-const FILE_EVENT_DEBOUNCE_MS = 300
 
 /**
  * Состояние индексации.
@@ -69,13 +68,13 @@ export class CodebaseIndexer implements IPlugin, ICodebaseIndexer {
     this.disposables.push(
       vscode.workspace.onDidSaveTextDocument(async (doc) => {
         if (this.isDisposed) return
-        this.scheduleFileChange(doc.uri.fsPath)
+        this.scheduleOp("change", doc.uri.fsPath)
       }),
 
       vscode.workspace.onDidDeleteFiles(async (e) => {
         if (this.isDisposed) return
         for (const file of e.files) {
-          this.scheduleFileDelete(file.fsPath)
+          this.scheduleOp("delete", file.fsPath)
         }
       }),
       vscode.workspace.onDidCreateFiles(async (e) => {
@@ -134,10 +133,10 @@ export class CodebaseIndexer implements IPlugin, ICodebaseIndexer {
   }
 
   /**
-   * Запланировать обработку изменения файла с дебаунсом.
+   * Запланировать операцию с дебаунсом.
    */
-  private scheduleFileChange(filePath: string): void {
-    this.pendingOps.push({ type: "change", path: filePath })
+  private scheduleOp(type: "change" | "delete", filePath: string): void {
+    this.pendingOps.push({ type, path: filePath })
     if (this.debounceTimer) return
     this.debounceTimer = setTimeout(async () => {
       this.debounceTimer = null
@@ -150,27 +149,7 @@ export class CodebaseIndexer implements IPlugin, ICodebaseIndexer {
           await this.onFileDeleted(op.path)
         }
       }
-    }, FILE_EVENT_DEBOUNCE_MS)
-  }
-
-  /**
-   * Запланировать обработку удаления файла с дебаунсом.
-   */
-  private scheduleFileDelete(filePath: string): void {
-    this.pendingOps.push({ type: "delete", path: filePath })
-    if (this.debounceTimer) return
-    this.debounceTimer = setTimeout(async () => {
-      this.debounceTimer = null
-      const ops = this.pendingOps.splice(0)
-      for (const op of ops) {
-        if (this.isDisposed) return
-        if (op.type === "change") {
-          await this.onFileChanged(op.path)
-        } else {
-          await this.onFileDeleted(op.path)
-        }
-      }
-    }, FILE_EVENT_DEBOUNCE_MS)
+    }, INDEX_FILE_EVENT_DEBOUNCE_MS)
   }
 
   /**

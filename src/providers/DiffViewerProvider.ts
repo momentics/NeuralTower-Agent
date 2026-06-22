@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
-import * as crypto from "crypto"
 import type { GitDiffOutcome } from "../services/git/GitService"
+import { buildWebviewHtml } from "../shared/WebviewBuilder"
 
 /**
  * Интерфейс просмотрщика diff.
@@ -82,16 +82,9 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
     this.disposables = []
   }
 
-  private buildHtml(): string {
-    const nonce = crypto.randomBytes(16).toString("hex")
-    return `<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy"
-    content="default-src 'none'; style-src ${this.panel!.webview.cspSource} 'unsafe-inline';
-             script-src 'nonce-${nonce}';">
-  <style>
+private buildHtml(): string {
+    return buildWebviewHtml(this.panel!.webview, this.extUri, {
+      inlineCss: `
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: var(--vscode-font-family); padding: 16px; color: var(--vscode-foreground); }
     h2 { margin-bottom: 12px; font-size: 14px; }
@@ -105,19 +98,8 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
     .file-list { list-style: none; max-height: 400px; overflow-y: auto; }
     .file-list li { padding: 4px 8px; font-size: 12px; border-bottom: 1px solid var(--vscode-input-border); cursor: default; }
     .file-list li:hover { background: var(--vscode-list-hoverBackground); }
-    .empty { color: var(--vscode-descriptionForeground); font-style: italic; padding: 20px 0; }
-  </style>
-</head>
-<body>
-  <h2>Изменения файлов</h2>
-  <div class="summary">
-    <div class="stat files"><div class="label">Файлов</div><div class="value" id="count">0</div></div>
-    <div class="stat additions"><div class="label">Добавлено строк</div><div class="value" id="adds">0</div></div>
-    <div class="stat deletions"><div class="label">Удалено строк</div><div class="value" id="dels">0</div></div>
-  </div>
-  <ul class="file-list" id="fileList"></ul>
-  <div class="empty" id="empty">Нет изменений</div>
-  <script nonce="${nonce}">
+    .empty { color: var(--vscode-descriptionForeground); font-style: italic; padding: 20px 0; }`,
+      inlineJs: `
     const countEl = document.getElementById('count')
     const addsEl = document.getElementById('adds')
     const delsEl = document.getElementById('dels')
@@ -143,9 +125,16 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
           })
         }
       }
+    })`,
+      body: `
+  <h2>Изменения файлов</h2>
+  <div class="summary">
+    <div class="stat files"><div class="label">Файлов</div><div class="value" id="count">0</div></div>
+    <div class="stat additions"><div class="label">Добавлено строк</div><div class="value" id="adds">0</div></div>
+    <div class="stat deletions"><div class="label">Удалено строк</div><div class="value" id="dels">0</div></div>
+  </div>
+  <ul class="file-list" id="fileList"></ul>
+  <div class="empty" id="empty">Нет изменений</div>`,
     })
-  </script>
-</body>
-</html>`
   }
 }

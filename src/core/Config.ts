@@ -1,3 +1,9 @@
+/**
+ * Централизованные константы конфигурации.
+ * Все числовые пороги и таймауты собраны в одном месте
+ * для единообразия и лёгкой настройки.
+ */
+
 import * as vscode from "vscode"
 import type { IBackendConfig } from "./IBackend"
 
@@ -175,3 +181,84 @@ export function loadAppConfig(): IAppConfig {
     },
   }
 }
+
+// ── LSP ──────────────────────────────────────────────────────
+
+/** Таймаут LSP-запроса в миллисекундах */
+export const LSP_TIMEOUT_MS = 10_000
+/** Максимальное число результатов символов */
+export const LSP_MAX_SYMBOL_RESULTS = 50
+/** Максимальное число результатов ссылок */
+export const LSP_MAX_REFERENCE_RESULTS = 30
+/** Максимальная длина hover-текста */
+export const LSP_MAX_HOVER_CHARS = 4000
+/** Максимальная глубина рекурсии символов */
+export const LSP_MAX_DEPTH = 4
+/** Длина сниппета строки */
+export const LSP_SNIPPET_LENGTH = 200
+
+// ── Инструменты файловой системы ─────────────────────────────
+
+/** Максимальная длина содержимого при редактировании */
+export const FS_MAX_EDIT_CONTENT_LENGTH = 1_000_000
+/** Максимальная длина содержимого при записи */
+export const FS_MAX_WRITE_CONTENT_LENGTH = 10_000_000
+/** Дефолтный лимит чтения строк */
+export const FS_DEFAULT_READ_LIMIT = 2000
+/** Максимальный лимит чтения строк */
+export const FS_MAX_READ_LIMIT = 10_000
+/** Максимальное число удаляемых файлов за раз */
+export const FS_MAX_DELETE_FILE_COUNT = 100
+/** Длина превью при редактировании */
+export const FS_EDIT_PREVIEW_TRUNCATE = 60
+
+// ── Bash-инструмент ──────────────────────────────────────────
+
+/** Дефолтный таймаут Bash-команды в миллисекундах */
+export const BASH_DEFAULT_TIMEOUT_MS = 30_000
+/** Максимальный буфер вывода Bash */
+export const BASH_MAX_BUFFER = 1024 * 1024
+/** Минимальный таймаут Bash в миллисекундах */
+export const BASH_MIN_TIMEOUT_MS = 1000
+/** Максимальный таймаут Bash в миллисекундах */
+export const BASH_MAX_TIMEOUT_MS = 300_000
+
+// ── Сеть ─────────────────────────────────────────────────────
+
+/** Дефолтный таймаут запроса в миллисекундах */
+export const NET_DEFAULT_TIMEOUT_MS = 15_000
+/** Дефолтная максимальная длина ответа */
+export const NET_DEFAULT_MAX_LENGTH = 12_000
+/** Дефолтный User-Agent */
+export const NET_DEFAULT_USER_AGENT = "NeuralTower-Agent/0.1"
+/** Максимальное число редиректов */
+export const NET_MAX_REDIRECTS = 5
+
+// ── MCP ──────────────────────────────────────────────────────
+
+/** Таймаут MCP-запроса в миллисекундах */
+export const MCP_REQUEST_TIMEOUT_MS = 10_000
+
+// ── Индексация ───────────────────────────────────────────────
+
+/** Дебаунс событий файловой системы в миллисекундах */
+export const INDEX_FILE_EVENT_DEBOUNCE_MS = 300
+/** Максимальное число файлов в индексе */
+export const INDEX_DEFAULT_MAX_FILES = 20_000
+
+// ── Разрешения ───────────────────────────────────────────────
+
+/** Таймаут запроса разрешения в миллисекундах */
+export const PERMISSION_TIMEOUT_MS = 30_000
+
+// ── UI ───────────────────────────────────────────────────────
+
+/** Длина обрезки аргументов в логе */
+export const UI_ARGS_LOG_TRUNCATE = 200
+/** Минимальный таймаут бэкенда в миллисекундах */
+export const UI_MIN_BACKEND_TIMEOUT_MS = 1000
+
+// ── Git ──────────────────────────────────────────────────────
+
+/** Длина обрезки текста коммита */
+export const GIT_COMMIT_MSG_TRUNCATE = 50
