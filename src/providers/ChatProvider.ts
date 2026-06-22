@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import * as crypto from "crypto"
-import type { ChatMessage } from "../core/IBackend"
+import type { IChatMessage } from "../core/IBackend"
 import type { IProvider } from "../core/IProvider"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ISessionStore } from "../shared/PersistentSessionStore"

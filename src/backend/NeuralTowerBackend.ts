@@ -1,4 +1,4 @@
-import type { IBackend, BackendConfig, ChatMessage, ToolCall, ToolDefinition } from "../core/IBackend"
+import type { IBackend, IBackendConfig, IChatMessage, IToolCall, IToolDefinition } from "../core/IBackend"
 import { BackendError, ConnectionError, TimeoutError, errorMessage } from "../core/Errors"
 import { loadDefaultBackendConfig } from "../core/Config"
 import { createDomainLogger } from "../core/Logger"
@@ -18,20 +18,20 @@ const SSE_MAX_RESPONSE_CHARS = 5_000_000
  * любой другой HTTP-сервер вывода, изменив API-эндпоинты и формат запросов.
  */
 export class NeuralTowerBackend implements IBackend {
-  private config: BackendConfig
+  private config: IBackendConfig
 
   constructor(
-    config?: BackendConfig,
-    private readonly onConfigChange?: (partial: Partial<BackendConfig>) => void,
+    config?: IBackendConfig,
+    private readonly onConfigChange?: (partial: Partial<IBackendConfig>) => void,
   ) {
     this.config = config ?? loadDefaultBackendConfig()
   }
 
-  async getConfig(): Promise<BackendConfig> {
+  async getConfig(): Promise<IBackendConfig> {
     return { ...this.config }
   }
 
-  async updateConfig(partial: Partial<BackendConfig>): Promise<void> {
+  async updateConfig(partial: Partial<IBackendConfig>): Promise<void> {
     if (partial.url !== undefined) {
       if (!validateUrl(partial.url)) {
         throw new BackendError(`Неверный URL: ${partial.url}`)
@@ -65,11 +65,11 @@ export class NeuralTowerBackend implements IBackend {
   }
 
   async chat(
-    messages: ChatMessage[],
+    messages: IChatMessage[],
     onChunk: (text: string) => void,
-    tools?: ToolDefinition[],
+    tools?: IToolDefinition[],
     signal?: AbortSignal,
-  ): Promise<ChatMessage> {
+  ): Promise<IChatMessage> {
     const cfg = await this.getConfig()
 
     const body: Record<string, unknown> = {
@@ -98,7 +98,7 @@ export class NeuralTowerBackend implements IBackend {
     if (!res.body) throw new BackendError("Пустой ответ от Neural Tower")
 
     let full = ""
-    const toolCalls = new Map<number, ToolCall>()
+    const toolCalls = new Map<number, IToolCall>()
     const reader = res.body.getReader()
     const dec = new TextDecoder()
 
@@ -172,7 +172,7 @@ export class NeuralTowerBackend implements IBackend {
       }
     }
 
-    const result: ChatMessage = { role: "assistant", content: full, timestamp: Date.now() }
+    const result: IChatMessage = { role: "assistant", content: full, timestamp: Date.now() }
     if (toolCalls.size > 0) {
       result.toolCalls = Array.from(toolCalls.values())
     }
@@ -182,7 +182,7 @@ export class NeuralTowerBackend implements IBackend {
   /**
    * Одиночный JSON-вызов для структурированных ответов.
    */
-  async chatJson<T>(messages: ChatMessage[]): Promise<T> {
+  async chatJson<T>(messages: IChatMessage[]): Promise<T> {
     const cfg = await this.getConfig()
     const res = await this.request(`${cfg.url}/v1/chat/completions`, {
       method: "POST",
@@ -248,8 +248,8 @@ export class NeuralTowerBackend implements IBackend {
   }
 }
 
-/** Преобразовать ChatMessage[] в формат API (без timestamp и toolCalls). */
-function mapMessages(messages: ChatMessage[]): Array<{ role: string; content: string }> {
+/** Преобразовать IChatMessage[] в формат API (без timestamp и toolCalls). */
+function mapMessages(messages: IChatMessage[]): Array<{ role: string; content: string }> {
   return messages.map((m) => ({ role: m.role, content: m.content }))
 }
 

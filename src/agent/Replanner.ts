@@ -1,7 +1,7 @@
 import type { IBackend } from "../core/IBackend"
 import type { IToolRegistry } from "../tools/ToolRegistry"
 import { Plan } from "./Plan"
-import type { PlanStep } from "./Plan"
+import type { IPlanStep } from "./Plan"
 import { createDomainLogger } from "../core/Logger"
 import { errorMessage } from "../core/Errors"
 
@@ -10,7 +10,7 @@ const log = createDomainLogger("Replanner")
 /**
  * Результат репланирования.
  */
-export interface ReplanResult {
+export interface IReplanResult {
   /** Новый план (или null, если реплан не выполнен). */
   plan: Plan | null
 
@@ -48,10 +48,10 @@ export class Replanner {
    */
   async replan(
     plan: Plan,
-    failedStep: PlanStep,
+    failedStep: IPlanStep,
     error: string,
     attempt: number,
-  ): Promise<ReplanResult> {
+  ): Promise<IReplanResult> {
     const reason = `Шаг "${failedStep.description}" провалился: ${error}`
 
     try {
@@ -66,7 +66,7 @@ export class Replanner {
 
   private async requestReplan(
     plan: Plan,
-    failedStep: PlanStep,
+    failedStep: IPlanStep,
     error: string,
     attempt: number,
   ): Promise<Plan> {
@@ -150,7 +150,7 @@ ${toolList}
     return newPlan
   }
 
-  private fallbackPlan(plan: Plan, failedStep: PlanStep, error: string): Plan {
+  private fallbackPlan(plan: Plan, failedStep: IPlanStep, error: string): Plan {
     return new Plan({
       title: plan.title,
       reasoning: `Адаптивное завершение: шаг "${failedStep.description}" провалился (${error}). LLM недоступен для репланирования.`,

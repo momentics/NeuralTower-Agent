@@ -1,5 +1,5 @@
 import type { ITool } from "./ITool"
-import type { ToolResult } from "../agent/AgentTypes"
+import type { IToolResult } from "../agent/AgentTypes"
 import { ToolError } from "../core/Errors"
 
 /**
@@ -11,16 +11,16 @@ export interface IToolRegistry {
   unregister(name: string): void
   list(): ITool[]
   get(name: string): ITool | undefined
-  invoke(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult>
+  invoke(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult>
   toSchemaList(): string
   toToolDefinitions(): Array<{ name: string; description: string; parameters: Record<string, unknown> }>
   clear(): void
 }
 
 /**
- * Преобразовать ToolSchema в формат OpenAI JSON Schema.
+ * Преобразовать IToolSchema в формат OpenAI JSON Schema.
  */
-export function toOpenAISchema(schema: import("./ITool").ToolSchema): Record<string, unknown> {
+export function toOpenAISchema(schema: import("./ITool").IToolSchema): Record<string, unknown> {
   const result: Record<string, unknown> = {
     type: "object",
   }
@@ -39,7 +39,7 @@ export function toOpenAISchema(schema: import("./ITool").ToolSchema): Record<str
  */
 function validateArgs(
   args: Record<string, unknown>,
-  parameters: Record<string, import("./ITool").ToolParam>,
+  parameters: Record<string, import("./ITool").IToolParam>,
 ): string[] {
   const errors: string[] = []
   for (const [key, param] of Object.entries(parameters)) {
@@ -114,7 +114,7 @@ export class ToolRegistry implements IToolRegistry {
     name: string,
     args: Record<string, unknown>,
     signal?: AbortSignal,
-  ): Promise<ToolResult> {
+  ): Promise<IToolResult> {
     const tool = this.tools.get(name)
     if (!tool) {
       return { output: `Инструмент "${name}" не найден`, success: false }

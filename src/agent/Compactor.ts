@@ -1,6 +1,6 @@
-import type { IBackend, ChatMessage } from "../core/IBackend"
+import type { IBackend, IChatMessage } from "../core/IBackend"
 import { estimateTokens } from "../core/TokenUtils"
-import { loadDefaultCompactorConfig, type CompactorConfig } from "../core/Config"
+import { loadDefaultCompactorConfig, type ICompactorConfig } from "../core/Config"
 import { createDomainLogger } from "../core/Logger"
 import { errorMessage } from "../core/Errors"
 
@@ -9,9 +9,9 @@ const log = createDomainLogger("Compactor")
 const FALLBACK_SUMMARY_MAX_CHARS = 500
 
 /**
- * Настройки сжатия контекста — алиас для CompactorConfig.
+ * Настройки сжатия контекста — алиас для ICompactorConfig.
  */
-export type CompactorOptions = CompactorConfig
+export type CompactorOptions = ICompactorConfig
 
 /**
  * Настройки по умолчанию для сжатия контекста.
@@ -55,12 +55,12 @@ const SUMMARY_TEMPLATE = `Сожми историю разговора в стр
 /**
  * Результат сжатия контекста.
  */
-export interface CompactionResult {
+export interface ICompactionResult {
   /** Нужно ли выполнять сжатие. */
   needsCompaction: boolean
 
   /** Сжатая история (если сжатие выполнено). */
-  compactedHistory?: ChatMessage[]
+  compactedHistory?: IChatMessage[]
 
   /** Текст сводки. */
   summary?: string
@@ -104,9 +104,9 @@ export class Compactor {
    * Проверить, нужно ли сжатие, и выполнить при необходимости.
    */
   async compactIfNeeded(
-    messages: ChatMessage[],
+    messages: IChatMessage[],
     systemPrompt: string,
-  ): Promise<CompactionResult> {
+  ): Promise<ICompactionResult> {
     const tokensBefore = estimateConversationTokens(messages, systemPrompt)
     const threshold = this.options.contextLimit - this.options.bufferTokens
 
@@ -125,9 +125,9 @@ export class Compactor {
    * Выполнить сжатие явно.
    */
   async compact(
-    messages: ChatMessage[],
+    messages: IChatMessage[],
     systemPrompt: string,
-  ): Promise<CompactionResult> {
+  ): Promise<ICompactionResult> {
     const tokensBefore = estimateConversationTokens(messages, systemPrompt)
 
     const { head, recent } = this.splitMessages(messages)
@@ -142,7 +142,7 @@ export class Compactor {
 
     const summary = await this.summarize(head)
 
-    const compacted: ChatMessage[] = [
+    const compacted: IChatMessage[] = [
       { role: "user", content: summary, timestamp: Date.now() },
       ...recent,
     ]
@@ -158,9 +158,9 @@ export class Compactor {
     }
   }
 
-  private splitMessages(messages: ChatMessage[]): {
-    head: ChatMessage[]
-    recent: ChatMessage[]
+  private splitMessages(messages: IChatMessage[]): {
+    head: IChatMessage[]
+    recent: IChatMessage[]
   } {
     let recentTokens = 0
     let splitIndex = 0
@@ -183,7 +183,7 @@ export class Compactor {
     }
   }
 
-  private async summarize(messages: ChatMessage[]): Promise<string> {
+  private async summarize(messages: IChatMessage[]): Promise<string> {
     if (!this.backend) {
       return this.fallbackSummary(messages)
     }
@@ -214,7 +214,7 @@ export class Compactor {
     }
   }
 
-  private fallbackSummary(messages: ChatMessage[]): string {
+  private fallbackSummary(messages: IChatMessage[]): string {
     const userMsgs = messages.filter((m) => m.role === "user")
     const lastUser = userMsgs[userMsgs.length - 1]
     return `## Цель\n${lastUser?.content.slice(0, FALLBACK_SUMMARY_MAX_CHARS) ?? "Неизвестно"}\n\n## Прогресс\nОбработано ${messages.length} сообщений. Контекст сжат.`
@@ -223,12 +223,12 @@ export class Compactor {
 
 // ── Утилиты ───────────────────────────────────────────────
 
-function estimateMessageTokens(message: ChatMessage): number {
+function estimateMessageTokens(message: IChatMessage): number {
   return estimateTokens(message.content)
 }
 
 function estimateConversationTokens(
-  messages: ChatMessage[],
+  messages: IChatMessage[],
   systemPrompt: string,
 ): number {
   let total = estimateTokens(systemPrompt)

@@ -1,6 +1,6 @@
 import * as path from "path"
 import * as vscode from "vscode"
-import type { ContextProvider, ContextItem } from "./Types"
+import type { IContextProvider, IContextItem } from "./Types"
 import {
   lspSymbolKindLabel,
   formatDocumentSymbols,
@@ -16,7 +16,7 @@ const LSP_PROVIDER_MAX_REFS = 15
 
 export function makeLspProvider(
   getWorkDir: () => string,
-): ContextProvider {
+): IContextProvider {
   return {
     description: {
       name: "lsp",
@@ -24,7 +24,7 @@ export function makeLspProvider(
       description: "LSP-операции: символы, определения, ссылки, hover",
       type: "query",
     },
-    async resolve(query: string): Promise<ContextItem[]> {
+    async resolve(query: string): Promise<IContextItem[]> {
       const trimmed = query.trim()
       if (!trimmed) return []
 

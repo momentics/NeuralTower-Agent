@@ -1,6 +1,6 @@
 import * as fs from "fs/promises"
 import * as path from "path"
-import type { PlanSerialized } from "./Plan"
+import type { IPlanSerialized } from "./Plan"
 import { Plan } from "./Plan"
 import { PlanError, errorMessage } from "../core/Errors"
 
@@ -42,7 +42,7 @@ export class PlanRepository {
       throw new PlanError(`Невалидный файл плана: ${filePath}`)
     }
 
-    const plan = Plan.fromJSON(data as PlanSerialized)
+    const plan = Plan.fromJSON(data as IPlanSerialized)
     return plan
   }
 

@@ -1,5 +1,5 @@
-import type { ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
+import type { IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
 import * as fs from "fs/promises"
 import * as path from "path"
 import { FilesystemTool } from "./FilesystemTool"
@@ -14,7 +14,7 @@ export class WriteFileTool extends FilesystemTool {
   category = "filesystem"
   isSafe = false
 
-  schema: ToolSchema = {
+  schema: IToolSchema = {
     name: "write_file",
     description: "Записать содержимое файла",
     parameters: {
@@ -24,7 +24,7 @@ export class WriteFileTool extends FilesystemTool {
     required: ["filepath", "content"],
   }
 
-  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     const fp = str(args, "filepath")
     const content = str(args, "content")
 

@@ -1,4 +1,4 @@
-import type { Service } from "../../shared/Types"
+import type { IService } from "../../shared/Types"
 import { createDomainLogger } from "../../core/Logger"
 import { errorMessage } from "../../core/Errors"
 import { runProcess } from "../../utils/ProcessRunner"
@@ -10,32 +10,32 @@ const GIT_DIFF_TIMEOUT_MS = 10000
 const GIT_DIFF_CONTEXT_MAX_CHARS = 10000
 const GIT_MAX_BUFFER = 512 * 1024
 
-export interface GitDiffResult {
+export interface IGitDiffResult {
   ok: true
   changed: string[]
   additions: number
   deletions: number
 }
 
-export interface GitDiffError {
+export interface IGitDiffError {
   ok: false
   error: string
 }
 
-export type GitDiffOutcome = GitDiffResult | GitDiffError
+export type GitDiffOutcome = IGitDiffResult | IGitDiffError
 
-export interface GitBranchInfo {
+export interface IGitBranchInfo {
   name: string
   ahead: number
   behind: number
 }
 
 /**
- * Интерфейс Git-сервиса — только методы, используемые через AgentDependencies.
+ * Интерфейс Git-сервиса — только методы, используемые через IAgentDependencies.
  */
 export interface IGitService {
   getDiffContext(dir: string): Promise<string>
-  getBranchInfo(dir: string): Promise<GitBranchInfo | null>
+  getBranchInfo(dir: string): Promise<IGitBranchInfo | null>
   getDiff(dir: string): Promise<GitDiffOutcome>
   getCachedDiff(dir: string): Promise<string>
   findRoot(cwd: string): Promise<string | null>
@@ -66,7 +66,7 @@ async function gitSpawn(
  * Git-сервис. Предоставляет различия, статус, информацию о ветке
  * и внедрение контекста различий для агента.
  */
-export class GitService implements Service, IGitService {
+export class GitService implements IService, IGitService {
   name = "git"
   private root: string | null = null
 
@@ -112,7 +112,7 @@ export class GitService implements Service, IGitService {
     }
   }
 
-  async getBranchInfo(dir: string): Promise<GitBranchInfo | null> {
+  async getBranchInfo(dir: string): Promise<IGitBranchInfo | null> {
     try {
       const { stdout } = await gitSpawn(dir, ["status", "--porcelain=2", "--branch"], GIT_DIFF_TIMEOUT_MS)
       const headBranch = stdout.match(/^# host .* head (.*?) branch.*/m)

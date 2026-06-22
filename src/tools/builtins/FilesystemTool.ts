@@ -1,4 +1,4 @@
-import type { ToolSchema } from "../ITool"
+import type { IToolSchema } from "../ITool"
 import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import * as path from "path"
 import * as fs from "fs/promises"
@@ -14,7 +14,7 @@ import { BaseTool } from "./BaseTool"
  * - Символические ссылки разрешаются до реального пути (защита от path traversal через symlink)
  */
 export abstract class FilesystemTool extends BaseTool {
-  abstract schema: ToolSchema
+  abstract schema: IToolSchema
 
   constructor(protected readonly workDir: string) {
     super()

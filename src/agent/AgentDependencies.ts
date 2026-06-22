@@ -6,7 +6,7 @@ import type { IContextManager } from "../core/ContextManager"
 import type { IGitService } from "../services/git/GitService"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import type { IMCPManager } from "../mcp/MCPManager"
-import type { AppConfig } from "../core/Config"
+import type { IAppConfig } from "../core/Config"
 import type { IFileIndex } from "../repo/FileIndex"
 import type { TodoStore } from "./TodoStore"
 
@@ -16,7 +16,7 @@ import type { TodoStore } from "./TodoStore"
  * прямой зависимости от AgentOrchestrator.
  */
 export type AgentSpawnFactory = (
-  deps: AgentDependencies,
+  deps: IAgentDependencies,
   backend: IBackend,
   toolRegistry: IToolRegistry,
   skillManager: ISkillManager,
@@ -33,12 +33,12 @@ export type AgentSpawnFactory = (
  * Опциональные зависимости (gitService, permissionManager, mcpManager)
  * могут быть null, если компонент это документирует.
  */
-export interface AgentDependencies {
+export interface IAgentDependencies {
   /** Функция получения рабочей директории (может меняться). */
   getWorkDir: () => string | null
 
   /** Конфигурация приложения. */
-  readonly config: AppConfig
+  readonly config: IAppConfig
 
   /** Реестр провайдеров контекста. */
   readonly contextProviderRegistry: IContextProviderRegistry

@@ -16,42 +16,42 @@ export interface IBackend {
    * Параметр `tools` передаёт определения инструментов для нативного function calling.
    * Параметр `signal` позволяет прервать запрос извне.
    */
-  chat(messages: ChatMessage[], onChunk: (text: string) => void, tools?: ToolDefinition[], signal?: AbortSignal): Promise<ChatMessage>
+  chat(messages: IChatMessage[], onChunk: (text: string) => void, tools?: IToolDefinition[], signal?: AbortSignal): Promise<IChatMessage>
 
   /**
    * Отправить чат-запрос с ожиданием структурированного JSON-ответа.
    * Используется для вызова инструментов, планирования и т. д.
    */
-  chatJson<T>(messages: ChatMessage[]): Promise<T>
+  chatJson<T>(messages: IChatMessage[]): Promise<T>
 
   /** Текущая конфигурация. */
-  getConfig(): Promise<BackendConfig>
+  getConfig(): Promise<IBackendConfig>
 
   /** Обновить конфигурацию. */
-  updateConfig(partial: Partial<BackendConfig>): Promise<void>
+  updateConfig(partial: Partial<IBackendConfig>): Promise<void>
 }
 
-export interface BackendConfig {
+export interface IBackendConfig {
   url: string
   model: string
   maxRetries: number
   timeoutMs: number
 }
 
-export interface ChatMessage {
+export interface IChatMessage {
   role: "system" | "user" | "assistant"
   content: string
-  toolCalls?: ToolCall[]
+  toolCalls?: IToolCall[]
   timestamp?: number
 }
 
-export interface ToolCall {
+export interface IToolCall {
   id: string
   toolName: string
   arguments: string
 }
 
-export interface ToolDefinition {
+export interface IToolDefinition {
   name: string
   description: string
   parameters: object

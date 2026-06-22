@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest"
 import { TelemetryService } from "./TelemetryService"
 
 describe("TelemetryService", () => {
-  it("implements Plugin interface", () => {
+  it("implements IPlugin interface", () => {
     const svc = new TelemetryService()
     expect(svc.name).toBe("telemetry")
   })

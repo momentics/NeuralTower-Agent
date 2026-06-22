@@ -8,7 +8,7 @@
  * больших репозиториев.
  */
 
-import type { CodeChunk } from "./ChunkTypes"
+import type { ICodeChunk } from "./ChunkTypes"
 import { TombstoneStore } from "../shared/TombstoneStore"
 
 const FTS_MIN_TOKEN_LENGTH = 2
@@ -18,9 +18,9 @@ const FTS_MAX_MATCH_COUNT = 10
 /**
  * Результат полнотекстового поиска.
  */
-export interface FtsResult {
+export interface IFtsResult {
   /** Фрагмент кода. */
-  chunk: CodeChunk
+  chunk: ICodeChunk
 
   /** Оценка релевантности (0-1). */
   score: number
@@ -33,8 +33,8 @@ export interface FtsResult {
  * Интерфейс полнотекстового поиска.
  */
 export interface IFullTextSearch {
-  add(chunks: CodeChunk[]): void
-  search(query: string, topK: number): FtsResult[]
+ add(chunks: ICodeChunk[]): void
+ search(query: string, topK: number): IFtsResult[]
   deleteByFile(filePath: string): void
   clear(): void
   count(): number
@@ -45,14 +45,14 @@ export interface IFullTextSearch {
  * Использует TombstoneStore для O(1) удаления и fileIndex для O(1) поиска по файлу.
  */
 export class FullTextSearch implements IFullTextSearch {
-  private store = new TombstoneStore<CodeChunk>()
+  private store = new TombstoneStore<ICodeChunk>()
   private tokenIndex = new Map<string, Set<number>>()
   private fileIndex = new Map<string, Set<number>>()
 
   /**
   * Добавить фрагменты для индексации.
   */
-  add(chunks: CodeChunk[]): void {
+  add(chunks: ICodeChunk[]): void {
     for (const chunk of chunks) {
       const idx = this.store.acquireSlot()
       this.store.put(idx, chunk)
@@ -75,7 +75,7 @@ export class FullTextSearch implements IFullTextSearch {
    * @param query строка запроса
    * @param topK число результатов
    */
-  search(query: string, topK: number): FtsResult[] {
+  search(query: string, topK: number): IFtsResult[] {
     const tokens = this.tokenize(query).filter((t) => t.length > FTS_MIN_TOKEN_LENGTH)
 
     if (tokens.length === 0) return []
@@ -123,7 +123,7 @@ export class FullTextSearch implements IFullTextSearch {
     scores.sort((a, b) => b.score - a.score)
 
     const limit = Math.min(topK, scores.length)
-    const results: FtsResult[] = []
+    const results: IFtsResult[] = []
 
     for (let i = 0; i < limit; i++) {
       const entry = scores[i]

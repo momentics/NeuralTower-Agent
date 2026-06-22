@@ -1,6 +1,6 @@
-import type { ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
-import type { TodoStore, TodoItem } from "../../agent/TodoStore"
+import type { IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
+import type { TodoStore, ITodoItem } from "../../agent/TodoStore"
 import { BaseTool } from "./BaseTool"
 import { arr } from "../ToolArgs"
 
@@ -20,7 +20,7 @@ export class TodoWriteTool extends BaseTool {
   category = "agent"
   isSafe = true
 
-  schema: ToolSchema = {
+  schema: IToolSchema = {
     name: "todowrite",
     description: this.description,
     parameters: {
@@ -52,7 +52,7 @@ export class TodoWriteTool extends BaseTool {
     super()
   }
 
-  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     const todos = arr<Record<string, unknown>>(args, "todos")
     if (todos.length === 0) {
       return {
@@ -61,13 +61,13 @@ export class TodoWriteTool extends BaseTool {
       }
     }
 
-    const validated: TodoItem[] = []
+    const validated: ITodoItem[] = []
 
     for (const item of todos) {
       const content = typeof item.content === "string" ? item.content : ""
-      const status = VALID_STATUSES.has(item.status as string) ? (item.status as TodoItem["status"]) : "pending"
+      const status = VALID_STATUSES.has(item.status as string) ? (item.status as ITodoItem["status"]) : "pending"
       const priority = VALID_PRIORITIES.has(item.priority as string)
-        ? item.priority as TodoItem["priority"]
+        ? item.priority as ITodoItem["priority"]
         : "medium"
 
       validated.push({ content, status, priority })

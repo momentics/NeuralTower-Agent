@@ -1,6 +1,6 @@
 import * as fs from "fs/promises"
 import * as path from "path"
-import type { ContextProvider, ContextItem } from "./Types"
+import type { IContextProvider, IContextItem } from "./Types"
 import { createDomainLogger } from "../../Logger"
 import { errorMessage } from "../../Errors"
 
@@ -43,7 +43,7 @@ export async function loadRulesFiles(getWorkDir: () => string): Promise<Array<{ 
 
 export function makeRulesProvider(
   getWorkDir: () => string,
-): ContextProvider {
+): IContextProvider {
   return {
     description: {
       name: "rules",
@@ -52,7 +52,7 @@ export function makeRulesProvider(
       type: "normal",
       priority: 99,
     },
-    async resolve(_query: string): Promise<ContextItem[]> {
+    async resolve(_query: string): Promise<IContextItem[]> {
       const rules = await loadRulesFiles(getWorkDir)
 
       if (rules.length === 0) {

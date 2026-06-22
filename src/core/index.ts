@@ -1,11 +1,11 @@
-export type { IBackend, BackendConfig, ChatMessage } from "./IBackend"
+export type { IBackend, IBackendConfig, IChatMessage } from "./IBackend"
 export type { IProvider } from "./IProvider"
 export type { IAgentOrchestrator } from "./IAgent"
 export { App } from "./App"
 export { ContextManager } from "./ContextManager"
 export type {
-  ContextSnapshot,
-  PreparedContext,
+  IContextSnapshot,
+  IPreparedContext,
 } from "./ContextManager"
 export {
   AgentMismatchError,
@@ -32,7 +32,7 @@ export {
   makeDebuggerProvider,
   makeTerminalProvider,
   makeOSProvider,
-} from "./ContextSources.vscode"
+} from "./ContextSourcesVscode"
 export {
   makeUrlProvider,
   makeWebSearchProvider,
@@ -45,14 +45,14 @@ export {
   loadRulesFiles,
 } from "./providers/context"
 export type {
-  ContextItem,
+  IContextItem,
   ProviderType,
-  ProviderDescription,
-  SubmenuItem,
-  ContextProvider,
+  IProviderDescription,
+  ISubmenuItem,
+  IContextProvider,
   MCPToolListFn,
-  RepoSummary,
-  FileIndexStats,
+  IRepoSummary,
+  IFileIndexStats,
 } from "./providers/context"
 export { ContextProviderRegistry } from "./providers/context"
 export { TOKENS_PER_CHAR, estimateTokens } from "./TokenUtils"
@@ -66,10 +66,10 @@ export {
   loadDefaultAutocompleteConfig,
 } from "./Config"
 export type {
-  AppConfig,
-  AgentConfig,
-  ContextConfig,
-  CompactorConfig,
-  SessionConfig,
-  AutocompleteConfig,
+  IAppConfig,
+  IAgentConfig,
+  IContextConfig,
+  ICompactorConfig,
+  ISessionConfig,
+  IAutocompleteConfig,
 } from "./Config"

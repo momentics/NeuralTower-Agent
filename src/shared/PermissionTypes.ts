@@ -1,11 +1,11 @@
 export type PermissionLevel = "deny" | "ask" | "allow"
 
-export interface ToolPermission {
+export interface IToolPermission {
   toolName: string
   level: PermissionLevel
 }
 
-export interface PermissionRequest {
+export interface IPermissionRequest {
   toolName: string
   args: Record<string, unknown>
   resolve: (allowed: boolean) => void
@@ -13,7 +13,7 @@ export interface PermissionRequest {
   timer?: ReturnType<typeof setTimeout>
 }
 
-export interface AutoApproveConfig {
+export interface IAutoApproveConfig {
   enabled: boolean
   tools: string[]
   maxCost: number

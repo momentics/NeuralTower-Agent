@@ -1,4 +1,4 @@
-import type { IBackend, ChatMessage } from "../core/IBackend"
+import type { IBackend, IChatMessage } from "../core/IBackend"
 import type { IToolRegistry } from "../tools/ToolRegistry"
 import type { ISkillManager } from "../skills/SkillManager"
 import type { ISkill } from "../skills/ISkill"
@@ -11,8 +11,8 @@ import { AgentToolExecutor } from "./AgentToolExecutor"
 import { AgentPlanner } from "./AgentPlanner"
 import { Replanner } from "./Replanner"
 import { SessionContext } from "./SessionContext"
-import type { AgentDependencies } from "./AgentDependencies"
-import type { ToolResult } from "./AgentTypes"
+import type { IAgentDependencies } from "./AgentDependencies"
+import type { IToolResult } from "./AgentTypes"
 import type { AgentModeName } from "./AgentMode"
 import { TodoStore } from "./TodoStore"
 import type { Plan } from "./Plan"
@@ -43,7 +43,7 @@ export class AgentCore {
     private readonly backend: IBackend,
     private readonly toolRegistry: IToolRegistry,
     private readonly skillManager: ISkillManager,
-    private readonly deps: AgentDependencies,
+    private readonly deps: IAgentDependencies,
     todoStore: TodoStore,
   ) {
     this.memory = new AgentMemory(deps.config.agent.maxTokens)
@@ -104,10 +104,10 @@ export class AgentCore {
     query: string,
     onChunk: (text: string) => void,
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: ToolResult) => void,
+    onToolResult?: (name: string, result: IToolResult) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
-  ): Promise<ChatMessage> {
+  ): Promise<IChatMessage> {
     if (this.disposed) {
       throw new AgentError("Агент освобождён")
     }
@@ -201,7 +201,7 @@ export class AgentCore {
   /**
    * Восстановить сессию из истории сообщений.
    */
-  async restoreSession(messages: ChatMessage[]): Promise<void> {
+  async restoreSession(messages: IChatMessage[]): Promise<void> {
     this.memory.clear()
     this.sessionContext.reset()
     this.planner.clearPlan()

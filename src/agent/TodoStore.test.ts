@@ -1,11 +1,11 @@
 import { describe, it, expect } from "vitest"
-import { TodoStore, type TodoItem } from "./TodoStore"
+import { TodoStore, type ITodoItem } from "./TodoStore"
 
 const makeItem = (
   content = "Task",
-  status: TodoItem["status"] = "pending",
-  priority: TodoItem["priority"] = "medium",
-): TodoItem => ({ content, status, priority })
+  status: ITodoItem["status"] = "pending",
+  priority: ITodoItem["priority"] = "medium",
+): ITodoItem => ({ content, status, priority })
 
 describe("TodoStore", () => {
   it("starts empty", () => {

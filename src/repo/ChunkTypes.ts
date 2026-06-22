@@ -19,7 +19,7 @@ export type ChunkNodeKind =
 /**
  * Фрагмент кода — минимальная смысловая единица для индексации.
  */
-export interface CodeChunk {
+export interface ICodeChunk {
   /** Уникальный идентификатор фрагмента. */
   id: string
 
@@ -60,12 +60,12 @@ export interface CodeChunk {
 /**
  * Результат разбиения одного файла на фрагменты.
  */
-export interface ChunkResult {
+export interface IChunkResult {
   /** Файл, который был разбит. */
   filePath: string
 
   /** Фрагменты кода. */
-  chunks: CodeChunk[]
+  chunks: ICodeChunk[]
 
   /** Общее число строк в файле. */
   totalLines: number
@@ -74,9 +74,9 @@ export interface ChunkResult {
 /**
  * Результат разбиения всего репозитория.
  */
-export interface CodebaseChunkResult {
+export interface ICodebaseChunkResult {
   /** Все фрагменты из всех файлов. */
-  chunks: CodeChunk[]
+  chunks: ICodeChunk[]
 
   /** Число обработанных файлов. */
   filesProcessed: number
@@ -91,7 +91,7 @@ export interface CodebaseChunkResult {
 /**
  * Конфигурация чанкера.
  */
-export interface ChunkerConfig {
+export interface IChunkerConfig {
   /** Максимальный размер фрагмента в символах. */
   maxChunkSize: number
 
@@ -111,7 +111,7 @@ export interface ChunkerConfig {
 /**
  * Конфигурация поиска по репозиторию.
  */
-export interface SearchConfig {
+export interface ISearchConfig {
   /** Число результатов для возврата. */
   topK: number
 

@@ -1,6 +1,6 @@
 import * as fs from "fs/promises"
 import * as path from "path"
-import type { ContextProvider, ContextItem } from "./Types"
+import type { IContextProvider, IContextItem } from "./Types"
 import { errorMessage } from "../../Errors"
 
 const CONTEXT_TREE_MAX_DEPTH = 4
@@ -59,7 +59,7 @@ async function buildTree(
 
 export function makeTreeProvider(
   getWorkDir: () => string,
-): ContextProvider {
+): IContextProvider {
   return {
     description: {
       name: "tree",
@@ -67,7 +67,7 @@ export function makeTreeProvider(
       description: "Дерево директорий проекта",
       type: "query",
     },
-    async resolve(query: string): Promise<ContextItem[]> {
+    async resolve(query: string): Promise<IContextItem[]> {
       const targetDir = query.trim()
         ? (path.isAbsolute(query.trim()) ? query.trim() : path.join(getWorkDir(), query.trim()))
         : getWorkDir()

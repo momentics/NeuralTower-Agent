@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import type { IBackend } from "../../core/IBackend"
 import type { IContextManager } from "../../core/ContextManager"
-import type { Plugin } from "../../shared/Types"
+import type { IPlugin } from "../../shared/Types"
 import { createDomainLogger } from "../../core/Logger"
 import { StatusBarIndicator } from "../../services/StatusBarIndicator"
 import { errorMessage } from "../../core/Errors"
@@ -11,7 +11,7 @@ const log = createDomainLogger("BackendHealth")
 const HEALTH_CHECK_INTERVAL_MS = 15000
 
 /** Монитор здоровья бэкенда: периодическая проверка подключения и отображение статуса в статус-баре. */
-export class BackendHealthMonitor extends StatusBarIndicator implements Plugin {
+export class BackendHealthMonitor extends StatusBarIndicator implements IPlugin {
   name = "backend-health"
 
   private healthTimer: ReturnType<typeof setInterval> | null = null

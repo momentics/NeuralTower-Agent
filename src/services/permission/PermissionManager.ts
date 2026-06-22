@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import type { ITool } from "../../tools/ITool"
-import type { PermissionLevel, ToolPermission, PermissionRequest, AutoApproveConfig } from "../../shared/PermissionTypes"
-import type { Plugin } from "../../shared/Types"
+import type { PermissionLevel, IToolPermission, IPermissionRequest, IAutoApproveConfig } from "../../shared/PermissionTypes"
+import type { IPlugin } from "../../shared/Types"
 
 const PERMISSION_TIMEOUT_MS = 30000
 
@@ -10,24 +10,24 @@ const PERMISSION_TIMEOUT_MS = 30000
  */
 export interface IPermissionManager {
   checkPermission(tool: ITool, args: Record<string, unknown>, timeoutMs?: number): Promise<boolean>
-  onDidRequestPermission(handler: (req: PermissionRequest) => void): vscode.Disposable
+ onDidRequestPermission(handler: (req: IPermissionRequest) => void): vscode.Disposable
   resolveRequest(requestId: string, allowed: boolean, always: boolean): boolean
   dispose(): void
 }
 
-export class PermissionManager implements Plugin, IPermissionManager {
+export class PermissionManager implements IPlugin, IPermissionManager {
   name = "permission-manager"
   private static readonly KEY_PERMISSIONS = "neuralTowerAgent.permissions"
   private static readonly KEY_AUTO_APPROVE = "neuralTowerAgent.autoApprove"
 
   private permissions: Map<string, PermissionLevel> = new Map()
-  private autoApprove: AutoApproveConfig = {
+  private autoApprove: IAutoApproveConfig = {
     enabled: false,
     tools: [],
     maxCost: 0,
   }
-  private pendingRequests: PermissionRequest[] = []
-  private requestEmitter: vscode.EventEmitter<PermissionRequest> | null = null
+  private pendingRequests: IPermissionRequest[] = []
+  private requestEmitter: vscode.EventEmitter<IPermissionRequest> | null = null
   private memento: vscode.Memento | null = null
 
   constructor(memento?: vscode.Memento) {
@@ -59,7 +59,7 @@ export class PermissionManager implements Plugin, IPermissionManager {
       }
     }
 
-    const storedAuto = this.memento.get<AutoApproveConfig | undefined>(
+    const storedAuto = this.memento.get<IAutoApproveConfig | undefined>(
       PermissionManager.KEY_AUTO_APPROVE,
       undefined,
     )
@@ -68,9 +68,9 @@ export class PermissionManager implements Plugin, IPermissionManager {
     }
   }
 
-  onDidRequestPermission(handler: (req: PermissionRequest) => void): vscode.Disposable {
+  onDidRequestPermission(handler: (req: IPermissionRequest) => void): vscode.Disposable {
     if (!this.requestEmitter) {
-      this.requestEmitter = new vscode.EventEmitter<PermissionRequest>()
+      this.requestEmitter = new vscode.EventEmitter<IPermissionRequest>()
     }
     return this.requestEmitter.event(handler)
   }
@@ -101,16 +101,16 @@ export class PermissionManager implements Plugin, IPermissionManager {
     return this.permissions.get(toolName) ?? "ask"
   }
 
-  setAutoApprove(config: Partial<AutoApproveConfig>): void {
+  setAutoApprove(config: Partial<IAutoApproveConfig>): void {
     Object.assign(this.autoApprove, config)
     this.persistAutoApprove()
   }
 
-  getAutoApprove(): AutoApproveConfig {
+  getAutoApprove(): IAutoApproveConfig {
     return { ...this.autoApprove }
   }
 
-  listPermissions(): ToolPermission[] {
+  listPermissions(): IToolPermission[] {
     return [...this.permissions.entries()].map(([toolName, level]) => ({
       toolName,
       level,
@@ -152,7 +152,7 @@ export class PermissionManager implements Plugin, IPermissionManager {
   ): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      const req: PermissionRequest = { toolName, args, resolve, id }
+      const req: IPermissionRequest = { toolName, args, resolve, id }
       this.pendingRequests.push(req)
       if (this.requestEmitter) {
         this.requestEmitter.fire(req)

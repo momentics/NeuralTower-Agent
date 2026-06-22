@@ -1,7 +1,7 @@
-import type { IBackend, ChatMessage } from "../core/IBackend"
+import type { IBackend, IChatMessage } from "../core/IBackend"
 import type { IToolRegistry } from "../tools/ToolRegistry"
 import type { ISkill } from "../skills/ISkill"
-import type { PlanStep } from "./Plan"
+import type { IPlanStep } from "./Plan"
 import { Plan } from "./Plan"
 import type { SessionContext } from "./SessionContext"
 import { PlanError, errorMessage } from "../core/Errors"
@@ -32,7 +32,7 @@ export class AgentPlanner {
    * @returns Новый план или null, если реплан невозможен
    */
   async attemptReplan(
-    failedStep: PlanStep,
+    failedStep: IPlanStep,
     error: string,
     maxAttempts: number,
   ): Promise<Plan | null> {
@@ -76,7 +76,7 @@ export class AgentPlanner {
   /**
    * Сериализовать план в системное сообщение для сохранения в сессии.
    */
-  serializePlan(): ChatMessage | null {
+  serializePlan(): IChatMessage | null {
     if (!this.currentPlan) return null
     return {
       role: "system",
@@ -88,7 +88,7 @@ export class AgentPlanner {
   /**
    * Десериализовать план из системного сообщения.
    */
-  deserializePlan(msg: ChatMessage): Plan | null {
+  deserializePlan(msg: IChatMessage): Plan | null {
     if (msg.role !== "system" || !msg.content.startsWith(PLAN_MESSAGE_PREFIX)) {
       return null
     }
@@ -111,7 +111,7 @@ export class AgentPlanner {
   /**
    * Найти и восстановить план из истории сообщений сессии.
    */
-  restorePlanFromMessages(messages: ChatMessage[]): Plan | null {
+  restorePlanFromMessages(messages: IChatMessage[]): Plan | null {
     for (let i = messages.length - 1; i >= 0; i--) {
       const plan = this.deserializePlan(messages[i])
       if (plan) return plan

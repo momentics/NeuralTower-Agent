@@ -10,9 +10,9 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import type { IFileIndex } from "./FileIndex"
 import type {
-  ChunkerConfig,
-  CodeChunk,
-  CodebaseChunkResult,
+  IChunkerConfig,
+  ICodeChunk,
+  ICodebaseChunkResult,
 } from "./ChunkTypes"
 import { errorMessage } from "../core/Errors"
 import type { IChunker } from "./Chunker"
@@ -27,8 +27,8 @@ export { createDefaultChunkerConfig } from "./Chunker"
  * Интерфейс оркестратора разбиения репозитория.
  */
 export interface ICodebaseChunker {
-  chunkAll(signal?: AbortSignal): Promise<CodebaseChunkResult>
-  chunkFile(filePath: string, signal?: AbortSignal): Promise<CodeChunk[]>
+  chunkAll(signal?: AbortSignal): Promise<ICodebaseChunkResult>
+  chunkFile(filePath: string, signal?: AbortSignal): Promise<ICodeChunk[]>
 }
 
 /**
@@ -36,11 +36,11 @@ export interface ICodebaseChunker {
  */
 export class CodebaseChunker implements ICodebaseChunker {
   private readonly chunkers: Map<string, IChunker> = new Map()
-  private readonly config: ChunkerConfig
+  private readonly config: IChunkerConfig
 
   constructor(
     private readonly fileIndex: IFileIndex,
-    chunkerConfig?: ChunkerConfig
+    chunkerConfig?: IChunkerConfig
   ) {
     this.config = chunkerConfig ?? createDefaultChunkerConfig()
     this.registerChunkers()
@@ -50,8 +50,8 @@ export class CodebaseChunker implements ICodebaseChunker {
    * Разбить все файлы репозитория на фрагменты.
    * Использует FileIndex для получения списка файлов.
    */
-  async chunkAll(signal?: AbortSignal): Promise<CodebaseChunkResult> {
-    const chunks: CodeChunk[] = []
+  async chunkAll(signal?: AbortSignal): Promise<ICodebaseChunkResult> {
+    const chunks: ICodeChunk[] = []
     let filesProcessed = 0
     let filesSkipped = 0
 
@@ -91,7 +91,7 @@ export class CodebaseChunker implements ICodebaseChunker {
   /**
    * Разбить один файл на фрагменты.
    */
-  async chunkFile(filePath: string, signal?: AbortSignal): Promise<CodeChunk[]> {
+  async chunkFile(filePath: string, signal?: AbortSignal): Promise<ICodeChunk[]> {
     if (signal?.aborted) return []
     try {
       const content = await fs.readFile(filePath, "utf-8")

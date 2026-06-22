@@ -1,2 +1,2 @@
 export { htmlToText } from "./UrlFetcher"
-export type { FetchUrlOptions, FetchUrlResult } from "./UrlFetcher"
+export type { IFetchUrlOptions, IFetchUrlResult } from "./UrlFetcher"

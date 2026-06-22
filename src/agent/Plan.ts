@@ -5,12 +5,12 @@ const DEFAULT_PLAN_MAX_RETRIES = 3
 /**
  * Состояние шага плана.
  */
-export type PlanStepStatus = "pending" | "running" | "done" | "failed" | "skipped"
+export type IPlanStepStatus = "pending" | "running" | "done" | "failed" | "skipped"
 
 /**
  * Шаг плана с отслеживанием состояния.
  */
-export interface PlanStep {
+export interface IPlanStep {
   /** Описание шага. */
   description: string
 
@@ -21,7 +21,7 @@ export interface PlanStep {
   dependsOn?: number[]
 
   /** Текущее состояние выполнения. */
-  status: PlanStepStatus
+  status: IPlanStepStatus
 
   /** Количество попыток выполнения. */
   attempts: number
@@ -36,7 +36,7 @@ export interface PlanStep {
 /**
  * Запись истории репланирования.
  */
-export interface ReplanEntry {
+export interface IReplanEntry {
   /** Причина репланирования. */
   reason: string
 
@@ -70,7 +70,7 @@ export class Plan {
   public reasoning: string
 
   /** Шаги плана. */
-  public steps: PlanStep[]
+  public steps: IPlanStep[]
 
   /** Текущее состояние плана. */
   public status: PlanStatus
@@ -91,16 +91,16 @@ export class Plan {
   public filePath?: string
 
   /** Данные для передачи управления между сессиями. */
-  public transferData?: PlanHandover
+  public transferData?: IPlanHandover
 
   /** История репланирования. */
-  public replanHistory: ReplanEntry[]
+  public replanHistory: IReplanEntry[]
 
   constructor(input: {
     id?: string
     title: string
     reasoning: string
-    steps: Omit<PlanStep, "status" | "attempts">[]
+    steps: Omit<IPlanStep, "status" | "attempts">[]
     maxRetries?: number
   }) {
     this.id = input.id ?? `plan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -158,7 +158,7 @@ export class Plan {
   /**
    * Текущий шаг (или null, если план завершён).
    */
-  get currentStep(): PlanStep | null {
+  get currentStep(): IPlanStep | null {
     if (
       this.currentStepIndex >= 0 &&
       this.currentStepIndex < this.steps.length
@@ -194,7 +194,7 @@ export class Plan {
   /**
    * Отметить текущий шаг как выполняющийся.
    */
-  markRunning(): PlanStep | null {
+  markRunning(): IPlanStep | null {
     let step = this.currentStep
     if (!step || step.status === "done" || step.status === "failed") {
       this.advanceToNextPending()
@@ -258,7 +258,7 @@ export class Plan {
    * в разговор или для handover.
    */
   toText(): string {
-    const statusIcon: Record<PlanStepStatus, string> = {
+    const statusIcon: Record<IPlanStepStatus, string> = {
       pending: "[ ]",
       running: "[→]",
       done: "[✓]",
@@ -295,7 +295,7 @@ export class Plan {
   /**
    * Сериализовать план в JSON.
    */
-  toJSON(): PlanSerialized {
+  toJSON(): IPlanSerialized {
     return {
       id: this.id,
       title: this.title,
@@ -314,7 +314,7 @@ export class Plan {
   /**
    * Десериализовать план из JSON.
    */
-  static fromJSON(data: PlanSerialized): Plan {
+  static fromJSON(data: IPlanSerialized): Plan {
     const plan = new Plan({
       id: data.id,
       title: data.title,
@@ -358,7 +358,7 @@ export class Plan {
 /**
  * Данные для передачи между сессиями (handover).
  */
-export interface PlanHandover {
+export interface IPlanHandover {
   planId: string
   title: string
   reasoning: string
@@ -372,16 +372,16 @@ export interface PlanHandover {
 /**
  * Сериализуемая форма плана.
  */
-export interface PlanSerialized {
+export interface IPlanSerialized {
   id: string
   title: string
   reasoning: string
-  steps: PlanStep[]
+  steps: IPlanStep[]
   status: PlanStatus
   currentStepIndex: number
   maxRetries: number
   createdAt: number
   updatedAt: number
-  handover?: PlanHandover
-  replanHistory?: ReplanEntry[]
+  handover?: IPlanHandover
+  replanHistory?: IReplanEntry[]
 }

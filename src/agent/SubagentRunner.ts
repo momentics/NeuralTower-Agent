@@ -1,9 +1,9 @@
-import type { IBackend, ChatMessage } from "../core/IBackend"
+import type { IBackend, IChatMessage } from "../core/IBackend"
 import type { IToolRegistry } from "../tools/ToolRegistry"
 import type { ISkillManager } from "../skills/SkillManager"
 import type { AgentModeName } from "./AgentMode"
 import type { AgentOrchestrator } from "./AgentOrchestrator"
-import type { AgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
+import type { IAgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
 import type { TodoStore } from "./TodoStore"
 import { errorMessage } from "../core/Errors"
 
@@ -15,7 +15,7 @@ export type SubagentStatus = "running" | "completed" | "failed" | "cancelled"
 /**
  * Результат работы подагента.
  */
-export interface SubagentResult {
+export interface ISubagentResult {
   /** Уникальный ID подагента. */
   id: string
 
@@ -44,7 +44,7 @@ export interface SubagentResult {
 /**
  * Конфигурация подагента.
  */
-export interface SubagentConfig {
+export interface ISubagentConfig {
   /** Название подагента (для отображения). */
   name: string
 
@@ -83,7 +83,7 @@ export class SubagentRunner {
     private readonly backend: IBackend,
     private readonly toolRegistry: IToolRegistry,
     private readonly skillManager: ISkillManager,
-    private readonly deps: AgentDependencies,
+    private readonly deps: IAgentDependencies,
     private readonly spawnFactory: AgentSpawnFactory,
     private readonly todoStore: TodoStore,
     maxConcurrent = 4,
@@ -95,12 +95,12 @@ export class SubagentRunner {
    * Запустить подагент.
    */
   async spawn(
-    config: SubagentConfig,
+    config: ISubagentConfig,
     onChunk?: (text: string) => void,
-    onDone?: (result: SubagentResult) => void,
+    onDone?: (result: ISubagentResult) => void,
   ): Promise<SubagentHandle> {
     if (this.running.size >= this.maxConcurrent) {
-      const result: SubagentResult = {
+      const result: ISubagentResult = {
         id: "",
         name: config.name,
         task: config.task,
@@ -129,7 +129,7 @@ export class SubagentRunner {
 
     this.running.set(id, handle)
 
-    const resultPromise = (async (): Promise<SubagentResult> => {
+    const resultPromise = (async (): Promise<ISubagentResult> => {
       try {
         const message = await orchestrator.run(
           config.task,
@@ -140,7 +140,7 @@ export class SubagentRunner {
         )
 
         const duration = Date.now() - startTime
-        const result: SubagentResult = {
+        const result: ISubagentResult = {
           id,
           name: config.name,
           task: config.task,
@@ -154,7 +154,7 @@ export class SubagentRunner {
       } catch (err: unknown) {
         const duration = Date.now() - startTime
         const isCancelled = abortController.signal.aborted
-        const result: SubagentResult = {
+        const result: ISubagentResult = {
           id,
           name: config.name,
           task: config.task,
@@ -188,10 +188,10 @@ export class SubagentRunner {
    * Запустить несколько подагентов параллельно.
    */
   async spawnAll(
-    configs: SubagentConfig[],
+    configs: ISubagentConfig[],
     onChunk?: (id: string, text: string) => void,
-    onDone?: (result: SubagentResult) => void,
-  ): Promise<SubagentResult[]> {
+    onDone?: (result: ISubagentResult) => void,
+  ): Promise<ISubagentResult[]> {
     const handles = await Promise.all(configs.map((config) =>
       this.spawn(
         config,
@@ -234,7 +234,7 @@ export class SubagentRunner {
   /**
    * Ожидать завершения всех подагентов.
    */
-  async waitForAll(): Promise<SubagentResult[]> {
+  async waitForAll(): Promise<ISubagentResult[]> {
     const handles = [...this.running.values()]
     return Promise.all(handles.map((h) => h.wait()))
   }
@@ -255,13 +255,13 @@ private createOrchestrator(): AgentOrchestrator {
  */
 export class SubagentHandle {
   public readonly id: string
-  public readonly config: SubagentConfig
-  public _result: Promise<SubagentResult> | null = null
+  public readonly config: ISubagentConfig
+  public _result: Promise<ISubagentResult> | null = null
   public _timeout: ReturnType<typeof setTimeout> | undefined
 
   constructor(
     id: string,
-    config: SubagentConfig,
+    config: ISubagentConfig,
     private readonly orchestrator: AgentOrchestrator,
     private readonly abortController: AbortController,
   ) {
@@ -272,7 +272,7 @@ export class SubagentHandle {
   /**
    * Ожидать завершения подагента.
    */
-  async wait(): Promise<SubagentResult> {
+  async wait(): Promise<ISubagentResult> {
     return await this._result!
   }
 

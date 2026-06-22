@@ -258,7 +258,7 @@
   "versionScript": "node ./bump-version.js",
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc --noEmit && esbuild ./src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "compile": "tsc --noEmit && esbuild ./src/Extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
     "watch": "npm run compile -- --watch",
     "test": "vitest run",
     "test:watch": "vitest"

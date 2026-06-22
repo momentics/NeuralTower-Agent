@@ -1,15 +1,15 @@
-import type { IBackend, ChatMessage } from "../core/IBackend"
+import type { IBackend, IChatMessage } from "../core/IBackend"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IToolRegistry } from "../tools/ToolRegistry"
 import type { ISkillManager } from "../skills/SkillManager"
 import type { ISkill } from "../skills/ISkill"
 import { AgentCore } from "./AgentCore"
 import type { AgentModeName } from "./AgentMode"
-import type { AgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
+import type { IAgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
 import type { Plan } from "./Plan"
 import type { TodoStore } from "./TodoStore"
-import type { ToolResult } from "./AgentTypes"
-import type { ContextItem } from "../core/providers/context/Types"
+import type { IToolResult } from "./AgentTypes"
+import type { IContextItem } from "../core/providers/context/Types"
 import { errorMessage } from "../core/Errors"
 
 /**
@@ -29,7 +29,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     private readonly backend: IBackend,
     private readonly toolRegistry: IToolRegistry,
     private readonly skillManager: ISkillManager,
-    private readonly deps: AgentDependencies,
+    private readonly deps: IAgentDependencies,
     private readonly spawnFactory: AgentSpawnFactory | null = null,
     private readonly todoStore: TodoStore,
   ) {
@@ -52,10 +52,10 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     query: string,
     onChunk: (text: string) => void,
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: ToolResult) => void,
+    onToolResult?: (name: string, result: IToolResult) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
-  ): Promise<ChatMessage> {
+  ): Promise<IChatMessage> {
     const combined = AbortSignal.any([this.abortController.signal, signal].filter((s): s is AbortSignal => !!s))
     return this.core.run(query, onChunk, onToolUse, onToolResult, combined, onCompaction)
   }
@@ -92,7 +92,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
 
   // ── Сессия ─────────────────────────────────────────────
 
-  async restoreSession(messages: ChatMessage[]): Promise<void> {
+  async restoreSession(messages: IChatMessage[]): Promise<void> {
     this.abortController.abort()
     this.core.dispose()
     this.abortController = new AbortController()
@@ -106,7 +106,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
 
   // ── Контекст ───────────────────────────────────────────
 
-  async resolveContextProvider(name: string, query: string): Promise<ContextItem[]> {
+  async resolveContextProvider(name: string, query: string): Promise<IContextItem[]> {
     const provider = this.deps.contextProviderRegistry.get(name)
     if (!provider) return []
     return provider.resolve(query)

@@ -12,10 +12,10 @@
 
 import { detectLanguageShort } from "../utils/LanguageDetector"
 import type {
-  ChunkerConfig,
-  CodeChunk,
+  IChunkerConfig,
+  ICodeChunk,
   ChunkNodeKind,
-  ChunkResult,
+  IChunkResult,
 } from "./ChunkTypes"
 
 const DEFAULT_CHUNK_SIZE = 4096
@@ -35,7 +35,7 @@ export interface IChunker {
    * @param content содержимое файла
    * @returns результат разбиения
    */
-  chunk(filePath: string, content: string): ChunkResult
+  chunk(filePath: string, content: string): IChunkResult
 
   /**
    * Поддерживает ли чанкер указанный язык.
@@ -46,7 +46,7 @@ export interface IChunker {
 /**
  * Конфигурация по умолчанию для чанкера.
  */
-export function createDefaultChunkerConfig(): ChunkerConfig {
+export function createDefaultChunkerConfig(): IChunkerConfig {
   return {
     maxChunkSize: DEFAULT_CHUNK_SIZE,
     overlapLines: DEFAULT_OVERLAP_LINES,
@@ -63,12 +63,12 @@ export function createDefaultChunkerConfig(): ChunkerConfig {
  * Подходит для всех языков, но не учитывает структуру кода.
  */
 export class LineChunker implements IChunker {
-  constructor(private readonly config: ChunkerConfig) { }
+  constructor(private readonly config: IChunkerConfig) { }
 
-  chunk(filePath: string, content: string): ChunkResult {
+  chunk(filePath: string, content: string): IChunkResult {
     const lines = content.split("\n")
     const totalLines = lines.length
-    const chunks: CodeChunk[] = []
+    const chunks: ICodeChunk[] = []
     let chunkIndex = 0
 
     const chunkSize = this.config.maxChunkSize
@@ -147,12 +147,12 @@ export class LineChunker implements IChunker {
  * Каждый фрагмент — это целая смысловая единица кода.
  */
 export class TypeScriptChunker implements IChunker {
-  constructor(private readonly config: ChunkerConfig) { }
+  constructor(private readonly config: IChunkerConfig) { }
 
-  chunk(filePath: string, content: string): ChunkResult {
+  chunk(filePath: string, content: string): IChunkResult {
     const lines = content.split("\n")
     const totalLines = lines.length
-    const chunks: CodeChunk[] = []
+    const chunks: ICodeChunk[] = []
     let chunkIndex = 0
 
     // Найти все определения в файле

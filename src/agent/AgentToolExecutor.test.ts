@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { AgentToolExecutor } from "./AgentToolExecutor"
-import type { IBackend, ChatMessage } from "../core/IBackend"
+import type { IBackend, IChatMessage } from "../core/IBackend"
 import { ToolRegistry } from "../tools/ToolRegistry"
 import type { ITool } from "../tools/ITool"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import { AgentModeManager } from "./AgentMode"
-import type { ToolResult } from "./AgentTypes"
+import type { IToolResult } from "./AgentTypes"
 
 const createMockBackend = (): IBackend => ({
   chat: vi.fn(async () => ({ role: "assistant", content: "Test response", timestamp: Date.now() })),
@@ -16,7 +16,7 @@ const createMockBackend = (): IBackend => ({
   healthCheck: vi.fn(async () => true),
 })
 
-const createMockTool = (name: string, isSafe = true, result: ToolResult = { output: "ok", success: true }): ITool => ({
+const createMockTool = (name: string, isSafe = true, result: IToolResult = { output: "ok", success: true }): ITool => ({
   name,
   description: `Mock ${name}`,
   category: "test",
@@ -59,7 +59,7 @@ describe("AgentToolExecutor", () => {
       null,
       modeManager,
     )
-    const conversation: ChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
+    const conversation: IChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     const result = await executor.callBackend(conversation, () => {})
     expect(result.type).toBe("text")
     expect(result.content).toBe("Test response")
@@ -80,7 +80,7 @@ describe("AgentToolExecutor", () => {
       null,
       modeManager,
     )
-    const conversation: ChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
+    const conversation: IChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     const result = await executor.callBackend(conversation, () => {})
     expect(result.type).toBe("tool_calls")
     expect(result.toolCalls).toHaveLength(1)
@@ -100,7 +100,7 @@ describe("AgentToolExecutor", () => {
       null,
       modeManager,
     )
-    const conversation: ChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
+    const conversation: IChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     const result = await executor.callBackend(conversation, () => {})
     expect(result.type).toBe("tool_calls")
     expect(result.toolCalls).toHaveLength(1)
@@ -117,7 +117,7 @@ describe("AgentToolExecutor", () => {
       null,
       modeManager,
     )
-    const conversation: ChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
+    const conversation: IChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     await expect(executor.callBackend(conversation, () => {}, ac.signal)).rejects.toThrow("Задача прервана")
   })
 
@@ -130,7 +130,7 @@ describe("AgentToolExecutor", () => {
       null,
       modeManager,
     )
-    const conversation: ChatMessage[] = []
+    const conversation: IChatMessage[] = []
     const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
     const result = await executor.executeToolCalls(toolCalls, "build", conversation)
     expect(result.anyFailed).toBe(false)
@@ -150,7 +150,7 @@ describe("AgentToolExecutor", () => {
       null,
       modeManager,
     )
-    const conversation: ChatMessage[] = []
+    const conversation: IChatMessage[] = []
     const toolCalls = [{ toolName: "edit", arguments: { path: "/test" } }]
     const result = await executor.executeToolCalls(toolCalls, "plan", conversation)
     expect(result.anyFailed).toBe(true)
@@ -169,7 +169,7 @@ describe("AgentToolExecutor", () => {
       permissionManager,
       modeManager,
     )
-    const conversation: ChatMessage[] = []
+    const conversation: IChatMessage[] = []
     const toolCalls = [{ toolName: "bash", arguments: { command: "rm -rf /" } }]
     const result = await executor.executeToolCalls(toolCalls, "build", conversation)
     expect(result.anyFailed).toBe(true)
@@ -188,7 +188,7 @@ describe("AgentToolExecutor", () => {
       null,
       modeManager,
     )
-    const conversation: ChatMessage[] = []
+    const conversation: IChatMessage[] = []
     const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
     const result = await executor.executeToolCalls(toolCalls, "build", conversation)
     expect(result.anyFailed).toBe(true)
@@ -204,7 +204,7 @@ describe("AgentToolExecutor", () => {
       null,
       modeManager,
     )
-    const conversation: ChatMessage[] = []
+    const conversation: IChatMessage[] = []
     const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
     const result = await executor.executeToolCalls(toolCalls, "build", conversation)
 
@@ -229,7 +229,7 @@ describe("AgentToolExecutor", () => {
       null,
       modeManager,
     )
-    const conversation: ChatMessage[] = []
+    const conversation: IChatMessage[] = []
     const toolCalls = [
       { toolName: "read", arguments: { path: "/test" } },
       { toolName: "write", arguments: { path: "/out" } },

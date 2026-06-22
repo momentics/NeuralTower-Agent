@@ -1,5 +1,5 @@
-import type { ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
+import type { IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
 import * as fs from "fs/promises"
 import { FilesystemTool } from "./FilesystemTool"
 import { str, bool } from "../ToolArgs"
@@ -33,7 +33,7 @@ export class EditFileTool extends FilesystemTool {
   category = "filesystem"
   isSafe = false
 
-  schema: ToolSchema = {
+  schema: IToolSchema = {
     name: "edit_file",
     description: "Редактировать файл заменой текста",
     parameters: {
@@ -45,7 +45,7 @@ export class EditFileTool extends FilesystemTool {
     required: ["filepath", "oldString", "newString"],
   }
 
-  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     const fp = str(args, "filepath")
     const oldStr = str(args, "oldString")
     const newStr = str(args, "newString")

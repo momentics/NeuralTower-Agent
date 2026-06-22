@@ -2,14 +2,14 @@
  * Результат агента за один вызов языковой модели.
  * Содержит либо итоговый текст, либо вызовы инструментов.
  */
-export interface AgentTurnResult {
+export interface IAgentTurnResult {
   type: "text" | "tool_calls"
   content?: string
-  toolCalls?: AgentToolCall[]
+  toolCalls?: IAgentToolCall[]
   thinking?: string
 }
 
-export interface AgentToolCall {
+export interface IAgentToolCall {
   toolName: string
   arguments: Record<string, unknown>
 }
@@ -17,7 +17,7 @@ export interface AgentToolCall {
 /**
  * Результат выполнения инструмента.
  */
-export interface ToolResult {
+export interface IToolResult {
   output: string
   success: boolean
   durationMs?: number

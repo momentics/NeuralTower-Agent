@@ -1,5 +1,5 @@
-import type { ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
+import type { IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import * as fs from "fs/promises"
@@ -30,7 +30,7 @@ export class GrepTool extends FilesystemTool {
   category = "filesystem"
   isSafe = true
 
-  schema: ToolSchema = {
+  schema: IToolSchema = {
     name: "grep",
     description: "Поиск в файлах по регулярному выражению",
     parameters: {
@@ -41,7 +41,7 @@ export class GrepTool extends FilesystemTool {
     required: ["pattern"],
   }
 
-  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     const pattern = str(args, "pattern")
     const root = str(args, "path") || "."
     const include = strOpt(args, "include")
@@ -65,7 +65,7 @@ export class GrepTool extends FilesystemTool {
     pattern: string,
     root: string,
     include: string | undefined,
-  ): Promise<ToolResult> {
+  ): Promise<IToolResult> {
     const fileArg = include ? ["-g", include, root] : [root]
     const { stdout, stderr } = await execFileAsync("rg", [
       "-n", "--no-heading", "--color=never", pattern, ...fileArg,
@@ -81,7 +81,7 @@ export class GrepTool extends FilesystemTool {
     root: string,
     include: string | undefined,
     signal?: AbortSignal,
-  ): Promise<ToolResult> {
+  ): Promise<IToolResult> {
     let re: RegExp
     try {
       re = new RegExp(pattern, "i")

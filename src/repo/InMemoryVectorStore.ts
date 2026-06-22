@@ -10,8 +10,8 @@
  */
 
 import type {
-  ChunkEmbedding,
-  SearchResult,
+  IChunkEmbedding,
+  ISearchResult,
   IVectorStore,
 } from "./IVectorStore"
 import { TombstoneStore } from "../shared/TombstoneStore"
@@ -21,14 +21,14 @@ import { TombstoneStore } from "../shared/TombstoneStore"
  * Использует TombstoneStore для O(1) удаления.
  */
 export class InMemoryVectorStore implements IVectorStore {
-  private store = new TombstoneStore<ChunkEmbedding>()
+  private store = new TombstoneStore<IChunkEmbedding>()
   private idIndex = new Map<string, number>()
   private fileIndex = new Map<string, Set<number>>()
 
   /**
    * Добавить эмбеддинги в хранилище.
    */
-  async add(embeddings: ChunkEmbedding[]): Promise<void> {
+  async add(embeddings: IChunkEmbedding[]): Promise<void> {
     for (const emb of embeddings) {
       const idx = this.store.acquireSlot()
       this.store.put(idx, emb)
@@ -45,7 +45,7 @@ export class InMemoryVectorStore implements IVectorStore {
    * косинусного сходства. Использует частичный top-K
    * для избежания сортировки всех результатов.
    */
-  async search(queryEmbedding: number[], topK: number): Promise<SearchResult[]> {
+  async search(queryEmbedding: number[], topK: number): Promise<ISearchResult[]> {
     const items = this.store.getItems()
     if (items.length === 0) return []
 
@@ -70,7 +70,7 @@ export class InMemoryVectorStore implements IVectorStore {
       }
     }
 
-    const results: SearchResult[] = []
+    const results: ISearchResult[] = []
     for (let i = 0; i < top.length; i++) {
       const entry = top[i]
       const emb = items[entry.index]

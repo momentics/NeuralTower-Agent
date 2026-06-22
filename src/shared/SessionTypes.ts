@@ -1,4 +1,4 @@
-export interface PersistedSession {
+export interface IPersistedSession {
   id: string
   title: string
   pinned: boolean
@@ -7,15 +7,15 @@ export interface PersistedSession {
   messageCount: number
 }
 
-export interface PersistedMessage {
+export interface IPersistedMessage {
   sessionId: string
   role: "system" | "user" | "assistant"
   content: string
   timestamp: number
 }
 
-export interface SessionData {
-  sessions: PersistedSession[]
-  messages: PersistedMessage[]
+export interface ISessionData {
+  sessions: IPersistedSession[]
+  messages: IPersistedMessage[]
   activeId: string
 }

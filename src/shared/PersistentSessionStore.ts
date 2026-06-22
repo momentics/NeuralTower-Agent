@@ -1,13 +1,13 @@
 import * as vscode from "vscode"
 import * as fs from "fs/promises"
 import * as path from "path"
-import type { ChatMessage } from "../core/IBackend"
+import type { IChatMessage } from "../core/IBackend"
 import type {
-  SessionData,
-  PersistedSession,
-  PersistedMessage,
+  ISessionData,
+  IPersistedSession,
+  IPersistedMessage,
 } from "./SessionTypes"
-import type { Plugin } from "./Types"
+import type { IPlugin } from "./Types"
 import { createDomainLogger } from "../core/Logger"
 import { Mutex } from "./Mutex"
 import { errorMessage } from "../core/Errors"
@@ -19,30 +19,30 @@ const DEFAULT_SESSION_TITLE = "Без названия"
 const DEFAULT_MAX_SESSIONS = 50
 
 export interface ISessionStore {
-  push(message: ChatMessage): Promise<void>
+  push(message: IChatMessage): Promise<void>
   newSession(): Promise<string>
   deleteSession(id: string): Promise<boolean>
   togglePin(id: string): Promise<void>
   rename(id: string, title: string): Promise<void>
-  list(): PersistedSession[]
+ list(): IPersistedSession[]
   setActive(id: string): void
-  getActiveMessages(): ChatMessage[]
+  getActiveMessages(): IChatMessage[]
   get activeId(): string
-  getSession(id: string): PersistedSession | undefined
-  getMessagesForSession(id: string): ChatMessage[]
+ getSession(id: string): IPersistedSession | undefined
+  getMessagesForSession(id: string): IChatMessage[]
   clearActive(): Promise<void>
   dispose(): void
 }
 
-const DEFAULT_DATA: SessionData = {
+const DEFAULT_DATA: ISessionData = {
   sessions: [],
   messages: [],
   activeId: "",
 }
 
-export class PersistentSessionStore implements Plugin, ISessionStore {
+export class PersistentSessionStore implements IPlugin, ISessionStore {
   name = "session-store"
-  private data: SessionData = { ...DEFAULT_DATA }
+  private data: ISessionData = { ...DEFAULT_DATA }
   private readonly storagePath: string
   private readonly maxSessions: number
   private readonly mutex = new Mutex()
@@ -63,7 +63,7 @@ export class PersistentSessionStore implements Plugin, ISessionStore {
     await this.mutex.withLock(async () => {
       try {
         const raw = await fs.readFile(this.storagePath, "utf-8")
-        this.data = JSON.parse(raw) as SessionData
+        this.data = JSON.parse(raw) as ISessionData
         if (!this.data.sessions.length && !this.data.activeId) {
           this.createDefault()
         }
@@ -97,15 +97,15 @@ export class PersistentSessionStore implements Plugin, ISessionStore {
     }
   }
 
-  getActiveMessages(): ChatMessage[] {
+  getActiveMessages(): IChatMessage[] {
     return this.data.messages
       .filter((m) => m.sessionId === this.data.activeId)
       .map((m) => ({ role: m.role, content: m.content, timestamp: m.timestamp }))
   }
 
-  async push(message: ChatMessage): Promise<void> {
+  async push(message: IChatMessage): Promise<void> {
     await this.mutex.withLock(async () => {
-      const pm: PersistedMessage = {
+      const pm: IPersistedMessage = {
         sessionId: this.data.activeId,
         role: message.role,
         content: message.content,
@@ -190,15 +190,15 @@ export class PersistentSessionStore implements Plugin, ISessionStore {
     })
   }
 
-  list(): PersistedSession[] {
+  list(): IPersistedSession[] {
     return [...this.data.sessions].sort((a, b) => b.updatedAt - a.updatedAt)
   }
 
-  getSession(id: string): PersistedSession | undefined {
+  getSession(id: string): IPersistedSession | undefined {
     return this.data.sessions.find((s) => s.id === id)
   }
 
-  getMessagesForSession(id: string): ChatMessage[] {
+  getMessagesForSession(id: string): IChatMessage[] {
     return this.data.messages
       .filter((m) => m.sessionId === id)
       .map((m) => ({ role: m.role, content: m.content, timestamp: m.timestamp }))

@@ -2,12 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { SessionContext } from "./SessionContext"
 import { ContextManager } from "../core/ContextManager"
 import { AgentMismatchError } from "../core/Errors"
-import type { ContextProvider } from "../core/providers/context/Types"
+import type { IContextProvider } from "../core/providers/context/Types"
 
 describe("SessionContext", () => {
   let cm: ContextManager
   let sc: SessionContext
-  let provider: ContextProvider
+  let provider: IContextProvider
 
   beforeEach(() => {
     cm = new ContextManager()

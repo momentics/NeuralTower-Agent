@@ -1,16 +1,16 @@
-import type { ContextProvider } from "./Types"
+import type { IContextProvider } from "./Types"
 
 /**
- * Интерфейс ContextProviderRegistry — методы, используемые через AgentDependencies.
+ * Интерфейс ContextProviderRegistry — методы, используемые через IAgentDependencies.
  */
 export interface IContextProviderRegistry {
-  get(name: string): ContextProvider | undefined
+get(name: string): IContextProvider | undefined
 }
 
 export class ContextProviderRegistry implements IContextProviderRegistry {
-  private providers = new Map<string, ContextProvider>()
+  private providers = new Map<string, IContextProvider>()
 
-  register(provider: ContextProvider): void {
+  register(provider: IContextProvider): void {
     this.providers.set(provider.description.name, provider)
   }
 
@@ -18,11 +18,11 @@ export class ContextProviderRegistry implements IContextProviderRegistry {
     this.providers.delete(name)
   }
 
-  get(name: string): ContextProvider | undefined {
+  get(name: string): IContextProvider | undefined {
     return this.providers.get(name)
   }
 
-  list(): ContextProvider[] {
+  list(): IContextProvider[] {
     return [...this.providers.values()]
   }
 

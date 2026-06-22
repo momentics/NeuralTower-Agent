@@ -1,11 +1,11 @@
 import * as path from "path"
-import type { IndexEntry } from "../../../repo/FileIndex"
-import type { ContextProvider, ContextItem } from "./Types"
+import type { IIndexEntry } from "../../../repo/FileIndex"
+import type { IContextProvider, IContextItem } from "./Types"
 
 const REPO_MAP_MAX_DIRS = 30
-import { RepoSummary } from "../../../repo/RepoAnalyzer"
+import { IRepoSummary } from "../../../repo/RepoAnalyzer"
 
-export interface FileIndexStats {
+export interface IFileIndexStats {
   totalFiles: number
   languages: number
   totalSize: number
@@ -13,9 +13,9 @@ export interface FileIndexStats {
 
 export function makeRepoMapProvider(
   getWorkDir: () => string,
-  getFileIndex: () => { findByPattern(pattern: string): IndexEntry[]; findByLanguage(lang: string): IndexEntry[]; stats(): FileIndexStats },
-  getRepoSummary: () => Promise<RepoSummary>,
-): ContextProvider {
+  getFileIndex: () => { findByPattern(pattern: string): IIndexEntry[]; findByLanguage(lang: string): IIndexEntry[]; stats(): IFileIndexStats },
+  getRepoSummary: () => Promise<IRepoSummary>,
+): IContextProvider {
   return {
     description: {
       name: "repo-map",
@@ -24,7 +24,7 @@ export function makeRepoMapProvider(
       type: "normal",
       priority: 87,
     },
-    async resolve(_query: string): Promise<ContextItem[]> {
+    async resolve(_query: string): Promise<IContextItem[]> {
       const summary = await getRepoSummary()
       const stats = getFileIndex().stats()
 

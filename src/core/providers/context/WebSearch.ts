@@ -1,11 +1,11 @@
-import type { ContextProvider, ContextItem } from "./Types"
+import type { IContextProvider, IContextItem } from "./Types"
 import { errorMessage } from "../../Errors"
 
 const CONTEXT_TIMEOUT_MS = 15000
 const WEB_SEARCH_MAX_TOPICS = 8
 const WEB_SEARCH_MAX_CONTENT = 2000
 
-export function makeWebSearchProvider(): ContextProvider {
+export function makeWebSearchProvider(): IContextProvider {
   return {
     description: {
       name: "web",
@@ -13,7 +13,7 @@ export function makeWebSearchProvider(): ContextProvider {
       description: "Поиск в интернете",
       type: "query",
     },
-    async resolve(query: string): Promise<ContextItem[]> {
+    async resolve(query: string): Promise<IContextItem[]> {
       const trimmed = query.trim()
       if (!trimmed) return []
 
@@ -44,7 +44,7 @@ export function makeWebSearchProvider(): ContextProvider {
           })
           .filter(Boolean) as string[]
 
-        const items: ContextItem[] = [{
+        const items: IContextItem[] = [{
           content: `Запрос: ${trimmed}\n\n${abstract}\n\nСвязанные:\n${related.map((r: string, i: number) => `${i + 1}. ${r}`).join("\n")}`,
           name: `Поиск: ${trimmed.slice(0, 40)}`,
           description: `${related.length} результатов`,

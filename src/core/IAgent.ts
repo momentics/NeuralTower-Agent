@@ -1,8 +1,8 @@
 import type { ITool } from "../tools/ITool"
 import type { ISkill } from "../skills/ISkill"
-import type { IBackend, ChatMessage } from "./IBackend"
+import type { IBackend, IChatMessage } from "./IBackend"
 import type { Plan } from "../agent/Plan"
-import type { ToolResult } from "../agent/AgentTypes"
+import type { IToolResult } from "../agent/AgentTypes"
 
 /**
  * Интерфейс оркестратора агента. Управляет циклом агента:
@@ -21,10 +21,10 @@ export interface IAgentOrchestrator {
     query: string,
     onChunk: (text: string) => void,
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: ToolResult) => void,
+    onToolResult?: (name: string, result: IToolResult) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
-  ): Promise<ChatMessage>
+  ): Promise<IChatMessage>
 
   /** Перезагрузить навыки и инструменты с диска/конфигурации. */
   reload(): Promise<void>
@@ -33,7 +33,7 @@ export interface IAgentOrchestrator {
   dispose(): void
 
   /** Восстановить контекст сессии из истории сообщений. */
-  restoreSession(messages: ChatMessage[]): Promise<void>
+  restoreSession(messages: IChatMessage[]): Promise<void>
 
   /** Сбросить контекст сессии (новый чат / переключение сессии). */
   resetSession(): void

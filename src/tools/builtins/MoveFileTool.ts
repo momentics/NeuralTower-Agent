@@ -1,5 +1,5 @@
-import type { ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
+import type { IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
 import * as fs from "fs/promises"
 import * as path from "path"
 import { FilesystemTool } from "./FilesystemTool"
@@ -12,7 +12,7 @@ export class MoveFileTool extends FilesystemTool {
   category = "filesystem"
   isSafe = false
 
-  schema: ToolSchema = {
+  schema: IToolSchema = {
     name: "move_file",
     description: "Переместить или переименовать файл или директорию",
     parameters: {
@@ -22,7 +22,7 @@ export class MoveFileTool extends FilesystemTool {
     required: ["source", "destination"],
   }
 
-  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     const src = str(args, "source")
     const dst = str(args, "destination")
 

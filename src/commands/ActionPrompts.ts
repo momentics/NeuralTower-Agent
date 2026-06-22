@@ -1,7 +1,7 @@
 /**
  * Шаблоны промптов для действий — логика без данных (SRP).
  */
-export interface ActionPromptTemplates {
+export interface IActionPromptTemplates {
   editorPromptTemplate: (text: string, lang: string, filePath: string) => string
   codeActionPromptTemplate: (text: string, lang: string, filePath: string) => string
   codeActionWithDiagnosticsPromptTemplate?: (text: string, lang: string, filePath: string, diagnostics: string) => string
@@ -10,7 +10,7 @@ export interface ActionPromptTemplates {
 /**
  * Реестр шаблонов промптов по имени действия.
  */
-export const ACTION_PROMPT_TEMPLATES: Record<string, ActionPromptTemplates> = {
+export const ACTION_PROMPT_TEMPLATES: Record<string, IActionPromptTemplates> = {
   explainCode: {
     editorPromptTemplate: (text, lang) => `Объясни этот код:\n\n\`\`\`${lang}\n${text}\n\`\`\``,
     codeActionPromptTemplate: (text, lang) => `Объясни этот код:\n\n\`\`\`${lang}\n${text}\n\`\`\``,

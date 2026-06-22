@@ -1,9 +1,9 @@
 import { spawn, type SpawnOptions, type ChildProcess } from "child_process"
-import type { IProcessRunner, ProcessRunOptions, ProcessRunResult } from "../core/IProcessRunner"
+import type { IProcessRunner, IProcessRunOptions, IProcessRunResult } from "../core/IProcessRunner"
 
 const DEFAULT_PROCESS_MAX_BUFFER = 1024 * 1024
 
-export interface ProcessRunnerOptions {
+export interface IProcessRunnerOptions {
   cwd?: string
   timeout?: number
   maxBuffer?: number
@@ -12,7 +12,7 @@ export interface ProcessRunnerOptions {
   signal?: AbortSignal
 }
 
-export interface ProcessResult {
+export interface IProcessResult {
   stdout: string
   stderr: string
   code: number | null
@@ -26,9 +26,9 @@ export class DefaultProcessRunner implements IProcessRunner {
   async run(
     command: string,
     args: string[],
-    options: ProcessRunOptions = {},
-  ): Promise<ProcessRunResult> {
-    return runProcess(command, args, options as ProcessRunnerOptions)
+    options: IProcessRunOptions = {},
+  ): Promise<IProcessRunResult> {
+    return runProcess(command, args, options as IProcessRunnerOptions)
   }
 }
 
@@ -39,8 +39,8 @@ export class DefaultProcessRunner implements IProcessRunner {
 export function runProcess(
   command: string,
   args: string[],
-  options: ProcessRunnerOptions = {},
-): Promise<ProcessResult> {
+  options: IProcessRunnerOptions = {},
+): Promise<IProcessResult> {
   const {
     cwd,
     timeout,
@@ -57,7 +57,7 @@ export function runProcess(
   return new Promise((resolve, reject) => {
     let settled = false
     const settle = (
-      value: ProcessResult | undefined,
+      value: IProcessResult | undefined,
       error: Error | undefined,
     ) => {
       if (settled) return

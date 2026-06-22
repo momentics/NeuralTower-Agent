@@ -1,9 +1,9 @@
 import * as vscode from "vscode"
-import type { BackendConfig } from "./IBackend"
+import type { IBackendConfig } from "./IBackend"
 
 // ── Бэкенд ────────────────────────────────────────────────
 
-export function loadDefaultBackendConfig(): BackendConfig {
+export function loadDefaultBackendConfig(): IBackendConfig {
   return {
     url: "http://localhost:30000",
     model: "qwen3.6-27b",
@@ -14,7 +14,7 @@ export function loadDefaultBackendConfig(): BackendConfig {
 
 // ── Агент ─────────────────────────────────────────────────
 
-export interface AgentConfig {
+export interface IAgentConfig {
   /** Максимальное число итераций вызова инструментов за один ход агента. */
   maxIterations: number
 
@@ -37,7 +37,7 @@ export interface AgentConfig {
   maxReplanAttempts: number
 }
 
-export function loadDefaultAgentConfig(): AgentConfig {
+export function loadDefaultAgentConfig(): IAgentConfig {
   return {
     maxIterations: 20,
     maxTokens: 60_000,
@@ -51,12 +51,12 @@ export function loadDefaultAgentConfig(): AgentConfig {
 
 // ── Контекст ──────────────────────────────────────────────
 
-export interface ContextConfig {
+export interface IContextConfig {
   /** Лимит токенов для системного промпта. */
   tokenBudget: number
 }
 
-export function loadDefaultContextConfig(): ContextConfig {
+export function loadDefaultContextConfig(): IContextConfig {
   return {
     tokenBudget: 16_000,
   }
@@ -64,7 +64,7 @@ export function loadDefaultContextConfig(): ContextConfig {
 
 // ── Компактор ─────────────────────────────────────────────
 
-export interface CompactorConfig {
+export interface ICompactorConfig {
   /** Лимит контекстных токенов модели. */
   contextLimit: number
 
@@ -81,7 +81,7 @@ export interface CompactorConfig {
   summaryMaxTokens: number
 }
 
-export function loadDefaultCompactorConfig(): CompactorConfig {
+export function loadDefaultCompactorConfig(): ICompactorConfig {
   return {
     contextLimit: 128_000,
     bufferTokens: 20_000,
@@ -93,12 +93,12 @@ export function loadDefaultCompactorConfig(): CompactorConfig {
 
 // ── Сессия ────────────────────────────────────────────────
 
-export interface SessionConfig {
+export interface ISessionConfig {
   /** Максимальное число сохраняемых сессий. */
   maxSessions: number
 }
 
-export function loadDefaultSessionConfig(): SessionConfig {
+export function loadDefaultSessionConfig(): ISessionConfig {
   return {
     maxSessions: 50,
   }
@@ -106,7 +106,7 @@ export function loadDefaultSessionConfig(): SessionConfig {
 
 // ── Автодополнение ────────────────────────────────────────
 
-export interface AutocompleteConfig {
+export interface IAutocompleteConfig {
   /** Включить автодополнение кода. */
   enabled: boolean
 
@@ -117,7 +117,7 @@ export interface AutocompleteConfig {
   maxPromptTokens: number
 }
 
-export function loadDefaultAutocompleteConfig(): AutocompleteConfig {
+export function loadDefaultAutocompleteConfig(): IAutocompleteConfig {
   return {
     enabled: true,
     debounceMs: 150,
@@ -127,20 +127,20 @@ export function loadDefaultAutocompleteConfig(): AutocompleteConfig {
 
 // ── Единая конфигурация приложения ────────────────────────
 
-export interface AppConfig {
-  backend: BackendConfig
-  agent: AgentConfig
-  context: ContextConfig
-  compactor: CompactorConfig
-  session: SessionConfig
-  autocomplete: AutocompleteConfig
+export interface IAppConfig {
+  backend: IBackendConfig
+  agent: IAgentConfig
+  context: IContextConfig
+  compactor: ICompactorConfig
+  session: ISessionConfig
+  autocomplete: IAutocompleteConfig
 }
 
 /**
- * Загрузить AppConfig из VS Code settings.
+ * Загрузить IAppConfig из VS Code settings.
  * Вызывается один раз при активации расширения.
  */
-export function loadAppConfig(): AppConfig {
+export function loadAppConfig(): IAppConfig {
   const cfg = vscode.workspace.getConfiguration("neuralTowerAgent")
 
   return {

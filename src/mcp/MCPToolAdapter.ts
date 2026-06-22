@@ -1,7 +1,7 @@
-import type { ITool, ToolSchema, ToolParam } from "../tools/ITool"
-import type { ToolResult } from "../agent/AgentTypes"
+import type { ITool, IToolSchema, IToolParam } from "../tools/ITool"
+import type { IToolResult } from "../agent/AgentTypes"
 
-export interface MCPToolDefinition {
+export interface IMCPToolDefinition {
   name: string
   description: string
   schema: Record<string, unknown>
@@ -17,7 +17,7 @@ type ToolParamType = "string" | "number" | "boolean" | "array" | "object"
 
 const VALID_TOOL_PARAM_TYPES = new Set<ToolParamType>(["string", "number", "boolean", "array", "object"])
 
-/** Безопасно преобразовать строку к типу ToolParam["type"]. */
+/** Безопасно преобразовать строку к типу IToolParam["type"]. */
 function safeToolParamType(raw: unknown): ToolParamType {
   if (typeof raw === "string" && VALID_TOOL_PARAM_TYPES.has(raw as ToolParamType)) {
     return raw as ToolParamType
@@ -35,10 +35,10 @@ function safeToolParamType(raw: unknown): ToolParamType {
  */
 export class MCPToolAdapter {
   /**
-   * Преобразовать определение MCPTool в экземпляр ITool.
+   * Преобразовать определение IMCPToolDefinition в экземпляр ITool.
    */
   adapt(
-    mcpTool: MCPToolDefinition,
+    mcpTool: IMCPToolDefinition,
     serverName: string,
     callToolFn: CallToolFn,
   ): ITool {
@@ -49,7 +49,7 @@ export class MCPToolAdapter {
       category: "mcp",
       schema: this.toSchema(mcpTool, serverName),
       isSafe: false,
-      execute: async (args: Record<string, unknown>, _signal?: AbortSignal): Promise<ToolResult> => {
+      execute: async (args: Record<string, unknown>, _signal?: AbortSignal): Promise<IToolResult> => {
         const start = Date.now()
         const result = await callToolFn(serverName, mcpTool.name, args)
         return {
@@ -63,15 +63,15 @@ export class MCPToolAdapter {
 
   /** Адаптировать несколько инструментов MCP. */
   adaptAll(
-    mcpTools: MCPToolDefinition[],
+    mcpTools: IMCPToolDefinition[],
     serverName: string,
     callToolFn: CallToolFn,
   ): ITool[] {
     return mcpTools.map((t) => this.adapt(t, serverName, callToolFn))
   }
 
-  private toSchema(tool: MCPToolDefinition, serverName: string): ToolSchema {
-    const params: Record<string, ToolParam> = {}
+  private toSchema(tool: IMCPToolDefinition, serverName: string): IToolSchema {
+    const params: Record<string, IToolParam> = {}
     if (tool.schema && typeof tool.schema === "object" && "inputSchema" in tool.schema) {
       const inputSchema = tool.schema.inputSchema as Record<string, unknown>
       if (inputSchema && typeof inputSchema === "object") {

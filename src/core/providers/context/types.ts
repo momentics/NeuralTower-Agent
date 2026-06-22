@@ -1,4 +1,4 @@
-export interface ContextItem {
+export interface IContextItem {
   readonly content: string
   readonly name: string
   readonly description?: string
@@ -6,7 +6,7 @@ export interface ContextItem {
 
 export type ProviderType = "normal" | "query" | "submenu"
 
-export interface ProviderDescription {
+export interface IProviderDescription {
   readonly name: string
   readonly displayTitle: string
   readonly description: string
@@ -15,7 +15,7 @@ export interface ProviderDescription {
   readonly priority?: number
 }
 
-export interface SubmenuItem {
+export interface ISubmenuItem {
   readonly id: string
   readonly label: string
   readonly description: string
@@ -26,13 +26,13 @@ export interface SubmenuItem {
  *
  * Используется и для on-demand запросов (resolve с query),
  * и для автоматического контекста (resolve с пустым query).
- * ContextManager потребляет ContextProvider для построения
+ * ContextManager потребляет IContextProvider для построения
  * снимков и обнаружения дельт между ходами агента.
  */
-export interface ContextProvider {
-  readonly description: ProviderDescription
-  resolve(query: string): Promise<ContextItem[]>
-  loadSubmenuItems?(): Promise<SubmenuItem[]>
+export interface IContextProvider {
+  readonly description: IProviderDescription
+  resolve(query: string): Promise<IContextItem[]>
+  loadSubmenuItems?(): Promise<ISubmenuItem[]>
   /**
    * Сформировать краткое описание изменения при изменении
    * содержимого провайдера. Если не определён — используется

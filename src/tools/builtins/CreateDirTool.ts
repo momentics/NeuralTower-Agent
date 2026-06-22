@@ -1,5 +1,5 @@
-import type { ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
+import type { IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
 import * as fs from "fs/promises"
 import { FilesystemTool } from "./FilesystemTool"
 import { str, bool } from "../ToolArgs"
@@ -11,7 +11,7 @@ export class CreateDirTool extends FilesystemTool {
   category = "filesystem"
   isSafe = true
 
-  schema: ToolSchema = {
+  schema: IToolSchema = {
     name: "create_dir",
     description: "Создать директорию",
     parameters: {
@@ -21,7 +21,7 @@ export class CreateDirTool extends FilesystemTool {
     required: ["path"],
   }
 
-  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     const p = str(args, "path")
     const result = await this.resolvePath(p)
     if ("error" in result) return { output: result.error, success: false }

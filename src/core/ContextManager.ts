@@ -1,4 +1,4 @@
-import type { ContextProvider, ContextItem } from "./providers/context/Types"
+import type { IContextProvider, IContextItem } from "./providers/context/Types"
 import { estimateTokens } from "./TokenUtils"
 import { loadDefaultContextConfig } from "./Config"
 import { createDomainLogger } from "./Logger"
@@ -12,11 +12,11 @@ const log = createDomainLogger("ContextManager")
  * начала хода агента. Используется для сравнения при
  * повторных запросах в рамках того же этапа.
  */
-export interface ContextSnapshot {
+export interface IContextSnapshot {
   /** Имя провайдера. */
   readonly name: string
 
-  /** Содержимое (объединённый content всех ContextItem). */
+  /** Содержимое (объединённый content всех IContextItem). */
   readonly content: string
 
   /** Порядковый номер ревизии. */
@@ -27,7 +27,7 @@ export interface ContextSnapshot {
  * Подготовленный контекст для передачи в цикл агента.
  * Содержит базовый системный промпт и метаданные этапа.
  */
-export interface PreparedContext {
+export interface IPreparedContext {
   /** Системный промпт (базовый текст всех провайдеров + дельты). */
   readonly systemPrompt: string
 
@@ -35,20 +35,20 @@ export interface PreparedContext {
   readonly revision: number
 
   /** Снимок провайдеров для сравнения. */
-  readonly snapshot: ContextSnapshot[]
+  readonly snapshot: IContextSnapshot[]
 
   /** Оценка токенов системного промпта. */
   readonly systemTokens: number
 }
 
 /**
- * Интерфейс ContextManager — методы, используемые через AgentDependencies.
+ * Интерфейс ContextManager — методы, используемые через IAgentDependencies.
  */
 export interface IContextManager {
-  initialize(): Promise<PreparedContext>
-  prepare(): Promise<PreparedContext>
+  initialize(): Promise<IPreparedContext>
+  prepare(): Promise<IPreparedContext>
   reset(): void
-  list(): ContextProvider[]
+list(): IContextProvider[]
   dispose(): void
 }
 
@@ -57,7 +57,7 @@ export interface IContextManager {
  * базовый системный промпт, сравнивает изменения между
  * ходами агента и отслеживает потребление токенов.
  *
- * Консумирует ContextProvider: для автоматического контекста
+ * Консумирует IContextProvider: для автоматического контекста
  * вызывается resolve('') на каждом провайдере, результат
  * сравнивается с предыдущим снимком для обнаружения дельт.
  *
@@ -65,8 +65,8 @@ export interface IContextManager {
  * добавляются, пока сумма токенов не превысит лимит.
  */
 export class ContextManager implements IContextManager {
-  private providers: ContextProvider[] = []
-  private snapshot: ContextSnapshot[] = []
+  private providers: IContextProvider[] = []
+  private snapshot: IContextSnapshot[] = []
   private revision = 0
   private previousContent: Map<string, string> = new Map()
   private tokenBudget: number
@@ -79,7 +79,7 @@ export class ContextManager implements IContextManager {
   /**
    * Зарегистрировать провайдер контекста.
    */
-  register(provider: ContextProvider): void {
+  register(provider: IContextProvider): void {
     this.providers.push(provider)
   }
 
@@ -109,7 +109,7 @@ export class ContextManager implements IContextManager {
   /**
    * Вернуть все зарегистрированные провайдеры.
    */
-  list(): ContextProvider[] {
+  list(): IContextProvider[] {
     return [...this.providers]
   }
 
@@ -119,12 +119,12 @@ export class ContextManager implements IContextManager {
    *
    * Вызывается один раз на начало этапа сессии.
    */
-  async initialize(): Promise<PreparedContext> {
+  async initialize(): Promise<IPreparedContext> {
     return await this.mutex.withLock(() => this.doInitialize())
   }
 
-  private async doInitialize(): Promise<PreparedContext> {
-    const snapshots: ContextSnapshot[] = []
+  private async doInitialize(): Promise<IPreparedContext> {
+    const snapshots: IContextSnapshot[] = []
     const baselineParts: string[] = []
     this.previousContent.clear()
     this.revision = 1
@@ -180,13 +180,13 @@ export class ContextManager implements IContextManager {
    *
    * Если провайдеры не изменились — возвращает базовый текст без изменений.
    */
-  async prepare(): Promise<PreparedContext> {
+  async prepare(): Promise<IPreparedContext> {
     return await this.mutex.withLock(() => this.doPrepare())
   }
 
-  private async doPrepare(): Promise<PreparedContext> {
+  private async doPrepare(): Promise<IPreparedContext> {
     const deltas: string[] = []
-    const newSnapshots: ContextSnapshot[] = []
+    const newSnapshots: IContextSnapshot[] = []
     const newContent: Map<string, string> = new Map()
     this.revision++
 
@@ -251,7 +251,7 @@ export class ContextManager implements IContextManager {
   /**
    * Вернуть текущий снимок контекста.
    */
-  getSnapshot(): ContextSnapshot[] {
+  getSnapshot(): IContextSnapshot[] {
     return [...this.snapshot]
   }
 
@@ -294,7 +294,7 @@ export class ContextManager implements IContextManager {
 
 // ── Утилиты ───────────────────────────────────────────────
 
-function extractContent(items: ContextItem[]): string {
+function extractContent(items: IContextItem[]): string {
   if (items.length === 0) return ""
   return items.map((i) => i.content).join("\n\n")
 }

@@ -1,9 +1,9 @@
 import * as vscode from "vscode"
 import type { CodebaseIndexer, IndexingState } from "./CodebaseIndexer"
-import type { Plugin } from "../../shared/Types"
+import type { IPlugin } from "../../shared/Types"
 import { StatusBarIndicator } from "../../services/StatusBarIndicator"
 
-export class IndexingStatusBar extends StatusBarIndicator implements Plugin {
+export class IndexingStatusBar extends StatusBarIndicator implements IPlugin {
   name = "indexing-status"
 
   private state: IndexingState = "idle"

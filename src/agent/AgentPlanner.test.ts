@@ -5,7 +5,7 @@ import { Replanner } from "./Replanner"
 import { ToolRegistry } from "../tools/ToolRegistry"
 import type { IBackend } from "../core/IBackend"
 import type { SessionContext } from "./SessionContext"
-import type { PlanStep } from "./Plan"
+import type { IPlanStep } from "./Plan"
 
 const createMockBackend = (): IBackend => ({
   chat: vi.fn(async () => ({ role: "assistant", content: "Test response", timestamp: Date.now() })),
@@ -114,7 +114,7 @@ describe("AgentPlanner", () => {
 
   it("attemptReplan returns null when no current plan", async () => {
     const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
-    const step: PlanStep = { description: "S1", suggestedTools: [], status: "failed", attempts: 1, error: "err" }
+    const step: IPlanStep = { description: "S1", suggestedTools: [], status: "failed", attempts: 1, error: "err" }
     const result = await planner.attemptReplan(step, "err", 2)
     expect(result).toBeNull()
   })
@@ -140,7 +140,7 @@ describe("AgentPlanner", () => {
     plan.markFailed("file not found")
 
     planner.setCurrentPlan(plan)
-    const step: PlanStep = plan.steps[1]
+    const step: IPlanStep = plan.steps[1]
     const result = await planner.attemptReplan(step, "file not found", 2)
 
     expect(result).not.toBeNull()
@@ -167,7 +167,7 @@ describe("AgentPlanner", () => {
     plan.markFailed("err")
 
     planner.setCurrentPlan(plan)
-    const step: PlanStep = plan.steps[0]
+    const step: IPlanStep = plan.steps[0]
     await planner.attemptReplan(step, "err", 2)
 
     expect(sessionContext.setPlan).toHaveBeenCalled()
@@ -187,7 +187,7 @@ describe("AgentPlanner", () => {
     plan.markFailed("err")
 
     planner.setCurrentPlan(plan)
-    const step: PlanStep = plan.steps[0]
+    const step: IPlanStep = plan.steps[0]
     const result = await planner.attemptReplan(step, "err", 2)
 
     expect(result).not.toBeNull()
@@ -206,7 +206,7 @@ describe("AgentPlanner", () => {
     plan.markFailed("err")
 
     planner.setCurrentPlan(plan)
-    const step: PlanStep = plan.steps[0]
+    const step: IPlanStep = plan.steps[0]
 
     planner.resetReplanAttempts()
     await planner.attemptReplan(step, "err", 1)
@@ -233,7 +233,7 @@ describe("AgentPlanner", () => {
     plan.markFailed("err")
 
     planner.setCurrentPlan(plan)
-    const step: PlanStep = plan.steps[0]
+    const step: IPlanStep = plan.steps[0]
     planner.attemptReplan(step, "err", 5)
     expect(planner.getReplanAttemptCount()).toBe(1)
 
@@ -253,7 +253,7 @@ describe("AgentPlanner", () => {
     plan.markFailed("err")
 
     planner.setCurrentPlan(plan)
-    const step: PlanStep = plan.steps[0]
+    const step: IPlanStep = plan.steps[0]
     planner.attemptReplan(step, "err", 5)
     planner.clearPlan()
     expect(planner.getReplanAttemptCount()).toBe(0)

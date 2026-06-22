@@ -18,7 +18,7 @@ const REPO_ANALYZER_MAX_FILES = 5000
  * которые он ранее не встречал.
  */
 
-export interface RepoSummary {
+export interface IRepoSummary {
   fileCount: number
   dirCount: number
   languages: Record<string, number>
@@ -49,7 +49,7 @@ export class RepoAnalyzer {
    * Использует поверхностное сканирование для скорости;
    * содержимое файлов не читается.
    */
-  async analyze(dir: string): Promise<RepoSummary> {
+  async analyze(dir: string): Promise<IRepoSummary> {
     const files = await walkDirectory(dir, { maxFiles: REPO_ANALYZER_MAX_FILES })
     const languages = this.detectLanguages(files)
     const buildSystems = this.detectBuildSystems(files)

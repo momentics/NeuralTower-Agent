@@ -11,7 +11,7 @@ const log = createDomainLogger("MCP")
 const MCP_REQUEST_TIMEOUT_MS = 10000
 
 /** Конфигурация MCP-сервера для подключения. */
-export interface MCPServerConfig {
+export interface IMCPServerConfig {
   name: string
   transport: "stdio" | "http"
   command: string
@@ -20,38 +20,38 @@ export interface MCPServerConfig {
 }
 
 /** Описание инструмента, обнаруженного на MCP-сервере. */
-export interface MCPTool {
+export interface IMCPTool {
   name: string
   description: string
   schema: Record<string, unknown>
 }
 
-interface PendingRequest {
+interface IPendingRequest {
   resolve: (value: unknown) => void
   reject: (reason: Error) => void
 }
 
-interface MCPServer {
-  config: MCPServerConfig
+interface IMCPServer {
+  config: IMCPServerConfig
   ready: boolean
   transport: IMCPTransport | null
-  tools: MCPTool[]
+ tools: IMCPTool[]
   nextRequestId: number
-  pendingRequests: Map<number, PendingRequest> | null
+  pendingRequests: Map<number, IPendingRequest> | null
 }
 
 /**
- * Интерфейс MCPManager — методы, используемые через AgentDependencies.
+ * Интерфейс MCPManager — методы, используемые через IAgentDependencies.
  */
 export interface IMCPManager {
-  register(config: MCPServerConfig): void
+ register(config: IMCPServerConfig): void
   connect(): Promise<void>
-  discover(): Promise<MCPTool[]>
+ discover(): Promise<IMCPTool[]>
   callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<{ output: string; success: boolean }>
   syncWithRegistry(registry: IToolRegistry): Promise<void>
-  listServers(): MCPServerConfig[]
+ listServers(): IMCPServerConfig[]
   getReadyServers(): string[]
-  getToolsByServer(): Array<{ server: string; tools: MCPTool[] }>
+ getToolsByServer(): Array<{ server: string; tools: IMCPTool[] }>
   disconnect(): Promise<void>
 }
 
@@ -59,7 +59,7 @@ export interface IMCPManager {
  * Создать транспорт для конфигурации сервера.
  * Для добавления нового типа транспорта достаточно расширить switch (KISS).
  */
-function createTransport(config: MCPServerConfig): IMCPTransport | null {
+function createTransport(config: IMCPServerConfig): IMCPTransport | null {
   switch (config.transport) {
     case "stdio":
       return new StdioMCPTransport(config)
@@ -70,10 +70,10 @@ function createTransport(config: MCPServerConfig): IMCPTransport | null {
 }
 
 export class MCPManager implements IMCPManager {
-  private servers: MCPServer[] = []
+  private servers: IMCPServer[] = []
   private toolAdapter = new MCPToolAdapter()
 
-  register(config: MCPServerConfig): void {
+  register(config: IMCPServerConfig): void {
     this.servers.push({
       config,
       ready: false,
@@ -148,14 +148,14 @@ export class MCPManager implements IMCPManager {
     }
   }
 
-  async discover(): Promise<MCPTool[]> {
-    const all: MCPTool[] = []
+  async discover(): Promise<IMCPTool[]> {
+    const all: IMCPTool[] = []
     for (const server of this.servers) {
       if (!server.ready || !server.transport) continue
       try {
         const result = await this.sendJSONRPC<Record<string, unknown>>(server, "tools/list", {})
         if (result && typeof result === "object" && Array.isArray((result as Record<string, unknown>).tools)) {
-          server.tools = (result as unknown as { tools: MCPTool[] }).tools
+          server.tools = (result as unknown as { tools: IMCPTool[] }).tools
           all.push(...server.tools)
         }
       } catch (err: unknown) {
@@ -207,7 +207,7 @@ export class MCPManager implements IMCPManager {
     }
   }
 
-  listServers(): MCPServerConfig[] {
+  listServers(): IMCPServerConfig[] {
     return this.servers.map((s) => s.config)
   }
 
@@ -215,7 +215,7 @@ export class MCPManager implements IMCPManager {
     return this.servers.filter((s) => s.ready).map((s) => s.config.name)
   }
 
-  getToolsByServer(): Array<{ server: string; tools: MCPTool[] }> {
+  getToolsByServer(): Array<{ server: string; tools: IMCPTool[] }> {
     return this.servers
       .filter((s) => s.ready)
       .map((s) => ({ server: s.config.name, tools: s.tools }))
@@ -243,7 +243,7 @@ export class MCPManager implements IMCPManager {
   // ── Приватные методы ────────────────────────────────────
 
   private sendJSONRPC<T>(
-    server: MCPServer,
+    server: IMCPServer,
     method: string,
     params: Record<string, unknown>,
   ): Promise<T> {

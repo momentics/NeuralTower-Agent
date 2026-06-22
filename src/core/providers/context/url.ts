@@ -1,10 +1,10 @@
-import type { ContextProvider, ContextItem } from "./Types"
+import type { IContextProvider, IContextItem } from "./Types"
 import { fetchUrl, htmlToText } from "../../../network/UrlFetcher"
 
 const CONTEXT_TIMEOUT_MS = 15000
 const CONTEXT_MAX_TEXT_LENGTH = 12000
 
-export function makeUrlProvider(): ContextProvider {
+export function makeUrlProvider(): IContextProvider {
   return {
     description: {
       name: "url",
@@ -12,7 +12,7 @@ export function makeUrlProvider(): ContextProvider {
       description: "Содержимое веб-страницы по URL",
       type: "query",
     },
-    async resolve(query: string): Promise<ContextItem[]> {
+    async resolve(query: string): Promise<IContextItem[]> {
       const trimmed = query.trim()
       if (!trimmed) return []
 

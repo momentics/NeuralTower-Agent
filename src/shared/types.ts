@@ -4,7 +4,7 @@
  * Сервис — базовый компонент с именем, без жизненного цикла.
  * Используйте для простых сервисов, которым не нужна инициализация.
  */
-export interface Service {
+export interface IService {
   /** Имя сервиса. */
   name: string
 
@@ -14,9 +14,9 @@ export interface Service {
 
 /**
  * Плагин — компонент с полным жизненным циклом.
- * Наследует Service и добавляет init/dispose.
+ * Наследует IService и добавляет init/dispose.
  */
-export interface Plugin extends Service {
+export interface IPlugin extends IService {
   /** Инициализировать плагин. */
   init(): Promise<void>
 

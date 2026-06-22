@@ -3,7 +3,7 @@ import { errorMessage } from "../core/Errors"
 /**
  * Результат безопасного выполнения функции.
  */
-export interface SafeResult<T> {
+export interface ISafeResult<T> {
   /** Успешно ли выполнилась функция */
   success: boolean
   /** Результат выполнения (при success: true) */
@@ -19,7 +19,7 @@ export interface SafeResult<T> {
 export async function safeExecute<T>(
   fn: () => Promise<T>,
   context: string = "operation",
-): Promise<SafeResult<T>> {
+): Promise<ISafeResult<T>> {
   try {
     const value = await fn()
     return { success: true, value }
@@ -34,7 +34,7 @@ export async function safeExecute<T>(
 export function safeExecuteSync<T>(
   fn: () => T,
   context: string = "operation",
-): SafeResult<T> {
+): ISafeResult<T> {
   try {
     const value = fn()
     return { success: true, value }

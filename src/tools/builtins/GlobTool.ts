@@ -1,5 +1,5 @@
-import type { ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
+import type { IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
 import { glob as globFn } from "glob"
 import { FilesystemTool } from "./FilesystemTool"
 import { str, strOpt } from "../ToolArgs"
@@ -13,7 +13,7 @@ export class GlobTool extends FilesystemTool {
   category = "filesystem"
   isSafe = true
 
-  schema: ToolSchema = {
+  schema: IToolSchema = {
     name: "glob",
     description: "Поиск файлов по шаблону",
     parameters: {
@@ -23,7 +23,7 @@ export class GlobTool extends FilesystemTool {
     required: ["pattern"],
   }
 
-  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     const pattern = str(args, "pattern")
     if (!pattern) return { output: "Не указан шаблон glob", success: false }
 

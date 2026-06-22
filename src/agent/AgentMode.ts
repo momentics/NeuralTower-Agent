@@ -16,7 +16,7 @@ export type AgentModeName = "build" | "plan" | "explore"
 /**
  * Правило разрешения для инструмента.
  */
-export interface ToolRule {
+export interface IToolRule {
   /** Паттерн имени инструмента (поддерживает * как wildcard). */
   tool: string
 
@@ -27,7 +27,7 @@ export interface ToolRule {
 /**
  * Определение режима агента.
  */
-export interface AgentMode {
+export interface IAgentMode {
   /** Имя режима. */
   readonly name: AgentModeName
 
@@ -38,7 +38,7 @@ export interface AgentMode {
   readonly description: string
 
   /** Правила разрешений для инструментов. */
-  readonly toolRules: ToolRule[]
+  readonly toolRules: IToolRule[]
 
   /** Допустимые переходы в другие режимы. */
   readonly transitions: AgentModeName[]
@@ -53,7 +53,7 @@ export interface AgentMode {
 /**
  * Проверить, соответствует ли имя инструмента правилу с wildcard.
  */
-export function toolMatchesRule(toolName: string, rule: ToolRule): boolean {
+export function toolMatchesRule(toolName: string, rule: IToolRule): boolean {
   if (rule.tool === "*") return true
   if (rule.tool === toolName) return true
 
@@ -70,7 +70,7 @@ export function toolMatchesRule(toolName: string, rule: ToolRule): boolean {
  * Правила проверяются в порядке объявления; первое совпадение — итоговое.
  */
 export function resolveToolPermission(
-  mode: AgentMode,
+  mode: IAgentMode,
   toolName: string,
 ): PermissionLevel {
   for (const rule of mode.toolRules) {
@@ -84,7 +84,7 @@ export function resolveToolPermission(
 /**
  * Встроенные режимы агента.
  */
-export const BUILT_IN_MODES: Record<AgentModeName, AgentMode> = {
+export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
   build: {
     name: "build",
     displayName: "Построение",
@@ -179,12 +179,12 @@ export const BUILT_IN_MODES: Record<AgentModeName, AgentMode> = {
  */
 export class AgentModeManager {
   private currentMode: AgentModeName = "build"
-  private overrides: Map<AgentModeName, AgentMode> = new Map()
+  private overrides: Map<AgentModeName, IAgentMode> = new Map()
 
   /**
    * Вернуть текущий режим.
    */
-  getMode(): AgentMode {
+  getMode(): IAgentMode {
     return this.overrides.get(this.currentMode) ?? BUILT_IN_MODES[this.currentMode]
   }
 
@@ -225,8 +225,8 @@ export class AgentModeManager {
   /**
    * Вернуть все доступные режимы.
    */
-  listModes(): AgentMode[] {
-    const modes: AgentMode[] = []
+  listModes(): IAgentMode[] {
+    const modes: IAgentMode[] = []
     for (const [name] of Object.entries(BUILT_IN_MODES)) {
       const mode = this.overrides.get(name as AgentModeName) ?? BUILT_IN_MODES[name as AgentModeName]
       modes.push(mode)
@@ -237,7 +237,7 @@ export class AgentModeManager {
   /**
    * Зарегистрировать пользовательский режим (переопределяет встроенный).
    */
-  registerMode(mode: AgentMode): void {
+  registerMode(mode: IAgentMode): void {
     this.overrides.set(mode.name, mode)
   }
 

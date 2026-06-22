@@ -1,6 +1,6 @@
 import type { IBackend } from "../../core/IBackend"
 import type { IGitService } from "../../services/git/GitService"
-import type { Plugin } from "../../shared/Types"
+import type { IPlugin } from "../../shared/Types"
 import { createDomainLogger } from "../../core/Logger"
 import { stripCodeFences } from "../../utils/StripCodeFences"
 import { errorMessage } from "../../core/Errors"
@@ -13,7 +13,7 @@ export interface ICommitMessageService {
 }
 
 /** Сервис генерации сообщений коммита на основе git diff через бэкенд. */
-export class CommitMessageService implements Plugin, ICommitMessageService {
+export class CommitMessageService implements IPlugin, ICommitMessageService {
   name = "commit-message"
 
   private readonly systemPrompt = `Ты — генератор сообщений коммитов. 

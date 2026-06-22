@@ -1,22 +1,22 @@
-import type { ToolResult } from "../agent/AgentTypes"
+import type { IToolResult } from "../agent/AgentTypes"
 
 /**
  * Схема инструмента на основе подмножества JSON Schema
  * (имя, описание, параметры).
  */
-export interface ToolSchema {
+export interface IToolSchema {
   name: string
   description: string
-  parameters: Record<string, ToolParam>
+  parameters: Record<string, IToolParam>
   required?: string[]
 }
 
-export interface ToolParam {
+export interface IToolParam {
   type: "string" | "number" | "boolean" | "array" | "object"
   description?: string
   enum?: string[]
-  items?: ToolParam
-  properties?: Record<string, ToolParam>
+  items?: IToolParam
+  properties?: Record<string, IToolParam>
   default?: unknown
 }
 
@@ -34,14 +34,14 @@ export interface ITool {
   category: string
 
   /** JSON Schema для параметров. */
-  schema: ToolSchema
+  schema: IToolSchema
 
  /**
     * Выполнить инструмент с валидированными аргументами.
     * Возвращает структурированный результат с текстом вывода и флагом успеха.
     * @param signal сигнал отмены для длительных операций
     */
-  execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult>
+  execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult>
 
   /**
    * Безопасен ли инструмент для автоматического вызова.

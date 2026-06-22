@@ -1,4 +1,4 @@
-﻿import type { ContextProvider, ContextItem } from "./Types"
+﻿import type { IContextProvider, IContextItem } from "./Types"
 import type { ICodebaseSearch } from "../../../repo/CodebaseSearch"
 import { createDomainLogger } from "../../../core/Logger"
 import { errorMessage } from "../../Errors"
@@ -16,7 +16,7 @@ const CODEBASE_MAX_CONTENT = 2000
  */
 export function makeCodebaseProvider(
   search: ICodebaseSearch,
-): ContextProvider {
+): IContextProvider {
   return {
     description: {
       name: "codebase",
@@ -24,7 +24,7 @@ export function makeCodebaseProvider(
       description: "Семантический поиск по коду репозитория",
       type: "query",
     },
-    async resolve(query: string): Promise<ContextItem[]> {
+    async resolve(query: string): Promise<IContextItem[]> {
       const trimmed = query.trim()
       if (!trimmed) return []
 

@@ -5,8 +5,8 @@
  * по смыслу, а не только по ключевым словам.
  */
 
-import type { ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
+import type { IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
 import type { ICodebaseSearch } from "../../repo/CodebaseSearch"
 import { errorMessage } from "../../core/Errors"
 import { BaseTool } from "./BaseTool"
@@ -28,7 +28,7 @@ export class CodebaseSearchTool extends BaseTool {
   category = "search"
   isSafe = true
 
-  schema: ToolSchema = {
+  schema: IToolSchema = {
     name: "codebase_search",
     description: "Поиск по коду репозитория",
     parameters: {
@@ -55,7 +55,7 @@ export class CodebaseSearchTool extends BaseTool {
     super()
   }
 
-  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     const query = str(args, "query").trim()
     if (!query) {
       return { output: "Не указан запрос для поиска", success: false }

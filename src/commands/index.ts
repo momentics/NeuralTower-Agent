@@ -5,7 +5,7 @@ import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IGitService } from "../services/git/GitService"
 import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
 
-export interface EditorCommandAction {
+export interface IEditorCommandAction {
   name: string
   noSelectionMessage: string
   promptTemplate: (text: string, lang: string, filePath: string) => string
@@ -15,7 +15,7 @@ export interface EditorCommandAction {
 /** Создать и зарегистрировать команду редактора для действия (refactor, explain и т.д.). */
 export function createEditorCommand(
   app: App,
-  action: EditorCommandAction,
+  action: IEditorCommandAction,
   agent: IAgentOrchestrator,
   gitService: IGitService,
   diffViewer: IDiffViewerProvider | undefined,

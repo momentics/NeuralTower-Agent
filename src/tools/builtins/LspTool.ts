@@ -1,5 +1,5 @@
-import type { ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
+import type { IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
 import {
   executeDocumentSymbol,
   executeWorkspaceSymbol,
@@ -35,7 +35,7 @@ export class LspTool extends BaseTool {
   category = "lsp"
   isSafe = true
 
-  schema: ToolSchema = {
+  schema: IToolSchema = {
     name: "lsp",
     description: "LSP-операции для семантического анализа кода",
     parameters: {
@@ -68,7 +68,7 @@ export class LspTool extends BaseTool {
     super()
   }
 
-  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     const operationRaw = str(args, "operation")
     if (!operationRaw) {
       return { output: "Не указана операция", success: false }

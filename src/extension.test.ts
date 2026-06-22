@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import * as vscode from "vscode"
 
 // Заглушки для всех зависимостей
@@ -212,7 +212,7 @@ vi.mock("./agent/SubagentRunner", () => ({
   SubagentRunner: vi.fn().mockImplementation(() => ({})),
 }))
 
-import { activate, deactivate } from "./extension"
+import { activate, deactivate } from "./Extension"
 import { App } from "./core/App"
 
 describe("extension", () => {

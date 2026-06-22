@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import type { IBackend } from "../../core/IBackend"
-import type { Plugin } from "../../shared/Types"
+import type { IPlugin } from "../../shared/Types"
 import { createDomainLogger } from "../../core/Logger"
 import { stripCodeFences } from "../../utils/StripCodeFences"
 import { errorMessage } from "../../core/Errors"
@@ -18,7 +18,7 @@ const AUTOCOMPLETE_CACHE_MAX_SIZE = 100
  * Конфигурация автодополнения для конкретного языка.
  * Добавление нового языка не требует изменения AutocompleteService (OCP).
  */
-export interface LanguageCompletionConfig {
+export interface ILanguageCompletionConfig {
   keywords: string[]
   builtins: string[]
 }
@@ -27,7 +27,7 @@ export interface LanguageCompletionConfig {
  * Реестр конфигураций автодополнения по языкам.
  * Для добавления нового языка достаточно внести запись в этот объект.
  */
-export const LANGUAGE_COMPLETIONS: Record<string, LanguageCompletionConfig> = {
+export const LANGUAGE_COMPLETIONS: Record<string, ILanguageCompletionConfig> = {
   javascript: {
     keywords: [
       "const", "let", "var", "function", "async", "await", "return",
@@ -120,7 +120,7 @@ export const LANGUAGE_COMPLETIONS: Record<string, LanguageCompletionConfig> = {
  * - Быстрые локальные префиксные дополнения без вызова бэкенда
  * - Контекст уровня workspace (открытые файлы, проблемы)
  */
-export class AutocompleteService implements Plugin, vscode.InlineCompletionItemProvider {
+export class AutocompleteService implements IPlugin, vscode.InlineCompletionItemProvider {
   name = "autocomplete"
 
   private readonly cache: Map<string, vscode.InlineCompletionItem[]> = new Map()

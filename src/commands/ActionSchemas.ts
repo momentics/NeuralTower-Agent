@@ -1,7 +1,7 @@
 /**
  * Статические схемы действий — данные без логики (SRP).
  */
-export interface ActionSchema {
+export interface IActionSchema {
   name: string
   editorCommandId: string
   codeActionCommandId: string
@@ -9,7 +9,7 @@ export interface ActionSchema {
   requireSelection: boolean
 }
 
-export const EDITOR_ACTION_SCHEMAS: ActionSchema[] = [
+export const EDITOR_ACTION_SCHEMAS: IActionSchema[] = [
   {
     name: "explainCode",
     editorCommandId: "neuralTowerAgent.explainCode",

@@ -12,7 +12,7 @@
 
 import type { IEmbeddingProvider } from "../backend/IEmbeddingProvider"
 import type { IVectorStore } from "./IVectorStore"
-import type { CodeChunk, SearchConfig, SearchMode } from "./ChunkTypes"
+import type { ICodeChunk, ISearchConfig, SearchMode } from "./ChunkTypes"
 import { errorMessage } from "../core/Errors"
 import type { IFullTextSearch } from "./FullTextSearch"
 import { createDomainLogger } from "../core/Logger"
@@ -24,9 +24,9 @@ const SEARCH_MULTIPLIER = 2
 /**
  * Результат объединённого поиска.
  */
-export interface UnifiedSearchResult {
+export interface IUnifiedSearchResult {
   /** Фрагмент кода. */
-  chunk: CodeChunk
+  chunk: ICodeChunk
 
   /** Оценка релевантности (0-1). */
   score: number
@@ -39,8 +39,8 @@ export interface UnifiedSearchResult {
  * Интерфейс поиска по кодовой базе.
  */
 export interface ICodebaseSearch {
-  search(query: string, config?: Partial<SearchConfig>, signal?: AbortSignal): Promise<UnifiedSearchResult[]>
-  indexChunks(chunks: CodeChunk[], signal?: AbortSignal): Promise<void>
+  search(query: string, config?: Partial<ISearchConfig>, signal?: AbortSignal): Promise<IUnifiedSearchResult[]>
+ indexChunks(chunks: ICodeChunk[], signal?: AbortSignal): Promise<void>
   deleteByFile(filePath: string): Promise<void>
   clear(): Promise<void>
   stats(): { vectorChunks: number; ftsChunks: number; embeddingAvailable: boolean }
@@ -63,9 +63,9 @@ export class CodebaseSearch implements ICodebaseSearch {
    */
   async search(
     query: string,
-    config?: Partial<SearchConfig>,
+    config?: Partial<ISearchConfig>,
     signal?: AbortSignal,
-  ): Promise<UnifiedSearchResult[]> {
+  ): Promise<IUnifiedSearchResult[]> {
     if (signal?.aborted) return []
     const topK = config?.topK ?? 10
     const minScore = config?.minScore ?? 0.1
@@ -90,7 +90,7 @@ export class CodebaseSearch implements ICodebaseSearch {
     topK: number,
     minScore: number,
     signal?: AbortSignal,
-  ): Promise<UnifiedSearchResult[]> {
+  ): Promise<IUnifiedSearchResult[]> {
     if (!this.embeddingProvider) return []
     if (signal?.aborted) return []
 
@@ -121,7 +121,7 @@ export class CodebaseSearch implements ICodebaseSearch {
     query: string,
     topK: number,
     minScore: number
-  ): Promise<UnifiedSearchResult[]> {
+  ): Promise<IUnifiedSearchResult[]> {
     const results = this.fts.search(query, topK * SEARCH_MULTIPLIER)
 
     return results
@@ -145,7 +145,7 @@ export class CodebaseSearch implements ICodebaseSearch {
     topK: number,
     minScore: number,
     signal?: AbortSignal,
-  ): Promise<UnifiedSearchResult[]> {
+  ): Promise<IUnifiedSearchResult[]> {
     const [semanticResults, keywordResults] = await Promise.all([
       this.semanticSearch(query, topK * SEARCH_MULTIPLIER, 0, signal),
       this.keywordSearch(query, topK * SEARCH_MULTIPLIER, 0),
@@ -154,7 +154,7 @@ export class CodebaseSearch implements ICodebaseSearch {
     // Объединить результаты, удалив дубликаты
     const seen = new Set<string>()
     const merged: Array<{
-      chunk: CodeChunk
+      chunk: ICodeChunk
       score: number
       source: "semantic" | "keyword" | "hybrid"
     }> = []
@@ -198,7 +198,7 @@ export class CodebaseSearch implements ICodebaseSearch {
   /**
    * Добавить фрагменты в оба индекса.
    */
-  async indexChunks(chunks: CodeChunk[], signal?: AbortSignal): Promise<void> {
+  async indexChunks(chunks: ICodeChunk[], signal?: AbortSignal): Promise<void> {
     if (signal?.aborted) return
     // Добавить в FTS
     this.fts.add(chunks)

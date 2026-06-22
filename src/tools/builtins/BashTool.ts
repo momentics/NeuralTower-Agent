@@ -1,5 +1,5 @@
-import type { ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
+import type { IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
 import { errorMessage } from "../../core/Errors"
 import { runProcess } from "../../utils/ProcessRunner"
 import { BaseTool } from "./BaseTool"
@@ -70,7 +70,7 @@ export class BashTool extends BaseTool {
   category = "process"
   isSafe = false
 
-  schema: ToolSchema = {
+  schema: IToolSchema = {
     name: "bash",
     description: "Выполнить команду оболочки",
     parameters: {
@@ -102,7 +102,7 @@ export class BashTool extends BaseTool {
     return null
   }
 
-  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     const cmd = str(args, "command")
     if (!cmd) return { output: "Не указана команда", success: false }
 

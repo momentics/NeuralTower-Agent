@@ -1,4 +1,4 @@
-export interface TodoItem {
+export interface ITodoItem {
   content: string
   status: "pending" | "in_progress" | "completed" | "cancelled"
   priority: "high" | "medium" | "low"
@@ -6,8 +6,8 @@ export interface TodoItem {
 
 /** Интерфейс хранилища задач. */
 export interface ITodoStore {
-  setItems(items: TodoItem[]): void
-  getItems(): TodoItem[]
+  setItems(items: ITodoItem[]): void
+  getItems(): ITodoItem[]
   clear(): void
   formatItems(): string
 }
@@ -18,13 +18,13 @@ export interface ITodoStore {
  * (инструменты не должны хранить состояние).
  */
 export class TodoStore implements ITodoStore {
-  private items: TodoItem[] = []
+  private items: ITodoItem[] = []
 
-  setItems(items: TodoItem[]): void {
+  setItems(items: ITodoItem[]): void {
     this.items = items
   }
 
-  getItems(): TodoItem[] {
+  getItems(): ITodoItem[] {
     return [...this.items]
   }
 

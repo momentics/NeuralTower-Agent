@@ -1,4 +1,4 @@
-export interface FetchUrlOptions {
+export interface IFetchUrlOptions {
   /** Тайм-аут в миллисекундах */
   timeout?: number
   /** Заголовки запроса */
@@ -11,7 +11,7 @@ export interface FetchUrlOptions {
 
 import { errorMessage } from "../core/Errors"
 
-export interface FetchUrlResult {
+export interface IFetchUrlResult {
   /** Содержимое ответа */
   text: string
   /** Заголовок страницы (если HTML) */
@@ -65,8 +65,8 @@ function isPrivateOrReservedIp(host: string): boolean {
 
 export async function fetchUrl(
   urlString: string,
-  options: FetchUrlOptions = {},
-): Promise<FetchUrlResult> {
+  options: IFetchUrlOptions = {},
+): Promise<IFetchUrlResult> {
   if (options.signal?.aborted) {
     return {
       text: "Операция отменена",

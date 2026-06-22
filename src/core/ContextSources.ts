@@ -1,5 +1,5 @@
-import type { ContextProvider, ContextItem } from "./providers/context/Types"
-import type { IGitService, GitDiffError } from "../services/git/GitService"
+import type { IContextProvider, IContextItem } from "./providers/context/Types"
+import type { IGitService, IGitDiffError } from "../services/git/GitService"
 import type { AgentMemory } from "../agent/AgentMemory"
 import { createDomainLogger } from "./Logger"
 import { errorMessage } from "./Errors"
@@ -13,7 +13,7 @@ export function makeEnvironmentProvider(
   workDir: () => string,
   model: () => Promise<string>,
   gitService?: IGitService | null,
-): ContextProvider {
+): IContextProvider {
   return {
     description: {
       name: "environment",
@@ -22,7 +22,7 @@ export function makeEnvironmentProvider(
       type: "normal",
       priority: 100,
     },
-    async resolve(_query: string): Promise<ContextItem[]> {
+    async resolve(_query: string): Promise<IContextItem[]> {
       const dir = workDir()
       const cfgModel = await model()
       let branch = "unknown"
@@ -55,7 +55,7 @@ export function makeEnvironmentProvider(
  */
 export function makeProjectMemoryProvider(
   memory: AgentMemory,
-): ContextProvider {
+): IContextProvider {
   return {
     description: {
       name: "projectmemory",
@@ -64,7 +64,7 @@ export function makeProjectMemoryProvider(
       type: "normal",
       priority: 85,
     },
-    async resolve(_query: string): Promise<ContextItem[]> {
+    async resolve(_query: string): Promise<IContextItem[]> {
       const v = memory.getProject()
       const parts: string[] = []
       if (v.repo) parts.push(`Проект: ${v.repo}`)
@@ -97,7 +97,7 @@ export function makeProjectMemoryProvider(
 export function makeGitDiffProvider(
   workDir: () => string,
   gitService: IGitService,
-): ContextProvider {
+): IContextProvider {
   return {
     description: {
       name: "gitdiff",
@@ -106,9 +106,9 @@ export function makeGitDiffProvider(
       type: "normal",
       priority: 70,
     },
-    async resolve(_query: string): Promise<ContextItem[]> {
+    async resolve(_query: string): Promise<IContextItem[]> {
       const dir = workDir()
-      const diff = await gitService.getDiff(dir).catch(() => ({ ok: false, error: "недоступно" } as GitDiffError))
+      const diff = await gitService.getDiff(dir).catch(() => ({ ok: false, error: "недоступно" } as IGitDiffError))
       if (!diff.ok || diff.changed.length === 0) return []
       return [{
         content: `## Git-различия\n  Файлов: ${diff.changed.length}, +${diff.additions} -${diff.deletions}\n${diff.changed

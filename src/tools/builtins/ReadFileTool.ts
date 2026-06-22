@@ -1,5 +1,5 @@
-import type { ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
+import type { IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
 import * as fs from "fs/promises"
 import { FilesystemTool } from "./FilesystemTool"
 import { str, num, clamp } from "../ToolArgs"
@@ -14,7 +14,7 @@ export class ReadFileTool extends FilesystemTool {
   category = "filesystem"
   isSafe = true
 
-  schema: ToolSchema = {
+  schema: IToolSchema = {
     name: "read_file",
     description: "Прочитать содержимое файла",
     parameters: {
@@ -25,7 +25,7 @@ export class ReadFileTool extends FilesystemTool {
     required: ["filepath"],
   }
 
-  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     const fp = str(args, "filepath")
     const result = await this.resolvePath(fp)
     if ("error" in result) return { output: result.error, success: false }

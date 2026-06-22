@@ -14,7 +14,7 @@ import type { IFileIndex } from "../../repo/FileIndex"
 import type { ICodebaseChunker } from "../../repo/CodebaseChunker"
 import type { ICodebaseSearch } from "../../repo/CodebaseSearch"
 import type { IEmbeddingProvider } from "../../backend/IEmbeddingProvider"
-import type { Plugin } from "../../shared/Types"
+import type { IPlugin } from "../../shared/Types"
 import { createDomainLogger } from "../../core/Logger"
 import { errorMessage } from "../../core/Errors"
 
@@ -41,7 +41,7 @@ export interface ICodebaseIndexer {
 /**
  * Сервис инкрементальной индексации.
  */
-export class CodebaseIndexer implements Plugin, ICodebaseIndexer {
+export class CodebaseIndexer implements IPlugin, ICodebaseIndexer {
   name = "codebase-indexer"
   private state: IndexingState = "idle"
   private disposables: vscode.Disposable[] = []

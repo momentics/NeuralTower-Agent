@@ -11,7 +11,7 @@ vi.mock("fs/promises", () => ({
 
 import * as fs from "fs/promises"
 
-describe("ContextSources.vscode", () => {
+describe("ContextSourcesVscode", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     ;(vscode.window as any).activeTextEditor = null
@@ -28,14 +28,14 @@ describe("ContextSources.vscode", () => {
 
   describe("makeCurrentFileProvider", () => {
     it("returns provider with correct name and priority", async () => {
-      const { makeCurrentFileProvider } = await import("./ContextSources.vscode")
+      const { makeCurrentFileProvider } = await import("./ContextSourcesVscode")
       const provider = makeCurrentFileProvider()
       expect(provider.description.name).toBe("currentfile")
       expect(provider.description.priority).toBe(95)
     })
 
     it("returns empty when no active editor", async () => {
-      const { makeCurrentFileProvider } = await import("./ContextSources.vscode")
+      const { makeCurrentFileProvider } = await import("./ContextSourcesVscode")
       const provider = makeCurrentFileProvider()
       const items = await provider.resolve("")
       expect(items).toHaveLength(0)
@@ -55,7 +55,7 @@ describe("ContextSources.vscode", () => {
       }
       ;(vscode.window as any).activeTextEditor = mockEditor
 
-      const { makeCurrentFileProvider } = await import("./ContextSources.vscode")
+      const { makeCurrentFileProvider } = await import("./ContextSourcesVscode")
       const provider = makeCurrentFileProvider()
       const items = await provider.resolve("")
 
@@ -82,7 +82,7 @@ describe("ContextSources.vscode", () => {
       }
       ;(vscode.window as any).activeTextEditor = mockEditor
 
-      const { makeCurrentFileProvider } = await import("./ContextSources.vscode")
+      const { makeCurrentFileProvider } = await import("./ContextSourcesVscode")
       const provider = makeCurrentFileProvider()
       const items = await provider.resolve("")
 
@@ -97,7 +97,7 @@ describe("ContextSources.vscode", () => {
       }
       ;(vscode.window as any).activeTextEditor = { document: mockDoc }
 
-      const { makeCurrentFileProvider } = await import("./ContextSources.vscode")
+      const { makeCurrentFileProvider } = await import("./ContextSourcesVscode")
       const provider = makeCurrentFileProvider()
       const items = await provider.resolve("")
       expect(items).toHaveLength(0)
@@ -110,7 +110,7 @@ describe("ContextSources.vscode", () => {
       }
       ;(vscode.window as any).activeTextEditor = { document: mockDoc }
 
-      const { makeCurrentFileProvider } = await import("./ContextSources.vscode")
+      const { makeCurrentFileProvider } = await import("./ContextSourcesVscode")
       const provider = makeCurrentFileProvider()
       const items = await provider.resolve("")
       expect(items).toHaveLength(0)
@@ -134,7 +134,7 @@ describe("ContextSources.vscode", () => {
       }
       ;(vscode.window as any).activeTextEditor = mockEditor
 
-      const { makeCurrentFileProvider } = await import("./ContextSources.vscode")
+      const { makeCurrentFileProvider } = await import("./ContextSourcesVscode")
       const provider = makeCurrentFileProvider()
       const items = await provider.resolve("")
 
@@ -144,14 +144,14 @@ describe("ContextSources.vscode", () => {
 
   describe("makeOpenFilesProvider", () => {
     it("returns provider with correct name and priority", async () => {
-      const { makeOpenFilesProvider } = await import("./ContextSources.vscode")
+      const { makeOpenFilesProvider } = await import("./ContextSourcesVscode")
       const provider = makeOpenFilesProvider()
       expect(provider.description.name).toBe("openfiles")
       expect(provider.description.priority).toBe(92)
     })
 
     it("returns empty when no visible editors", async () => {
-      const { makeOpenFilesProvider } = await import("./ContextSources.vscode")
+      const { makeOpenFilesProvider } = await import("./ContextSourcesVscode")
       const provider = makeOpenFilesProvider()
       const items = await provider.resolve("")
       expect(items).toHaveLength(0)
@@ -176,7 +176,7 @@ describe("ContextSources.vscode", () => {
       ]
       ;(vscode.window as any).visibleTextEditors = mockEditors
 
-      const { makeOpenFilesProvider } = await import("./ContextSources.vscode")
+      const { makeOpenFilesProvider } = await import("./ContextSourcesVscode")
       const provider = makeOpenFilesProvider()
       const items = await provider.resolve("")
 
@@ -204,7 +204,7 @@ describe("ContextSources.vscode", () => {
       ]
       ;(vscode.window as any).visibleTextEditors = mockEditors
 
-      const { makeOpenFilesProvider } = await import("./ContextSources.vscode")
+      const { makeOpenFilesProvider } = await import("./ContextSourcesVscode")
       const provider = makeOpenFilesProvider()
       const items = await provider.resolve("")
 
@@ -216,14 +216,14 @@ describe("ContextSources.vscode", () => {
 
   describe("makeProblemsProvider", () => {
     it("returns provider with correct name and priority", async () => {
-      const { makeProblemsProvider } = await import("./ContextSources.vscode")
+      const { makeProblemsProvider } = await import("./ContextSourcesVscode")
       const provider = makeProblemsProvider(() => "/work")
       expect(provider.description.name).toBe("problems")
       expect(provider.description.priority).toBe(88)
     })
 
     it("returns empty when no diagnostics", async () => {
-      const { makeProblemsProvider } = await import("./ContextSources.vscode")
+      const { makeProblemsProvider } = await import("./ContextSourcesVscode")
       const provider = makeProblemsProvider(() => "/work")
       const items = await provider.resolve("")
       expect(items).toHaveLength(0)
@@ -244,7 +244,7 @@ describe("ContextSources.vscode", () => {
         new Map([[mockUri, diagnostics]])
       )
 
-      const { makeProblemsProvider } = await import("./ContextSources.vscode")
+      const { makeProblemsProvider } = await import("./ContextSourcesVscode")
       const provider = makeProblemsProvider(() => "/work")
       const items = await provider.resolve("")
 
@@ -267,7 +267,7 @@ describe("ContextSources.vscode", () => {
         new Map([[mockUri, diagnostics]])
       )
 
-      const { makeProblemsProvider } = await import("./ContextSources.vscode")
+      const { makeProblemsProvider } = await import("./ContextSourcesVscode")
       const provider = makeProblemsProvider(() => "/work")
       const items = await provider.resolve("")
 
@@ -282,7 +282,7 @@ describe("ContextSources.vscode", () => {
         new Map([[mockUri, diagnostics]])
       )
 
-      const { makeProblemsProvider } = await import("./ContextSources.vscode")
+      const { makeProblemsProvider } = await import("./ContextSourcesVscode")
       const provider = makeProblemsProvider(() => "/work")
       const items = await provider.resolve("")
 
@@ -300,7 +300,7 @@ describe("ContextSources.vscode", () => {
         new Map([[mockUri, diagnostics]])
       )
 
-      const { makeProblemsProvider } = await import("./ContextSources.vscode")
+      const { makeProblemsProvider } = await import("./ContextSourcesVscode")
       const provider = makeProblemsProvider(() => "/work")
       const items = await provider.resolve("")
 
@@ -311,7 +311,7 @@ describe("ContextSources.vscode", () => {
 
   describe("makeClipboardProvider", () => {
     it("returns provider with correct name and priority", async () => {
-      const { makeClipboardProvider } = await import("./ContextSources.vscode")
+      const { makeClipboardProvider } = await import("./ContextSourcesVscode")
       const provider = makeClipboardProvider()
       expect(provider.description.name).toBe("clipboard")
       expect(provider.description.priority).toBe(60)
@@ -319,7 +319,7 @@ describe("ContextSources.vscode", () => {
 
     it("returns empty when clipboard is empty", async () => {
       ;(vscode.env as any).clipboard.readText = vi.fn().mockResolvedValue("")
-      const { makeClipboardProvider } = await import("./ContextSources.vscode")
+      const { makeClipboardProvider } = await import("./ContextSourcesVscode")
       const provider = makeClipboardProvider()
       const items = await provider.resolve("")
       expect(items).toHaveLength(0)
@@ -327,7 +327,7 @@ describe("ContextSources.vscode", () => {
 
     it("returns clipboard data", async () => {
       ;(vscode.env as any).clipboard.readText = vi.fn().mockResolvedValue("Hello World")
-      const { makeClipboardProvider } = await import("./ContextSources.vscode")
+      const { makeClipboardProvider } = await import("./ContextSourcesVscode")
       const provider = makeClipboardProvider()
       const items = await provider.resolve("")
 
@@ -338,7 +338,7 @@ describe("ContextSources.vscode", () => {
 
     it("truncates long clipboard content", async () => {
       ;(vscode.env as any).clipboard.readText = vi.fn().mockResolvedValue("A".repeat(200))
-      const { makeClipboardProvider } = await import("./ContextSources.vscode")
+      const { makeClipboardProvider } = await import("./ContextSourcesVscode")
       const provider = makeClipboardProvider()
       const items = await provider.resolve("")
 
@@ -348,7 +348,7 @@ describe("ContextSources.vscode", () => {
 
     it("handles clipboard read error gracefully", async () => {
       ;(vscode.env as any).clipboard.readText = vi.fn().mockRejectedValue(new Error("no access"))
-      const { makeClipboardProvider } = await import("./ContextSources.vscode")
+      const { makeClipboardProvider } = await import("./ContextSourcesVscode")
       const provider = makeClipboardProvider()
       const items = await provider.resolve("")
       expect(items).toHaveLength(0)
@@ -357,14 +357,14 @@ describe("ContextSources.vscode", () => {
 
   describe("makeDebuggerProvider", () => {
     it("returns provider with correct name and priority", async () => {
-      const { makeDebuggerProvider } = await import("./ContextSources.vscode")
+      const { makeDebuggerProvider } = await import("./ContextSourcesVscode")
       const provider = makeDebuggerProvider()
       expect(provider.description.name).toBe("debugger")
       expect(provider.description.priority).toBe(82)
     })
 
     it("returns empty when no debug session", async () => {
-      const { makeDebuggerProvider } = await import("./ContextSources.vscode")
+      const { makeDebuggerProvider } = await import("./ContextSourcesVscode")
       const provider = makeDebuggerProvider()
       const items = await provider.resolve("")
       expect(items).toHaveLength(0)
@@ -384,7 +384,7 @@ describe("ContextSources.vscode", () => {
       }
       ;(vscode.debug as any).activeDebugSession = mockSession
 
-      const { makeDebuggerProvider } = await import("./ContextSources.vscode")
+      const { makeDebuggerProvider } = await import("./ContextSourcesVscode")
       const provider = makeDebuggerProvider()
       const items = await provider.resolve("")
 
@@ -402,7 +402,7 @@ describe("ContextSources.vscode", () => {
       }
       ;(vscode.debug as any).activeDebugSession = mockSession
 
-      const { makeDebuggerProvider } = await import("./ContextSources.vscode")
+      const { makeDebuggerProvider } = await import("./ContextSourcesVscode")
       const provider = makeDebuggerProvider()
       const items = await provider.resolve("")
 
@@ -417,7 +417,7 @@ describe("ContextSources.vscode", () => {
       }
       ;(vscode.debug as any).activeDebugSession = mockSession
 
-      const { makeDebuggerProvider } = await import("./ContextSources.vscode")
+      const { makeDebuggerProvider } = await import("./ContextSourcesVscode")
       const provider = makeDebuggerProvider()
       const items = await provider.resolve("")
 
@@ -434,7 +434,7 @@ describe("ContextSources.vscode", () => {
       }
       ;(vscode.debug as any).activeDebugSession = mockSession
 
-      const { makeDebuggerProvider } = await import("./ContextSources.vscode")
+      const { makeDebuggerProvider } = await import("./ContextSourcesVscode")
       const provider = makeDebuggerProvider()
       const items = await provider.resolve("")
 
@@ -444,14 +444,14 @@ describe("ContextSources.vscode", () => {
 
   describe("makeTerminalProvider", () => {
     it("returns provider with correct name and priority", async () => {
-      const { makeTerminalProvider } = await import("./ContextSources.vscode")
+      const { makeTerminalProvider } = await import("./ContextSourcesVscode")
       const provider = makeTerminalProvider()
       expect(provider.description.name).toBe("terminal")
       expect(provider.description.priority).toBe(65)
     })
 
     it("returns empty when no terminals", async () => {
-      const { makeTerminalProvider } = await import("./ContextSources.vscode")
+      const { makeTerminalProvider } = await import("./ContextSourcesVscode")
       const provider = makeTerminalProvider()
       const items = await provider.resolve("")
       expect(items).toHaveLength(0)
@@ -464,7 +464,7 @@ describe("ContextSources.vscode", () => {
       ]
       ;(vscode.window as any).activeTerminal = { name: "Terminal 1" }
 
-      const { makeTerminalProvider } = await import("./ContextSources.vscode")
+      const { makeTerminalProvider } = await import("./ContextSourcesVscode")
       const provider = makeTerminalProvider()
       const items = await provider.resolve("")
 
@@ -478,7 +478,7 @@ describe("ContextSources.vscode", () => {
       ;(vscode.window as any).terminals = [{ name: "Terminal 1" }]
       ;(vscode.window as any).activeTerminal = null
 
-      const { makeTerminalProvider } = await import("./ContextSources.vscode")
+      const { makeTerminalProvider } = await import("./ContextSourcesVscode")
       const provider = makeTerminalProvider()
       const items = await provider.resolve("")
 
@@ -490,14 +490,14 @@ describe("ContextSources.vscode", () => {
 
   describe("makeOSProvider", () => {
     it("returns provider with correct name and priority", async () => {
-      const { makeOSProvider } = await import("./ContextSources.vscode")
+      const { makeOSProvider } = await import("./ContextSourcesVscode")
       const provider = makeOSProvider()
       expect(provider.description.name).toBe("os")
       expect(provider.description.priority).toBe(98)
     })
 
     it("resolves OS data", async () => {
-      const { makeOSProvider } = await import("./ContextSources.vscode")
+      const { makeOSProvider } = await import("./ContextSourcesVscode")
       const provider = makeOSProvider()
       const items = await provider.resolve("")
 
@@ -515,7 +515,7 @@ describe("ContextSources.vscode", () => {
       process.env.COMSPEC = "cmd.exe"
       delete process.env.SHELL
 
-      const { makeOSProvider } = await import("./ContextSources.vscode")
+      const { makeOSProvider } = await import("./ContextSourcesVscode")
       const provider = makeOSProvider()
       const items = await provider.resolve("")
 
@@ -528,7 +528,7 @@ describe("ContextSources.vscode", () => {
       const original = process.env.SHELL
       process.env.SHELL = "/bin/bash"
 
-      const { makeOSProvider } = await import("./ContextSources.vscode")
+      const { makeOSProvider } = await import("./ContextSourcesVscode")
       const provider = makeOSProvider()
       const items = await provider.resolve("")
 
@@ -543,7 +543,7 @@ describe("ContextSources.vscode", () => {
       delete process.env.SHELL
       delete process.env.COMSPEC
 
-      const { makeOSProvider } = await import("./ContextSources.vscode")
+      const { makeOSProvider } = await import("./ContextSourcesVscode")
       const provider = makeOSProvider()
       const items = await provider.resolve("")
 

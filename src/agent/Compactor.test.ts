@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { Compactor } from "./Compactor"
-import type { IBackend, ChatMessage } from "../core/IBackend"
+import type { IBackend, IChatMessage } from "../core/IBackend"
 
-const makeMessages = (count: number, contentLen: number): ChatMessage[] => {
-  const msgs: ChatMessage[] = []
+const makeMessages = (count: number, contentLen: number): IChatMessage[] => {
+  const msgs: IChatMessage[] = []
   for (let i = 0; i < count; i++) {
     msgs.push({
       role: i % 2 === 0 ? "user" : "assistant",
@@ -132,7 +132,7 @@ describe("Compactor", () => {
     await c.compact(msgs, "sys")
 
     const callArgs = (backend.chatJson as ReturnType<typeof vi.fn>).mock.calls[0][0]
-    const userMsg = callArgs.find((m: ChatMessage) => m.content.includes("Сожми"))
+    const userMsg = callArgs.find((m: IChatMessage) => m.content.includes("Сожми"))
     expect(userMsg).toBeDefined()
   })
 
@@ -143,7 +143,7 @@ describe("Compactor", () => {
       keepTokens: 1,
     })
 
-    const msgs: ChatMessage[] = [
+    const msgs: IChatMessage[] = [
       { role: "user", content: "My goal is to test" },
       { role: "assistant", content: "ok" },
     ]
@@ -160,7 +160,7 @@ describe("Compactor", () => {
     })
 
     // Использовать только сообщения ассистента, чтобы последнее сообщение пользователя было undefined
-    const msgs: ChatMessage[] = [
+    const msgs: IChatMessage[] = [
       { role: "assistant", content: "some response" },
       { role: "assistant", content: "another response" },
     ]

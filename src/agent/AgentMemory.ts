@@ -7,17 +7,17 @@
  * - Управление контекстным окном: отсечение при превышении лимита
  */
 
-import type { ChatMessage } from "../core/IBackend"
+import type { IChatMessage } from "../core/IBackend"
 import { TOKENS_PER_CHAR } from "../core/TokenUtils"
 import { loadDefaultAgentConfig } from "../core/Config"
 
-export interface MemoryEntry {
-  message: ChatMessage
+export interface IMemoryEntry {
+  message: IChatMessage
   tokenCount: number
   pinned: boolean // закреплённые записи сохраняются при отсечении
 }
 
-export interface ProjectMemory {
+export interface IProjectMemory {
   /** Название репозитория. */
   repo: string
   /** Языки, определённые в проекте. */
@@ -29,8 +29,8 @@ export interface ProjectMemory {
 }
 
 export class AgentMemory {
-  private shortTerm: MemoryEntry[] = []
-  private project: ProjectMemory = {
+  private shortTerm: IMemoryEntry[] = []
+  private project: IProjectMemory = {
     repo: "",
     languages: [],
     commands: {},
@@ -44,7 +44,7 @@ export class AgentMemory {
   }
 
   /** Добавить сообщение в краткосрочную память. */
-  add(message: ChatMessage): void {
+  add(message: IChatMessage): void {
     this.shortTerm.push({
       message,
       tokenCount: Math.ceil(message.content.length * TOKENS_PER_CHAR),
@@ -57,12 +57,12 @@ export class AgentMemory {
    * Вернуть последние сообщения в пределах лимита токенов.
    * Закреплённые сообщения всегда включаются.
    */
-  getRecent(maxTokens?: number): ChatMessage[] {
+  getRecent(maxTokens?: number): IChatMessage[] {
     const budget = maxTokens ?? this.maxTokens
     let used = 0
 
     // Всегда включать закреплённые
-    const result: ChatMessage[] = []
+    const result: IChatMessage[] = []
     for (const entry of this.shortTerm) {
       if (entry.pinned) {
         result.push(entry.message)
@@ -94,7 +94,7 @@ export class AgentMemory {
   }
 
   /** Установить память о проекте. */
-  setProject(mem: Partial<ProjectMemory>): void {
+  setProject(mem: Partial<IProjectMemory>): void {
     if (mem.repo !== undefined) this.project.repo = mem.repo
     if (mem.languages) this.project.languages = mem.languages
     if (mem.commands) Object.assign(this.project.commands, mem.commands)
@@ -102,7 +102,7 @@ export class AgentMemory {
   }
 
   /** Вернуть память о проекте. */
-  getProject(): ProjectMemory {
+  getProject(): IProjectMemory {
     return { ...this.project }
   }
 
@@ -121,7 +121,7 @@ export class AgentMemory {
   }
 
   /** Восстановить память из истории сообщений. */
-  restoreFromMessages(messages: ChatMessage[]): void {
+  restoreFromMessages(messages: IChatMessage[]): void {
     this.shortTerm = messages.map((m) => ({
       message: m,
       tokenCount: Math.ceil(m.content.length * TOKENS_PER_CHAR),

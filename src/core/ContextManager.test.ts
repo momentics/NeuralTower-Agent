@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { ContextManager } from "./ContextManager"
-import type { ContextProvider, ContextItem } from "./providers/context/types"
+import type { IContextProvider, IContextItem } from "./providers/context/types"
 
 function makeProvider(
   name: string,
   priority: number,
-  resolveFn: () => Promise<ContextItem[]>,
-): ContextProvider {
+  resolveFn: () => Promise<IContextItem[]>,
+): IContextProvider {
   return {
     description: {
       name,
@@ -83,7 +83,7 @@ describe("ContextManager", () => {
   })
 
   it("initialize catches provider resolve errors", async () => {
-    const p: ContextProvider = {
+    const p: IContextProvider = {
       description: { name: "fail", displayTitle: "fail", description: "fail", type: "normal" },
       resolve: vi.fn(async () => { throw new Error("fail") }),
     }
@@ -155,7 +155,7 @@ describe("ContextManager", () => {
   })
 
   it("uses custom changed text", async () => {
-    const p: ContextProvider = {
+    const p: IContextProvider = {
       description: { name: "a", displayTitle: "a", description: "a", type: "normal" },
       resolve: vi.fn(async () => [{ content: "v1", name: "A" }]),
       changed: vi.fn(() => "custom changed"),

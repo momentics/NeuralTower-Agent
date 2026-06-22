@@ -15,7 +15,7 @@ import { registerGitCommands } from "./GitCommands"
 import { registerChatCommands } from "./ChatCommands"
 import { registerCodeActionCommands } from "./CodeActionCommands"
 
-export interface CommandDeps {
+export interface ICommandDeps {
   app: App
   agent: IAgentOrchestrator
   chatProvider: IProvider
@@ -31,7 +31,7 @@ export interface CommandDeps {
 }
 
 /** Зарегистрировать все команды расширения. */
-export function registerAllCommands(deps: CommandDeps): void {
+export function registerAllCommands(deps: ICommandDeps): void {
   registerEditorCommands(deps.app, deps.agent, deps.gitService, deps.diffViewer, deps.outputChannel)
   registerGitCommands(deps.app, deps.commitMessageService)
   registerChatCommands(

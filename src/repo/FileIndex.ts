@@ -21,29 +21,29 @@ const log = createDomainLogger("FileIndex")
 
 const FILE_INDEX_DEFAULT_MAX_FILES = 20000
 
-export interface IndexEntry {
+export interface IIndexEntry {
   path: string
   language: string
   size: number
 }
 
 /**
- * Интерфейс FileIndex — методы, используемые через AgentDependencies.
+ * Интерфейс FileIndex — методы, используемые через IAgentDependencies.
  */
 export interface IFileIndex {
   stats(): { totalFiles: number; languages: number; totalSize: number }
-  findByPattern(pattern: string): IndexEntry[]
-  findByLanguage(lang: string): IndexEntry[]
+  findByPattern(pattern: string): IIndexEntry[]
+  findByLanguage(lang: string): IIndexEntry[]
   findByName(name: string): string[]
   build(dir: string, maxFiles?: number, signal?: AbortSignal): Promise<void>
   clear(): void
 }
 
 export class FileIndex implements IFileIndex {
-  private entries: IndexEntry[] = []
+  private entries: IIndexEntry[] = []
   private nameMap = new Map<string, string[]>()
   private langMap = new Map<string, string[]>()
-  private pathToEntry = new Map<string, IndexEntry>()
+  private pathToEntry = new Map<string, IIndexEntry>()
   private regexCache = new LRUCache<string, RegExp>(50)
 
   /**
@@ -69,7 +69,7 @@ export class FileIndex implements IFileIndex {
         log.error(`Не удалось получить размер файла ${f}: ${msg}`)
       }
 
-      const entry: IndexEntry = { path: f, language: lang, size }
+      const entry: IIndexEntry = { path: f, language: lang, size }
       this.entries.push(entry)
       this.pathToEntry.set(f, entry)
 
@@ -85,7 +85,7 @@ export class FileIndex implements IFileIndex {
   }
 
   /** Найти файлы по имени (частичное совпадение). */
-  findByPattern(pattern: string): IndexEntry[] {
+  findByPattern(pattern: string): IIndexEntry[] {
     let re = this.regexCache.get(pattern)
     if (!re) {
       re = new RegExp(pattern, "i")
@@ -95,10 +95,10 @@ export class FileIndex implements IFileIndex {
   }
 
   /** Найти файлы по языку. */
-  findByLanguage(lang: string): IndexEntry[] {
+  findByLanguage(lang: string): IIndexEntry[] {
     const paths = this.langMap.get(lang)
     if (!paths) return []
-    const result: IndexEntry[] = []
+    const result: IIndexEntry[] = []
     for (const p of paths) {
       const entry = this.pathToEntry.get(p)
       if (entry) result.push(entry)

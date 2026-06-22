@@ -36,7 +36,7 @@ export interface IEmbeddingProvider {
 /**
  * Конфигурация провайдера эмбеддингов.
  */
-export interface EmbeddingProviderConfig {
+export interface IEmbeddingProviderConfig {
   /** URL бэкенда. */
   baseUrl: string
 

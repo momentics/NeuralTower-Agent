@@ -1,7 +1,7 @@
 import * as fs from "fs/promises"
 import * as path from "path"
 
-export interface WalkOptions {
+export interface IWalkOptions {
   /** Максимальное число файлов */
   maxFiles?: number
   /** Пропускать скрытые директории и файлы (начинающиеся с .) */
@@ -12,7 +12,7 @@ export interface WalkOptions {
   signal?: AbortSignal
 }
 
-const DEFAULT_WALK_OPTIONS: Omit<Required<WalkOptions>, "signal"> = {
+const DEFAULT_WALK_OPTIONS: Omit<Required<IWalkOptions>, "signal"> = {
   maxFiles: 20000,
   skipHidden: true,
   skipNodeModules: true,
@@ -24,7 +24,7 @@ const DEFAULT_WALK_OPTIONS: Omit<Required<WalkOptions>, "signal"> = {
  */
 export async function walkDirectory(
   dir: string,
-  options: WalkOptions = {},
+  options: IWalkOptions = {},
 ): Promise<string[]> {
   const opts = { ...DEFAULT_WALK_OPTIONS, ...options }
   const files: string[] = []

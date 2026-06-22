@@ -5,17 +5,17 @@
  * поиск по косинусному сходству.
  */
 
-import type { CodeChunk } from "./ChunkTypes"
+import type { ICodeChunk } from "./ChunkTypes"
 
 /**
  * Эмбеддинг фрагмента кода.
  */
-export interface ChunkEmbedding {
+export interface IChunkEmbedding {
   /** Уникальный идентификатор. */
   id: string
 
   /** Фрагмент кода. */
-  chunk: CodeChunk
+  chunk: ICodeChunk
 
   /** Вектор эмбеддинга. */
   embedding: number[]
@@ -24,9 +24,9 @@ export interface ChunkEmbedding {
 /**
  * Результат поиска.
  */
-export interface SearchResult {
+export interface ISearchResult {
   /** Фрагмент кода. */
-  chunk: CodeChunk
+  chunk: ICodeChunk
 
   /** Оценка сходства (0-1, 1 = идентично). */
   score: number
@@ -39,7 +39,7 @@ export interface IVectorStore {
   /**
    * Добавить эмбеддинги в хранилище.
    */
-  add(embeddings: ChunkEmbedding[]): Promise<void>
+  add(embeddings: IChunkEmbedding[]): Promise<void>
 
   /**
    * Поиск по вектору запроса.
@@ -47,7 +47,7 @@ export interface IVectorStore {
    * @param topK число результатов
    * @returns результаты поиска, отсортированные по релевантности
    */
-  search(queryEmbedding: number[], topK: number): Promise<SearchResult[]>
+  search(queryEmbedding: number[], topK: number): Promise<ISearchResult[]>
 
   /**
    * Удалить все эмбеддинги для файла.

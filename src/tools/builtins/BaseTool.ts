@@ -1,5 +1,5 @@
-import type { ITool, ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
+import type { ITool, IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
 import { errorMessage } from "../../core/Errors"
 
 /**
@@ -11,7 +11,7 @@ export abstract class BaseTool implements ITool {
   abstract description: string
   abstract category: string
   abstract isSafe: boolean
-  abstract schema: ToolSchema
+  abstract schema: IToolSchema
 
   /**
    * Абстрактный метод для выполнения логики инструмента.
@@ -20,12 +20,12 @@ export abstract class BaseTool implements ITool {
   protected abstract doExecute(
     args: Record<string, unknown>,
     signal?: AbortSignal,
-  ): Promise<ToolResult>
+  ): Promise<IToolResult>
 
   /**
    * Стандартный execute с проверкой AbortSignal и обработкой ошибок.
    */
-  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  async execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     if (signal?.aborted) return { output: "Операция отменена", success: false }
     try {
       return await this.doExecute(args, signal)

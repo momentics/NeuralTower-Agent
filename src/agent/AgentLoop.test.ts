@@ -1,32 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { AgentLoop } from "./AgentLoop"
-import type { IBackend, ChatMessage } from "../core/IBackend"
+import type { IBackend, IChatMessage } from "../core/IBackend"
 import { AgentMemory } from "./AgentMemory"
-import { Compactor, type CompactionResult } from "./Compactor"
+import { Compactor, type ICompactionResult } from "./Compactor"
 import { AgentModeManager } from "./AgentMode"
 import type { SessionContext } from "./SessionContext"
 import type { AgentContextBuilder } from "./AgentContextBuilder"
 import type { AgentToolExecutor } from "./AgentToolExecutor"
 import type { AgentPlanner } from "./AgentPlanner"
 import { Plan } from "./Plan"
-import type { AgentTurnResult } from "./AgentTypes"
+import type { IAgentTurnResult } from "./AgentTypes"
 
 class MockCompactor extends Compactor {
   private _shouldCompact = false
-  private _compactionResult: CompactionResult | null = null
+  private _compactionResult: ICompactionResult | null = null
 
   enableCompaction(): void {
     this._shouldCompact = true
   }
 
-  setCompactionResult(result: CompactionResult): void {
+  setCompactionResult(result: ICompactionResult): void {
     this._compactionResult = result
   }
 
   async compactIfNeeded(
-    messages: ChatMessage[],
+    messages: IChatMessage[],
     systemPrompt: string,
-  ): Promise<CompactionResult> {
+  ): Promise<ICompactionResult> {
     if (!this._shouldCompact) {
       return { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
     }
@@ -66,7 +66,7 @@ const createMockContextBuilder = (): AgentContextBuilder => ({
 } as unknown as AgentContextBuilder)
 
 const createMockToolExecutor = (): AgentToolExecutor => ({
-  callBackend: vi.fn(async (): Promise<AgentTurnResult> => ({ type: "text", content: "Test response" })),
+  callBackend: vi.fn(async (): Promise<IAgentTurnResult> => ({ type: "text", content: "Test response" })),
   executeToolCalls: vi.fn(async () => ({ anyFailed: false })),
 } as unknown as AgentToolExecutor)
 
@@ -332,7 +332,7 @@ const loop = new AgentLoop(
 
     expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(2)
     const secondCall = vi.mocked(mockToolExecutor.callBackend).mock.calls[1]
-    const conversation = secondCall[0] as ChatMessage[]
+    const conversation = secondCall[0] as IChatMessage[]
     const recoveryMsg = conversation.find(
       (m) => m.role === "user" && m.content.includes("Внимание: инструменты"),
     )
@@ -690,7 +690,7 @@ const loop = new AgentLoop(
     await loop.run("test query", [], () => {})
 
     const secondCall = vi.mocked(mockToolExecutor.callBackend).mock.calls[1]
-    const conversation = secondCall[0] as ChatMessage[]
+    const conversation = secondCall[0] as IChatMessage[]
     const planStepMsg = conversation.find(
       (m) => m.role === "user" && m.content.includes("Выполнить шаг"),
     )
@@ -818,7 +818,7 @@ const loop = new AgentLoop(
 
     expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(2)
     const secondCall = vi.mocked(mockToolExecutor.callBackend).mock.calls[1]
-    const conversation = secondCall[0] as ChatMessage[]
+    const conversation = secondCall[0] as IChatMessage[]
     const errorMsg = conversation.find(
       (m) => m.role === "user" && m.content.includes("Внимание: инструменты"),
     )

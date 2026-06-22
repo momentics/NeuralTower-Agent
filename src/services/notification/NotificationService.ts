@@ -1,9 +1,9 @@
 import * as vscode from "vscode"
-import type { Plugin } from "../../shared/Types"
+import type { IPlugin } from "../../shared/Types"
 
 export type NotificationType = "info" | "warning" | "error" | "agentDone" | "permissionRequest"
 
-export interface NotificationServiceOptions {
+export interface INotificationServiceOptions {
   enabled: boolean
   sounds: boolean
   agentCompletion: boolean
@@ -16,15 +16,15 @@ export interface NotificationServiceOptions {
 export interface INotificationService {
   show(type: NotificationType, message: string, actions?: string[]): Promise<void>
   askPermission(toolName: string, description: string): Promise<"allow" | "deny" | "allowAlways">
-  setOptions(partial: Partial<NotificationServiceOptions>): void
-  getOptions(): NotificationServiceOptions
+  setOptions(partial: Partial<INotificationServiceOptions>): void
+  getOptions(): INotificationServiceOptions
   dispose(): void
 }
 
 /** Сервис уведомлений: отображение сообщений и запросы разрешений в VS Code. */
-export class NotificationService implements Plugin, INotificationService {
+export class NotificationService implements IPlugin, INotificationService {
   name = "notifications"
-  private options: NotificationServiceOptions = {
+  private options: INotificationServiceOptions = {
     enabled: true,
     sounds: false,
     agentCompletion: true,
@@ -78,12 +78,12 @@ export class NotificationService implements Plugin, INotificationService {
   }
 
   /** Обновить настройки уведомлений. */
-  setOptions(partial: Partial<NotificationServiceOptions>): void {
+  setOptions(partial: Partial<INotificationServiceOptions>): void {
     Object.assign(this.options, partial)
   }
 
   /** Вернуть текущие настройки уведомлений. */
-  getOptions(): NotificationServiceOptions {
+  getOptions(): INotificationServiceOptions {
     return { ...this.options }
   }
 

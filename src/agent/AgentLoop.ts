@@ -1,10 +1,10 @@
-import type { IBackend, ChatMessage } from "../core/IBackend"
+import type { IBackend, IChatMessage } from "../core/IBackend"
 import type { ISkill } from "../skills/ISkill"
-import type { AgentTurnResult, ToolResult } from "./AgentTypes"
+import type { IAgentTurnResult, IToolResult } from "./AgentTypes"
 import { AgentMemory } from "./AgentMemory"
 import type { AgentModeManager } from "./AgentMode"
 import type { AgentModeName } from "./AgentMode"
-import { Compactor, type CompactionResult } from "./Compactor"
+import { Compactor, type ICompactionResult } from "./Compactor"
 import type { SessionContext } from "./SessionContext"
 import type { Plan } from "./Plan"
 import type { AgentContextBuilder } from "./AgentContextBuilder"
@@ -19,7 +19,7 @@ const log = createDomainLogger("AgentLoop")
 const PLAN_STEP_RESULT_MAX_CHARS = 500
 const DEFAULT_MAX_COMPACTIONS = 5
 
-export interface AgentLoopConfig {
+export interface IAgentLoopConfig {
   maxIterations?: number
   maxRecoveryAttempts?: number
   replanOnFailure?: boolean
@@ -34,24 +34,24 @@ export class AgentLoop {
   private readonly maxReplanAttempts: number
   private readonly maxCompactions: number
 
-  private pushSessionMessage(msg: ChatMessage): void {
+  private pushSessionMessage(msg: IChatMessage): void {
     if (this.sessionContext) {
       this.sessionContext.pushMessage(msg)
     }
   }
 
   /** Добавить сообщение в память и контекст сессии. */
-  private addToMemory(msg: ChatMessage): void {
+  private addToMemory(msg: IChatMessage): void {
     this.memory.add(msg)
     this.pushSessionMessage(msg)
   }
 
   /** Попытка компактизации с обработкой ошибок. */
   private async tryCompact(
-    messages: ChatMessage[],
+    messages: IChatMessage[],
     systemPrompt: string,
-  ): Promise<CompactionResult> {
-    const emptyResult: CompactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
+  ): Promise<ICompactionResult> {
+    const emptyResult: ICompactionResult = { needsCompaction: false, tokensBefore: 0, tokensAfter: 0 }
     try {
       return await this.compactor.compactIfNeeded(messages.slice(1), systemPrompt)
     } catch (err: unknown) {
@@ -62,9 +62,9 @@ export class AgentLoop {
 
   /** Применение результата компактизации к рабочему контексту. */
   private applyCompaction(
-    result: CompactionResult,
+    result: ICompactionResult,
     systemPrompt: string,
-  ): ChatMessage[] | null {
+  ): IChatMessage[] | null {
     if (result.needsCompaction && result.compactedHistory) {
       return [
         { role: "system", content: systemPrompt, timestamp: Date.now() },
@@ -83,7 +83,7 @@ export class AgentLoop {
     private readonly contextBuilder: AgentContextBuilder,
     private readonly toolExecutor: AgentToolExecutor,
     private readonly planner: AgentPlanner,
-    config: AgentLoopConfig = {},
+    config: IAgentLoopConfig = {},
   ) {
     const defaults = loadDefaultAgentConfig()
     this.maxIterations = config.maxIterations ?? defaults.maxIterations
@@ -98,10 +98,10 @@ export class AgentLoop {
     activeSkills: ISkill[],
     onChunk: (text: string) => void,
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: ToolResult) => void,
+    onToolResult?: (name: string, result: IToolResult) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
-  ): Promise<ChatMessage> {
+  ): Promise<IChatMessage> {
     const currentMode = this.modeManager.getModeName()
 
     let planContext = ""
@@ -114,7 +114,7 @@ export class AgentLoop {
       + "\n\n" + this.modeManager.getSystemPromptAddon()
       + (planContext ? "\n\n" + planContext : "")
 
-    const conversation: ChatMessage[] = [
+    const conversation: IChatMessage[] = [
       { role: "system", content: systemPrompt, timestamp: Date.now() },
       ...this.memory.getRecent(),
       { role: "user", content: query, timestamp: Date.now() },
@@ -123,7 +123,7 @@ export class AgentLoop {
     this.addToMemory(conversation[conversation.length - 1])
 
     const compactionResult = await this.tryCompact(conversation, systemPrompt)
-    let workingConversation: ChatMessage[] = this.applyCompaction(compactionResult, systemPrompt) ?? conversation
+    let workingConversation: IChatMessage[] = this.applyCompaction(compactionResult, systemPrompt) ?? conversation
 
     let iterations = 0
     let recoveryAttempts = 0
@@ -199,7 +199,7 @@ export class AgentLoop {
               }
             }
 
-            return workingConversation[workingConversation.length - 1] as ChatMessage
+            return workingConversation[workingConversation.length - 1] as IChatMessage
           }
         }
 

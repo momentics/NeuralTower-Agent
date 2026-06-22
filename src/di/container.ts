@@ -1,10 +1,10 @@
 import * as vscode from "vscode"
-import type { AppConfig, SessionConfig } from "../core/Config"
+import type { IAppConfig, ISessionConfig } from "../core/Config"
 import type { IGitService } from "../services/git/GitService"
 import type { ICodebaseSearch } from "../repo/CodebaseSearch"
 import type { ICodebaseChunker } from "../repo/CodebaseChunker"
 import type { IFileIndex } from "../repo/FileIndex"
-import type { IBackend, BackendConfig } from "../core/IBackend"
+import type { IBackend, IBackendConfig } from "../core/IBackend"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IProvider } from "../core/IProvider"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
@@ -15,8 +15,8 @@ import type { IToolRegistry } from "../tools/ToolRegistry"
 import type { ISkillManager } from "../skills/SkillManager"
 import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
 import type { INotificationService } from "../services/notification/NotificationService"
-import type { AgentDependencies, AgentSpawnFactory } from "../agent/AgentDependencies"
-import type { ContextProvider } from "../core/providers/context/Types"
+import type { IAgentDependencies, AgentSpawnFactory } from "../agent/AgentDependencies"
+import type { IContextProvider } from "../core/providers/context/Types"
 import {
   NeuralTowerBackend,
   NeuralTowerEmbeddingProvider,
@@ -69,7 +69,7 @@ import {
   makeDebuggerProvider,
   makeTerminalProvider,
   makeOSProvider,
-} from "../core/ContextSources.vscode"
+} from "../core/ContextSourcesVscode"
 import {
   makeEnvironmentProvider,
   makeGitDiffProvider,
@@ -95,7 +95,7 @@ const log = createDomainLogger("DI")
 
 // ── Публичные типы ────────────────────────────────────────
 
-export interface ExtensionDeps {
+export interface IExtensionDeps {
   backend: IBackend
   agent: IAgentOrchestrator
   todoStore: TodoStore
@@ -112,8 +112,8 @@ export interface ExtensionDeps {
   mcpManager: IMCPManager
   contextManager: IContextManager
   subagentRunner: SubagentRunner
-  config: AppConfig
-  agentDeps: AgentDependencies
+ config: IAppConfig
+  agentDeps: IAgentDependencies
   fileIndex: IFileIndex
   codebaseSearch: ICodebaseSearch
   codebaseIndexer: CodebaseIndexer
@@ -124,7 +124,7 @@ export interface ExtensionDeps {
 
 // ── Результаты композиции доменов ─────────────────────────
 
-export interface SearchInfrastructureDeps {
+export interface ISearchInfrastructureDeps {
   fileIndex: FileIndex
   repoAnalyzer: RepoAnalyzer
   embeddingProvider: NeuralTowerEmbeddingProvider
@@ -134,39 +134,39 @@ export interface SearchInfrastructureDeps {
   chunker: CodebaseChunker
 }
 
-export interface ServicesDeps {
+export interface IServicesDeps {
   sessionStore: ISessionStore
   permissionManager: IPermissionManager
   gitService: IGitService
   notificationService: INotificationService
 }
 
-export interface ToolsDeps {
+export interface IToolsDeps {
   tools: IToolRegistry
   mcpManager: IMCPManager
   skills: ISkillManager
 }
 
-export interface AgentDepsResult {
+export interface IAgentDepsResult {
   agent: IAgentOrchestrator
   subagentRunner: SubagentRunner
   todoStore: TodoStore
-  agentDeps: AgentDependencies
+  agentDeps: IAgentDependencies
 }
 
-export interface ContextDepsResult {
+export interface IContextDepsResult {
   contextManager: ContextManager
   contextProviderRegistry: ContextProviderRegistry
-  providers: ContextProvider[]
+ providers: IContextProvider[]
 }
 
-export interface UIDepsResult {
+export interface IUIDepsResult {
   chatProvider: IProvider
   diffViewer: IDiffViewerProvider
   settingsProvider: SettingsProvider
 }
 
-export interface MonitoringDepsResult {
+export interface IMonitoringDepsResult {
   healthMonitor: BackendHealthMonitor
   commitMessageService: CommitMessageService
   autocompleteService: AutocompleteService
@@ -177,11 +177,11 @@ export interface MonitoringDepsResult {
 
 // ── Независимые фабрики ───────────────────────────────────
 
-export function createBackend(config: AppConfig, onConfigChange?: (partial: Partial<BackendConfig>) => void): IBackend {
+export function createBackend(config: IAppConfig, onConfigChange?: (partial: Partial<IBackendConfig>) => void): IBackend {
   return new NeuralTowerBackend(config.backend, onConfigChange)
 }
 
-export function createEmbeddingProvider(config: AppConfig): NeuralTowerEmbeddingProvider {
+export function createEmbeddingProvider(config: IAppConfig): NeuralTowerEmbeddingProvider {
   return new NeuralTowerEmbeddingProvider({
     baseUrl: config.backend.url,
     timeoutMs: config.backend.timeoutMs,
@@ -225,7 +225,7 @@ export function createIndexingStatusBar(
 
 // ── Домен: Инфраструктура поиска ──────────────────────────
 
-export function createSearchInfrastructure(config: AppConfig): SearchInfrastructureDeps {
+export function createSearchInfrastructure(config: IAppConfig): ISearchInfrastructureDeps {
   const fileIndex = new FileIndex()
   const repoAnalyzer = new RepoAnalyzer()
   const embeddingProvider = createEmbeddingProvider(config)
@@ -250,8 +250,8 @@ export function createSearchInfrastructure(config: AppConfig): SearchInfrastruct
 export async function createServicesDomain(
   ctx: vscode.ExtensionContext,
   vsCfg: vscode.WorkspaceConfiguration,
-  sessionConfig: SessionConfig,
-): Promise<ServicesDeps> {
+  sessionConfig: ISessionConfig,
+): Promise<IServicesDeps> {
   const sessionStore = new PersistentSessionStore(ctx.globalStorageUri, sessionConfig.maxSessions)
   await sessionStore.init()
 
@@ -274,7 +274,7 @@ export function createToolsDomain(
   workspaceRoot: string | undefined,
   codebaseSearch: ICodebaseSearch | undefined,
   todoStore: TodoStore,
-): ToolsDeps {
+): IToolsDeps {
   const tools = new ToolRegistry()
 
   if (workspaceRoot) {
@@ -325,10 +325,10 @@ export function createAgentDomain(
   backend: IBackend,
   tools: IToolRegistry,
   skills: ISkillManager,
-  agentDeps: AgentDependencies,
+  agentDeps: IAgentDependencies,
   spawnFactory: AgentSpawnFactory,
   todoStore: TodoStore,
-): AgentDepsResult {
+): IAgentDepsResult {
   const agent = new AgentOrchestrator(backend, tools, skills, agentDeps, spawnFactory, todoStore)
   const subagentRunner = new SubagentRunner(backend, tools, skills, agentDeps, spawnFactory, todoStore)
 
@@ -338,7 +338,7 @@ export function createAgentDomain(
 // ── Домен: Контекст ───────────────────────────────────────
 
 export function createContextDomain(
-  config: AppConfig,
+  config: IAppConfig,
   backend: IBackend,
   gitService: IGitService,
   mcpManager: IMCPManager,
@@ -346,17 +346,17 @@ export function createContextDomain(
   repoAnalyzer: RepoAnalyzer,
   codebaseSearch: ICodebaseSearch,
   getWorkDir: () => string,
-): ContextDepsResult {
+): IContextDepsResult {
   const contextManager = new ContextManager(config.context.tokenBudget)
   const contextProviderRegistry = new ContextProviderRegistry()
 
-  const register = (p: ContextProvider): ContextProvider => {
+  const register = (p: IContextProvider): IContextProvider => {
     contextManager.register(p)
     contextProviderRegistry.register(p)
     return p
   }
 
-  const providers: ContextProvider[] = []
+  const providers: IContextProvider[] = []
 
   // VS Code провайдеры
   providers.push(register(makeCurrentFileProvider()))
@@ -416,7 +416,7 @@ export function createUIDomain(
   notificationService: INotificationService,
   permissionManager: IPermissionManager,
   backend: IBackend,
-): UIDepsResult {
+): IUIDepsResult {
   const chatProvider = new ChatProvider(extUri, agent, sessionStore, notificationService, permissionManager)
   const diffViewer = new DiffViewerProvider(extUri)
   const settingsProvider = new SettingsProvider(extUri, backend)
@@ -434,7 +434,7 @@ export async function createMonitoringDomain(
   chunker: ICodebaseChunker,
   codebaseSearch: ICodebaseSearch,
   embeddingProvider: NeuralTowerEmbeddingProvider,
-): Promise<MonitoringDepsResult> {
+): Promise<IMonitoringDepsResult> {
   const healthMonitor = new BackendHealthMonitor(backend, contextManager)
   await healthMonitor.init()
 
@@ -471,7 +471,7 @@ export async function createMonitoringDomain(
 
 export async function createDeps(
   ctx: vscode.ExtensionContext,
-): Promise<ExtensionDeps> {
+): Promise<IExtensionDeps> {
   const config = loadAppConfig()
   const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
 
@@ -517,7 +517,7 @@ export async function createDeps(
   )
 
   // ── Агент ───────────────────────────────────────────────
-  const agentDeps: AgentDependencies = {
+  const agentDeps: IAgentDependencies = {
     getWorkDir: () => workDirState.current,
     config,
     contextProviderRegistry,

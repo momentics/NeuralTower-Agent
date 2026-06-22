@@ -1,9 +1,9 @@
-import type { IBackend, ChatMessage, ToolCall as BackendToolCall } from "../core/IBackend"
+import type { IBackend, IChatMessage, IToolCall as BackendToolCall } from "../core/IBackend"
 import type { IToolRegistry } from "../tools/ToolRegistry"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import type { AgentModeManager } from "./AgentMode"
 import type { AgentModeName } from "./AgentMode"
-import type { AgentTurnResult, AgentToolCall, ToolResult } from "./AgentTypes"
+import type { IAgentTurnResult, IAgentToolCall, IToolResult } from "./AgentTypes"
 import { AbortError, errorMessage } from "../core/Errors"
 import { createDomainLogger } from "../core/Logger"
 import { extractJsonBlocks } from "../utils/ExtractJsonBlocks"
@@ -19,10 +19,10 @@ export class AgentToolExecutor {
   ) {}
 
   async callBackend(
-    conversation: ChatMessage[],
+    conversation: IChatMessage[],
     onChunk: (text: string) => void,
     signal?: AbortSignal,
-  ): Promise<AgentTurnResult> {
+  ): Promise<IAgentTurnResult> {
     if (signal?.aborted) {
       throw new AbortError("Задача прервана")
     }
@@ -53,12 +53,12 @@ export class AgentToolExecutor {
   }
 
   async executeToolCalls(
-    toolCalls: AgentToolCall[],
+    toolCalls: IAgentToolCall[],
     currentMode: AgentModeName,
-    workingConversation: ChatMessage[],
+    workingConversation: IChatMessage[],
     signal?: AbortSignal,
     onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: ToolResult) => void,
+    onToolResult?: (name: string, result: IToolResult) => void,
   ): Promise<{ anyFailed: boolean; failedTools?: { name: string; error: string }[] }> {
     let anyFailed = false
     const failedTools: { name: string; error: string }[] = []
@@ -99,7 +99,7 @@ export class AgentToolExecutor {
 
       onToolUse?.(tc.toolName, resolvedArgs)
 
-      let toolResult: ToolResult
+      let toolResult: IToolResult
 
       try {
         toolResult = await this.toolRegistry.invoke(tc.toolName, resolvedArgs, signal)
@@ -134,8 +134,8 @@ export class AgentToolExecutor {
     return args
   }
 
-  private extractToolCalls(content: string): AgentToolCall[] | null {
-const calls: AgentToolCall[] = []
+ private extractToolCalls(content: string): IAgentToolCall[] | null {
+ const calls: IAgentToolCall[] = []
 
     const jsonBlocks = extractJsonBlocks(content)
 
@@ -166,8 +166,8 @@ const calls: AgentToolCall[] = []
 /**
  * Преобразовать нативные tool_calls из бэкенда в формат AgentToolExecutor.
  */
-function parseBackendToolCalls(backendCalls: BackendToolCall[]): AgentToolCall[] | null {
-  const calls: AgentToolCall[] = []
+function parseBackendToolCalls(backendCalls: BackendToolCall[]): IAgentToolCall[] | null {
+  const calls: IAgentToolCall[] = []
   for (const bc of backendCalls) {
     let args: Record<string, unknown> = {}
     try {

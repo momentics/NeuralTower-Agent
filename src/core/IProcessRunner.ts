@@ -5,10 +5,10 @@
  */
 
 export interface IProcessRunner {
-  run(command: string, args: string[], options?: ProcessRunOptions): Promise<ProcessRunResult>
+  run(command: string, args: string[], options?: IProcessRunOptions): Promise<IProcessRunResult>
 }
 
-export interface ProcessRunOptions {
+export interface IProcessRunOptions {
   cwd?: string
   timeout?: number
   maxBuffer?: number
@@ -17,7 +17,7 @@ export interface ProcessRunOptions {
   signal?: AbortSignal
 }
 
-export interface ProcessRunResult {
+export interface IProcessRunResult {
   stdout: string
   stderr: string
   code: number | null

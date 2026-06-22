@@ -8,7 +8,7 @@
  * в этом случае семантический поиск будет отключён.
  */
 
-import type { IEmbeddingProvider, EmbeddingProviderConfig } from "./IEmbeddingProvider"
+import type { IEmbeddingProvider, IEmbeddingProviderConfig } from "./IEmbeddingProvider"
 import { BackendError, ConnectionError, errorMessage } from "../core/Errors"
 import { createDomainLogger } from "../core/Logger"
 
@@ -24,12 +24,12 @@ const DEFAULT_EMBEDDING_BATCH_SIZE = 256
  * Провайдер эмбеддингов Neural Tower.
  */
 export class NeuralTowerEmbeddingProvider implements IEmbeddingProvider {
-  private config: EmbeddingProviderConfig
+  private config: IEmbeddingProviderConfig
   private _available = false
   private _dimension = DEFAULT_EMBEDDING_DIMENSION
   private _modelName = DEFAULT_EMBEDDING_MODEL
 
-  constructor(config?: Partial<EmbeddingProviderConfig>) {
+  constructor(config?: Partial<IEmbeddingProviderConfig>) {
     this.config = {
       baseUrl: config?.baseUrl ?? DEFAULT_BACKEND_URL,
       model: config?.model ?? DEFAULT_EMBEDDING_MODEL,

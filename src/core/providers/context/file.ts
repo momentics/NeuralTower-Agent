@@ -1,6 +1,6 @@
 import * as fs from "fs/promises"
 import * as path from "path"
-import type { ContextProvider, ContextItem } from "./Types"
+import type { IContextProvider, IContextItem } from "./Types"
 import { detectLanguageDisplay } from "../../../utils/LanguageDetector"
 import { errorMessage } from "../../Errors"
 
@@ -10,7 +10,7 @@ const CONTEXT_MAX_CONTENT_CHARS = 100000
 /** Создать провайдер контекста для чтения содержимого файлов. */
 export function makeFileProvider(
   getWorkDir: () => string,
-): ContextProvider {
+): IContextProvider {
   return {
     description: {
       name: "file",
@@ -18,7 +18,7 @@ export function makeFileProvider(
       description: "Содержимое файла по пути",
       type: "query",
     },
-    async resolve(query: string): Promise<ContextItem[]> {
+    async resolve(query: string): Promise<IContextItem[]> {
       const trimmed = query.trim()
       if (!trimmed) return []
 

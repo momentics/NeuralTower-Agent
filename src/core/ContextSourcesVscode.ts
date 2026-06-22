@@ -1,7 +1,7 @@
 import * as os from "os"
 import * as path from "path"
 import * as vscode from "vscode"
-import type { ContextProvider, ContextItem } from "./providers/context/Types"
+import type { IContextProvider, IContextItem } from "./providers/context/Types"
 import { createDomainLogger } from "./Logger"
 import { errorMessage } from "./Errors"
 
@@ -21,7 +21,7 @@ const STACK_TRACE_LEVELS = 8
 /**
  * Провайдер контекста: активный файл.
  */
-export function makeCurrentFileProvider(): ContextProvider {
+export function makeCurrentFileProvider(): IContextProvider {
   return {
     description: {
       name: "currentfile",
@@ -30,7 +30,7 @@ export function makeCurrentFileProvider(): ContextProvider {
       type: "normal",
       priority: 95,
     },
-    async resolve(_query: string): Promise<ContextItem[]> {
+    async resolve(_query: string): Promise<IContextItem[]> {
       const editor = vscode.window.activeTextEditor
       if (!editor) return []
 
@@ -74,7 +74,7 @@ export function makeCurrentFileProvider(): ContextProvider {
 /**
  * Провайдер контекста: открытые файлы.
  */
-export function makeOpenFilesProvider(): ContextProvider {
+export function makeOpenFilesProvider(): IContextProvider {
   return {
     description: {
       name: "openfiles",
@@ -83,7 +83,7 @@ export function makeOpenFilesProvider(): ContextProvider {
       type: "normal",
       priority: 92,
     },
-    async resolve(_query: string): Promise<ContextItem[]> {
+    async resolve(_query: string): Promise<IContextItem[]> {
       const editors = vscode.window.visibleTextEditors
       const result: string[] = []
       for (const editor of editors) {
@@ -105,7 +105,7 @@ export function makeOpenFilesProvider(): ContextProvider {
  */
 export function makeProblemsProvider(
   getWorkDir: () => string,
-): ContextProvider {
+): IContextProvider {
   const severityMap: Record<number, string> = {
     0: "error",
     1: "warning",
@@ -123,7 +123,7 @@ export function makeProblemsProvider(
       type: "normal",
       priority: 88,
     },
-    async resolve(_query: string): Promise<ContextItem[]> {
+    async resolve(_query: string): Promise<IContextItem[]> {
       const allDiagnostics = vscode.languages.getDiagnostics()
       const problems: Array<{
         file: string
@@ -212,7 +212,7 @@ export function makeProblemsProvider(
 /**
  * Провайдер контекста: буфер обмена.
  */
-export function makeClipboardProvider(): ContextProvider {
+export function makeClipboardProvider(): IContextProvider {
   return {
     description: {
       name: "clipboard",
@@ -221,7 +221,7 @@ export function makeClipboardProvider(): ContextProvider {
       type: "normal",
       priority: 60,
     },
-    async resolve(_query: string): Promise<ContextItem[]> {
+    async resolve(_query: string): Promise<IContextItem[]> {
       try {
         const text = await vscode.env.clipboard.readText()
         if (text.length === 0) return []
@@ -243,7 +243,7 @@ export function makeClipboardProvider(): ContextProvider {
 /**
  * Провайдер контекста: отладчик.
  */
-export function makeDebuggerProvider(): ContextProvider {
+export function makeDebuggerProvider(): IContextProvider {
   return {
     description: {
       name: "debugger",
@@ -252,7 +252,7 @@ export function makeDebuggerProvider(): ContextProvider {
       type: "normal",
       priority: 82,
     },
-    async resolve(_query: string): Promise<ContextItem[]> {
+    async resolve(_query: string): Promise<IContextItem[]> {
       const session = vscode.debug.activeDebugSession
       if (!session) return []
 
@@ -300,7 +300,7 @@ export function makeDebuggerProvider(): ContextProvider {
 /**
  * Провайдер контекста: терминал.
  */
-export function makeTerminalProvider(): ContextProvider {
+export function makeTerminalProvider(): IContextProvider {
   return {
     description: {
       name: "terminal",
@@ -309,7 +309,7 @@ export function makeTerminalProvider(): ContextProvider {
       type: "normal",
       priority: 65,
     },
-    async resolve(_query: string): Promise<ContextItem[]> {
+    async resolve(_query: string): Promise<IContextItem[]> {
       const terminals = vscode.window.terminals
       if (terminals.length === 0) return []
 
@@ -326,7 +326,7 @@ export function makeTerminalProvider(): ContextProvider {
 /**
  * Провайдер контекста: информация о системе.
  */
-export function makeOSProvider(): ContextProvider {
+export function makeOSProvider(): IContextProvider {
   return {
     description: {
       name: "os",
@@ -335,7 +335,7 @@ export function makeOSProvider(): ContextProvider {
       type: "normal",
       priority: 98,
     },
-    async resolve(_query: string): Promise<ContextItem[]> {
+    async resolve(_query: string): Promise<IContextItem[]> {
       const shell = process.env.SHELL ?? process.env.COMSPEC ?? "unknown"
       return [{
         content: `## Система\n  Платформа: ${os.platform()} ${os.arch()}\n  Релиз: ${os.release()}\n  Shell: ${shell}\n  Память: ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(1)} ГБ\n  CPU: ${os.cpus()[0]?.model ?? "unknown"}`,

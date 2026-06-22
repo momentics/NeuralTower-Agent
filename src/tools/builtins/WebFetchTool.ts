@@ -1,5 +1,5 @@
-import type { ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
+import type { IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
 import { fetchUrl, htmlToText } from "../../network/UrlFetcher"
 import { BaseTool } from "./BaseTool"
 import { str, strOpt, num, clamp } from "../ToolArgs"
@@ -18,7 +18,7 @@ export class WebFetchTool extends BaseTool {
   category = "network"
   isSafe = true
 
-  schema: ToolSchema = {
+  schema: IToolSchema = {
     name: "web_fetch",
     description: "Получить содержимое веб-страницы",
     parameters: {
@@ -29,7 +29,7 @@ export class WebFetchTool extends BaseTool {
     required: ["url"],
   }
 
-  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     const url = str(args, "url")
     if (!url) return { output: "Не указан URL", success: false }
 

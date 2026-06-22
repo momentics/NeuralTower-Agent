@@ -1,6 +1,6 @@
 import { EventEmitter } from "events"
 import { spawn, type ChildProcess } from "child_process"
-import type { MCPServerConfig } from "./MCPManager"
+import type { IMCPServerConfig } from "./MCPManager"
 import { ExecutionError } from "../core/Errors"
 import { createDomainLogger } from "../core/Logger"
 
@@ -36,7 +36,7 @@ export class StdioMCPTransport extends EventEmitter implements IMCPTransport {
   private errorListener: ((err: Error) => void) | null = null
   private exitListener: ((code: number | null, signal: string | null) => void) | null = null
 
-  constructor(private readonly config: MCPServerConfig) {
+  constructor(private readonly config: IMCPServerConfig) {
     super()
   }
 

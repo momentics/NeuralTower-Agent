@@ -1,5 +1,5 @@
-import type { ToolSchema } from "../ITool"
-import type { ToolResult } from "../../agent/AgentTypes"
+import type { IToolSchema } from "../ITool"
+import type { IToolResult } from "../../agent/AgentTypes"
 import * as fs from "fs/promises"
 import { FilesystemTool } from "./FilesystemTool"
 import { str, bool } from "../ToolArgs"
@@ -13,7 +13,7 @@ export class DeleteFileTool extends FilesystemTool {
   category = "filesystem"
   isSafe = false
 
-  schema: ToolSchema = {
+  schema: IToolSchema = {
     name: "delete_file",
     description: "Удалить файл или директорию",
     parameters: {
@@ -23,7 +23,7 @@ export class DeleteFileTool extends FilesystemTool {
     required: ["filepath"],
   }
 
-  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult> {
     const fp = str(args, "filepath")
     const result = await this.resolvePath(fp)
     if ("error" in result) return { output: result.error, success: false }
