@@ -3,7 +3,6 @@ export { PersistentSessionStore, type ISessionStore } from "./PersistentSessionS
 export { Mutex } from "./Mutex"
 export { LRUCache } from "./LRUCache"
 export { TombstoneStore } from "./TombstoneStore"
-export { safeExecute } from "./SafeExecute"
 export { withTimeoutAndSignal } from "./WithTimeoutAndSignal"
 export type { PermissionLevel, IToolPermission, IPermissionRequest, IAutoApproveConfig } from "./PermissionTypes"
 export type { IPersistedSession, IPersistedMessage, ISessionData } from "./SessionTypes"

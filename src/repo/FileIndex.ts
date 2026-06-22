@@ -21,8 +21,6 @@ const log = createDomainLogger("FileIndex")
 
 import { INDEX_DEFAULT_MAX_FILES } from "../core/Config"
 
-const FILE_INDEX_DEFAULT_MAX_FILES = INDEX_DEFAULT_MAX_FILES
-
 export interface IIndexEntry {
   path: string
   language: string
@@ -52,7 +50,7 @@ export class FileIndex implements IFileIndex {
    * Построить индекс для директории. Сканирует только имена
    * файлов и размеры, не читает содержимое.
    */
-  async build(dir: string, maxFiles = FILE_INDEX_DEFAULT_MAX_FILES, signal?: AbortSignal): Promise<void> {
+  async build(dir: string, maxFiles = INDEX_DEFAULT_MAX_FILES, signal?: AbortSignal): Promise<void> {
     this.entries = []
     this.nameMap.clear()
     this.langMap.clear()

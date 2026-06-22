@@ -157,18 +157,6 @@ export async function safeExecute<T>(fn: () => Promise<T>): Promise<SafeResult<T
 }
 
 /**
- * Безопасно выполнить синхронную операцию.
- */
-export function safeExecuteSync<T>(fn: () => T): SafeResult<T> {
-  try {
-    const value = fn()
-    return { ok: true, value }
-  } catch (err: unknown) {
-    return { ok: false, error: errorMessage(err) }
-  }
-}
-
-/**
  * Обработать ошибку запроса к бэкенду: вызвать обратный вызов с сообщением,
  * показать уведомление и вернуть флаг прерывания.
  * @param err ошибка для обработки

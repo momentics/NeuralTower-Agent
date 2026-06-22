@@ -93,7 +93,7 @@ export class NeuralTowerBackend implements IBackend {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-    })
+    }, signal)
 
     if (!res.body) throw new BackendError("Пустой ответ от Neural Tower")
 
@@ -209,7 +209,7 @@ export class NeuralTowerBackend implements IBackend {
 
   // ── HTTP-помощник с повторными попытками ─────────────────
 
-  private async request(url: string, init?: RequestInit): Promise<Response> {
+  private async request(url: string, init?: RequestInit, externalSignal?: AbortSignal): Promise<Response> {
     const cfg = await this.getConfig()
     let lastError: Error | null = null
 
@@ -223,7 +223,12 @@ export class NeuralTowerBackend implements IBackend {
       try {
         const ctrl = new AbortController()
         const timer = setTimeout(() => ctrl.abort(), cfg.timeoutMs)
-        const res = await fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(timer))
+
+        const signals: AbortSignal[] = [ctrl.signal]
+        if (externalSignal) signals.push(externalSignal)
+        const combined = AbortSignal.any(signals)
+
+        const res = await fetch(url, { ...init, signal: combined }).finally(() => clearTimeout(timer))
         if (!res.ok) {
           const body = await res.text()
           if (res.status === 408) {
@@ -236,6 +241,9 @@ export class NeuralTowerBackend implements IBackend {
         if (err instanceof BackendError) {
           lastError = err
         } else if (err instanceof DOMException && err.name === "AbortError") {
+          if (externalSignal?.aborted) {
+            throw err
+          }
           lastError = new TimeoutError("Запрос прерван по таймауту")
         } else {
           const e = err instanceof Error ? err : new Error(String(err))

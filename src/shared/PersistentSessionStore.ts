@@ -19,16 +19,17 @@ const DEFAULT_SESSION_TITLE = "Без названия"
 const DEFAULT_MAX_SESSIONS = 50
 
 export interface ISessionStore {
+  init(): Promise<void>
   push(message: IChatMessage): Promise<void>
   newSession(): Promise<string>
   deleteSession(id: string): Promise<boolean>
   togglePin(id: string): Promise<void>
   rename(id: string, title: string): Promise<void>
- list(): IPersistedSession[]
+  list(): IPersistedSession[]
   setActive(id: string): void
   getActiveMessages(): IChatMessage[]
   get activeId(): string
- getSession(id: string): IPersistedSession | undefined
+  getSession(id: string): IPersistedSession | undefined
   getMessagesForSession(id: string): IChatMessage[]
   clearActive(): Promise<void>
   dispose(): void

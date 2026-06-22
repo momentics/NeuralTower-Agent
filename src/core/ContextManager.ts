@@ -47,8 +47,12 @@ export interface IPreparedContext {
 export interface IContextManager {
   initialize(): Promise<IPreparedContext>
   prepare(): Promise<IPreparedContext>
+  register(provider: IContextProvider): void
+  unregister(name: string): void
+  setTokenBudget(budget: number): void
+  getTokenBudget(): number
   reset(): void
-list(): IContextProvider[]
+  list(): IContextProvider[]
   dispose(): void
 }
 

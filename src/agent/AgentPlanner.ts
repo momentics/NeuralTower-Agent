@@ -23,6 +23,7 @@ export class AgentPlanner {
     private readonly toolRegistry: IToolRegistry,
     private readonly sessionContext: SessionContext | null,
     private readonly replanner: Replanner,
+    private readonly planRepo: PlanRepository,
   ) {}
 
   /**
@@ -123,12 +124,11 @@ export class AgentPlanner {
    * Восстановить план из файла на диске.
    * Ищет план в директории .neuraltower/plans/.
    */
-  async restorePlanFromFile(workDir: string): Promise<Plan | null> {
+  async restorePlanFromFile(_workDir: string): Promise<Plan | null> {
     try {
-      const repo = new PlanRepository(workDir)
-      const latest = await repo.findLatest()
+      const latest = await this.planRepo.findLatest()
       if (!latest) return null
-      const plan = await repo.load(latest)
+      const plan = await this.planRepo.load(latest)
       if (plan && (plan.status === "running" || plan.status === "paused")) {
         this.currentPlan = plan
         if (this.sessionContext) {

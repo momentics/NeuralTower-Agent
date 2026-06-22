@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { AgentPlanner } from "./AgentPlanner"
 import { Plan } from "./Plan"
 import { Replanner } from "./Replanner"
+import { PlanRepository } from "./PlanRepository"
 import { ToolRegistry } from "../tools/ToolRegistry"
 import type { IBackend } from "../core/IBackend"
 import type { SessionContext } from "./SessionContext"
@@ -43,40 +44,42 @@ describe("AgentPlanner", () => {
   let toolRegistry: ToolRegistry
   let sessionContext: SessionContext
   let replanner: Replanner
+  let planRepo: PlanRepository
 
   beforeEach(() => {
     backend = createMockBackend()
     toolRegistry = new ToolRegistry()
     sessionContext = createMockSessionContext()
     replanner = new Replanner(backend, toolRegistry)
+    planRepo = new PlanRepository("/tmp/test")
   })
 
   it("creates instance with all dependencies", () => {
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     expect(planner).toBeDefined()
   })
 
   it("getPlan returns null initially", () => {
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     expect(planner.getPlan()).toBeNull()
   })
 
   it("createPlan creates a plan with correct title", async () => {
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     const plan = await planner.createPlan("My test task")
     expect(plan).toBeDefined()
     expect(plan.title).toBe("My test task")
   })
 
   it("createPlan starts the plan (status is running)", async () => {
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     const plan = await planner.createPlan("My test task")
     expect(plan.status).toBe("running")
   })
 
   it("createPlan falls back to single-step plan on backend error", async () => {
     vi.mocked(backend.chatJson).mockRejectedValueOnce(new Error("Backend error"))
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     const plan = await planner.createPlan("My test task")
     expect(plan).toBeDefined()
     expect(plan.steps.length).toBe(1)
@@ -84,13 +87,13 @@ describe("AgentPlanner", () => {
   })
 
   it("createPlan sets plan on sessionContext when set", async () => {
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     await planner.createPlan("My test task")
     expect(sessionContext.setPlan).toHaveBeenCalled()
   })
 
   it("clearPlan resets plan to null", () => {
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     const plan = new Plan({ title: "Test", reasoning: "Test", steps: [] })
     planner.setCurrentPlan(plan)
     planner.clearPlan()
@@ -98,7 +101,7 @@ describe("AgentPlanner", () => {
   })
 
   it("clearPlan clears plan on sessionContext when set", () => {
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     const plan = new Plan({ title: "Test", reasoning: "Test", steps: [] })
     planner.setCurrentPlan(plan)
     planner.clearPlan()
@@ -106,14 +109,14 @@ describe("AgentPlanner", () => {
   })
 
   it("setCurrentPlan sets the plan externally", () => {
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     const plan = new Plan({ title: "External", reasoning: "External", steps: [] })
     planner.setCurrentPlan(plan)
     expect(planner.getPlan()).toBe(plan)
   })
 
   it("attemptReplan returns null when no current plan", async () => {
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     const step: IPlanStep = { description: "S1", suggestedTools: [], status: "failed", attempts: 1, error: "err" }
     const result = await planner.attemptReplan(step, "err", 2)
     expect(result).toBeNull()
@@ -125,7 +128,7 @@ describe("AgentPlanner", () => {
       steps: [{ description: "New step", suggestedTools: [] }],
     })
 
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     const plan = new Plan({
       title: "Original",
       reasoning: "Original",
@@ -156,7 +159,7 @@ describe("AgentPlanner", () => {
       steps: [{ description: "New step", suggestedTools: [] }],
     })
 
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     const plan = new Plan({
       title: "Original",
       reasoning: "Original",
@@ -176,7 +179,7 @@ describe("AgentPlanner", () => {
   it("attemptReplan returns fallback plan when backend fails", async () => {
     vi.mocked(backend.chatJson).mockRejectedValueOnce(new Error("Backend error"))
 
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     const plan = new Plan({
       title: "Original",
       reasoning: "Original",
@@ -195,7 +198,7 @@ describe("AgentPlanner", () => {
   })
 
   it("attemptReplan returns null after max attempts exceeded", async () => {
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     const plan = new Plan({
       title: "Original",
       reasoning: "Original",
@@ -217,12 +220,12 @@ describe("AgentPlanner", () => {
   })
 
   it("getReplanAttemptCount returns current count", () => {
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     expect(planner.getReplanAttemptCount()).toBe(0)
   })
 
   it("resetReplanAttempts resets the counter", () => {
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     const plan = new Plan({
       title: "T",
       reasoning: "R",
@@ -242,7 +245,7 @@ describe("AgentPlanner", () => {
   })
 
   it("clearPlan resets replan attempts", () => {
-    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     const plan = new Plan({
       title: "T",
       reasoning: "R",

@@ -36,6 +36,7 @@ export class AgentCore {
   private sessionContext: SessionContext
   private toolExecutor: AgentToolExecutor
   private planner: AgentPlanner
+  private planRepo: PlanRepository
   private todoStore: TodoStore
   private disposed = false
 
@@ -52,6 +53,7 @@ export class AgentCore {
       `session-${Date.now()}`,
       deps.contextManager,
     )
+    this.planRepo = new PlanRepository(deps.getWorkDir() || "")
     this.todoStore = todoStore
 
     const contextBuilder = new AgentContextBuilder(
@@ -77,6 +79,7 @@ export class AgentCore {
       toolRegistry,
       this.sessionContext,
       new Replanner(backend, toolRegistry),
+      this.planRepo,
     )
 
     const compactor = new Compactor(backend, deps.config.compactor)
@@ -135,7 +138,7 @@ export class AgentCore {
       // Сохранить план на диск
       if (workDir) {
         try {
-          await new PlanRepository(workDir).save(plan)
+          await this.planRepo.save(plan)
         } catch (err: unknown) {
           log.warn(`Не удалось сохранить план: ${errorMessage(err)}`)
         }
@@ -224,9 +227,9 @@ export class AgentCore {
     this.deps.contextManager.reset()
   }
 
- /**
-    * Освободить ресурсы.
-    */
+  /**
+   * Освободить ресурсы.
+   */
   dispose(): void {
     this.disposed = true
     this.memory.clear()
