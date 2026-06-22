@@ -103,15 +103,15 @@ code --install-extension NeuralTower-Agent-*.*.*.vsix
 
 Использовано 11 паттернов проектирования (список обновляется редко и действителен на момент коммита):
 
-- Dependency Injection, 
-- Interface-Driven Design, 
-- Strategy, 
-- Factory, 
-- Repository, 
-- Observer, 
-- Facade, 
-- Template Method, 
-- Tombstone Deletion, 
+- Dependency Injection
+- Interface-Driven Design
+- Strategy
+- Factory
+- Repository
+- Observer
+- Facade
+- Template Method
+- Tombstone Deletion
 - Mutex-Protected Write
 - Open/Closed Principle
 
