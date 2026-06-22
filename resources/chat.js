@@ -1,21 +1,43 @@
 const vscode = acquireVsCodeApi()
 
 const form = document.getElementById("chat-form") as HTMLFormElement
-const input = document.getElementById("input") as HTMLInputElement
+const input = document.getElementById("input") as HTMLTextAreaElement
 const messages = document.getElementById("messages") as HTMLDivElement
-const sessionBar = document.getElementById("session-bar") as HTMLDivElement
-const btn = form.querySelector("button") as HTMLButtonElement
+const emptyState = document.getElementById("empty-state") as HTMLDivElement
+const tasksList = document.getElementById("tasks-list") as HTMLDivElement
+const viewAll = document.getElementById("view-all") as HTMLDivElement
+const sendBtn = document.getElementById("send-btn") as HTMLButtonElement
+const stopBtn = document.getElementById("stop-btn") as HTMLButtonElement
+const tasksSection = document.getElementById("tasks-section") as HTMLDivElement
 
 let currentEl: HTMLElement | null = null
 let sessions: Array<{ id: string; title: string; pinned: boolean; updatedAt: number; messageCount: number; active: boolean }> = []
+let isStreaming = false
 
 form.addEventListener("submit", (e) => {
   e.preventDefault()
   const text = input.value.trim()
   if (!text) return
   input.value = ""
-  btn.disabled = true
+  input.style.height = "auto"
+  setStreaming(true)
   vscode.postMessage({ type: "sendMessage", content: text })
+})
+
+input.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault()
+    form.requestSubmit()
+  }
+})
+
+input.addEventListener("input", () => {
+  input.style.height = "auto"
+  input.style.height = Math.min(input.scrollHeight, 120) + "px"
+})
+
+stopBtn.addEventListener("click", () => {
+  vscode.postMessage({ type: "stopAgent" })
 })
 
 window.addEventListener("message", (event) => {
@@ -23,6 +45,7 @@ window.addEventListener("message", (event) => {
 
   switch (data.type) {
     case "messageConfirmed":
+      hideEmpty()
       append("user", data.content)
       currentEl = append("assistant", "")
       break
@@ -33,20 +56,22 @@ window.addEventListener("message", (event) => {
       break
 
     case "streamDone":
-      btn.disabled = false
+      setStreaming(false)
       currentEl = null
       break
 
     case "streamError":
       if (currentEl) currentEl.remove()
       append("error", data.error)
-      btn.disabled = false
+      setStreaming(false)
       currentEl = null
       break
 
     case "newChat":
       while (messages.firstChild) messages.removeChild(messages.firstChild)
+      showEmpty()
       currentEl = null
+      setStreaming(false)
       break
 
     case "toolUse":
@@ -68,7 +93,7 @@ window.addEventListener("message", (event) => {
 
     case "sessionList":
       sessions = data.sessions
-      renderSessionBar()
+      renderTasks()
       break
 
     case "switchSession":
@@ -84,6 +109,14 @@ window.addEventListener("message", (event) => {
   }
 })
 
+function setStreaming(streaming: boolean): void {
+  isStreaming = streaming
+  sendBtn.style.display = streaming ? "none" : "flex"
+  stopBtn.style.display = streaming ? "flex" : "none"
+  sendBtn.disabled = streaming
+  input.disabled = streaming
+}
+
 function append(role: string, text: string): HTMLElement {
   const el = document.createElement("div")
   el.className = `msg ${role}`
@@ -93,39 +126,73 @@ function append(role: string, text: string): HTMLElement {
   return el
 }
 
-function renderSessionBar(): void {
-  sessionBar.innerHTML = ""
-  if (sessions.length === 0) return
+function hideEmpty(): void {
+  if (emptyState) emptyState.style.display = "none"
+  if (tasksSection) tasksSection.style.display = "none"
+}
 
-  const active = sessions.find((s) => s.active)
-  if (active) {
-    const badge = document.createElement("span")
-    badge.className = "session-badge"
-    badge.textContent = active.title
-    const pinBtn = document.createElement("span")
-    pinBtn.className = `pin-btn ${active.pinned ? "pinned" : ""}`
-    pinBtn.textContent = active.pinned ? "📌" : "📍"
-    pinBtn.title = active.pinned ? "Unpin" : "Pin"
-    pinBtn.addEventListener("click", () => {
-      vscode.postMessage({ type: "pinSession", sessionId: active.id })
-    })
-    badge.appendChild(pinBtn)
-    badge.addEventListener("click", () => {
-      const newTitle = prompt("Rename session:", active.title)
-      if (newTitle && newTitle !== active.title) {
-        vscode.postMessage({ type: "renameSession", sessionId: active.id, title: newTitle })
+function showEmpty(): void {
+  if (emptyState) emptyState.style.display = "flex"
+  if (tasksSection) tasksSection.style.display = "block"
+}
+
+function timeAgo(timestamp: number): string {
+  const now = Date.now()
+  const diff = now - timestamp
+  const minutes = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+  const weeks = Math.floor(diff / 604800000)
+
+  if (minutes < 1) return "now"
+  if (minutes < 60) return `${minutes}m`
+  if (hours < 24) return `${hours}h`
+  if (days < 7) return `${days}d`
+  return `${weeks}w`
+}
+
+function renderTasks(): void {
+  if (!tasksList || !viewAll) return
+
+  tasksList.innerHTML = ""
+
+  const sorted = [...sessions].sort((a, b) => b.updatedAt - a.updatedAt)
+
+  const shown = sorted.slice(0, 3)
+
+  for (const s of shown) {
+    const item = document.createElement("div")
+    item.className = `task-item${s.active ? " active" : ""}`
+
+    const title = document.createElement("span")
+    title.className = "task-title"
+    title.textContent = s.title
+    title.title = s.title
+
+    const time = document.createElement("span")
+    time.className = "task-time"
+    time.textContent = timeAgo(s.updatedAt)
+
+    item.appendChild(title)
+    item.appendChild(time)
+
+    item.addEventListener("click", () => {
+      if (!s.active) {
+        vscode.postMessage({ type: "switchSession", sessionId: s.id })
       }
     })
-    sessionBar.appendChild(badge)
 
-    const delBtn = document.createElement("span")
-    delBtn.className = "del-btn"
-    delBtn.textContent = "×"
-    delBtn.title = "Delete session"
-    delBtn.addEventListener("click", () => {
-      vscode.postMessage({ type: "deleteSession", sessionId: active.id })
+    tasksList.appendChild(item)
+  }
+
+  if (sorted.length > 3) {
+    viewAll.textContent = `View all (${sorted.length})`
+    viewAll.style.display = "inline-block"
+    viewAll.addEventListener("click", () => {
+      vscode.postMessage({ type: "sessionList" })
     })
-    sessionBar.appendChild(delBtn)
+  } else {
+    viewAll.style.display = "none"
   }
 }
 

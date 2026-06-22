@@ -82,10 +82,52 @@ export class ChatProvider implements IProvider {
       js: "chat.js",
       body: `
   <div id="session-bar"></div>
-  <div id="messages"></div>
+
+  <div id="header">
+    <div id="brand">NEURALTOWER AGENT</div>
+    <div class="header-actions">
+      <button title="Новый чат" onclick="vscode.postMessage({type:'createSession'})">＋</button>
+      <button title="Настройки" onclick="vscode.postMessage({type:'settings'})">⚙</button>
+    </div>
+  </div>
+
+  <div id="tasks-section">
+    <div id="tasks-label">Tasks</div>
+    <div id="tasks-list"></div>
+    <div id="view-all"></div>
+  </div>
+
+  <div id="messages">
+    <div id="empty-state">
+      <svg class="empty-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M24 4C18 4 14 8 14 14c0 3 1 5 3 7-2 1-4 3-4 6 0 4 3 7 7 7h12c4 0 7-3 7-7 0-3-2-5-4-6 2-2 3-4 3-7 0-6-4-10-10-10z"/>
+        <circle cx="20" cy="16" r="1.5" fill="currentColor"/>
+        <circle cx="28" cy="16" r="1.5" fill="currentColor"/>
+        <path d="M20 22c1.5 1.5 6.5 1.5 8 0"/>
+      </svg>
+    </div>
+  </div>
+
   <form id="chat-form">
-    <input id="input" type="text" placeholder="Спросить..." autocomplete="off">
-    <button type="submit">Отправить</button>
+    <div id="input-area">
+      <div id="input-box">
+        <textarea id="input" placeholder="Do anything..." rows="1" autocomplete="off"></textarea>
+        <div id="input-toolbar">
+          <button type="button" class="toolbar-btn add" title="Прикрепить">+</button>
+          <div class="access-badge">
+            <span class="icon">⚠</span>
+            <select class="toolbar-select" id="access-level">
+              <option value="full">Full access</option>
+              <option value="limited">Limited</option>
+            </select>
+          </div>
+          <div class="toolbar-separator"></div>
+          <button type="button" class="toolbar-btn" title="Контекст IDE">✦ IDE context</button>
+          <button type="submit" id="send-btn" title="Отправить">↑</button>
+          <button type="button" id="stop-btn" title="Остановить" style="display:none">■</button>
+        </div>
+      </div>
+    </div>
   </form>`,
     })
   }
