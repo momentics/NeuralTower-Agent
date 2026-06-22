@@ -4,7 +4,6 @@ import type { App } from "../core/App"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IProvider } from "../core/IProvider"
 import type { ITodoStore } from "../agent/TodoStore"
-import type { IBackend } from "../core/IBackend"
 import type { IGitService } from "../services/git/GitService"
 import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
 import type { ICommitMessageService } from "../services/commit-message/CommitMessageService"
@@ -15,45 +14,64 @@ import { registerGitCommands } from "./GitCommands"
 import { registerChatCommands } from "./ChatCommands"
 import { registerCodeActionCommands } from "./CodeActionCommands"
 
-export interface ICommandDeps {
+/** Зависимости для редакторных команд (ISP: только нужные поля). */
+export interface IEditorCommandDeps {
   app: App
   agent: IAgentOrchestrator
-  chatProvider: IProvider
-  todoStore: ITodoStore
-  backend: IBackend
   gitService: IGitService
-  diffViewer: IDiffViewerProvider
-  settingsProvider: ISettingsProvider
-  commitMessageService: ICommitMessageService
-  extUri: vscode.Uri
-  codebaseIndexer: ICodebaseIndexer
+  diffViewer: IDiffViewerProvider | undefined
   outputChannel: vscode.OutputChannel
 }
 
-/** Зарегистрировать все команды расширения. */
-export function registerAllCommands(deps: ICommandDeps): void {
-  registerEditorCommands(deps.app, deps.agent, deps.gitService, deps.diffViewer, deps.outputChannel)
-  registerGitCommands(deps.app, deps.commitMessageService)
-  registerChatCommands(
-    deps.app,
-    deps.chatProvider,
-    deps.todoStore,
-    deps.agent,
-    deps.backend,
-    deps.gitService,
-    deps.diffViewer,
-    deps.settingsProvider,
-    deps.extUri,
-    deps.outputChannel,
-  )
-  registerCodeActionCommands(deps.app, deps.agent, deps.gitService, deps.diffViewer, deps.outputChannel)
+/** Зависимости для команд чата (ISP: только нужные поля). */
+export interface IChatCommandDeps {
+  app: App
+  chatProvider: IProvider
+  todoStore: ITodoStore
+  agent: IAgentOrchestrator
+  gitService: IGitService | undefined
+  diffViewer: IDiffViewerProvider | undefined
+  settingsProvider: ISettingsProvider
+}
 
-  deps.app.registerCommand("neuralTowerAgent.reindex", async () => {
+/** Зависимости для Git-команд (ISP: только нужные поля). */
+export interface IGitCommandDeps {
+  app: App
+  commitMessageService: ICommitMessageService
+}
+
+/** Зависимости для команды реиндексации (ISP: только нужные поля). */
+export interface IIndexCommandDeps {
+  app: App
+  codebaseIndexer: ICodebaseIndexer
+}
+
+/** Зарегистрировать все команды расширения. */
+export function registerAllCommands(
+  editorDeps: IEditorCommandDeps,
+  chatDeps: IChatCommandDeps,
+  gitDeps: IGitCommandDeps,
+  indexDeps: IIndexCommandDeps,
+): void {
+  registerEditorCommands(editorDeps.app, editorDeps.agent, editorDeps.gitService, editorDeps.diffViewer, editorDeps.outputChannel)
+  registerGitCommands(gitDeps.app, gitDeps.commitMessageService)
+  registerChatCommands(
+    chatDeps.app,
+    chatDeps.chatProvider,
+    chatDeps.todoStore,
+    chatDeps.agent,
+    chatDeps.gitService,
+    chatDeps.diffViewer,
+    chatDeps.settingsProvider,
+  )
+  registerCodeActionCommands(editorDeps.app, editorDeps.agent, editorDeps.gitService, editorDeps.diffViewer, editorDeps.outputChannel)
+
+  indexDeps.app.registerCommand("neuralTowerAgent.reindex", async () => {
     const folder = vscode.workspace.workspaceFolders?.[0]
     if (!folder) {
       vscode.window.showWarningMessage("Рабочая область не открыта")
       return
     }
-    await deps.codebaseIndexer.reindex(folder.uri.fsPath)
+    await indexDeps.codebaseIndexer.reindex(folder.uri.fsPath)
   })
 }

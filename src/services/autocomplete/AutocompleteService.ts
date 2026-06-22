@@ -27,66 +27,44 @@ export interface ILanguageCompletionConfig {
  * Реестр конфигураций автодополнения по языкам.
  * Для добавления нового языка достаточно внести запись в этот объект.
  */
+const JS_KEYWORDS = [
+  "const", "let", "var", "function", "async", "await", "return",
+  "import", "export", "default", "from", "class", "extends",
+  "interface", "type", "enum", "implements", "public", "private",
+  "protected", "static", "readonly", "if", "else", "while",
+  "for", "do", "switch", "case", "break", "continue", "try",
+  "catch", "finally", "throw", "new", "this", "super",
+  "typeof", "instanceof", "void", "null", "undefined", "true",
+  "false", "constructor", "get", "set", "declare", "abstract",
+  "override", "namespace", "module", "as", "in", "of",
+] as const
+
+const JS_BUILTINS = [
+  "toString", "valueOf", "hasOwnProperty", "constructor",
+  "push", "pop", "shift", "unshift", "splice", "slice",
+  "map", "filter", "reduce", "forEach", "find", "findIndex",
+  "some", "every", "includes", "indexOf", "lastIndexOf",
+  "concat", "join", "sort", "reverse", "flat", "flatMap",
+  "entries", "keys", "values", "length",
+  "trim", "trimStart", "trimEnd", "toUpperCase", "toLowerCase",
+  "charAt", "charCodeAt", "startsWith", "endsWith", "repeat",
+  "replace", "replaceAll", "split", "substr", "substring",
+  "log", "error", "warn", "info", "debug",
+  "then", "catch", "finally", "resolve", "reject",
+  "querySelector", "querySelectorAll", "addEventListener",
+  "removeEventListener", "appendChild", "removeChild",
+  "createElement", "getElementById", "getElementsByClassName",
+  "getElementsByName", "getElementsByTagName",
+] as const
+
 export const LANGUAGE_COMPLETIONS: Record<string, ILanguageCompletionConfig> = {
   javascript: {
-    keywords: [
-      "const", "let", "var", "function", "async", "await", "return",
-      "import", "export", "default", "from", "class", "extends",
-      "interface", "type", "enum", "implements", "public", "private",
-      "protected", "static", "readonly", "if", "else", "while",
-      "for", "do", "switch", "case", "break", "continue", "try",
-      "catch", "finally", "throw", "new", "this", "super",
-      "typeof", "instanceof", "void", "null", "undefined", "true",
-      "false", "constructor", "get", "set", "declare", "abstract",
-      "override", "namespace", "module", "as", "in", "of",
-    ],
-    builtins: [
-      "toString", "valueOf", "hasOwnProperty", "constructor",
-      "push", "pop", "shift", "unshift", "splice", "slice",
-      "map", "filter", "reduce", "forEach", "find", "findIndex",
-      "some", "every", "includes", "indexOf", "lastIndexOf",
-      "concat", "join", "sort", "reverse", "flat", "flatMap",
-      "entries", "keys", "values", "length",
-      "trim", "trimStart", "trimEnd", "toUpperCase", "toLowerCase",
-      "charAt", "charCodeAt", "startsWith", "endsWith", "repeat",
-      "replace", "replaceAll", "split", "substr", "substring",
-      "log", "error", "warn", "info", "debug",
-      "then", "catch", "finally", "resolve", "reject",
-      "querySelector", "querySelectorAll", "addEventListener",
-      "removeEventListener", "appendChild", "removeChild",
-      "createElement", "getElementById", "getElementsByClassName",
-      "getElementsByName", "getElementsByTagName",
-    ],
+    keywords: [...JS_KEYWORDS],
+    builtins: [...JS_BUILTINS],
   },
   typescript: {
-    keywords: [
-      "const", "let", "var", "function", "async", "await", "return",
-      "import", "export", "default", "from", "class", "extends",
-      "interface", "type", "enum", "implements", "public", "private",
-      "protected", "static", "readonly", "if", "else", "while",
-      "for", "do", "switch", "case", "break", "continue", "try",
-      "catch", "finally", "throw", "new", "this", "super",
-      "typeof", "instanceof", "void", "null", "undefined", "true",
-      "false", "constructor", "get", "set", "declare", "abstract",
-      "override", "namespace", "module", "as", "in", "of",
-    ],
-    builtins: [
-      "toString", "valueOf", "hasOwnProperty", "constructor",
-      "push", "pop", "shift", "unshift", "splice", "slice",
-      "map", "filter", "reduce", "forEach", "find", "findIndex",
-      "some", "every", "includes", "indexOf", "lastIndexOf",
-      "concat", "join", "sort", "reverse", "flat", "flatMap",
-      "entries", "keys", "values", "length",
-      "trim", "trimStart", "trimEnd", "toUpperCase", "toLowerCase",
-      "charAt", "charCodeAt", "startsWith", "endsWith", "repeat",
-      "replace", "replaceAll", "split", "substr", "substring",
-      "log", "error", "warn", "info", "debug",
-      "then", "catch", "finally", "resolve", "reject",
-      "querySelector", "querySelectorAll", "addEventListener",
-      "removeEventListener", "appendChild", "removeChild",
-      "createElement", "getElementById", "getElementsByClassName",
-      "getElementsByName", "getElementsByTagName",
-    ],
+    keywords: [...JS_KEYWORDS],
+    builtins: [...JS_BUILTINS],
   },
   python: {
     keywords: [
@@ -128,6 +106,7 @@ export class AutocompleteService implements IPlugin, vscode.InlineCompletionItem
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
   private pendingAbort: AbortController | null = null
   private isInitialized = false
+  private disposables: vscode.Disposable[] = []
 
   // ── Настройки ───────────────────────────────────────────
 
@@ -151,6 +130,11 @@ export class AutocompleteService implements IPlugin, vscode.InlineCompletionItem
 
   async init(): Promise<void> {
     this.isInitialized = true
+    this.disposables.push(
+      vscode.workspace.onDidChangeTextDocument((e) => {
+        this.invalidateCacheForFile(e.document.uri.fsPath)
+      }),
+    )
   }
 
   dispose(): void {
@@ -161,7 +145,24 @@ export class AutocompleteService implements IPlugin, vscode.InlineCompletionItem
       clearTimeout(this.debounceTimer)
       this.debounceTimer = null
     }
+    for (const d of this.disposables) d.dispose()
+    this.disposables = []
     this.isInitialized = false
+  }
+
+  // ── Инвалидация кэша при изменении файла ────────────────
+
+  private invalidateCacheForFile(filePath: string): void {
+    const prefix = `${filePath}:`
+    for (const key of this.cacheOrder) {
+      if (key.startsWith(prefix)) {
+        this.cache.delete(key)
+      }
+    }
+    const idx = this.cacheOrder.findIndex((k) => k.startsWith(prefix))
+    if (idx !== -1) {
+      this.cacheOrder.splice(idx, this.cacheOrder.filter((k) => k.startsWith(prefix)).length)
+    }
   }
 
   // ── Провайдер инлайн-дополнений ─────────────────────────

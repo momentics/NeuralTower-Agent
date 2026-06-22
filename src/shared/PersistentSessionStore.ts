@@ -1,5 +1,4 @@
 import * as vscode from "vscode"
-import * as fs from "fs/promises"
 import * as path from "path"
 import type { IChatMessage } from "../core/IBackend"
 import type {
@@ -17,6 +16,39 @@ const log = createDomainLogger("SessionStore")
 const SESSION_TITLE_TRUNCATE = 60
 const DEFAULT_SESSION_TITLE = "Без названия"
 const DEFAULT_MAX_SESSIONS = 50
+
+/**
+ * Интерфейс персистентности сессий — абстрагирует файловый I/O
+ * от бизнес-логики хранилища (DIP, SRP).
+ */
+export interface ISessionPersister {
+  /** Загрузить данные из хранилища. */
+  load(): Promise<ISessionData | null>
+  /** Сохранить данные в хранилище. */
+  save(data: ISessionData): Promise<void>
+}
+
+/**
+ * Реализация ISessionPersister через JSON-файл на диске.
+ */
+export class FileSessionPersister implements ISessionPersister {
+  constructor(private readonly filePath: string) {}
+
+  async load(): Promise<ISessionData | null> {
+    const { readFile } = await import("fs/promises")
+    try {
+      const raw = await readFile(this.filePath, "utf-8")
+      return JSON.parse(raw) as ISessionData
+    } catch {
+      return null
+    }
+  }
+
+  async save(data: ISessionData): Promise<void> {
+    const { writeFile } = await import("fs/promises")
+    await writeFile(this.filePath, JSON.stringify(data, null, 2), "utf-8")
+  }
+}
 
 export interface ISessionStore {
   init(): Promise<void>
@@ -44,33 +76,38 @@ const DEFAULT_DATA: ISessionData = {
 export class PersistentSessionStore implements IPlugin, ISessionStore {
   name = "session-store"
   private data: ISessionData = { ...DEFAULT_DATA }
-  private readonly storagePath: string
   private readonly maxSessions: number
   private readonly mutex = new Mutex()
   private disposed = false
 
   constructor(
-    storageUri: vscode.Uri,
+    private readonly persister: ISessionPersister,
     maxSessions = DEFAULT_MAX_SESSIONS,
   ) {
-    this.storagePath = path.join(
+    this.maxSessions = maxSessions
+  }
+
+  /**
+   * Создать хранилище с файловой персистентностью (удобный конструктор).
+   */
+  static withFileStorage(
+    storageUri: vscode.Uri,
+    maxSessions = DEFAULT_MAX_SESSIONS,
+  ): PersistentSessionStore {
+    const filePath = path.join(
       storageUri.fsPath,
       "neuralTowerAgent-sessions.json",
     )
-    this.maxSessions = maxSessions
+    const persister = new FileSessionPersister(filePath)
+    return new PersistentSessionStore(persister, maxSessions)
   }
 
   async init(): Promise<void> {
     await this.mutex.withLock(async () => {
-      try {
-        const raw = await fs.readFile(this.storagePath, "utf-8")
-        this.data = JSON.parse(raw) as ISessionData
-        if (!this.data.sessions.length && !this.data.activeId) {
-          this.createDefault()
-        }
-      } catch (err: unknown) {
-        const msg = errorMessage(err)
-        log.error(`Не удалось загрузить хранилище сессий: ${msg}`)
+      const loaded = await this.persister.load()
+      if (loaded && loaded.sessions.length && loaded.activeId) {
+        this.data = loaded
+      } else {
         this.data = { ...DEFAULT_DATA }
         this.createDefault()
       }
@@ -79,13 +116,8 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
 
   async save(): Promise<void> {
     await this.mutex.withLock(async () => {
-      await this._save()
+      await this.persister.save(this.data)
     })
-  }
-
-  /** Сохранение без мьютекса — для вызова изнутри withLock. */
-  private async _save(): Promise<void> {
-    await fs.writeFile(this.storagePath, JSON.stringify(this.data, null, 2), "utf-8")
   }
 
   get activeId(): string {
@@ -124,7 +156,7 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
       if (this.data.sessions.length > this.maxSessions) {
         this.trimOldSessions()
       }
-      await this._save()
+      await this.persister.save(this.data)
     })
   }
 
@@ -149,7 +181,7 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
         }
       }
       this.data.activeId = id
-      await this._save()
+      await this.persister.save(this.data)
       return id
     })
   }
@@ -166,7 +198,7 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
         this.data.activeId = this.data.sessions[0]?.id ?? ""
         if (!this.data.activeId) this.createDefault()
       }
-      await this._save()
+      await this.persister.save(this.data)
       return true
     })
   }
@@ -176,7 +208,7 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
       const session = this.data.sessions.find((s) => s.id === id)
       if (session) {
         session.pinned = !session.pinned
-        await this._save()
+        await this.persister.save(this.data)
       }
     })
   }
@@ -186,7 +218,7 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
       const session = this.data.sessions.find((s) => s.id === id)
       if (session) {
         session.title = title
-        await this._save()
+        await this.persister.save(this.data)
       }
     })
   }
@@ -212,7 +244,7 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
       )
       const session = this.data.sessions.find((s) => s.id === this.data.activeId)
       if (session) session.messageCount = 0
-      await this._save()
+      await this.persister.save(this.data)
     })
   }
 

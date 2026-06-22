@@ -96,13 +96,16 @@ vi.mock("./services/telemetry/TelemetryService", () => ({
   })),
 }))
 
-vi.mock("./shared/PersistentSessionStore", () => ({
-  PersistentSessionStore: vi.fn().mockImplementation(() => ({
+vi.mock("./shared/PersistentSessionStore", () => {
+  const mockStore = {
     init: vi.fn().mockResolvedValue(undefined),
     dispose: vi.fn(),
     activeId: "session-1",
-  })),
-}))
+  }
+  const cls = vi.fn().mockImplementation(() => mockStore)
+  cls.withFileStorage = vi.fn().mockReturnValue(mockStore)
+  return { PersistentSessionStore: cls }
+})
 
 vi.mock("./services/permission/PermissionManager", () => ({
   PermissionManager: vi.fn().mockImplementation(() => ({
@@ -271,7 +274,7 @@ describe("extension", () => {
     it("creates and initializes session store", async () => {
       await activate(ctx)
       const { PersistentSessionStore } = await import("./shared/PersistentSessionStore")
-      expect(PersistentSessionStore).toHaveBeenCalledWith(ctx.globalStorageUri, expect.any(Number))
+      expect(PersistentSessionStore.withFileStorage).toHaveBeenCalledWith(ctx.globalStorageUri, expect.any(Number))
     })
 
     it("creates and configures permission manager", async () => {

@@ -121,15 +121,15 @@ export interface IWindowService {
  */
 export class VscodeWindowService implements IWindowService {
   showInformationMessage(message: string, ...args: (string | vscode.MessageOptions)[]): Thenable<string | undefined> {
-    return (vscode.window.showInformationMessage as any)(message, ...args)
+    return vscode.window.showInformationMessage(message, ...(args as unknown as string[])) as unknown as Thenable<string | undefined>
   }
 
   showWarningMessage(message: string, ...args: (string | vscode.MessageOptions)[]): Thenable<string | undefined> {
-    return (vscode.window.showWarningMessage as any)(message, ...args)
+    return vscode.window.showWarningMessage(message, ...(args as unknown as string[])) as unknown as Thenable<string | undefined>
   }
 
   showErrorMessage(message: string, ...args: (string | vscode.MessageOptions)[]): Thenable<string | undefined> {
-    return (vscode.window.showErrorMessage as any)(message, ...args)
+    return vscode.window.showErrorMessage(message, ...(args as unknown as string[])) as unknown as Thenable<string | undefined>
   }
 
   showInputBox(options?: vscode.InputBoxOptions): Thenable<string | undefined> {

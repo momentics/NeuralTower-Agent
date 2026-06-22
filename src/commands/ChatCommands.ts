@@ -3,7 +3,6 @@ import type { App } from "../core/App"
 import type { IProvider } from "../core/IProvider"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ITodoStore } from "../agent/TodoStore"
-import type { IBackend } from "../core/IBackend"
 import type { IGitService } from "../services/git/GitService"
 import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
 import type { ISettingsProvider } from "../providers/SettingsProvider"
@@ -14,12 +13,9 @@ export function registerChatCommands(
   chatProvider: IProvider,
   todoStore: ITodoStore,
   agent: IAgentOrchestrator,
-  _backend: IBackend,
   gitService: IGitService | undefined,
   diffViewer: IDiffViewerProvider | undefined,
   settingsProvider: ISettingsProvider,
-  _extUri: vscode.Uri,
-  _outputChannel: vscode.OutputChannel,
 ): void {
   app.registerCommand("neuralTowerAgent.newChat", () => {
     chatProvider.broadcastNewChat?.()

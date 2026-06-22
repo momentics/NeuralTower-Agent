@@ -33,20 +33,12 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   vscode.languages.registerCodeActionsProvider("*", codeActionProvider, codeActionProviderMetadata)
 
   // ── Команды ─────────────────────────────────────────────
-  registerAllCommands({
-    app,
-    agent: deps.agent,
-    chatProvider: deps.chatProvider,
-    todoStore: deps.todoStore,
-    backend: deps.backend,
-    gitService: deps.gitService,
-    diffViewer: deps.diffViewer,
-    settingsProvider: deps.settingsProvider,
-    commitMessageService: deps.commitMessageService,
-    extUri: ctx.extensionUri,
-    codebaseIndexer: deps.codebaseIndexer,
-    outputChannel,
-  })
+  registerAllCommands(
+    { app, agent: deps.agent, gitService: deps.gitService, diffViewer: deps.diffViewer, outputChannel },
+    { app, chatProvider: deps.chatProvider, todoStore: deps.todoStore, agent: deps.agent, gitService: deps.gitService, diffViewer: deps.diffViewer, settingsProvider: deps.settingsProvider },
+    { app, commitMessageService: deps.commitMessageService },
+    { app, codebaseIndexer: deps.codebaseIndexer },
+  )
 
   // ── Сериализаторы панелей Webview ─────────────────────────────
   vscode.window.registerWebviewPanelSerializer(

@@ -1,5 +1,5 @@
 export type { IService, IPlugin } from "./Types"
-export { PersistentSessionStore, type ISessionStore } from "./PersistentSessionStore"
+export { PersistentSessionStore, FileSessionPersister, type ISessionStore, type ISessionPersister } from "./PersistentSessionStore"
 export { Mutex } from "./Mutex"
 export { LRUCache } from "./LRUCache"
 export { TombstoneStore } from "./TombstoneStore"

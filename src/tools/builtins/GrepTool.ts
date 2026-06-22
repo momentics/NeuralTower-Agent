@@ -1,18 +1,15 @@
 import type { IToolSchema } from "../ITool"
 import type { IToolResult } from "../../agent/AgentTypes"
-import { execFile } from "node:child_process"
-import { promisify } from "node:util"
 import * as fs from "fs/promises"
 import * as path from "path"
 import { walkDirectory } from "../../utils/FileSystem"
+import { runProcess } from "../../utils/ProcessRunner"
 import { createDomainLogger } from "../../core/Logger"
 import { errorMessage } from "../../core/Errors"
 import { FilesystemTool } from "./FilesystemTool"
 import { str, strOpt } from "../ToolArgs"
 
 const log = createDomainLogger("Grep")
-
-const execFileAsync = promisify(execFile)
 
 const RG_TIMEOUT_MS = 15000
 const RG_MAX_BUFFER = 512 * 1024
@@ -67,10 +64,10 @@ export class GrepTool extends FilesystemTool {
     include: string | undefined,
   ): Promise<IToolResult> {
     const fileArg = include ? ["-g", include, root] : [root]
-    const { stdout, stderr } = await execFileAsync("rg", [
+    const { stdout, stderr, code } = await runProcess("rg", [
       "-n", "--no-heading", "--color=never", pattern, ...fileArg,
     ], { timeout: RG_TIMEOUT_MS, maxBuffer: RG_MAX_BUFFER })
-    if (stderr && !stdout) {
+    if (code !== 0 && code !== 1 && stderr) {
       return { output: `Ошибка ripgrep: ${stderr}`, success: false }
     }
     return { output: stdout || "Совпадений не найдено", success: true }

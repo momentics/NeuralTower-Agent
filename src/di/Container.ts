@@ -252,7 +252,7 @@ export async function createServicesDomain(
   vsCfg: vscode.WorkspaceConfiguration,
   sessionConfig: ISessionConfig,
 ): Promise<IServicesDeps> {
-  const sessionStore = new PersistentSessionStore(ctx.globalStorageUri, sessionConfig.maxSessions)
+  const sessionStore = PersistentSessionStore.withFileStorage(ctx.globalStorageUri, sessionConfig.maxSessions)
   await sessionStore.init()
 
   const permissionManager = new PermissionManager(ctx.globalState)
