@@ -53,7 +53,7 @@ export class ChatProvider implements IProvider {
 
   broadcastNewChat(): void {
     if (this.panel && this.messageHandler) {
-      this.sessionStore.newSession()
+      this.sessionStore.newSession().catch(() => {})
       this.messageHandler.sendSessionList()
       this.panel.webview.postMessage({ type: "newChat" } as ExtToWebview)
     }

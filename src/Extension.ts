@@ -10,12 +10,27 @@ import { errorMessage } from "./core/Errors"
 
 const log = createDomainLogger("Extension")
 
+/**
+ * Глобальный обработчик необработанных отказов промисов.
+ * VS Code убивает расширение при unhandled rejection, поэтому
+ * ловим все отклонения и логируем их для диагностики.
+ */
+function setupUnhandledRejectionHandler(): void {
+  process.on("unhandledRejection", (reason: unknown, promise: Promise<unknown>) => {
+    const msg = errorMessage(reason)
+    log.error(`UNHANDLED REJECTION: ${msg}`)
+    log.error(`  Stack: ${reason instanceof Error ? reason.stack : "N/A"}`)
+    vscode.window.showErrorMessage(`NeuralTower Agent: внутренняя ошибка: ${msg}`)
+  })
+}
+
 let app: App | undefined
 let initInProgress = false
 
 export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   app = new App(ctx)
   const currentApp = app
+  setupUnhandledRejectionHandler()
   const deps = await createDeps(ctx)
   const outputChannel = createOutputChannel()
 

@@ -483,10 +483,14 @@ export async function createDeps(
   const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
 
   const backend = createBackend(config, async (partial) => {
-    if (partial.url !== undefined) await vsCfg.update("neuralTowerUrl", partial.url, true)
-    if (partial.model !== undefined) await vsCfg.update("model", partial.model, true)
-    if (partial.maxRetries !== undefined) await vsCfg.update("maxRetries", partial.maxRetries, true)
-    if (partial.timeoutMs !== undefined) await vsCfg.update("timeoutMs", partial.timeoutMs, true)
+    try {
+      if (partial.url !== undefined) await vsCfg.update("neuralTowerUrl", partial.url, true)
+      if (partial.model !== undefined) await vsCfg.update("model", partial.model, true)
+      if (partial.maxRetries !== undefined) await vsCfg.update("maxRetries", partial.maxRetries, true)
+      if (partial.timeoutMs !== undefined) await vsCfg.update("timeoutMs", partial.timeoutMs, true)
+    } catch (err: unknown) {
+      log.error(`Ошибка сохранения конфигурации: ${errorMessage(err)}`)
+    }
   })
 
   // ── Сервисы ─────────────────────────────────────────────

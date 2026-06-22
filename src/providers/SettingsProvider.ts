@@ -3,6 +3,10 @@ import type { IBackend } from "../core/IBackend"
 import type { SettingsToExt, ExtToSettings } from "../shared/Messages"
 import { UI_MIN_BACKEND_TIMEOUT_MS } from "../core/Config"
 import { buildWebviewHtml } from "../shared/WebviewBuilder"
+import { errorMessage } from "../core/Errors"
+import { createDomainLogger } from "../core/Logger"
+
+const log = createDomainLogger("Settings")
 
 /**
  * Интерфейс провайдера настроек.
@@ -37,7 +41,9 @@ export class SettingsProvider implements ISettingsProvider {
     )
     this._panel.webview.html = this.html()
     this.setupHandler()
-    this.loadData()
+    this.loadData().catch((err: unknown) => {
+      log.error(`Ошибка загрузки настроек: ${errorMessage(err)}`)
+    })
     this._panel.onDidDispose(() => { this._panel = undefined })
   }
 
@@ -76,47 +82,53 @@ export class SettingsProvider implements ISettingsProvider {
 
   private setupHandler(): void {
     const disposable = this.getWebview().onDidReceiveMessage(async (msg: SettingsToExt) => {
-      switch (msg.type) {
-        case "settingsSave": {
-          const url = typeof msg.url === "string" && msg.url.trim() ? msg.url.trim() : undefined
-          const model = typeof msg.model === "string" && msg.model.trim() ? msg.model.trim() : undefined
-          if (!url && !model) {
-            this.getWebview().postMessage({
-              type: "settingsTestResult",
-              success: false,
-              message: "Укажите адрес сервера или модель",
-            } as ExtToSettings)
+      try {
+        switch (msg.type) {
+          case "settingsSave": {
+            const url = typeof msg.url === "string" && msg.url.trim() ? msg.url.trim() : undefined
+            const model = typeof msg.model === "string" && msg.model.trim() ? msg.model.trim() : undefined
+            if (!url && !model) {
+              this.getWebview().postMessage({
+                type: "settingsTestResult",
+                success: false,
+                message: "Укажите адрес сервера или модель",
+              } as ExtToSettings)
+              break
+            }
+            const config: Record<string, unknown> = {}
+            if (url) config.url = url
+            if (model) config.model = model
+            await this.backend.updateConfig(config)
+            if (typeof msg.maxRetries === "number" && msg.maxRetries >= 0 && msg.maxRetries <= 10) {
+              await this.backend.updateConfig({ maxRetries: msg.maxRetries })
+            }
+            if (typeof msg.timeoutMs === "number" && msg.timeoutMs >= UI_MIN_BACKEND_TIMEOUT_MS) {
+              await this.backend.updateConfig({ timeoutMs: msg.timeoutMs })
+            }
+            if (typeof msg.autoApprove === "boolean") {
+              await vscode.workspace.getConfiguration("neuralTowerAgent").update(
+                "autoApprove.enabled",
+                msg.autoApprove,
+                true,
+              )
+            }
+            this.getWebview().postMessage({ type: "settingsSaved" } as ExtToSettings)
+            vscode.window.showInformationMessage("Настройки сохранены")
             break
           }
-          const config: Record<string, unknown> = {}
-          if (url) config.url = url
-          if (model) config.model = model
-          await this.backend.updateConfig(config)
-          if (typeof msg.maxRetries === "number" && msg.maxRetries >= 0 && msg.maxRetries <= 10) {
-            await this.backend.updateConfig({ maxRetries: msg.maxRetries })
-          }
-          if (typeof msg.timeoutMs === "number" && msg.timeoutMs >= UI_MIN_BACKEND_TIMEOUT_MS) {
-            await this.backend.updateConfig({ timeoutMs: msg.timeoutMs })
-          }
-          if (typeof msg.autoApprove === "boolean") {
-            await vscode.workspace.getConfiguration("neuralTowerAgent").update(
-              "autoApprove.enabled",
-              msg.autoApprove,
-              true,
-            )
-          }
-          this.getWebview().postMessage({ type: "settingsSaved" } as ExtToSettings)
-          vscode.window.showInformationMessage("Настройки сохранены")
-          break
+          case "settingsTest":
+            const ok = await this.backend.healthCheck()
+            this.getWebview().postMessage({
+              type: "settingsTestResult",
+              success: ok,
+              message: ok ? "Подключено" : "Не удалось подключиться",
+            } as ExtToSettings)
+            break
         }
-        case "settingsTest":
-          const ok = await this.backend.healthCheck()
-          this.getWebview().postMessage({
-            type: "settingsTestResult",
-            success: ok,
-            message: ok ? "Подключено" : "Не удалось подключиться",
-          } as ExtToSettings)
-          break
+      } catch (err: unknown) {
+        const msg = errorMessage(err)
+        log.error(`Ошибка обработки сообщения настроек: ${msg}`)
+        vscode.window.showErrorMessage(`NeuralTower Agent: ошибка настроек: ${msg}`)
       }
     })
     this.disposables.push(disposable)

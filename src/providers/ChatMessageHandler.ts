@@ -4,7 +4,7 @@ import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { INotificationService } from "../services/notification/NotificationService"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import type { WebviewToExt, ExtToWebview } from "../shared/Messages"
-import { handleBackendError } from "../core/Errors"
+import { handleBackendError, errorMessage } from "../core/Errors"
 import { UI_ARGS_LOG_TRUNCATE } from "../core/Config"
 
 const PLAN_MARKER = "__PLAN__"
@@ -66,59 +66,69 @@ export class ChatMessageHandler {
 
   private createMessageHandler(): vscode.Disposable {
     return this.webview.onDidReceiveMessage(async (msg: WebviewToExt) => {
-      if (this.streaming && msg.type !== "permissionResponse" && msg.type !== "stopAgent") return
+      try {
+        if (this.streaming && msg.type !== "permissionResponse" && msg.type !== "stopAgent") return
 
-      switch (msg.type) {
-        case "sendMessage": {
-          const content = msg.content?.trim()
-          if (!content) return
-          await this.handleMessage(content)
-          break
+        switch (msg.type) {
+          case "sendMessage": {
+            const content = msg.content?.trim()
+            if (!content) return
+            await this.handleMessage(content)
+            break
+          }
+          case "switchSession":
+            this.sessionStore.setActive(msg.sessionId)
+            const messages = this.sessionStore.getActiveMessages()
+            await this.agent.restoreSession(messages)
+            this.sendActiveMessages()
+            this.sendSessionList()
+            break
+          case "createSession":
+            await this.sessionStore.newSession()
+            this.sendSessionList()
+            break
+          case "deleteSession":
+            await this.sessionStore.deleteSession(msg.sessionId)
+            this.sendSessionList()
+            break
+          case "pinSession":
+            await this.sessionStore.togglePin(msg.sessionId)
+            this.sendSessionList()
+            break
+          case "renameSession":
+            await this.sessionStore.rename(msg.sessionId, msg.title)
+            this.sendSessionList()
+            break
+          case "sessionList":
+            this.sendSessionList()
+            break
+          case "permissionResponse":
+            this.handlePermissionResponse(msg)
+            break
+          case "stopAgent":
+            this.abortController?.abort()
+            break
         }
-        case "switchSession":
-          this.sessionStore.setActive(msg.sessionId)
-          const messages = this.sessionStore.getActiveMessages()
-          await this.agent.restoreSession(messages)
-          this.sendActiveMessages()
-          this.sendSessionList()
-          break
-        case "createSession":
-          await this.sessionStore.newSession()
-          this.sendSessionList()
-          break
-        case "deleteSession":
-          await this.sessionStore.deleteSession(msg.sessionId)
-          this.sendSessionList()
-          break
-        case "pinSession":
-          await this.sessionStore.togglePin(msg.sessionId)
-          this.sendSessionList()
-          break
-        case "renameSession":
-          await this.sessionStore.rename(msg.sessionId, msg.title)
-          this.sendSessionList()
-          break
-        case "sessionList":
-          this.sendSessionList()
-          break
-        case "permissionResponse":
-          this.handlePermissionResponse(msg)
-          break
-        case "stopAgent":
-          this.abortController?.abort()
-          break
+      } catch (err: unknown) {
+        const msg = errorMessage(err)
+        vscode.window.showErrorMessage(`NeuralTower Agent: ошибка обработки сообщения: ${msg}`)
       }
     })
   }
 
   private createPermissionHandler(): vscode.Disposable {
     return this.permissionManager.onDidRequestPermission(async (req) => {
-      this.webview.postMessage({
-        type: "permissionRequest",
-        requestId: req.id ?? "",
-        toolName: req.toolName,
-        description: `Инструмент "${req.toolName}" хочет выполнить вызов с аргументами: ${JSON.stringify(req.args).slice(0, UI_ARGS_LOG_TRUNCATE)}`,
-      } as ExtToWebview)
+      try {
+        this.webview.postMessage({
+          type: "permissionRequest",
+          requestId: req.id ?? "",
+          toolName: req.toolName,
+          description: `Инструмент "${req.toolName}" хочет выполнить вызов с аргументами: ${JSON.stringify(req.args).slice(0, UI_ARGS_LOG_TRUNCATE)}`,
+        } as ExtToWebview)
+      } catch (err: unknown) {
+        const msg = errorMessage(err)
+        vscode.window.showErrorMessage(`NeuralTower Agent: ошибка запроса разрешения: ${msg}`)
+      }
     })
   }
 

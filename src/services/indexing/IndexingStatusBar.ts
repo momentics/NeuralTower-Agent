@@ -2,6 +2,10 @@ import * as vscode from "vscode"
 import type { CodebaseIndexer, IndexingState } from "./CodebaseIndexer"
 import type { IPlugin } from "../../shared/Types"
 import { StatusBarIndicator } from "../../services/StatusBarIndicator"
+import { createDomainLogger } from "../../core/Logger"
+import { errorMessage } from "../../core/Errors"
+
+const log = createDomainLogger("IndexingStatusBar")
 
 export class IndexingStatusBar extends StatusBarIndicator implements IPlugin {
   name = "indexing-status"
@@ -18,13 +22,21 @@ export class IndexingStatusBar extends StatusBarIndicator implements IPlugin {
     )
     this.stateDisposable = this.indexer.onDidChangeState((s) => {
       this.state = s
-      this.syncBar()
+      try {
+        this.syncBar()
+      } catch (err: unknown) {
+        log.error(`Ошибка обновления статус-бара: ${errorMessage(err)}`)
+      }
     })
   }
 
   async init(): Promise<void> {
     this.state = this.indexer.getState()
-    this.syncBar()
+    try {
+      this.syncBar()
+    } catch (err: unknown) {
+      log.error(`Ошибка инициализации статус-бара: ${errorMessage(err)}`)
+    }
   }
 
   override dispose(): void {
