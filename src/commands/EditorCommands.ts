@@ -4,7 +4,7 @@ import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IGitService } from "../services/git/GitService"
 import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
 import { createEditorCommand } from "./index"
-import { EDITOR_ACTIONS } from "./action-definitions"
+import { EDITOR_ACTIONS } from "./ActionDefinitions"
 
 export function registerEditorCommands(
   app: App,

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { makeMCPProvider } from "./mcp"
+import { makeMCPProvider } from "./Mcp"
 
 describe("makeMCPProvider", () => {
   it("returns empty when no tools", async () => {

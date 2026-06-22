@@ -9,8 +9,8 @@ import type { AgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
 import type { Plan } from "./Plan"
 import type { TodoStore } from "./TodoStore"
 import type { ToolResult } from "./AgentTypes"
-import type { ContextItem } from "../core/providers/context/types"
-import { errorMessage } from "../core/errors"
+import type { ContextItem } from "../core/providers/context/Types"
+import { errorMessage } from "../core/Errors"
 
 /**
  * AgentOrchestrator — тонкий фасад над AgentCore.

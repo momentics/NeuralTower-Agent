@@ -13,8 +13,8 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import { detectLanguageShort } from "../utils/LanguageDetector"
 import { walkDirectory } from "../utils/FileSystem"
-import { errorMessage } from "../core/errors"
-import { createDomainLogger } from "../core/logger"
+import { errorMessage } from "../core/Errors"
+import { createDomainLogger } from "../core/Logger"
 import { LRUCache } from "../shared/LRUCache"
 
 const log = createDomainLogger("FileIndex")

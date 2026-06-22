@@ -5,7 +5,7 @@ import type { AgentModeName } from "./AgentMode"
 import type { AgentOrchestrator } from "./AgentOrchestrator"
 import type { AgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
 import type { TodoStore } from "./TodoStore"
-import { errorMessage } from "../core/errors"
+import { errorMessage } from "../core/Errors"
 
 /**
  * Состояние подагента.

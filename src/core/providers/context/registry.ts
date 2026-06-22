@@ -1,4 +1,4 @@
-import type { ContextProvider } from "./types"
+import type { ContextProvider } from "./Types"
 
 /**
  * Интерфейс ContextProviderRegistry — методы, используемые через AgentDependencies.

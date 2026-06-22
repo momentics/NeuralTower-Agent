@@ -11,7 +11,7 @@ import {
   executeSignatureHelp,
   MAX_SYMBOL_RESULTS,
 } from "../../lsp/LspClient"
-import { errorMessage } from "../../core/errors"
+import { errorMessage } from "../../core/Errors"
 import { BaseTool } from "./BaseTool"
 import { str, strOpt, numOpt } from "../ToolArgs"
 

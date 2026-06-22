@@ -1,6 +1,6 @@
 import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
-import { errorMessage } from "../../core/errors"
+import { errorMessage } from "../../core/Errors"
 import { runProcess } from "../../utils/ProcessRunner"
 import { BaseTool } from "./BaseTool"
 import { str, strOpt, num, clamp } from "../ToolArgs"

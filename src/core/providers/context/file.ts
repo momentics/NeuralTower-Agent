@@ -1,8 +1,8 @@
 import * as fs from "fs/promises"
 import * as path from "path"
-import type { ContextProvider, ContextItem } from "./types"
+import type { ContextProvider, ContextItem } from "./Types"
 import { detectLanguageDisplay } from "../../../utils/LanguageDetector"
-import { errorMessage } from "../../errors"
+import { errorMessage } from "../../Errors"
 
 const CONTEXT_MAX_FILE_SIZE = 200_000
 const CONTEXT_MAX_CONTENT_CHARS = 100000

@@ -14,9 +14,9 @@ import type { IFileIndex } from "../../repo/FileIndex"
 import type { ICodebaseChunker } from "../../repo/CodebaseChunker"
 import type { ICodebaseSearch } from "../../repo/CodebaseSearch"
 import type { IEmbeddingProvider } from "../../backend/IEmbeddingProvider"
-import type { Plugin } from "../../shared/types"
-import { createDomainLogger } from "../../core/logger"
-import { errorMessage } from "../../core/errors"
+import type { Plugin } from "../../shared/Types"
+import { createDomainLogger } from "../../core/Logger"
+import { errorMessage } from "../../core/Errors"
 
 const log = createDomainLogger("CodebaseIndexer")
 

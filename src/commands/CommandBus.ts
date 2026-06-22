@@ -10,10 +10,10 @@ import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
 import type { ICommitMessageService } from "../services/commit-message/CommitMessageService"
 import type { ICodebaseIndexer } from "../services/indexing/CodebaseIndexer"
 import type { ISettingsProvider } from "../providers/SettingsProvider"
-import { registerEditorCommands } from "./editor-commands"
-import { registerGitCommands } from "./git-commands"
-import { registerChatCommands } from "./chat-commands"
-import { registerCodeActionCommands } from "./code-action-commands"
+import { registerEditorCommands } from "./EditorCommands"
+import { registerGitCommands } from "./GitCommands"
+import { registerChatCommands } from "./ChatCommands"
+import { registerCodeActionCommands } from "./CodeActionCommands"
 
 export interface CommandDeps {
   app: App

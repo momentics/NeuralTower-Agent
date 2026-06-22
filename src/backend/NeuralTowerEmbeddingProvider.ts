@@ -9,8 +9,8 @@
  */
 
 import type { IEmbeddingProvider, EmbeddingProviderConfig } from "./IEmbeddingProvider"
-import { BackendError, ConnectionError, errorMessage } from "../core/errors"
-import { createDomainLogger } from "../core/logger"
+import { BackendError, ConnectionError, errorMessage } from "../core/Errors"
+import { createDomainLogger } from "../core/Logger"
 
 const log = createDomainLogger("Embedding")
 

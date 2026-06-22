@@ -1,7 +1,7 @@
 import type { AgentModeName } from "./AgentMode"
 import type { Plan } from "./Plan"
 import type { PreparedContext, ContextSnapshot } from "../core/ContextManager"
-import { AgentMismatchError, ContextError } from "../core/errors"
+import { AgentMismatchError, ContextError } from "../core/Errors"
 import type { IContextManager } from "../core/ContextManager"
 import type { ChatMessage } from "../core/IBackend"
 

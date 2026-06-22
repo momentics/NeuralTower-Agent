@@ -1,5 +1,5 @@
-import type { ContextProvider, ContextItem } from "./types"
-import { errorMessage } from "../../errors"
+import type { ContextProvider, ContextItem } from "./Types"
+import { errorMessage } from "../../Errors"
 
 const CONTEXT_TIMEOUT_MS = 15000
 const WEB_SEARCH_MAX_TOPICS = 8

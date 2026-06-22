@@ -1,8 +1,8 @@
 import type { ITool } from "../tools/ITool"
 import type { IToolRegistry } from "../tools/ToolRegistry"
 import { MCPToolAdapter } from "./MCPToolAdapter"
-import { ExecutionError, TimeoutError, errorMessage } from "../core/errors"
-import { createDomainLogger } from "../core/logger"
+import { ExecutionError, TimeoutError, errorMessage } from "../core/Errors"
+import { createDomainLogger } from "../core/Logger"
 import type { IMCPTransport } from "./MCPTransport"
 import { StdioMCPTransport, MCP_TRANSPORT_EVENTS } from "./MCPTransport"
 

@@ -1,10 +1,10 @@
 import * as vscode from "vscode"
 import type { IBackend } from "../../core/IBackend"
 import type { IContextManager } from "../../core/ContextManager"
-import type { Plugin } from "../../shared/types"
-import { createDomainLogger } from "../../core/logger"
+import type { Plugin } from "../../shared/Types"
+import { createDomainLogger } from "../../core/Logger"
 import { StatusBarIndicator } from "../../services/StatusBarIndicator"
-import { errorMessage } from "../../core/errors"
+import { errorMessage } from "../../core/Errors"
 
 const log = createDomainLogger("BackendHealth")
 

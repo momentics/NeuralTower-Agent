@@ -2,8 +2,8 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import { detectLanguageFull } from "../utils/LanguageDetector"
 import { walkDirectory } from "../utils/FileSystem"
-import { createDomainLogger } from "../core/logger"
-import { errorMessage } from "../core/errors"
+import { createDomainLogger } from "../core/Logger"
+import { errorMessage } from "../core/Errors"
 
 const log = createDomainLogger("RepoAnalyzer")
 

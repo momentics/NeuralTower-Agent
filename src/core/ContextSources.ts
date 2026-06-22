@@ -1,8 +1,8 @@
-import type { ContextProvider, ContextItem } from "./providers/context/types"
+import type { ContextProvider, ContextItem } from "./providers/context/Types"
 import type { IGitService, GitDiffError } from "../services/git/GitService"
 import type { AgentMemory } from "../agent/AgentMemory"
-import { createDomainLogger } from "./logger"
-import { errorMessage } from "./errors"
+import { createDomainLogger } from "./Logger"
+import { errorMessage } from "./Errors"
 
 const log = createDomainLogger("ContextSources")
 

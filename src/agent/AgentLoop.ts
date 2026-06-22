@@ -10,9 +10,9 @@ import type { Plan } from "./Plan"
 import type { AgentContextBuilder } from "./AgentContextBuilder"
 import type { AgentToolExecutor } from "./AgentToolExecutor"
 import type { AgentPlanner } from "./AgentPlanner"
-import { AbortError, errorMessage } from "../core/errors"
-import { loadDefaultAgentConfig } from "../core/config"
-import { createDomainLogger } from "../core/logger"
+import { AbortError, errorMessage } from "../core/Errors"
+import { loadDefaultAgentConfig } from "../core/Config"
+import { createDomainLogger } from "../core/Logger"
 
 const log = createDomainLogger("AgentLoop")
 

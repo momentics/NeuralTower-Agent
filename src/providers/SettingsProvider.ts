@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import * as crypto from "crypto"
 import type { IBackend } from "../core/IBackend"
-import type { SettingsToExt, ExtToSettings } from "../shared/messages"
+import type { SettingsToExt, ExtToSettings } from "../shared/Messages"
 
 /**
  * Интерфейс провайдера настроек.

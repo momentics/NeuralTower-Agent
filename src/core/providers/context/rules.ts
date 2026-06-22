@@ -1,8 +1,8 @@
 import * as fs from "fs/promises"
 import * as path from "path"
-import type { ContextProvider, ContextItem } from "./types"
-import { createDomainLogger } from "../../logger"
-import { errorMessage } from "../../errors"
+import type { ContextProvider, ContextItem } from "./Types"
+import { createDomainLogger } from "../../Logger"
+import { errorMessage } from "../../Errors"
 
 const log = createDomainLogger("RulesProvider")
 

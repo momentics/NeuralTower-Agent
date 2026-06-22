@@ -14,11 +14,11 @@ import type {
   CodeChunk,
   CodebaseChunkResult,
 } from "./ChunkTypes"
-import { errorMessage } from "../core/errors"
+import { errorMessage } from "../core/Errors"
 import type { IChunker } from "./Chunker"
 import { LineChunker, TypeScriptChunker, createDefaultChunkerConfig } from "./Chunker"
 import { detectLanguageShort } from "../utils/LanguageDetector"
-import { createDomainLogger } from "../core/logger"
+import { createDomainLogger } from "../core/Logger"
 
 const log = createDomainLogger("CodebaseChunker")
 export { createDefaultChunkerConfig } from "./Chunker"

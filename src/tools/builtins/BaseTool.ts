@@ -1,6 +1,6 @@
 import type { ITool, ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
-import { errorMessage } from "../../core/errors"
+import { errorMessage } from "../../core/Errors"
 
 /**
  * Базовый класс для инструментов, которые не работают с файловой системой.

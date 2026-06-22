@@ -1,14 +1,14 @@
 import * as path from "path"
 import * as vscode from "vscode"
-import type { ContextProvider, ContextItem } from "./types"
+import type { ContextProvider, ContextItem } from "./Types"
 import {
   lspSymbolKindLabel,
   formatDocumentSymbols,
   executeWorkspaceSymbol,
   executeDocumentSymbol,
 } from "../../../lsp/LspClient"
-import { withTimeoutAndSignal } from "../../../shared/withTimeoutAndSignal"
-import { errorMessage } from "../../errors"
+import { withTimeoutAndSignal } from "../../../shared/WithTimeoutAndSignal"
+import { errorMessage } from "../../Errors"
 
 const LSP_PROVIDER_MAX_SYMBOLS = 30
 const LSP_PROVIDER_MAX_DEFS = 5

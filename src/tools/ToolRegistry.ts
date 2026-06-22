@@ -1,6 +1,6 @@
 import type { ITool } from "./ITool"
 import type { ToolResult } from "../agent/AgentTypes"
-import { ToolError } from "../core/errors"
+import { ToolError } from "../core/Errors"
 
 /**
  * Интерфейс реестра инструментов.

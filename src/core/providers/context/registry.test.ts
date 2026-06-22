@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { ContextProviderRegistry } from "./registry"
+import { ContextProviderRegistry } from "./Registry"
 
 describe("ContextProviderRegistry", () => {
   let reg: ContextProviderRegistry

@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import type { IBackend } from "./IBackend"
 import type { IProvider } from "./IProvider"
-import { createDomainLogger } from "./logger"
+import { createDomainLogger } from "./Logger"
 
 const log = createDomainLogger("App")
 

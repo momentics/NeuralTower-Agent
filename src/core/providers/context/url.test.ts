@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
-import { makeUrlProvider } from "./url"
+import { makeUrlProvider } from "./Url"
 
 describe("makeUrlProvider", () => {
   const provider = makeUrlProvider()

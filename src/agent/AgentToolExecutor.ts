@@ -4,9 +4,9 @@ import type { IPermissionManager } from "../services/permission/PermissionManage
 import type { AgentModeManager } from "./AgentMode"
 import type { AgentModeName } from "./AgentMode"
 import type { AgentTurnResult, AgentToolCall, ToolResult } from "./AgentTypes"
-import { AbortError, errorMessage } from "../core/errors"
-import { createDomainLogger } from "../core/logger"
-import { extractJsonBlocks } from "../utils/extractJsonBlocks"
+import { AbortError, errorMessage } from "../core/Errors"
+import { createDomainLogger } from "../core/Logger"
+import { extractJsonBlocks } from "../utils/ExtractJsonBlocks"
 
 const log = createDomainLogger("AgentToolExecutor")
 

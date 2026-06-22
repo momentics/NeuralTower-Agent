@@ -1,4 +1,4 @@
-import type { ContextProvider, ContextItem } from "./types"
+import type { ContextProvider, ContextItem } from "./Types"
 import { fetchUrl, htmlToText } from "../../../network/UrlFetcher"
 
 const CONTEXT_TIMEOUT_MS = 15000

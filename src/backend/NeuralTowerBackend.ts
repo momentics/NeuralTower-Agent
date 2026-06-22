@@ -1,7 +1,7 @@
 import type { IBackend, BackendConfig, ChatMessage, ToolCall, ToolDefinition } from "../core/IBackend"
-import { BackendError, ConnectionError, TimeoutError, errorMessage } from "../core/errors"
-import { loadDefaultBackendConfig } from "../core/config"
-import { createDomainLogger } from "../core/logger"
+import { BackendError, ConnectionError, TimeoutError, errorMessage } from "../core/Errors"
+import { loadDefaultBackendConfig } from "../core/Config"
+import { createDomainLogger } from "../core/Logger"
 
 const log = createDomainLogger("Backend")
 

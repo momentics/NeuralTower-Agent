@@ -1,8 +1,8 @@
 import { EventEmitter } from "events"
 import { spawn, type ChildProcess } from "child_process"
 import type { MCPServerConfig } from "./MCPManager"
-import { ExecutionError } from "../core/errors"
-import { createDomainLogger } from "../core/logger"
+import { ExecutionError } from "../core/Errors"
+import { createDomainLogger } from "../core/Logger"
 
 const log = createDomainLogger("MCPTransport")
 

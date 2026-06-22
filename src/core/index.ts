@@ -10,7 +10,7 @@ export type {
 export {
   AgentMismatchError,
   AgentReplacementBlockedError,
-} from "./errors"
+} from "./Errors"
 export {
   NeuralTowerError,
   BackendError,
@@ -23,7 +23,7 @@ export {
   PlanError,
   AgentError,
   AbortError,
-} from "./errors"
+} from "./Errors"
 export {
   makeCurrentFileProvider,
   makeOpenFilesProvider,
@@ -55,7 +55,7 @@ export type {
   FileIndexStats,
 } from "./providers/context"
 export { ContextProviderRegistry } from "./providers/context"
-export { TOKENS_PER_CHAR, estimateTokens } from "./token-utils"
+export { TOKENS_PER_CHAR, estimateTokens } from "./TokenUtils"
 export {
   loadAppConfig,
   loadDefaultBackendConfig,
@@ -64,7 +64,7 @@ export {
   loadDefaultCompactorConfig,
   loadDefaultSessionConfig,
   loadDefaultAutocompleteConfig,
-} from "./config"
+} from "./Config"
 export type {
   AppConfig,
   AgentConfig,
@@ -72,4 +72,4 @@ export type {
   CompactorConfig,
   SessionConfig,
   AutocompleteConfig,
-} from "./config"
+} from "./Config"

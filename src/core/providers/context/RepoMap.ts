@@ -1,6 +1,6 @@
 import * as path from "path"
 import type { IndexEntry } from "../../../repo/FileIndex"
-import type { ContextProvider, ContextItem } from "./types"
+import type { ContextProvider, ContextItem } from "./Types"
 
 const REPO_MAP_MAX_DIRS = 30
 import { RepoSummary } from "../../../repo/RepoAnalyzer"

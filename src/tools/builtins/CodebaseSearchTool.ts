@@ -8,7 +8,7 @@
 import type { ToolSchema } from "../ITool"
 import type { ToolResult } from "../../agent/AgentTypes"
 import type { ICodebaseSearch } from "../../repo/CodebaseSearch"
-import { errorMessage } from "../../core/errors"
+import { errorMessage } from "../../core/Errors"
 import { BaseTool } from "./BaseTool"
 import { str, strOpt, num, clamp } from "../ToolArgs"
 

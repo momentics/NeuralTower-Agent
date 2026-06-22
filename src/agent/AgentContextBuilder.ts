@@ -5,8 +5,8 @@ import type { IGitService } from "../services/git/GitService"
 import type { IContextManager } from "../core/ContextManager"
 import type { IFileIndex } from "../repo/FileIndex"
 import { AgentMemory } from "./AgentMemory"
-import { createDomainLogger } from "../core/logger"
-import { errorMessage } from "../core/errors"
+import { createDomainLogger } from "../core/Logger"
+import { errorMessage } from "../core/Errors"
 
 const log = createDomainLogger("AgentContext")
 

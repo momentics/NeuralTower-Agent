@@ -7,10 +7,10 @@ import type {
   PersistedSession,
   PersistedMessage,
 } from "./SessionTypes"
-import type { Plugin } from "./types"
-import { createDomainLogger } from "../core/logger"
+import type { Plugin } from "./Types"
+import { createDomainLogger } from "../core/Logger"
 import { Mutex } from "./Mutex"
-import { errorMessage } from "../core/errors"
+import { errorMessage } from "../core/Errors"
 
 const log = createDomainLogger("SessionStore")
 

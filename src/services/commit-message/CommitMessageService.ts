@@ -1,9 +1,9 @@
 import type { IBackend } from "../../core/IBackend"
 import type { IGitService } from "../../services/git/GitService"
-import type { Plugin } from "../../shared/types"
-import { createDomainLogger } from "../../core/logger"
-import { stripCodeFences } from "../../utils/stripCodeFences"
-import { errorMessage } from "../../core/errors"
+import type { Plugin } from "../../shared/Types"
+import { createDomainLogger } from "../../core/Logger"
+import { stripCodeFences } from "../../utils/StripCodeFences"
+import { errorMessage } from "../../core/Errors"
 
 const log = createDomainLogger("CommitMessage")
 

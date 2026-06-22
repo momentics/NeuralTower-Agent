@@ -1,8 +1,8 @@
 import type { IBackend, ChatMessage } from "../core/IBackend"
-import { estimateTokens } from "../core/token-utils"
-import { loadDefaultCompactorConfig, type CompactorConfig } from "../core/config"
-import { createDomainLogger } from "../core/logger"
-import { errorMessage } from "../core/errors"
+import { estimateTokens } from "../core/TokenUtils"
+import { loadDefaultCompactorConfig, type CompactorConfig } from "../core/Config"
+import { createDomainLogger } from "../core/Logger"
+import { errorMessage } from "../core/Errors"
 
 const log = createDomainLogger("Compactor")
 

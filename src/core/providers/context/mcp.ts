@@ -1,4 +1,4 @@
-import type { ContextProvider, ContextItem, SubmenuItem } from "./types"
+import type { ContextProvider, ContextItem, SubmenuItem } from "./Types"
 
 export type MCPToolListFn = () => Promise<
   Array<{ server: string; tool: { name: string; description: string; schema: Record<string, unknown> } }>

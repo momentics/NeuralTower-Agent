@@ -2,11 +2,11 @@ import * as vscode from "vscode"
 import { App } from "./core/App"
 import { AgentCodeActionProvider, codeActionProviderMetadata } from "./services/code-actions/AgentCodeActionProvider"
 import { DiffViewerProvider } from "./providers/DiffViewerProvider"
-import { createDeps } from "./di/container"
-import { registerAllCommands } from "./commands/command-bus"
-import { createOutputChannel } from "./commands/utils"
-import { createDomainLogger } from "./core/logger"
-import { errorMessage } from "./core/errors"
+import { createDeps } from "./di/Container"
+import { registerAllCommands } from "./commands/CommandBus"
+import { createOutputChannel } from "./commands/Utils"
+import { createDomainLogger } from "./core/Logger"
+import { errorMessage } from "./core/Errors"
 
 const log = createDomainLogger("Extension")
 

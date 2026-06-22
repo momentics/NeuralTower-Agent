@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import type { ITool } from "../../tools/ITool"
 import type { PermissionLevel, ToolPermission, PermissionRequest, AutoApproveConfig } from "../../shared/PermissionTypes"
-import type { Plugin } from "../../shared/types"
+import type { Plugin } from "../../shared/Types"
 
 const PERMISSION_TIMEOUT_MS = 30000
 

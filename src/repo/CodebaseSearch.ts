@@ -13,9 +13,9 @@
 import type { IEmbeddingProvider } from "../backend/IEmbeddingProvider"
 import type { IVectorStore } from "./IVectorStore"
 import type { CodeChunk, SearchConfig, SearchMode } from "./ChunkTypes"
-import { errorMessage } from "../core/errors"
+import { errorMessage } from "../core/Errors"
 import type { IFullTextSearch } from "./FullTextSearch"
-import { createDomainLogger } from "../core/logger"
+import { createDomainLogger } from "../core/Logger"
 
 const log = createDomainLogger("CodebaseSearch")
 

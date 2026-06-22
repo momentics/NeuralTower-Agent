@@ -8,8 +8,8 @@
  */
 
 import type { ChatMessage } from "../core/IBackend"
-import { TOKENS_PER_CHAR } from "../core/token-utils"
-import { loadDefaultAgentConfig } from "../core/config"
+import { TOKENS_PER_CHAR } from "../core/TokenUtils"
+import { loadDefaultAgentConfig } from "../core/Config"
 
 export interface MemoryEntry {
   message: ChatMessage

@@ -1,4 +1,4 @@
-import { PlanError } from "../core/errors"
+import { PlanError } from "../core/Errors"
 
 const DEFAULT_PLAN_MAX_RETRIES = 3
 

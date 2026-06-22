@@ -1,9 +1,9 @@
 import * as vscode from "vscode"
 import * as path from "path"
 import * as fs from "fs/promises"
-import { createDomainLogger } from "../core/logger"
-import { errorMessage } from "../core/errors"
-import { withTimeoutAndSignal } from "../shared/withTimeoutAndSignal"
+import { createDomainLogger } from "../core/Logger"
+import { errorMessage } from "../core/Errors"
+import { withTimeoutAndSignal } from "../shared/WithTimeoutAndSignal"
 
 const log = createDomainLogger("LSP")
 

@@ -6,8 +6,8 @@ import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { INotificationService } from "../services/notification/NotificationService"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
-import type { WebviewToExt, ExtToWebview } from "../shared/messages"
-import { handleBackendError } from "../core/errors"
+import type { WebviewToExt, ExtToWebview } from "../shared/Messages"
+import { handleBackendError } from "../core/Errors"
 
 const ARGS_LOG_TRUNCATE = 200
 const PLAN_MARKER = "__PLAN__"

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { makeRepoMapProvider } from "./repo-map"
+import { makeRepoMapProvider } from "./RepoMap"
 
 describe("makeRepoMapProvider", () => {
   it("returns repo map", async () => {

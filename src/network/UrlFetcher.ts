@@ -9,7 +9,7 @@ export interface FetchUrlOptions {
   signal?: AbortSignal
 }
 
-import { errorMessage } from "../core/errors"
+import { errorMessage } from "../core/Errors"
 
 export interface FetchUrlResult {
   /** Содержимое ответа */

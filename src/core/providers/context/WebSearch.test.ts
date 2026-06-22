@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest"
-import { makeWebSearchProvider } from "./web-search"
+import { makeWebSearchProvider } from "./WebSearch"
 
 describe("makeWebSearchProvider", () => {
   const provider = makeWebSearchProvider()

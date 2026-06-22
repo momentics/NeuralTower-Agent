@@ -2,8 +2,8 @@ import type { IBackend } from "../core/IBackend"
 import type { IToolRegistry } from "../tools/ToolRegistry"
 import { Plan } from "./Plan"
 import type { PlanStep } from "./Plan"
-import { createDomainLogger } from "../core/logger"
-import { errorMessage } from "../core/errors"
+import { createDomainLogger } from "../core/Logger"
+import { errorMessage } from "../core/Errors"
 
 const log = createDomainLogger("Replanner")
 

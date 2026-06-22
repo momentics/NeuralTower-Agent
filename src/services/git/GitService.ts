@@ -1,6 +1,6 @@
-import type { Service } from "../../shared/types"
-import { createDomainLogger } from "../../core/logger"
-import { errorMessage } from "../../core/errors"
+import type { Service } from "../../shared/Types"
+import { createDomainLogger } from "../../core/Logger"
+import { errorMessage } from "../../core/Errors"
 import { runProcess } from "../../utils/ProcessRunner"
 
 const log = createDomainLogger("Git")

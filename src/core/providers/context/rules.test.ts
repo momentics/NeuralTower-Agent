@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { makeRulesProvider, loadRulesFiles } from "./rules"
+import { makeRulesProvider, loadRulesFiles } from "./Rules"
 
 vi.mock("fs/promises", () => ({
   stat: vi.fn(),

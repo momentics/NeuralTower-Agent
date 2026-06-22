@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { makeFileProvider } from "./file"
+import { makeFileProvider } from "./File"
 
 vi.mock("fs/promises", () => ({
   stat: vi.fn(),

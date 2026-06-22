@@ -1,9 +1,9 @@
 import * as os from "os"
 import * as path from "path"
 import * as vscode from "vscode"
-import type { ContextProvider, ContextItem } from "./providers/context/types"
-import { createDomainLogger } from "./logger"
-import { errorMessage } from "./errors"
+import type { ContextProvider, ContextItem } from "./providers/context/Types"
+import { createDomainLogger } from "./Logger"
+import { errorMessage } from "./Errors"
 
 const log = createDomainLogger("VSCodeContext")
 

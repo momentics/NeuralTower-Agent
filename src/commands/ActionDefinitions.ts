@@ -1,8 +1,8 @@
 /**
  * Составные определения действий — объединение схем (данные) и промптов (логика).
  */
-import { EDITOR_ACTION_SCHEMAS, type ActionSchema } from "./action-schemas"
-import { ACTION_PROMPT_TEMPLATES, type ActionPromptTemplates } from "./action-prompts"
+import { EDITOR_ACTION_SCHEMAS, type ActionSchema } from "./ActionSchemas"
+import { ACTION_PROMPT_TEMPLATES, type ActionPromptTemplates } from "./ActionPrompts"
 
 export interface ActionDefinition extends ActionSchema, ActionPromptTemplates {}
 

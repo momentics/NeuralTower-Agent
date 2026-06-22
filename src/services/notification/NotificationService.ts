@@ -1,5 +1,5 @@
 import * as vscode from "vscode"
-import type { Plugin } from "../../shared/types"
+import type { Plugin } from "../../shared/Types"
 
 export type NotificationType = "info" | "warning" | "error" | "agentDone" | "permissionRequest"
 

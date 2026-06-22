@@ -1,5 +1,5 @@
 import * as vscode from "vscode"
-import type { AppConfig, SessionConfig } from "../core/config"
+import type { AppConfig, SessionConfig } from "../core/Config"
 import type { IGitService } from "../services/git/GitService"
 import type { ICodebaseSearch } from "../repo/CodebaseSearch"
 import type { ICodebaseChunker } from "../repo/CodebaseChunker"
@@ -16,7 +16,7 @@ import type { ISkillManager } from "../skills/SkillManager"
 import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
 import type { INotificationService } from "../services/notification/NotificationService"
 import type { AgentDependencies, AgentSpawnFactory } from "../agent/AgentDependencies"
-import type { ContextProvider } from "../core/providers/context/types"
+import type { ContextProvider } from "../core/providers/context/Types"
 import {
   NeuralTowerBackend,
   NeuralTowerEmbeddingProvider,
@@ -37,7 +37,7 @@ import { TelemetryService } from "../services/telemetry/TelemetryService"
 import { MCPManager } from "../mcp"
 import { SettingsProvider } from "../providers/SettingsProvider"
 import { ContextManager } from "../core/ContextManager"
-import { ContextProviderRegistry } from "../core/providers/context/registry"
+import { ContextProviderRegistry } from "../core/providers/context/Registry"
 import { FileIndex } from "../repo/FileIndex"
 import { RepoAnalyzer } from "../repo/RepoAnalyzer"
 import { SubagentRunner } from "../agent/SubagentRunner"
@@ -48,9 +48,9 @@ import { CodebaseSearch } from "../repo/CodebaseSearch"
 import { CodebaseChunker, createDefaultChunkerConfig } from "../repo/CodebaseChunker"
 import { CodebaseIndexer } from "../services/indexing/CodebaseIndexer"
 import { IndexingStatusBar } from "../services/indexing/IndexingStatusBar"
-import { loadAppConfig } from "../core/config"
-import { createDomainLogger } from "../core/logger"
-import { errorMessage } from "../core/errors"
+import { loadAppConfig } from "../core/Config"
+import { createDomainLogger } from "../core/Logger"
+import { errorMessage } from "../core/Errors"
 import {
   makeUrlProvider,
   makeWebSearchProvider,
@@ -74,7 +74,7 @@ import {
   makeEnvironmentProvider,
   makeGitDiffProvider,
 } from "../core/ContextSources"
-import { makeCodebaseProvider } from "../core/providers/context/codebase"
+import { makeCodebaseProvider } from "../core/providers/context/Codebase"
 import {
   ReadFileTool,
   WriteFileTool,

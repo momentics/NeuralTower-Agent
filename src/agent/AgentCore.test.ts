@@ -5,9 +5,9 @@ import { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
 import type { AgentDependencies } from "./AgentDependencies"
 import { ContextManager } from "../core/ContextManager"
-import { ContextProviderRegistry } from "../core/providers/context/registry"
+import { ContextProviderRegistry } from "../core/providers/context/Registry"
 import { FileIndex } from "../repo/FileIndex"
-import { loadDefaultAgentConfig, loadDefaultCompactorConfig, loadDefaultContextConfig, loadDefaultSessionConfig } from "../core/config"
+import { loadDefaultAgentConfig, loadDefaultCompactorConfig, loadDefaultContextConfig, loadDefaultSessionConfig } from "../core/Config"
 import { TodoStore } from "./TodoStore"
 
 const createMockBackend = (): IBackend => ({

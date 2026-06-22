@@ -1,4 +1,4 @@
-import { errorMessage } from "../core/errors"
+import { errorMessage } from "../core/Errors"
 
 /**
  * Результат безопасного выполнения функции.

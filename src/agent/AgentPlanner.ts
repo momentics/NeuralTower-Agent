@@ -4,10 +4,10 @@ import type { ISkill } from "../skills/ISkill"
 import type { PlanStep } from "./Plan"
 import { Plan } from "./Plan"
 import type { SessionContext } from "./SessionContext"
-import { PlanError, errorMessage } from "../core/errors"
+import { PlanError, errorMessage } from "../core/Errors"
 import { Replanner } from "./Replanner"
 import { PlanRepository } from "./PlanRepository"
-import { createDomainLogger } from "../core/logger"
+import { createDomainLogger } from "../core/Logger"
 
 const log = createDomainLogger("AgentPlanner")
 

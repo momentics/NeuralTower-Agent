@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import type { IAgentOrchestrator } from "../core/IAgent"
-import { handleBackendError } from "../core/errors"
+import { handleBackendError } from "../core/Errors"
 import type { IGitService } from "../services/git/GitService"
 import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
 import { detectLanguageDisplay } from "../utils/LanguageDetector"

@@ -2,7 +2,7 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import type { PlanSerialized } from "./Plan"
 import { Plan } from "./Plan"
-import { PlanError, errorMessage } from "../core/errors"
+import { PlanError, errorMessage } from "../core/Errors"
 
 /**
  * Репозиторий для сохранения и загрузки планов.

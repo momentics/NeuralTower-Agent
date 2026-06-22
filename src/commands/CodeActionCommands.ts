@@ -1,10 +1,10 @@
 import * as vscode from "vscode"
 import type { App } from "../core/App"
-import { sendAgentQuery, detectLanguageDisplay } from "./utils"
+import { sendAgentQuery, detectLanguageDisplay } from "./Utils"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { IGitService } from "../services/git/GitService"
 import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
-import { EDITOR_ACTIONS } from "./action-definitions"
+import { EDITOR_ACTIONS } from "./ActionDefinitions"
 
 export function registerCodeActionCommands(
   app: App,

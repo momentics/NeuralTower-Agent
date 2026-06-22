@@ -17,8 +17,8 @@ import type { AgentModeName } from "./AgentMode"
 import { TodoStore } from "./TodoStore"
 import type { Plan } from "./Plan"
 import { PlanRepository } from "./PlanRepository"
-import { AbortError, AgentError, errorMessage } from "../core/errors"
-import { createDomainLogger } from "../core/logger"
+import { AbortError, AgentError, errorMessage } from "../core/Errors"
+import { createDomainLogger } from "../core/Logger"
 
 const log = createDomainLogger("AgentCore")
 

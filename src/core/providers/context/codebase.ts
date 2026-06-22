@@ -1,7 +1,7 @@
-﻿import type { ContextProvider, ContextItem } from "./types"
+﻿import type { ContextProvider, ContextItem } from "./Types"
 import type { ICodebaseSearch } from "../../../repo/CodebaseSearch"
-import { createDomainLogger } from "../../../core/logger"
-import { errorMessage } from "../../errors"
+import { createDomainLogger } from "../../../core/Logger"
+import { errorMessage } from "../../Errors"
 
 const log = createDomainLogger("CodebaseProvider")
 

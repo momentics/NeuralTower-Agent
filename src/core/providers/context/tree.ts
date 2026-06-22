@@ -1,7 +1,7 @@
 import * as fs from "fs/promises"
 import * as path from "path"
-import type { ContextProvider, ContextItem } from "./types"
-import { errorMessage } from "../../errors"
+import type { ContextProvider, ContextItem } from "./Types"
+import { errorMessage } from "../../Errors"
 
 const CONTEXT_TREE_MAX_DEPTH = 4
 

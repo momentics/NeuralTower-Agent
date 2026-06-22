@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { makeTreeProvider } from "./tree"
+import { makeTreeProvider } from "./Tree"
 
 vi.mock("fs/promises", () => ({
   stat: vi.fn(),

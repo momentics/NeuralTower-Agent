@@ -1,4 +1,4 @@
-import type { Plugin } from "../../shared/types"
+import type { Plugin } from "../../shared/Types"
 
 const TELEMETRY_MAX_EVENTS = 1000
 
