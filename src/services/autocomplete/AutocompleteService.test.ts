@@ -140,7 +140,7 @@ describe("AutocompleteService", () => {
     const doc = createMockDocument("function h", 100, 20)
     const pos = new vscode.Position(0, 11)
 
-    // Need to wait for debounce
+    // Необходимо подождать debounce
     const result = await service.provideInlineCompletionItems(
       doc as any,
       pos,
@@ -148,7 +148,7 @@ describe("AutocompleteService", () => {
       { isCancellationRequested: false } as any,
     )
 
-    // Wait for debounce to fire
+    // Ждём срабатывания debounce
     await new Promise((r) => setTimeout(r, 200))
 
     expect(mockBackend.chat).toHaveBeenCalled()
