@@ -1,9 +1,10 @@
 import * as path from "path"
 import type { IIndexEntry } from "../../../repo/FileIndex"
-import type { IContextProvider, IContextItem } from "./Types"
+import type { IContextProvider } from "./Types"
+import { IRepoSummary } from "../../../repo/RepoAnalyzer"
+import { createContextProviderNoTrim } from "./WithErrorHandling"
 
 const REPO_MAP_MAX_DIRS = 30
-import { IRepoSummary } from "../../../repo/RepoAnalyzer"
 
 export interface IFileIndexStats {
   totalFiles: number
@@ -16,15 +17,15 @@ export function makeRepoMapProvider(
   getFileIndex: () => { findByPattern(pattern: string): IIndexEntry[]; findByLanguage(lang: string): IIndexEntry[]; stats(): IFileIndexStats },
   getRepoSummary: () => Promise<IRepoSummary>,
 ): IContextProvider {
-  return {
-    description: {
+  return createContextProviderNoTrim(
+    {
       name: "repo-map",
       displayTitle: "Карта репозитория",
       description: "Карта архитектуры репозитория",
       type: "normal",
       priority: 87,
     },
-    async resolve(_query: string): Promise<IContextItem[]> {
+    async () => {
       const summary = await getRepoSummary()
       const stats = getFileIndex().stats()
 
@@ -86,5 +87,5 @@ export function makeRepoMapProvider(
         description: `${summary.fileCount} файлов, ${Object.keys(summary.languages).length} языков`,
       }]
     },
-  }
+  )
 }

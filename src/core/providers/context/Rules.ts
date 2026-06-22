@@ -1,8 +1,9 @@
 import * as fs from "fs/promises"
 import * as path from "path"
-import type { IContextProvider, IContextItem } from "./Types"
+import type { IContextProvider } from "./Types"
 import { createDomainLogger } from "../../Logger"
 import { errorMessage } from "../../Errors"
+import { createContextProviderNoTrim } from "./WithErrorHandling"
 
 const log = createDomainLogger("RulesProvider")
 
@@ -44,15 +45,15 @@ export async function loadRulesFiles(getWorkDir: () => string): Promise<Array<{ 
 export function makeRulesProvider(
   getWorkDir: () => string,
 ): IContextProvider {
-  return {
-    description: {
+  return createContextProviderNoTrim(
+    {
       name: "rules",
       displayTitle: "Правила",
       description: "Правила проекта",
       type: "normal",
       priority: 99,
     },
-    async resolve(_query: string): Promise<IContextItem[]> {
+    async () => {
       const rules = await loadRulesFiles(getWorkDir)
 
       if (rules.length === 0) {
@@ -72,5 +73,5 @@ export function makeRulesProvider(
         description: `${rules.length} правил`,
       }]
     },
-  }
+  )
 }

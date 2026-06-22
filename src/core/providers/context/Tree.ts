@@ -1,6 +1,7 @@
 import * as fs from "fs/promises"
 import * as path from "path"
-import type { IContextProvider, IContextItem } from "./Types"
+import type { IContextProvider } from "./Types"
+import { createContextProviderNoTrim } from "./WithErrorHandling"
 import { errorMessage } from "../../Errors"
 
 const CONTEXT_TREE_MAX_DEPTH = 4
@@ -20,7 +21,9 @@ async function buildTree(
   try {
     entries = await fs.readdir(current, { withFileTypes: true })
   } catch (err: unknown) {
-    if (current === root) throw err
+    if (current === root) {
+      throw Object.assign(new Error(`Не удалось построить дерево: ${errorMessage(err)}`), { code: (err as { code?: string })?.code })
+    }
     entries = []
   }
   const dirs: { name: string; full: string }[] = []
@@ -60,29 +63,24 @@ async function buildTree(
 export function makeTreeProvider(
   getWorkDir: () => string,
 ): IContextProvider {
-  return {
-    description: {
+  return createContextProviderNoTrim(
+    {
       name: "tree",
       displayTitle: "Дерево",
       description: "Дерево директорий проекта",
       type: "query",
     },
-    async resolve(query: string): Promise<IContextItem[]> {
-      const targetDir = query.trim()
-        ? (path.isAbsolute(query.trim()) ? query.trim() : path.join(getWorkDir(), query.trim()))
+    async (trimmed) => {
+      const targetDir = trimmed
+        ? (path.isAbsolute(trimmed) ? trimmed : path.join(getWorkDir(), trimmed))
         : getWorkDir()
 
-      try {
-        const lines = await buildTree(targetDir, targetDir, "", true, 0)
-        return [{
-          content: `Дерево: ${targetDir}\n\n${lines}`,
-          name: `Tree: ${path.basename(targetDir) || targetDir}`,
-          description: `${lines.split("\n").length} строк`,
-        }]
-      } catch (err: unknown) {
-        const msg = errorMessage(err)
-        return [{ content: `Не удалось построить дерево для ${targetDir}: ${msg}`, name: "tree", description: "error" }]
-      }
+      const lines = await buildTree(targetDir, targetDir, "", true, 0)
+      return [{
+        content: `Дерево: ${targetDir}\n\n${lines}`,
+        name: `Tree: ${path.basename(targetDir) || targetDir}`,
+        description: `${lines.split("\n").length} строк`,
+      }]
     },
-  }
+  )
 }

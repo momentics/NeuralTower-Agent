@@ -1,4 +1,5 @@
-import type { IContextProvider, IContextItem, ISubmenuItem } from "./Types"
+import type { IContextProvider, ISubmenuItem } from "./Types"
+import { createContextProviderNoTrim } from "./WithErrorHandling"
 
 export type MCPToolListFn = () => Promise<
   Array<{ server: string; tool: { name: string; description: string; schema: Record<string, unknown> } }>
@@ -7,15 +8,14 @@ export type MCPToolListFn = () => Promise<
 export function makeMCPProvider(
   listMCPTools: MCPToolListFn,
 ): IContextProvider {
-  return {
-    description: {
+  return createContextProviderNoTrim(
+    {
       name: "mcp",
       displayTitle: "MCP",
       description: "MCP-инструменты как контекст",
       type: "submenu",
     },
-    async resolve(query: string): Promise<IContextItem[]> {
-      const trimmed = query.trim()
+    async (trimmed) => {
       const allTools = await listMCPTools()
 
       if (allTools.length === 0) {
@@ -57,7 +57,7 @@ export function makeMCPProvider(
         description: `${filtered.length} инструментов`,
       }]
     },
-    async loadSubmenuItems(): Promise<ISubmenuItem[]> {
+    async (): Promise<ISubmenuItem[]> => {
       const allTools = await listMCPTools()
       return allTools.map((t) => ({
         id: `${t.server}:${t.tool.name}`,
@@ -65,5 +65,5 @@ export function makeMCPProvider(
         description: `[${t.server}] ${t.tool.description}`,
       }))
     },
-  }
+  )
 }

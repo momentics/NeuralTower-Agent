@@ -1,21 +1,19 @@
-import type { IContextProvider, IContextItem } from "./Types"
+import type { IContextProvider } from "./Types"
 import { fetchUrl, htmlToText } from "../../../network/UrlFetcher"
+import { createContextProvider } from "./WithErrorHandling"
 
 const CONTEXT_TIMEOUT_MS = 15000
 const CONTEXT_MAX_TEXT_LENGTH = 12000
 
 export function makeUrlProvider(): IContextProvider {
-  return {
-    description: {
+  return createContextProvider(
+    {
       name: "url",
       displayTitle: "URL",
       description: "Содержимое веб-страницы по URL",
       type: "query",
     },
-    async resolve(query: string): Promise<IContextItem[]> {
-      const trimmed = query.trim()
-      if (!trimmed) return []
-
+    async (trimmed) => {
       const result = await fetchUrl(trimmed, { timeout: CONTEXT_TIMEOUT_MS, maxLength: CONTEXT_MAX_TEXT_LENGTH })
 
       if (!result.ok && result.status === 0) {
@@ -46,5 +44,5 @@ export function makeUrlProvider(): IContextProvider {
         description: url.toString(),
       }]
     },
-  }
+  )
 }

@@ -66,10 +66,9 @@ export function createDomainLogger(domain: string): Omit<ILogger, "error" | "war
   warn: (message: string, context?: unknown) => void
   info: (message: string, context?: unknown) => void
 } {
-  const logger = getLogger()
   return {
-    error: (message: string, context?: unknown) => logger.error(domain, message, context),
-    warn: (message: string, context?: unknown) => logger.warn(domain, message, context),
-    info: (message: string, context?: unknown) => logger.info(domain, message, context),
+    error: (message: string, context?: unknown) => getLogger().error(domain, message, context),
+    warn: (message: string, context?: unknown) => getLogger().warn(domain, message, context),
+    info: (message: string, context?: unknown) => getLogger().info(domain, message, context),
   }
 }

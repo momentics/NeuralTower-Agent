@@ -1,6 +1,5 @@
 import type { IPlugin } from "../../shared/Types"
 import type { IWindowService } from "../../core/VscodeApi"
-import { VscodeWindowService } from "../../core/VscodeApi"
 
 export type NotificationType = "info" | "warning" | "error" | "agentDone" | "permissionRequest"
 
@@ -32,7 +31,7 @@ export class NotificationService implements IPlugin, INotificationService {
     permissionRequests: true,
   }
 
-  constructor(private readonly window: IWindowService = new VscodeWindowService()) {}
+  constructor(private readonly window: IWindowService) {}
 
   /** Инициализация не требуется. */
   async init(): Promise<void> {}

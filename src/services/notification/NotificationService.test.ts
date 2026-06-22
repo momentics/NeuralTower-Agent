@@ -1,80 +1,82 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import * as vscode from "vscode"
 import { NotificationService } from "./NotificationService"
+import type { IWindowService } from "../../core/VscodeApi"
 
 describe("NotificationService", () => {
+  let window: IWindowService
   let service: NotificationService
 
   beforeEach(() => {
-    vi.clearAllMocks()
-    service = new NotificationService()
-    vi.spyOn(vscode.window, "showInformationMessage").mockResolvedValue(undefined as any)
-    vi.spyOn(vscode.window, "showWarningMessage").mockResolvedValue(undefined as any)
-    vi.spyOn(vscode.window, "showErrorMessage").mockResolvedValue(undefined as any)
+    window = {
+      showInformationMessage: vi.fn().mockResolvedValue(undefined),
+      showWarningMessage: vi.fn().mockResolvedValue(undefined),
+      showErrorMessage: vi.fn().mockResolvedValue(undefined),
+    }
+    service = new NotificationService(window)
   })
 
   it("shows info notification", async () => {
     await service.show("info", "test message")
-    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith("test message")
+    expect(window.showInformationMessage).toHaveBeenCalledWith("test message")
   })
 
   it("shows warning notification", async () => {
     await service.show("warning", "test message")
-    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith("test message")
+    expect(window.showWarningMessage).toHaveBeenCalledWith("test message")
   })
 
   it("shows error notification", async () => {
     await service.show("error", "test message")
-    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith("test message")
+    expect(window.showErrorMessage).toHaveBeenCalledWith("test message")
   })
 
   it("shows agentDone when enabled", async () => {
     await service.show("agentDone", "done")
-    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith("done")
+    expect(window.showInformationMessage).toHaveBeenCalledWith("done")
   })
 
   it("skips agentDone when disabled", async () => {
     service.setOptions({ agentCompletion: false })
     await service.show("agentDone", "done")
-    expect(vscode.window.showInformationMessage).not.toHaveBeenCalled()
+    expect(window.showInformationMessage).not.toHaveBeenCalled()
   })
 
   it("shows permissionRequest when enabled", async () => {
     await service.show("permissionRequest", "allow?")
-    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith("allow?")
+    expect(window.showWarningMessage).toHaveBeenCalledWith("allow?")
   })
 
   it("skips permissionRequest when disabled", async () => {
     service.setOptions({ permissionRequests: false })
     await service.show("permissionRequest", "allow?")
-    expect(vscode.window.showWarningMessage).not.toHaveBeenCalled()
+    expect(window.showWarningMessage).not.toHaveBeenCalled()
   })
 
   it("skips all when disabled", async () => {
     service.setOptions({ enabled: false })
     await service.show("info", "test")
-    expect(vscode.window.showInformationMessage).not.toHaveBeenCalled()
+    expect(window.showInformationMessage).not.toHaveBeenCalled()
   })
 
   it("shows actions", async () => {
     await service.show("info", "test", ["OK", "Cancel"])
-    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith("test", "OK", "Cancel")
+    expect(window.showInformationMessage).toHaveBeenCalledWith("test", "OK", "Cancel")
   })
 
   it("askPermission returns allow", async () => {
-    vi.spyOn(vscode.window, "showWarningMessage").mockResolvedValue("Разрешить" as any)
+    vi.mocked(window.showWarningMessage).mockResolvedValue("Разрешить" as any)
     const result = await service.askPermission("bash", "Run command?")
     expect(result).toBe("allow")
   })
 
   it("askPermission returns allowAlways", async () => {
-    vi.spyOn(vscode.window, "showWarningMessage").mockResolvedValue("Разрешить всегда" as any)
+    vi.mocked(window.showWarningMessage).mockResolvedValue("Разрешить всегда" as any)
     const result = await service.askPermission("bash", "Run command?")
     expect(result).toBe("allowAlways")
   })
 
   it("askPermission returns deny", async () => {
-    vi.spyOn(vscode.window, "showWarningMessage").mockResolvedValue("Запретить" as any)
+    vi.mocked(window.showWarningMessage).mockResolvedValue("Запретить" as any)
     const result = await service.askPermission("bash", "Run command?")
     expect(result).toBe("deny")
   })

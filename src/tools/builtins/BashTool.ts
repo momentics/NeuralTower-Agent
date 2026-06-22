@@ -54,6 +54,15 @@ const DENIED_PATTERNS = [
   /&&\s*(rm|del|rmdir|format|shutdown|reboot)\b/i,
   />>?\s*\/etc\//i,
   />>?\s*\/root\//i,
+  // Инъекция через подстановку команд
+  /\$\([^)]*\)/,
+  /`[^`]*`/,
+  // Инъекция через вызов интерпретатора
+  /\b(sh|bash|zsh|dash|csh|ksh|fish|powershell|pwsh|cmd)\s+-c\b/i,
+  // Обход через cat + pipe
+  /cat\s+.*\s*\|\s*(bash|sh|zsh|powershell|cmd)/i,
+  // Обход через python/perl/ruby
+  /\b(python|python3|perl|ruby|node)\s+.*-e\s/i,
 ]
 
 /**

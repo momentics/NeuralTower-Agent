@@ -17,3 +17,10 @@ export { makeRulesProvider, loadRulesFiles } from "./Rules"
 export { makeMCPProvider } from "./Mcp"
 export type { MCPToolListFn } from "./Mcp"
 export { makeLspProvider } from "./Lsp"
+export {
+  errorItem,
+  withContextErrorHandling,
+  withContextErrorHandlingNoTrim,
+  createContextProvider,
+  createContextProviderNoTrim,
+} from "./WithErrorHandling"

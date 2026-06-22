@@ -50,6 +50,7 @@ export class CodebaseIndexer implements IPlugin, ICodebaseIndexer {
 
   private debounceTimer: ReturnType<typeof setTimeout> | null = null
   private pendingOps: Array<{ type: "change"; path: string } | { type: "delete"; path: string }> = []
+  private pendingPaths = new Map<string, "change" | "delete">()
 
   constructor(
     private readonly fileIndex: IFileIndex,
@@ -136,11 +137,16 @@ export class CodebaseIndexer implements IPlugin, ICodebaseIndexer {
    * Запланировать операцию с дебаунсом.
    */
   private scheduleOp(type: "change" | "delete", filePath: string): void {
+    const existing = this.pendingPaths.get(filePath)
+    if (existing === "delete" && type === "change") return
+    this.pendingPaths.set(filePath, type)
+    if (existing === type) return
     this.pendingOps.push({ type, path: filePath })
     if (this.debounceTimer) return
     this.debounceTimer = setTimeout(async () => {
       this.debounceTimer = null
       const ops = this.pendingOps.splice(0)
+      this.pendingPaths.clear()
       for (const op of ops) {
         if (this.isDisposed) return
         if (op.type === "change") {

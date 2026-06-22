@@ -27,8 +27,6 @@ export class DeleteFileTool extends FilesystemTool {
     const result = await this.resolvePath(fp)
     if ("error" in result) return { output: result.error, success: false }
 
-    if (signal?.aborted) return { output: "Операция отменена", success: false }
-
     const stat = await fs.stat(result.resolved)
     const isDir = stat.isDirectory()
     const isRecursive = isDir || bool(args, "recursive", false)

@@ -1,9 +1,6 @@
-﻿import type { IContextProvider, IContextItem } from "./Types"
+﻿import type { IContextProvider } from "./Types"
 import type { ICodebaseSearch } from "../../../repo/CodebaseSearch"
-import { createDomainLogger } from "../../../core/Logger"
-import { errorMessage } from "../../Errors"
-
-const log = createDomainLogger("CodebaseProvider")
+import { createContextProvider } from "./WithErrorHandling"
 
 const CODEBASE_TOPK = 5
 const CODEBASE_MAX_CONTENT = 2000
@@ -17,68 +14,55 @@ const CODEBASE_MAX_CONTENT = 2000
 export function makeCodebaseProvider(
   search: ICodebaseSearch,
 ): IContextProvider {
-  return {
-    description: {
+  return createContextProvider(
+    {
       name: "codebase",
       displayTitle: "Кодовая база",
       description: "Семантический поиск по коду репозитория",
       type: "query",
     },
-    async resolve(query: string): Promise<IContextItem[]> {
-      const trimmed = query.trim()
-      if (!trimmed) return []
+    async (trimmed) => {
+      const results = await search.search(trimmed, {
+        topK: CODEBASE_TOPK,
+        searchMode: "hybrid",
+      })
 
-      try {
-        const results = await search.search(trimmed, {
-          topK: CODEBASE_TOPK,
-          searchMode: "hybrid",
-        })
-
-        if (results.length === 0) {
-          return [{
-            content: "Результаты не найдены для \"" + trimmed + "\"",
-            name: "codebase",
-            description: "not found",
-          }]
-        }
-
-        const lines: string[] = []
-
-        for (const r of results) {
-          lines.push("--- " + r.chunk.filePath + " (строки " + r.chunk.startLine + "-" + r.chunk.endLine + ", оценка: " + r.score.toFixed(3) + ") ---")
-
-          if (r.chunk.symbolName) {
-            lines.push("Символ: " + r.chunk.symbolName)
-            if (r.chunk.parentName) {
-              lines.push("Родитель: " + r.chunk.parentName)
-            }
-          }
-
-          if (r.chunk.signature) {
-            lines.push("Подпись: " + r.chunk.signature)
-          }
-
-          lines.push("")
-          lines.push("`" + r.chunk.language)
-          lines.push(r.chunk.content.slice(0, CODEBASE_MAX_CONTENT))
-          lines.push("`")
-          lines.push("")
-        }
-
+      if (results.length === 0) {
         return [{
-          content: "Семантический поиск по коду для \"" + trimmed + "\":\n\n" + lines.join("\n"),
-          name: "Codebase: " + trimmed,
-          description: String(results.length) + " результатов",
-        }]
-      } catch (err: unknown) {
-        const msg = errorMessage(err)
-        log.error(`Поиск по коду не выполнен: ${msg}`)
-        return [{
-          content: "Ошибка поиска по коду для \"" + trimmed + "\"",
+          content: "Результаты не найдены для \"" + trimmed + "\"",
           name: "codebase",
-          description: "error",
+          description: "not found",
         }]
       }
+
+      const lines: string[] = []
+
+      for (const r of results) {
+        lines.push("--- " + r.chunk.filePath + " (строки " + r.chunk.startLine + "-" + r.chunk.endLine + ", оценка: " + r.score.toFixed(3) + ") ---")
+
+        if (r.chunk.symbolName) {
+          lines.push("Символ: " + r.chunk.symbolName)
+          if (r.chunk.parentName) {
+            lines.push("Родитель: " + r.chunk.parentName)
+          }
+        }
+
+        if (r.chunk.signature) {
+          lines.push("Подпись: " + r.chunk.signature)
+        }
+
+        lines.push("")
+        lines.push("`" + r.chunk.language)
+        lines.push(r.chunk.content.slice(0, CODEBASE_MAX_CONTENT))
+        lines.push("`")
+        lines.push("")
+      }
+
+      return [{
+        content: "Семантический поиск по коду для \"" + trimmed + "\":\n\n" + lines.join("\n"),
+        name: "Codebase: " + trimmed,
+        description: String(results.length) + " результатов",
+      }]
     },
-  }
+  )
 }

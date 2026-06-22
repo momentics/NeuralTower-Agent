@@ -30,6 +30,7 @@ import { PersistentSessionStore } from "../shared"
 import { PermissionManager } from "../services/permission/PermissionManager"
 import { GitService } from "../services/git/GitService"
 import { NotificationService } from "../services/notification/NotificationService"
+import { VscodeWindowService } from "../core/VscodeApi"
 import { BackendHealthMonitor } from "../services/health/BackendHealthMonitor"
 import { CommitMessageService } from "../services/commit-message/CommitMessageService"
 import { AutocompleteService } from "../services/autocomplete/AutocompleteService"
@@ -262,7 +263,7 @@ export async function createServicesDomain(
   permissionManager.setAutoApprove({ enabled: autoApproveEnabled, tools: autoApproveTools, maxCost: 0 })
 
   const gitService = new GitService()
-  const notificationService = new NotificationService()
+  const notificationService = new NotificationService(new VscodeWindowService())
   await notificationService.init()
 
   return { sessionStore, permissionManager, gitService, notificationService }
@@ -469,8 +470,14 @@ export async function createMonitoringDomain(
 
 // ── Главный оркестратор ───────────────────────────────────
 
+export interface ICreateDepsOptions {
+  /** Переопределить отдельные зависимости (для тестов). */
+  overrides?: Partial<IExtensionDeps>
+}
+
 export async function createDeps(
   ctx: vscode.ExtensionContext,
+  options: ICreateDepsOptions = {},
 ): Promise<IExtensionDeps> {
   const config = loadAppConfig()
   const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
@@ -585,5 +592,6 @@ export async function createDeps(
     indexingStatusBar,
     telemetry,
     setWorkDir: (dir: string) => { workDirState.current = dir },
+    ...options.overrides,
   }
 }

@@ -18,6 +18,7 @@ const log = createDomainLogger("AgentLoop")
 
 const PLAN_STEP_RESULT_MAX_CHARS = 500
 const DEFAULT_MAX_COMPACTIONS = 5
+const MAX_COMPACTIONS_ERROR = Symbol("MAX_COMPACTIONS")
 
 export interface IAgentLoopConfig {
   maxIterations?: number
@@ -74,6 +75,202 @@ export class AgentLoop {
     return null
   }
 
+  /**
+   * Выполнить компактизацию в цикле: попытаться компактировать, применить результат,
+   * синхронизировать память и контекст сессии.
+   * @returns true если компактизация была применена
+   */
+  private async tryLoopCompact(
+    conversation: IChatMessage[],
+    systemPrompt: string,
+    compactionCount: number,
+    onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
+  ): Promise<{ compacted: boolean; conversation: IChatMessage[] }> {
+    const loopCompactionResult = await this.tryCompact(conversation, systemPrompt)
+    const compactedConversation = this.applyCompaction(loopCompactionResult, systemPrompt)
+
+    if (!compactedConversation) {
+      return { compacted: false, conversation }
+    }
+
+    if (compactionCount >= this.maxCompactions) {
+      throw MAX_COMPACTIONS_ERROR
+    }
+
+    // Синхронизация памяти после компактизации
+    this.memory.restoreFromMessages(compactedConversation.slice(1))
+    this.sessionContext?.replaceMessages(compactedConversation.slice(1))
+
+    onCompaction?.(loopCompactionResult.tokensBefore ?? 0, loopCompactionResult.tokensAfter ?? 0)
+
+    return { compacted: true, conversation: compactedConversation }
+  }
+
+  /**
+   * Встроить шаг плана в разговор, если план активен и текущий шаг ожидает выполнения.
+   */
+  private injectPlanStep(
+    conversation: IChatMessage[],
+    plan: Plan | null,
+  ): void {
+    if (!plan || plan.status !== "running") return
+    const step = plan.currentStep
+    if (!step || step.status !== "pending") return
+
+    conversation.push({
+      role: "user",
+      content: `Выполнить шаг ${plan.currentStepIndex + 1}: ${step.description}${
+        step.suggestedTools.length ? ` (предлагаемые инструменты: ${step.suggestedTools.join(", ")})` : ""
+      }`,
+      timestamp: Date.now(),
+    })
+  }
+
+  /**
+   * Выполнить один ход: вызвать бэкенд, обработать ответ (текст или инструменты).
+   */
+  private async executeTurn(
+    conversation: IChatMessage[],
+    currentMode: AgentModeName,
+    onChunk: (text: string) => void,
+    signal?: AbortSignal,
+    onToolUse?: (name: string, args: Record<string, unknown>) => void,
+    onToolResult?: (name: string, result: IToolResult) => void,
+  ): Promise<{
+    type: "text" | "tool_calls" | "error"
+    content?: string
+    anyFailed?: boolean
+    failedTools?: { name: string; error: string }[]
+    plan?: Plan | null
+  }> {
+    let currentPlan: Plan | null = null
+
+    try {
+      const result = await this.toolExecutor.callBackend(conversation, onChunk, signal)
+
+      if (result.type === "text") {
+        if (result.content) {
+          conversation.push({
+            role: "assistant",
+            content: result.content,
+            timestamp: Date.now(),
+          })
+          this.addToMemory(conversation[conversation.length - 1])
+
+          currentPlan = this.planner.getPlan()
+          if (currentPlan && currentPlan.status === "running") {
+            currentPlan.markDone(result.content.slice(0, PLAN_STEP_RESULT_MAX_CHARS))
+          }
+
+          return { type: "text", content: result.content, plan: currentPlan }
+        }
+      }
+
+      if (result.type === "tool_calls" && result.toolCalls) {
+        currentPlan = this.planner.getPlan()
+        if (currentPlan && currentPlan.status === "running") {
+          currentPlan.markRunning()
+        }
+
+        const convLenBefore = conversation.length
+        const toolResult = await this.toolExecutor.executeToolCalls(
+          result.toolCalls,
+          currentMode,
+          conversation,
+          signal,
+          onToolUse,
+          onToolResult,
+        )
+
+        // Синхронизация: добавить сообщения вызовов инструментов в память
+        for (let i = convLenBefore; i < conversation.length; i++) {
+          this.addToMemory(conversation[i])
+        }
+
+        if (currentPlan) {
+          if (toolResult.anyFailed) {
+            currentPlan.markFailed("Инструмент вернул ошибку")
+          } else {
+            currentPlan.markDone()
+          }
+        }
+
+        return {
+          type: "tool_calls",
+          anyFailed: toolResult.anyFailed,
+          failedTools: toolResult.failedTools,
+          plan: currentPlan,
+        }
+      }
+
+      return { type: "text", plan: currentPlan }
+    } catch (err: unknown) {
+      const msg = errorMessage(err)
+      currentPlan = this.planner.getPlan()
+      if (currentPlan) {
+        currentPlan.markFailed(msg)
+      }
+      return {
+        type: "error",
+        anyFailed: true,
+        failedTools: [{ name: "backend", error: msg }],
+        plan: currentPlan,
+      }
+    }
+  }
+
+  /**
+   * Обработать провал хода: попытка репланирования или добавление сообщения об ошибке.
+   */
+  private async handleTurnFailure(
+    conversation: IChatMessage[],
+    anyFailed: boolean,
+    failedTools: { name: string; error: string }[] | undefined,
+    currentPlan: Plan | null,
+    recoveryAttempts: number,
+  ): Promise<{
+    recoveryAttempts: number
+    shouldBreak: boolean
+    shouldReplan: boolean
+  }> {
+    if (!anyFailed) return { recoveryAttempts, shouldBreak: false, shouldReplan: false }
+
+    if (recoveryAttempts >= this.maxRecoveryAttempts) {
+      return { recoveryAttempts, shouldBreak: true, shouldReplan: false }
+    }
+
+    // Попытка адаптивного репланирования
+    if (this.replanOnFailure && currentPlan && currentPlan.currentStep?.status === "failed") {
+      const failedStep = currentPlan.currentStep!
+      const failedError = failedStep.error ?? "Инструмент вернул ошибку"
+      const newPlan = await this.planner.attemptReplan(failedStep, failedError, this.maxReplanAttempts)
+
+      if (newPlan) {
+        recoveryAttempts++
+        const newPlanText = newPlan.toText()
+        conversation.push({
+          role: "user",
+          content: `План пересмотрен после провала шага "${failedStep.description}". Новый план:\n\n${newPlanText}`,
+          timestamp: Date.now(),
+        })
+        this.addToMemory(conversation[conversation.length - 1])
+
+        return { recoveryAttempts, shouldBreak: false, shouldReplan: true }
+      }
+    }
+
+    recoveryAttempts++
+    const failedNames = failedTools?.map((t) => t.name).join(", ") ?? "неизвестно"
+    conversation.push({
+      role: "user",
+      content: `Внимание: инструменты ${failedNames} завершены с ошибкой. Проанализируйте ошибки выше и попробуйте выполнить задачу другим способом. Вы можете: повторить вызов с другими аргументами, использовать другой инструмент, или завершить задачу с описанием ошибки.`,
+      timestamp: Date.now(),
+    })
+    this.addToMemory(conversation[conversation.length - 1])
+
+    return { recoveryAttempts, shouldBreak: false, shouldReplan: false }
+  }
+
   constructor(
     private readonly backend: IBackend,
     private readonly memory: AgentMemory,
@@ -93,7 +290,7 @@ export class AgentLoop {
     this.maxCompactions = config.maxCompactions ?? DEFAULT_MAX_COMPACTIONS
   }
 
-  async run(
+ async run(
     query: string,
     activeSkills: ISkill[],
     onChunk: (text: string) => void,
@@ -136,157 +333,63 @@ export class AgentLoop {
         throw new AbortError()
       }
 
-     // Периодическая компактизация контекста перед каждым вызовом бэкенда
-      const loopCompactionResult = await this.tryCompact(workingConversation, systemPrompt)
-      const compactedConversation = this.applyCompaction(loopCompactionResult, systemPrompt)
-      if (compactedConversation) {
-        if (compactionCount >= this.maxCompactions) {
-          // Слишком много компактизаций — контекст превышает допустимые пределы
+      // Периодическая компактизация контекста
+      try {
+        const compactResult = await this.tryLoopCompact(
+          workingConversation, systemPrompt, compactionCount, onCompaction,
+        )
+        if (compactResult.compacted) {
+          compactionCount++
+          workingConversation = compactResult.conversation
+        }
+      } catch (err: unknown) {
+        if (err === MAX_COMPACTIONS_ERROR) {
           return {
             role: "assistant",
             content: "Контекст превышает допустимые пределы. Задача может быть незавершённой.",
             timestamp: Date.now(),
           }
         }
-
-        compactionCount++
-        workingConversation = compactedConversation
-
-        onCompaction?.(loopCompactionResult.tokensBefore ?? 0, loopCompactionResult.tokensAfter ?? 0)
-
-        // Синхронизация памяти после компактизации
-        this.memory.restoreFromMessages(workingConversation.slice(1))
-
-        this.sessionContext?.replaceMessages(workingConversation.slice(1))
+        throw err
       }
 
-      // Инъекция шага плана в разговор
-      const plan = this.planner.getPlan()
-      if (plan && plan.status === "running") {
-        const step = plan.currentStep
-        if (step && step.status === "pending") {
-          workingConversation.push({
-            role: "user",
-            content: `Выполнить шаг ${plan.currentStepIndex + 1}: ${step.description}${
-              step.suggestedTools.length ? ` (предлагаемые инструменты: ${step.suggestedTools.join(", ")})` : ""
-            }`,
-            timestamp: Date.now(),
-          })
+      // Инъекция шага плана
+      this.injectPlanStep(workingConversation, this.planner.getPlan())
+
+      // Выполнение хода
+      const turn = await this.executeTurn(
+        workingConversation, currentMode, onChunk, signal, onToolUse, onToolResult,
+      )
+
+      if (turn.type === "text") {
+        if (turn.content) {
+          return workingConversation[workingConversation.length - 1] as IChatMessage
         }
+        break
       }
 
-      let anyFailed = false
-      let failedTools: { name: string; error: string }[] | undefined
-      let currentPlan: Plan | null = null
+      if (turn.type === "tool_calls") {
+        const { anyFailed, failedTools, plan: currentPlan } = turn
+        if (!anyFailed) continue
 
-      try {
-        const result = await this.toolExecutor.callBackend(workingConversation, onChunk, signal)
+        const recovery = await this.handleTurnFailure(
+          workingConversation, anyFailed, failedTools, currentPlan ?? null, recoveryAttempts,
+        )
+        recoveryAttempts = recovery.recoveryAttempts
 
-        if (result.type === "text") {
-          if (result.content) {
-            workingConversation.push({
-              role: "assistant",
-              content: result.content,
-              timestamp: Date.now(),
-            })
-            this.addToMemory(workingConversation[workingConversation.length - 1])
-
-            currentPlan = this.planner.getPlan()
-            if (currentPlan && currentPlan.status === "running") {
-              currentPlan.markDone(result.content.slice(0, PLAN_STEP_RESULT_MAX_CHARS))
-              if (currentPlan.status === "running") {
-                continue
-              }
-            }
-
-            return workingConversation[workingConversation.length - 1] as IChatMessage
-          }
-        }
-
-        if (result.type === "tool_calls" && result.toolCalls) {
-          currentPlan = this.planner.getPlan()
-          if (currentPlan && currentPlan.status === "running") {
-            currentPlan.markRunning()
-          }
-
-          const convLenBefore = workingConversation.length
-          const toolResult = await this.toolExecutor.executeToolCalls(
-            result.toolCalls,
-            currentMode,
-            workingConversation,
-            signal,
-            onToolUse,
-            onToolResult,
-          )
-
-          // Синхронизация: добавить сообщения вызовов инструментов в память
-          for (let i = convLenBefore; i < workingConversation.length; i++) {
-            this.addToMemory(workingConversation[i])
-          }
-
-          anyFailed = toolResult.anyFailed
-          failedTools = toolResult.failedTools
-
-          if (currentPlan) {
-            if (anyFailed) {
-              currentPlan.markFailed("Инструмент вернул ошибку")
-            } else {
-              currentPlan.markDone()
-            }
-          }
-        } else {
-          break
-        }
-      } catch (err: unknown) {
-        anyFailed = true
-        const msg = errorMessage(err)
-        failedTools = [{ name: "backend", error: msg }]
-
-        currentPlan = this.planner.getPlan()
-        if (currentPlan) {
-          currentPlan.markFailed(msg)
-        }
-      }
-
-      if (anyFailed) {
-        if (recoveryAttempts >= this.maxRecoveryAttempts) {
-          break
-        }
-
-        // Попытка адаптивного репланирования, если шаг провалился окончательно
-        if (this.replanOnFailure && currentPlan && currentPlan.currentStep?.status === "failed") {
-          const failedStep = currentPlan.currentStep!
-          const failedError = failedStep.error ?? "Инструмент вернул ошибку"
-          const newPlan = await this.planner.attemptReplan(failedStep, failedError, this.maxReplanAttempts)
-
-          if (newPlan) {
-            recoveryAttempts++
-            const newPlanText = newPlan.toText()
-            workingConversation.push({
-              role: "user",
-              content: `План пересмотрен после провала шага "${failedStep.description}". Новый план:\n\n${newPlanText}`,
-              timestamp: Date.now(),
-            })
-            this.addToMemory(workingConversation[workingConversation.length - 1])
-
-            continue
-          }
-        }
-
-        recoveryAttempts++
-        const failedNames = failedTools?.map((t) => t.name).join(", ") ?? "неизвестно"
-        workingConversation.push({
-          role: "user",
-          content: `Внимание: инструменты ${failedNames} завершены с ошибкой. Проанализируйте ошибки выше и попробуйте выполнить задачу другим способом. Вы можете: повторить вызов с другими аргументами, использовать другой инструмент, или завершить задачу с описанием ошибки.`,
-          timestamp: Date.now(),
-        })
-        this.addToMemory(workingConversation[workingConversation.length - 1])
-
+        if (recovery.shouldBreak) break
+        if (recovery.shouldReplan) continue
         continue
       }
 
-      // Инструменты выполнены успешно — продолжить цикл
-      continue
+      // Error
+      const { anyFailed, failedTools, plan: currentPlan } = turn
+      const recovery = await this.handleTurnFailure(
+        workingConversation, Boolean(anyFailed), failedTools, currentPlan ?? null, recoveryAttempts,
+      )
+      recoveryAttempts = recovery.recoveryAttempts
+
+      if (recovery.shouldBreak) break
     }
 
     return {

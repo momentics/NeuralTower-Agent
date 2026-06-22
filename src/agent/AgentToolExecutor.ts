@@ -67,12 +67,12 @@ export class AgentToolExecutor {
       const modePerm = this.modeManager.checkToolPermission(tc.toolName)
 
       if (modePerm === "deny") {
-        onToolUse?.(tc.toolName, { ...tc.arguments, _blocked: `mode ${currentMode} denies ${tc.toolName}` })
-        workingConversation.push({
-          role: "assistant",
-          content: `Вызов инструмента: ${tc.toolName} — ЗАБЛОКИРОВАНО режимом ${currentMode}`,
-          timestamp: Date.now(),
-        })
+        this.recordBlockedTool(
+          tc.toolName, tc.arguments, workingConversation,
+          `ЗАБЛОКИРОВАНО режимом ${currentMode}`,
+          `mode ${currentMode} denies ${tc.toolName}`,
+          onToolUse,
+        )
         anyFailed = true
         failedTools.push({ name: tc.toolName, error: `Режим ${currentMode} запрещает вызов` })
         continue
@@ -83,12 +83,12 @@ export class AgentToolExecutor {
       if (this.permissionManager && tool && modePerm !== "allow") {
         const allowed = await this.permissionManager.checkPermission(tool, tc.arguments)
         if (!allowed) {
-          onToolUse?.(tc.toolName, { ...tc.arguments, _blocked: "permission denied" })
-          workingConversation.push({
-            role: "assistant",
-            content: `Вызов инструмента: ${tc.toolName} — ЗАБЛОКИРОВАНО политикой разрешений`,
-            timestamp: Date.now(),
-          })
+          this.recordBlockedTool(
+            tc.toolName, tc.arguments, workingConversation,
+            "ЗАБЛОКИРОВАНО политикой разрешений",
+            "permission denied",
+            onToolUse,
+          )
           anyFailed = true
           failedTools.push({ name: tc.toolName, error: "Отказано в доступе" })
           continue
@@ -128,6 +128,22 @@ export class AgentToolExecutor {
     }
 
     return { anyFailed, failedTools: anyFailed ? failedTools : undefined }
+  }
+
+  private recordBlockedTool(
+    toolName: string,
+    args: Record<string, unknown>,
+    conversation: IChatMessage[],
+    blockReason: string,
+    blockedTag: string,
+    onToolUse?: (name: string, args: Record<string, unknown>) => void,
+  ): void {
+    onToolUse?.(toolName, { ...args, _blocked: blockedTag })
+    conversation.push({
+      role: "assistant",
+      content: `Вызов инструмента: ${toolName} — ${blockReason}`,
+      timestamp: Date.now(),
+    })
   }
 
   private resolveArgs(_toolName: string, args: Record<string, unknown>): Record<string, unknown> {

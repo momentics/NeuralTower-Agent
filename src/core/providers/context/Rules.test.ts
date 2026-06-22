@@ -15,8 +15,8 @@ describe("makeRulesProvider", () => {
   })
 
   it("returns empty when no rules found", async () => {
-    vi.mocked(fs.readdir).mockRejectedValueOnce(new Error("ENOENT"))
-    vi.mocked(fs.readFile).mockRejectedValueOnce(new Error("ENOENT"))
+    vi.mocked(fs.readdir).mockRejectedValue(new Error("ENOENT"))
+    vi.mocked(fs.readFile).mockRejectedValue(new Error("ENOENT"))
     const provider = makeRulesProvider(() => "/work")
     const result = await provider.resolve("")
     expect(result).toHaveLength(1)
@@ -24,8 +24,10 @@ describe("makeRulesProvider", () => {
   })
 
   it("returns rules from AGENTS.md", async () => {
-    vi.mocked(fs.readdir).mockRejectedValueOnce(new Error("ENOENT"))
-    vi.mocked(fs.readFile).mockResolvedValueOnce("# Test Rule")
+    vi.mocked(fs.readdir).mockRejectedValue(new Error("ENOENT"))
+    vi.mocked(fs.readFile)
+      .mockResolvedValueOnce("# Test Rule")
+      .mockRejectedValue(new Error("ENOENT"))
     const provider = makeRulesProvider(() => "/work")
     const result = await provider.resolve("")
     expect(result).toHaveLength(1)
@@ -40,19 +42,19 @@ describe("loadRulesFiles", () => {
   })
 
   it("returns empty when no rules exist", async () => {
-    vi.mocked(fs.readdir).mockRejectedValueOnce(new Error("ENOENT"))
-    vi.mocked(fs.readFile).mockRejectedValueOnce(new Error("ENOENT"))
+    vi.mocked(fs.readdir).mockRejectedValue(new Error("ENOENT"))
+    vi.mocked(fs.readFile).mockRejectedValue(new Error("ENOENT"))
     const rules = await loadRulesFiles(() => "/work")
     expect(rules).toEqual([])
   })
 
   it("loads rules from .neuraltower/rules", async () => {
-    vi.mocked(fs.readdir).mockResolvedValueOnce(["rule1.md", "rule2.md"])
+    vi.mocked(fs.readdir)
+      .mockResolvedValueOnce(["rule1.md", "rule2.md"])
+      .mockRejectedValue(new Error("ENOENT"))
     vi.mocked(fs.readFile)
       .mockResolvedValueOnce("# Rule 1")
       .mockResolvedValueOnce("# Rule 2")
-      .mockRejectedValue(new Error("ENOENT"))
-      .mockRejectedValue(new Error("ENOENT"))
       .mockRejectedValue(new Error("ENOENT"))
     const rules = await loadRulesFiles(() => "/work")
     expect(rules).toHaveLength(2)
