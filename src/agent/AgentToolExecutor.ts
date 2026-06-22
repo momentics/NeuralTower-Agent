@@ -70,7 +70,7 @@ export class AgentToolExecutor {
         this.recordBlockedTool(
           tc.toolName, tc.arguments, workingConversation,
           `ЗАБЛОКИРОВАНО режимом ${currentMode}`,
-          `mode ${currentMode} denies ${tc.toolName}`,
+          `режим ${currentMode} запрещает ${tc.toolName}`,
           onToolUse,
         )
         anyFailed = true
@@ -86,7 +86,7 @@ export class AgentToolExecutor {
           this.recordBlockedTool(
             tc.toolName, tc.arguments, workingConversation,
             "ЗАБЛОКИРОВАНО политикой разрешений",
-            "permission denied",
+            "отказано в доступе",
             onToolUse,
           )
           anyFailed = true

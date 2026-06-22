@@ -43,7 +43,14 @@ function isPrivateOrReservedIp(host: string): boolean {
 
   const ipMatch = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
   if (ipMatch) {
-    const [, a, b] = ipMatch.map(Number)
+    const octets = ipMatch.slice(1).map(Number)
+
+    // Проверить каждый октет на вхождение в [0, 255]
+    for (const octet of octets) {
+      if (octet > 255) return false
+    }
+
+    const [a, b] = octets
 
     if (a === 10) return true
     if (a === 172 && b >= 16 && b <= 31) return true

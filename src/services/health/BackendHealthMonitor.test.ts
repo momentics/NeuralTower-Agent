@@ -82,7 +82,7 @@ describe("BackendHealthMonitor", () => {
     await vi.advanceTimersByTimeAsync(200)
     const [r1, r2] = await Promise.all([p1, p2])
     expect(r1).toBe(true)
-    expect(r2).toBe(false) // second call returns this.connected which is still false
+    expect(r2).toBe(false) // второй вызов возвращает this.connected, который всё ещё false
     expect(backend.healthCheck).toHaveBeenCalledTimes(1)
   })
 

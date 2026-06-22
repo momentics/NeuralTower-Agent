@@ -3,6 +3,7 @@ import type { IToolResult } from "../../agent/AgentTypes"
 import * as fs from "fs/promises"
 import { FilesystemTool } from "./FilesystemTool"
 import { str, bool } from "../ToolArgs"
+import { errorMessage } from "../../core/Errors"
 
 /** Создание директории. Поддерживает рекурсивное создание родительских директорий. */
 export class CreateDirTool extends FilesystemTool {
@@ -27,7 +28,11 @@ export class CreateDirTool extends FilesystemTool {
     if ("error" in result) return { output: result.error, success: false }
 
     const recursive = bool(args, "recursive", false)
-    await fs.mkdir(result.resolved, { recursive })
+    try {
+      await fs.mkdir(result.resolved, { recursive })
+    } catch (err: unknown) {
+      return { output: `Не удалось создать директорию: ${errorMessage(err)}`, success: false }
+    }
     return { output: `Директория создана: ${p}`, success: true }
   }
 }

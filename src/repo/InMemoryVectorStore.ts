@@ -43,7 +43,7 @@ export class InMemoryVectorStore implements IVectorStore {
   /**
    * Поиск по вектору запроса с использованием
    * косинусного сходства. Использует частичный top-K
-   * для избежания сортировки всех результатов.
+   * с O(log k) вставкой вместо полной сортировки O(k log k).
    */
   async search(queryEmbedding: number[], topK: number): Promise<ISearchResult[]> {
     const items = this.store.getItems()
@@ -65,7 +65,8 @@ export class InMemoryVectorStore implements IVectorStore {
         threshold = top[top.length - 1].score
       } else if (similarity > top[top.length - 1].score) {
         top[top.length - 1] = { index: i, score: similarity }
-        top.sort((a, b) => b.score - a.score)
+        // O(log k) sift-up вместо полной сортировки O(k log k)
+        this.siftUp(top, top.length - 1)
         threshold = top[top.length - 1].score
       }
     }
@@ -83,6 +84,21 @@ export class InMemoryVectorStore implements IVectorStore {
     }
 
     return results
+  }
+
+  /**
+    * Поднять элемент на позиции `pos` на правильное место в массиве, отсортированном по убыванию.
+    * O(log k) вместо полной сортировки O(k log k).
+    */
+  private siftUp(arr: Array<{ score: number }>, pos: number): void {
+    while (pos > 0) {
+      const parent = (pos - 1) >> 1
+      if (arr[pos].score >= arr[parent].score) break
+      const tmp = arr[parent]
+      arr[parent] = arr[pos]
+      arr[pos] = tmp
+      pos = parent
+    }
   }
 
   /**

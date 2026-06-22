@@ -40,9 +40,10 @@ export interface IUnifiedSearchResult {
  */
 export interface ICodebaseSearch {
   search(query: string, config?: Partial<ISearchConfig>, signal?: AbortSignal): Promise<IUnifiedSearchResult[]>
- indexChunks(chunks: ICodeChunk[], signal?: AbortSignal): Promise<void>
+  indexChunks(chunks: ICodeChunk[], signal?: AbortSignal): Promise<void>
   deleteByFile(filePath: string): Promise<void>
   clear(): Promise<void>
+  compactIfNeeded(): void
   stats(): { vectorChunks: number; ftsChunks: number; embeddingAvailable: boolean }
 }
 
@@ -253,5 +254,13 @@ export class CodebaseSearch implements ICodebaseSearch {
       ftsChunks: this.fts.count(),
       embeddingAvailable: this.embeddingProvider?.isAvailable() ?? false,
     }
+  }
+
+  /**
+   * Выполнить compaction обоих индексов если tombstone превышает порог.
+   */
+  compactIfNeeded(): void {
+    this.vectorStore.compactIfNeeded()
+    this.fts.compactIfNeeded()
   }
 }

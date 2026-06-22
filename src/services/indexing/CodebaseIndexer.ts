@@ -170,6 +170,7 @@ export class CodebaseIndexer implements IPlugin, ICodebaseIndexer {
       if (chunks.length > 0) {
         await this.search.indexChunks(chunks)
       }
+      this.search.compactIfNeeded()
     } catch (err: unknown) {
       const msg = errorMessage(err)
       log.error(`Ошибка при индексации файла ${filePath}: ${msg}`)
@@ -183,6 +184,7 @@ export class CodebaseIndexer implements IPlugin, ICodebaseIndexer {
     if (this.isDisposed) return
     try {
       await this.search.deleteByFile(filePath)
+      this.search.compactIfNeeded()
     } catch (err: unknown) {
       const msg = errorMessage(err)
       log.error(`Ошибка при удалении индекса файла ${filePath}: ${msg}`)

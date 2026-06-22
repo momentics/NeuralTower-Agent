@@ -4,6 +4,7 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import { FilesystemTool } from "./FilesystemTool"
 import { str } from "../ToolArgs"
+import { errorMessage } from "../../core/Errors"
 
 /** Перемещение или переименование файла или директории. */
 export class MoveFileTool extends FilesystemTool {
@@ -32,10 +33,14 @@ export class MoveFileTool extends FilesystemTool {
     const result = await this.resolveTwoPaths(src, dst)
     if ("error" in result) return { output: result.error, success: false }
 
-    await fs.stat(result.source)
-    const dstDir = path.dirname(result.destination)
-    await fs.mkdir(dstDir, { recursive: true })
-    await fs.rename(result.source, result.destination)
+    try {
+      await fs.stat(result.source)
+      const dstDir = path.dirname(result.destination)
+      await fs.mkdir(dstDir, { recursive: true })
+      await fs.rename(result.source, result.destination)
+    } catch (err: unknown) {
+      return { output: `Не удалось переместить файл: ${errorMessage(err)}`, success: false }
+    }
     return { output: `Перемещено: ${src} -> ${dst}`, success: true }
   }
 }

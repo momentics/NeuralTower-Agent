@@ -101,6 +101,9 @@ export class MCPManager implements IMCPManager {
         continue
       }
 
+      // Удалить старые слушатели перед подключением новых, чтобы избежать накопления при переподключении
+      transport.removeAllListeners()
+
       server.transport = transport
       server.ready = true
       server.nextRequestId = 0

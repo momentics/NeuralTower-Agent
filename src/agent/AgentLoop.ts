@@ -382,7 +382,7 @@ export class AgentLoop {
         continue
       }
 
-      // Error
+      // Ошибка
       const { anyFailed, failedTools, plan: currentPlan } = turn
       const recovery = await this.handleTurnFailure(
         workingConversation, Boolean(anyFailed), failedTools, currentPlan ?? null, recoveryAttempts,

@@ -4,6 +4,7 @@ import * as fs from "fs/promises"
 import { FilesystemTool } from "./FilesystemTool"
 import { str, bool } from "../ToolArgs"
 import { FS_MAX_DELETE_FILE_COUNT } from "../../core/Config"
+import { errorMessage } from "../../core/Errors"
 
 /** Удаление файла или директории. Поддерживает рекурсивное удаление директорий. */
 export class DeleteFileTool extends FilesystemTool {
@@ -27,7 +28,13 @@ export class DeleteFileTool extends FilesystemTool {
     const result = await this.resolvePath(fp)
     if ("error" in result) return { output: result.error, success: false }
 
-    const stat = await fs.stat(result.resolved)
+    let stat
+    try {
+      stat = await fs.stat(result.resolved)
+    } catch (err: unknown) {
+      return { output: `Не удалось получить информацию о файле: ${errorMessage(err)}`, success: false }
+    }
+
     const isDir = stat.isDirectory()
     const isRecursive = isDir || bool(args, "recursive", false)
 
@@ -41,10 +48,14 @@ export class DeleteFileTool extends FilesystemTool {
       }
     }
 
-    await fs.rm(result.resolved, {
-      recursive: isRecursive,
-      force: true,
-    })
+    try {
+      await fs.rm(result.resolved, {
+        recursive: isRecursive,
+        force: true,
+      })
+    } catch (err: unknown) {
+      return { output: `Не удалось удалить: ${errorMessage(err)}`, success: false }
+    }
     return {
       output: `Удалено: ${fp}${isDir ? " (директория)" : ""}`,
       success: true,

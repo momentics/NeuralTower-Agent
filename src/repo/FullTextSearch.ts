@@ -38,6 +38,7 @@ export interface IFullTextSearch {
   deleteByFile(filePath: string): void
   clear(): void
   count(): number
+  compactIfNeeded(threshold?: number): boolean
 }
 
 /**

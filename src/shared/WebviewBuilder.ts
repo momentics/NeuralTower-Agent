@@ -59,7 +59,7 @@ export function buildWebviewHtml(
     inlineJsBlock = `<script nonce="${nonce}">${config.inlineJs}</script>`
   }
 
-  const scriptCsp = config.inlineJs ? `script-src 'nonce-${nonce}';` : `script-src 'nonce-${nonce}';`
+  const scriptCsp = config.inlineJs || config.js ? `script-src 'nonce-${nonce}';` : `script-src ${cspSource};`
   const styleCsp = config.inlineCss ? `style-src ${cspSource} 'unsafe-inline';` : `style-src ${cspSource};`
 
   return `<!DOCTYPE html>

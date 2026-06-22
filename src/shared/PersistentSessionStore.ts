@@ -116,7 +116,11 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
 
   async save(): Promise<void> {
     await this.mutex.withLock(async () => {
-      await this.persister.save(this.data)
+      try {
+        await this.persister.save(this.data)
+      } catch (err: unknown) {
+        log.error(`Ошибка сохранения сессий: ${errorMessage(err)}`)
+      }
     })
   }
 

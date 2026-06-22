@@ -97,14 +97,19 @@ export class BashTool extends BaseTool {
    */
   validateCommand(cmd: string): string | null {
     const trimmed = cmd.trim()
-    const firstWord = trimmed.split(/\s+/)[0]?.toLowerCase().replace(/[\/\\].*$/, "")
+
+    // Unicode NFKC: нормализация гомоглифов (напр. кириллический "р" → латинский "р")
+    // для предотвращения атак через подмену символов
+    const normalized = trimmed.normalize("NFKC")
+
+    const firstWord = normalized.split(/\s+/)[0]?.toLowerCase().replace(/[\/\\].*$/, "")
 
     if (DENIED_COMMANDS.has(firstWord)) {
       return `Команда "${firstWord}" запрещена`
     }
 
     for (const pattern of DENIED_PATTERNS) {
-      if (pattern.test(trimmed)) {
+      if (pattern.test(normalized)) {
         return `Команда содержит запрещённый паттерн: ${pattern.source}`
       }
     }

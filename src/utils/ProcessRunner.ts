@@ -33,8 +33,8 @@ export class DefaultProcessRunner implements IProcessRunner {
 }
 
 /**
- * Run an external process with buffer limits, timeout, and proper cleanup.
- * Shared between BashTool, GitService, and any future process-based tools.
+ * Выполнить внешний процесс с лимитами буфера, таймаутом и корректной очисткой.
+ * Используется в BashTool, GitService и других инструментах на основе процессов.
  */
 export function runProcess(
   command: string,
@@ -66,9 +66,18 @@ export function runProcess(
       else if (value) resolve(value)
     }
 
-    const opts: SpawnOptions = { cwd, timeout, shell, env }
+    const opts: SpawnOptions = { cwd, shell, env }
 
     const proc: ChildProcess = spawn(command, args, opts)
+
+    // Node.js spawn не поддерживает `timeout`; применяем вручную
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    if (timeout) {
+      timeoutId = setTimeout(() => {
+        proc.kill()
+        settle(undefined, new Error(`Превышен таймаут процесса (${timeout} мс)`))
+      }, timeout)
+    }
 
     const stdoutChunks: Buffer[] = []
     const stderrChunks: Buffer[] = []
@@ -96,6 +105,10 @@ export function runProcess(
     proc.on("error", (err: Error) => settle(undefined, err))
 
     proc.on("close", (code: number | null) => {
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId)
+        timeoutId = undefined
+      }
       const stdout = Buffer.concat(stdoutChunks).toString("utf-8")
       const stderr = Buffer.concat(stderrChunks).toString("utf-8")
       settle({ stdout, stderr, code }, undefined)

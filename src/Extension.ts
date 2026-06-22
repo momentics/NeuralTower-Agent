@@ -15,33 +15,66 @@ let initInProgress = false
 
 export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   app = new App(ctx)
+  const currentApp = app
   const deps = await createDeps(ctx)
-
-  // ── Канал вывода ────────────────────────────────────────
   const outputChannel = createOutputChannel()
 
-  // ── Провайдеры ──────────────────────────────────────────
-  app.registerProvider(deps.chatProvider)
+  registerProviders(currentApp, deps)
+  registerLanguageFeatures(deps)
+  registerCommands(currentApp, deps, outputChannel)
+  registerWebviewSerializers()
+  registerWorkspaceListeners(deps)
+  setupDisposal(ctx, deps, outputChannel)
 
-  // ── Автодополнение ──────────────────────────────────────
+  await currentApp.init()
+  deps.telemetry.capture("session_started", { version: currentApp.version() })
+
+  initInBackground(deps).catch((err: unknown) => {
+    const msg = errorMessage(err)
+    log.error(`Фоновая инициализация не выполнена: ${msg}`)
+  })
+}
+
+/**
+ * Зарегистрировать UI-провайдеры.
+ */
+function registerProviders(app: App, deps: Awaited<ReturnType<typeof createDeps>>): void {
+  app.registerProvider(deps.chatProvider)
+}
+
+/**
+ * Зарегистрировать языковые возможности (автодополнение, code actions).
+ */
+function registerLanguageFeatures(deps: Awaited<ReturnType<typeof createDeps>>): void {
   vscode.languages.registerInlineCompletionItemProvider(
     { pattern: "**/*" },
     deps.autocompleteService,
   )
 
-  // ── Действия кода ────────────────────────────────────────
   const codeActionProvider = new AgentCodeActionProvider(deps.chatProvider)
   vscode.languages.registerCodeActionsProvider("*", codeActionProvider, codeActionProviderMetadata)
+}
 
-  // ── Команды ─────────────────────────────────────────────
+/**
+ * Зарегистрировать команды.
+ */
+function registerCommands(
+  app: App,
+  deps: Awaited<ReturnType<typeof createDeps>>,
+  outputChannel: vscode.OutputChannel,
+): void {
   registerAllCommands(
     { app, agent: deps.agent, gitService: deps.gitService, diffViewer: deps.diffViewer, outputChannel },
     { app, chatProvider: deps.chatProvider, todoStore: deps.todoStore, agent: deps.agent, gitService: deps.gitService, diffViewer: deps.diffViewer, settingsProvider: deps.settingsProvider },
     { app, commitMessageService: deps.commitMessageService },
     { app, codebaseIndexer: deps.codebaseIndexer },
   )
+}
 
-  // ── Сериализаторы панелей Webview ─────────────────────────────
+/**
+ * Зарегистрировать сериализаторы веб-представлений.
+ */
+function registerWebviewSerializers(): void {
   vscode.window.registerWebviewPanelSerializer(
     DiffViewerProvider.viewType,
     {
@@ -51,8 +84,12 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
       },
     },
   )
+}
 
-  // ── Слушатель изменений рабочей директории ──────────────
+/**
+ * Зарегистрировать слушатели событий рабочей области.
+ */
+function registerWorkspaceListeners(deps: Awaited<ReturnType<typeof createDeps>>): void {
   vscode.workspace.onDidChangeWorkspaceFolders(async () => {
     if (vscode.workspace.workspaceFolders?.[0]) {
       const newDir = vscode.workspace.workspaceFolders[0].uri.fsPath
@@ -63,36 +100,29 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
       await deps.agent.reload()
     }
   })
+}
 
-  // ── Запуск ──────────────────────────────────────────────
-  await app.init()
-  deps.telemetry.capture("session_started", { version: app.version() })
-
-  // ── Фоновая инициализация (не блокирует UI) ─────────────
-  initInBackground(deps).catch((err: unknown) => {
-    const msg = errorMessage(err)
-    log.error(`Фоновая инициализация не выполнена: ${msg}`)
-  })
-
-  // ── Сохранить объекты для освобождения ──────────────────
+/**
+ * Настроить освобождение ресурсов при деактивации.
+ */
+function setupDisposal(
+  ctx: vscode.ExtensionContext,
+  deps: Awaited<ReturnType<typeof createDeps>>,
+  outputChannel: vscode.OutputChannel,
+): void {
   ctx.subscriptions.push({
     dispose: () => {
       const toDispose: (() => void | Promise<void>)[] = [
-        // Агенты (созданы последними)
         () => deps.agent.dispose(),
-        // UI-провайдеры
         () => deps.diffViewer.dispose(),
         () => deps.settingsProvider.dispose(),
-        // Мониторинг
         () => deps.healthMonitor.dispose(),
         () => deps.indexingStatusBar.dispose(),
         () => deps.commitMessageService.dispose(),
         () => deps.autocompleteService.dispose(),
-        // Сервисы
         () => deps.notificationService.dispose(),
         () => deps.permissionManager.dispose(),
         () => deps.sessionStore.dispose(),
-        // Инфраструктура
         () => deps.codebaseIndexer.dispose(),
         () => deps.mcpManager.disconnect(),
         () => deps.telemetry.dispose(),
@@ -136,7 +166,6 @@ async function initInBackground(deps: Awaited<ReturnType<typeof createDeps>>): P
 
   try {
     await vscode.window.withProgress(progressOptions, async (progress) => {
-      // codebaseIndexer.start() сам строит файловый индекс внутри fullIndex()
       progress.report({ message: "Индексация кодовой базы..." })
       try {
         await deps.codebaseIndexer.start(vscode.workspace.workspaceFolders![0].uri)

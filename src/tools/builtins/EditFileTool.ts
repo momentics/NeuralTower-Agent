@@ -4,6 +4,7 @@ import * as fs from "fs/promises"
 import { FilesystemTool } from "./FilesystemTool"
 import { str, bool } from "../ToolArgs"
 import { FS_EDIT_PREVIEW_TRUNCATE, FS_MAX_EDIT_CONTENT_LENGTH } from "../../core/Config"
+import { errorMessage } from "../../core/Errors"
 
 /**
  * Расширения бинарных файлов, которые нельзя редактировать как текст.
@@ -50,7 +51,7 @@ export class EditFileTool extends FilesystemTool {
     const all = bool(args, "replaceAll", false)
 
     if (!fp) return { output: "Не указан путь к файлу", success: false }
-    if (!oldStr) return { output: "Не указан текст для поиска", success: false }
+    if (oldStr.length === 0) return { output: "Текст для поиска не может быть пустым", success: false }
     if (newStr.length > FS_MAX_EDIT_CONTENT_LENGTH) {
       return { output: `Текст замены слишком велик (макс. ${FS_MAX_EDIT_CONTENT_LENGTH} символов)`, success: false }
     }
@@ -63,7 +64,13 @@ export class EditFileTool extends FilesystemTool {
       return { output: `Редактирование бинарных файлов запрещено: .${ext}`, success: false }
     }
 
-    const content = await fs.readFile(result.resolved, "utf-8")
+    let content: string
+    try {
+      content = await fs.readFile(result.resolved, "utf-8")
+    } catch (err: unknown) {
+      return { output: `Не удалось прочитать файл: ${errorMessage(err)}`, success: false }
+    }
+
     const count = content.split(oldStr).length - 1
 
     if (count === 0) {
@@ -78,7 +85,12 @@ export class EditFileTool extends FilesystemTool {
       ? content.split(oldStr).join(newStr)
       : content.replace(oldStr, newStr)
 
-    await fs.writeFile(result.resolved, updated, "utf-8")
+    try {
+      await fs.writeFile(result.resolved, updated, "utf-8")
+    } catch (err: unknown) {
+      return { output: `Не удалось записать файл: ${errorMessage(err)}`, success: false }
+    }
+
     return {
       output: `Заменено ${count} вхождений в ${fp}`,
       success: true,

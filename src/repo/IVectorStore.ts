@@ -73,4 +73,9 @@ export interface IVectorStore {
    * Получить статистику хранилища.
    */
   stats(): { totalChunks: number; filesIndexed: number; avgChunkSize: number }
+
+  /**
+   * Выполнить compaction если tombstone превышает порог.
+   */
+  compactIfNeeded(threshold?: number): boolean
 }
