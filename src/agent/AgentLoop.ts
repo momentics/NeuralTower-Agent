@@ -40,6 +40,12 @@ export class AgentLoop {
     }
   }
 
+  /** Добавить сообщение в память и контекст сессии. */
+  private addToMemory(msg: ChatMessage): void {
+    this.memory.add(msg)
+    this.pushSessionMessage(msg)
+  }
+
   /** Попытка компактизации с обработкой ошибок. */
   private async tryCompact(
     messages: ChatMessage[],
@@ -114,9 +120,7 @@ export class AgentLoop {
       { role: "user", content: query, timestamp: Date.now() },
     ]
 
-    this.memory.add(conversation[conversation.length - 1])
-
-    this.pushSessionMessage(conversation[conversation.length - 1])
+    this.addToMemory(conversation[conversation.length - 1])
 
     const compactionResult = await this.tryCompact(conversation, systemPrompt)
     let workingConversation: ChatMessage[] = this.applyCompaction(compactionResult, systemPrompt) ?? conversation
@@ -185,9 +189,7 @@ export class AgentLoop {
               content: result.content,
               timestamp: Date.now(),
             })
-            this.memory.add(workingConversation[workingConversation.length - 1])
-
-            this.pushSessionMessage(workingConversation[workingConversation.length - 1])
+            this.addToMemory(workingConversation[workingConversation.length - 1])
 
             currentPlan = this.planner.getPlan()
             if (currentPlan && currentPlan.status === "running") {
@@ -207,6 +209,7 @@ export class AgentLoop {
             currentPlan.markRunning()
           }
 
+          const convLenBefore = workingConversation.length
           const toolResult = await this.toolExecutor.executeToolCalls(
             result.toolCalls,
             currentMode,
@@ -215,6 +218,11 @@ export class AgentLoop {
             onToolUse,
             onToolResult,
           )
+
+          // Синхронизация: добавить сообщения вызовов инструментов в память
+          for (let i = convLenBefore; i < workingConversation.length; i++) {
+            this.addToMemory(workingConversation[i])
+          }
 
           anyFailed = toolResult.anyFailed
           failedTools = toolResult.failedTools
@@ -259,9 +267,7 @@ export class AgentLoop {
               content: `План пересмотрен после провала шага "${failedStep.description}". Новый план:\n\n${newPlanText}`,
               timestamp: Date.now(),
             })
-            this.memory.add(workingConversation[workingConversation.length - 1])
-
-            this.pushSessionMessage(workingConversation[workingConversation.length - 1])
+            this.addToMemory(workingConversation[workingConversation.length - 1])
 
             continue
           }
@@ -274,9 +280,7 @@ export class AgentLoop {
           content: `Внимание: инструменты ${failedNames} завершены с ошибкой. Проанализируйте ошибки выше и попробуйте выполнить задачу другим способом. Вы можете: повторить вызов с другими аргументами, использовать другой инструмент, или завершить задачу с описанием ошибки.`,
           timestamp: Date.now(),
         })
-        this.memory.add(workingConversation[workingConversation.length - 1])
-
-        this.pushSessionMessage(workingConversation[workingConversation.length - 1])
+        this.addToMemory(workingConversation[workingConversation.length - 1])
 
         continue
       }

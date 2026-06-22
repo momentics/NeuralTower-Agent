@@ -45,7 +45,7 @@ export class EditFileTool extends FilesystemTool {
     required: ["filepath", "oldString", "newString"],
   }
 
-  protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const fp = str(args, "filepath")
     const oldStr = str(args, "oldString")
     const newStr = str(args, "newString")

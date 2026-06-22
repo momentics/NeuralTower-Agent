@@ -98,11 +98,7 @@ export function runProcess(
     proc.on("close", (code: number | null) => {
       const stdout = Buffer.concat(stdoutChunks).toString("utf-8")
       const stderr = Buffer.concat(stderrChunks).toString("utf-8")
-      if (code === 0) {
-        settle({ stdout, stderr, code }, undefined)
-      } else {
-        settle(undefined, new Error(`Выходной код: ${code ?? -1}` + (stderr ? `\n${stderr}` : "")))
-      }
+      settle({ stdout, stderr, code }, undefined)
     })
 
     if (signal) {

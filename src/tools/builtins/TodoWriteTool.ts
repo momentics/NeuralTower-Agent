@@ -52,7 +52,7 @@ export class TodoWriteTool extends BaseTool {
     super()
   }
 
-  protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const todos = arr<Record<string, unknown>>(args, "todos")
     if (todos.length === 0) {
       return {

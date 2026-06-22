@@ -56,6 +56,9 @@ async function gitSpawn(
     timeout,
     maxBuffer,
   })
+  if (result.code !== 0) {
+    throw new Error(`Git exited with code ${result.code}: ${result.stderr}`)
+  }
   return { stdout: result.stdout, stderr: result.stderr }
 }
 

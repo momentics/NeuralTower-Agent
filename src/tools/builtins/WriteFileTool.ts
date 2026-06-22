@@ -24,7 +24,7 @@ export class WriteFileTool extends FilesystemTool {
     required: ["filepath", "content"],
   }
 
-  protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const fp = str(args, "filepath")
     const content = str(args, "content")
 

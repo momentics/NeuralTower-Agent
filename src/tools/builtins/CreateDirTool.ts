@@ -21,7 +21,7 @@ export class CreateDirTool extends FilesystemTool {
     required: ["path"],
   }
 
-  protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const p = str(args, "path")
     const result = await this.resolvePath(p)
     if ("error" in result) return { output: result.error, success: false }

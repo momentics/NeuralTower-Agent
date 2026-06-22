@@ -23,7 +23,6 @@ export abstract class FilesystemTool extends BaseTool {
   /**
    * Разрешить путь до канонического, используя realpath для существующих
    * и ближайшего существующего родителя для несуществующих.
-   * Это устраняет расхождения DOS short paths (MOMENT~1 vs momentics) на Windows.
    */
   protected async resolveToReal(p: string): Promise<string> {
     try {
@@ -33,7 +32,8 @@ export abstract class FilesystemTool extends BaseTool {
       let suffix = p.slice(dir.length)
       while (dir !== p) {
         try {
-          return (await fs.realpath(dir)) + suffix
+          const realDir = await fs.realpath(dir)
+          return realDir + suffix
         } catch {
           const parent = path.dirname(dir)
           if (parent === dir) break

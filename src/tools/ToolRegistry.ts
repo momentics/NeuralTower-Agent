@@ -66,6 +66,11 @@ function validateArgs(
           errors.push(`${key}: ожидался массив, получен ${typeof value}`)
         }
         break
+      case "object":
+        if (typeof value !== "object" || value === null || Array.isArray(value)) {
+          errors.push(`${key}: ожидался object, получен ${typeof value}`)
+        }
+        break
     }
   }
   return errors

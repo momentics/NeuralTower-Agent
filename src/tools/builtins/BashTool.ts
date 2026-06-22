@@ -114,13 +114,16 @@ export class BashTool extends BaseTool {
     const workdir = strOpt(args, "workdir")
 
     const isWindows = process.platform === "win32"
-    const { stdout, stderr } = await runProcess(
+    const { stdout, stderr, code } = await runProcess(
       isWindows ? "cmd.exe" : "sh",
       isWindows ? ["/c", cmd] : ["-c", cmd],
       { cwd: workdir, timeout, maxBuffer: BASH_MAX_BUFFER, signal },
     )
     const outTrimmed = stdout.trim()
     const out = (outTrimmed ? stdout : "") + (stderr ? `\nВЫВОД ОШИБОК:\n${stderr}` : "")
-    return { output: out || "(нет вывода)", success: true }
+    return {
+      output: `${out || "(нет вывода)"}\nВыходной код: ${code}`,
+      success: code === 0,
+    }
   }
 }

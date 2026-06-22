@@ -4,9 +4,6 @@ import type { IPermissionManager } from "../services/permission/PermissionManage
 import type { AgentModeManager } from "./AgentMode"
 import type { AgentModeName } from "./AgentMode"
 import type { AgentTurnResult, AgentToolCall, ToolResult } from "./AgentTypes"
-import { AgentMemory } from "./AgentMemory"
-import type { SessionContext } from "./SessionContext"
-
 import { AbortError, errorMessage } from "../core/errors"
 import { createDomainLogger } from "../core/logger"
 import { extractJsonBlocks } from "../utils/extractJsonBlocks"
@@ -19,8 +16,6 @@ export class AgentToolExecutor {
     private readonly toolRegistry: IToolRegistry,
     private readonly permissionManager: IPermissionManager | null,
     private readonly modeManager: AgentModeManager,
-    private readonly memory: AgentMemory,
-    private readonly sessionContext: SessionContext | null,
   ) {}
 
   async callBackend(
@@ -125,12 +120,6 @@ export class AgentToolExecutor {
         content: `Результат инструмента:\n${toolResult.output}`,
         timestamp: Date.now(),
       })
-
-      this.memory.add(workingConversation[workingConversation.length - 1])
-
-      if (this.sessionContext) {
-        this.sessionContext.pushMessage(workingConversation[workingConversation.length - 1])
-      }
 
       if (!toolResult.success) {
         anyFailed = true

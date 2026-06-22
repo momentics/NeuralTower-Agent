@@ -23,7 +23,7 @@ export class GlobTool extends FilesystemTool {
     required: ["pattern"],
   }
 
-  protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const pattern = str(args, "pattern")
     if (!pattern) return { output: "Не указан шаблон glob", success: false }
 

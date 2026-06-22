@@ -5,8 +5,6 @@ import { ToolRegistry } from "../tools/ToolRegistry"
 import type { ITool } from "../tools/ITool"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import { AgentModeManager } from "./AgentMode"
-import { AgentMemory } from "./AgentMemory"
-import type { SessionContext } from "./SessionContext"
 import type { ToolResult } from "./AgentTypes"
 
 const createMockBackend = (): IBackend => ({
@@ -32,37 +30,16 @@ const createMockPermissionManager = (): IPermissionManager =>
     checkPermission: vi.fn(async () => true),
   })
 
-const createMockSessionContext = (): SessionContext =>
-  ({
-    pushMessage: vi.fn(),
-    getMessages: vi.fn(() => []),
-    replaceMessages: vi.fn(),
-    getPlan: vi.fn(() => null),
-    setPlan: vi.fn(),
-    clearPlan: vi.fn(),
-    getEpoch: vi.fn(() => null),
-    getAgent: vi.fn(() => null),
-    isCompacted: vi.fn(() => false),
-    reset: vi.fn(),
-    initialize: vi.fn(async () => ({ baseline: "", baselineSeq: 0, revision: 0 })),
-    prepare: vi.fn(async () => ({ baseline: "", baselineSeq: 0, revision: 0 })),
-    sessionID: "test-session",
-  }) as unknown as SessionContext
-
 describe("AgentToolExecutor", () => {
   let backend: IBackend
   let toolRegistry: ToolRegistry
   let permissionManager: IPermissionManager
   let modeManager: AgentModeManager
-  let memory: AgentMemory
-  let sessionContext: SessionContext
   beforeEach(() => {
     backend = createMockBackend()
     toolRegistry = new ToolRegistry()
     permissionManager = createMockPermissionManager()
     modeManager = new AgentModeManager()
-    memory = new AgentMemory()
-    sessionContext = createMockSessionContext()
   })
 
   it("creates instance with all dependencies", () => {
@@ -71,8 +48,6 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       permissionManager,
       modeManager,
-      memory,
-      sessionContext,
     )
     expect(executor).toBeDefined()
   })
@@ -83,8 +58,6 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
-      memory,
-      null,
     )
     const conversation: ChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     const result = await executor.callBackend(conversation, () => {})
@@ -106,8 +79,6 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
-      memory,
-      null,
     )
     const conversation: ChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     const result = await executor.callBackend(conversation, () => {})
@@ -128,8 +99,6 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
-      memory,
-      null,
     )
     const conversation: ChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     const result = await executor.callBackend(conversation, () => {})
@@ -147,8 +116,6 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
-      memory,
-      null,
     )
     const conversation: ChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     await expect(executor.callBackend(conversation, () => {}, ac.signal)).rejects.toThrow("Задача прервана")
@@ -162,8 +129,6 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
-      memory,
-      null,
     )
     const conversation: ChatMessage[] = []
     const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
@@ -184,8 +149,6 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
-      memory,
-      null,
     )
     const conversation: ChatMessage[] = []
     const toolCalls = [{ toolName: "edit", arguments: { path: "/test" } }]
@@ -205,8 +168,6 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       permissionManager,
       modeManager,
-      memory,
-      null,
     )
     const conversation: ChatMessage[] = []
     const toolCalls = [{ toolName: "bash", arguments: { command: "rm -rf /" } }]
@@ -226,49 +187,11 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
-      memory,
-      null,
     )
     const conversation: ChatMessage[] = []
     const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
     const result = await executor.executeToolCalls(toolCalls, "build", conversation)
     expect(result.anyFailed).toBe(true)
-  })
-
-  it("executeToolCalls adds messages to memory", async () => {
-    const mockTool = createMockTool("read")
-    toolRegistry.register(mockTool)
-    const addSpy = vi.spyOn(memory, "add")
-    const executor = new AgentToolExecutor(
-      backend,
-      toolRegistry,
-      null,
-      modeManager,
-      memory,
-      null,
-    )
-    const conversation: ChatMessage[] = []
-    const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
-    await executor.executeToolCalls(toolCalls, "build", conversation)
-    expect(addSpy).toHaveBeenCalledTimes(1)
-  })
-
-  it("executeToolCalls adds messages to sessionContext when set", async () => {
-    const mockTool = createMockTool("read")
-    toolRegistry.register(mockTool)
-    const pushSpy = vi.spyOn(sessionContext, "pushMessage")
-    const executor = new AgentToolExecutor(
-      backend,
-      toolRegistry,
-      null,
-      modeManager,
-      memory,
-      sessionContext,
-    )
-    const conversation: ChatMessage[] = []
-    const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
-    await executor.executeToolCalls(toolCalls, "build", conversation)
-    expect(pushSpy).toHaveBeenCalledTimes(1)
   })
 
   it("executeToolCalls handles tool that throws exception", async () => {
@@ -280,8 +203,6 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
-      memory,
-      null,
     )
     const conversation: ChatMessage[] = []
     const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
@@ -307,8 +228,6 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
-      memory,
-      null,
     )
     const conversation: ChatMessage[] = []
     const toolCalls = [

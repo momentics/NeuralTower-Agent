@@ -22,7 +22,7 @@ export class MoveFileTool extends FilesystemTool {
     required: ["source", "destination"],
   }
 
-  protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const src = str(args, "source")
     const dst = str(args, "destination")
 

@@ -44,7 +44,7 @@ describe("BashTool", () => {
   it("returns error for failing command", async () => {
     const result = await tool.execute({ command: "exit 1" })
     expect(result.success).toBe(false)
-    expect(result.output).toContain("Не удалось выполнить bash")
+    expect(result.output).toContain("Выходной код: 1")
   })
 
   it("respects custom timeout", async () => {
@@ -53,7 +53,6 @@ describe("BashTool", () => {
       timeout: 500,
     })
     expect(result.success).toBe(false)
-    expect(result.output).toContain("Не удалось выполнить bash")
   })
 
   it("captures stderr output", async () => {

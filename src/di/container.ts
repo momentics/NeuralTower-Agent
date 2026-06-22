@@ -290,7 +290,7 @@ export function createToolsDomain(
 
   tools.register(new BashTool())
   tools.register(new WebFetchTool())
-  tools.register(new LspTool())
+  tools.register(new LspTool(() => workspaceRoot ?? process.cwd()))
   tools.register(new TodoWriteTool(todoStore))
 
   if (codebaseSearch) {

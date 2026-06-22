@@ -41,9 +41,6 @@ export class GrepTool extends FilesystemTool {
     required: ["pattern"],
   }
 
-  private rgFailedCount = 0
-  private readonly MAX_RG_FAILURES = 3
-
   protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const pattern = str(args, "pattern")
     const root = str(args, "path") || "."
@@ -54,16 +51,11 @@ export class GrepTool extends FilesystemTool {
     const result = await this.resolvePath(root)
     if ("error" in result) return { output: result.error, success: false }
 
-    if (this.rgFailedCount < this.MAX_RG_FAILURES) {
-      try {
-        const rgResult = await this.executeRg(pattern, result.resolved, include)
-        this.rgFailedCount = 0
-        return rgResult
-      } catch (err: unknown) {
-        const msg = errorMessage(err)
-        log.error(`ripgrep недоступен: ${msg}`)
-        this.rgFailedCount++
-      }
+    try {
+      return await this.executeRg(pattern, result.resolved, include)
+    } catch (err: unknown) {
+      const msg = errorMessage(err)
+      log.error(`ripgrep недоступен: ${msg}`)
     }
 
     return await this.executeFallback(pattern, result.resolved, include, signal)

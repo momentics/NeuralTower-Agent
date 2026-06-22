@@ -70,8 +70,6 @@ export class AgentCore {
       toolRegistry,
       deps.permissionManager,
       this.modeManager,
-      this.memory,
-      this.sessionContext,
     )
 
     this.planner = new AgentPlanner(

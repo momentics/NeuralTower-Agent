@@ -25,7 +25,7 @@ export class ReadFileTool extends FilesystemTool {
     required: ["filepath"],
   }
 
-  protected async doExecute(args: Record<string, unknown>): Promise<ToolResult> {
+  protected async doExecute(args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const fp = str(args, "filepath")
     const result = await this.resolvePath(fp)
     if ("error" in result) return { output: result.error, success: false }
