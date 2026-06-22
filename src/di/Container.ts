@@ -553,19 +553,14 @@ export async function createDeps(
       backend, contextManager, gitService, fileIndex, chunker, codebaseSearch, embeddingProvider,
     )
 
-  // ── Постинициализация: определение рабочей директории, построение индекса, запуск индексации ──
+  // ── Постинициализация: определение рабочей директории ──
   if (vscode.workspace.workspaceFolders?.[0]) {
     workDirState.current = vscode.workspace.workspaceFolders[0].uri.fsPath
     await gitService.findRoot(vscode.workspace.workspaceFolders[0].uri.fsPath)
   }
 
-  if (workDirState.current) {
-    await fileIndex.build(workDirState.current)
-  }
-
-  if (vscode.workspace.workspaceFolders?.[0]) {
-    await codebaseIndexer.start(vscode.workspace.workspaceFolders[0].uri)
-  }
+  // Построение файлового индекса и индексация кодовой базы выполняются в фоне
+  // (см. Extension.ts, initInBackground)
 
   return {
     backend,

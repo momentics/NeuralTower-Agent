@@ -30,9 +30,8 @@ export class BackendHealthMonitor extends StatusBarIndicator implements IPlugin 
     )
   }
 
-  /** Инициализировать мониторинг: выполнить первую проверку и запустить периодический таймер. */
+  /** Инициализировать мониторинг: запустить периодический таймер. Первая проверка выполняется в фоне. */
   async init(): Promise<void> {
-    await this.check()
     if (this.contextManager) {
       const providers = this.contextManager.list()
       if (providers.length === 0) {
@@ -47,6 +46,8 @@ export class BackendHealthMonitor extends StatusBarIndicator implements IPlugin 
     } catch {
       /* unref не поддерживается в окружении */
     }
+    // Первая проверка — в фоне, не блокируем активацию
+    setImmediate(async () => { await this.check() })
   }
 
   /** Вернуть текущий статус подключения. */

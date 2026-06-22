@@ -67,6 +67,12 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   await app.init()
   deps.telemetry.capture("session_started", { version: app.version() })
 
+  // ── Фоновая инициализация (не блокирует UI) ─────────────
+  initInBackground(deps).catch((err: unknown) => {
+    const msg = errorMessage(err)
+    log.error(`Фоновая инициализация не выполнена: ${msg}`)
+  })
+
   // ── Сохранить объекты для освобождения ──────────────────
   ctx.subscriptions.push({
     dispose: () => {
@@ -101,6 +107,41 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
         }
       }
     },
+  })
+}
+
+/**
+ * Фоновая инициализация: построение файлового индекса и
+ * индексация кодовой базы. Выполняется после показа UI
+ * с прогресс-индикатором.
+ */
+async function initInBackground(deps: Awaited<ReturnType<typeof createDeps>>): Promise<void> {
+  const workDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+  if (!workDir) return
+
+  const progressOptions: vscode.ProgressOptions = {
+    location: vscode.ProgressLocation.Window,
+    title: "NeuralTower Agent: инициализация",
+  }
+
+  await vscode.window.withProgress(progressOptions, async (progress) => {
+    // ── Шаг 1: Файловый индекс ────────────────────────────
+    progress.report({ message: "Построение файлового индекса..." })
+    try {
+      await deps.fileIndex.build(workDir)
+    } catch (err: unknown) {
+      const msg = errorMessage(err)
+      log.error(`Построение файлового индекса не выполнено: ${msg}`)
+    }
+
+    // ── Шаг 2: Индексация кодовой базы ────────────────────
+    progress.report({ message: "Индексация кодовой базы..." })
+    try {
+      await deps.codebaseIndexer.start(vscode.workspace.workspaceFolders![0].uri)
+    } catch (err: unknown) {
+      const msg = errorMessage(err)
+      log.error(`Индексация кодовой базы не выполнена: ${msg}`)
+    }
   })
 }
 

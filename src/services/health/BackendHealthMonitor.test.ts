@@ -38,11 +38,16 @@ describe("BackendHealthMonitor", () => {
 
   it("init checks health", async () => {
     await monitor.init()
+    // Первая проверка выполняется в фоне через setImmediate
+    await vi.advanceTimersByTimeAsync(0)
     expect(backend.healthCheck).toHaveBeenCalled()
   })
 
   it("init starts interval", async () => {
     await monitor.init()
+    // setImmediate для первой проверки
+    await vi.advanceTimersByTimeAsync(0)
+    // Интервал для периодической проверки
     await vi.advanceTimersByTimeAsync(15000)
     expect(backend.healthCheck).toHaveBeenCalledTimes(2)
   })

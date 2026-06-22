@@ -17,7 +17,7 @@ const log = createDomainLogger("Embedding")
 const DEFAULT_EMBEDDING_DIMENSION = 1536
 const DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
 const DEFAULT_BACKEND_URL = "http://localhost:30000"
-const EMBEDDING_TIMEOUT_MS = 30000
+const EMBEDDING_TIMEOUT_MS = 10000
 const DEFAULT_EMBEDDING_BATCH_SIZE = 256
 
 /**

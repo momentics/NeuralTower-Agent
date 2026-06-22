@@ -2,7 +2,7 @@
   "name": "NeuralTower-Agent",
   "displayName": "NeuralTower Agent",
   "description": "Интеллектуальный ассистент для разработки на базе локальной модели Neural Tower",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "repository": "https://github.com/NeuralTower-Agent/NeuralTower-Agent",
   "engines": {
     "vscode": "^1.85.0"
@@ -12,7 +12,7 @@
     "Machine Learning",
     "Chat"
   ],
-  "activationEvents": ["onStartup"],
+  "activationEvents": ["onView:neuralTowerAgent.chat"],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
