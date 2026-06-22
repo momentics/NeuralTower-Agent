@@ -67,18 +67,18 @@ export class CodebaseIndexer implements IPlugin, ICodebaseIndexer {
    */
   async start(workspaceUri: vscode.Uri): Promise<void> {
     this.disposables.push(
-      vscode.workspace.onDidSaveTextDocument(async (doc) => {
+      vscode.workspace.onDidSaveTextDocument((doc) => {
         if (this.isDisposed) return
         this.scheduleOp("change", doc.uri.fsPath)
       }),
 
-      vscode.workspace.onDidDeleteFiles(async (e) => {
+      vscode.workspace.onDidDeleteFiles((e) => {
         if (this.isDisposed) return
         for (const file of e.files) {
           this.scheduleOp("delete", file.fsPath)
         }
       }),
-      vscode.workspace.onDidCreateFiles(async (e) => {
+      vscode.workspace.onDidCreateFiles((e) => {
         if (this.isDisposed) return
         for (const file of e.files) {
           // Не индексировать сразу — подождать сохранения

@@ -11,6 +11,7 @@ import { errorMessage } from "./core/Errors"
 const log = createDomainLogger("Extension")
 
 let app: App | undefined
+let initInProgress = false
 
 export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   app = new App(ctx)
@@ -111,38 +112,42 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
 }
 
 /**
- * Фоновая инициализация: построение файлового индекса и
- * индексация кодовой базы. Выполняется после показа UI
- * с прогресс-индикатором.
+ * Фоновая инициализация: индексация кодовой базы.
+ * Выполняется после показа UI с прогресс-индикатором.
+ * Защищена от повторного запуска через флаг initInProgress.
  */
 async function initInBackground(deps: Awaited<ReturnType<typeof createDeps>>): Promise<void> {
+  if (initInProgress) {
+    log.info("Фоновая инициализация уже запущена, пропускаем")
+    return
+  }
+  initInProgress = true
+
   const workDir = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
-  if (!workDir) return
+  if (!workDir) {
+    initInProgress = false
+    return
+  }
 
   const progressOptions: vscode.ProgressOptions = {
     location: vscode.ProgressLocation.Window,
     title: "NeuralTower Agent: инициализация",
   }
 
-  await vscode.window.withProgress(progressOptions, async (progress) => {
-    // ── Шаг 1: Файловый индекс ────────────────────────────
-    progress.report({ message: "Построение файлового индекса..." })
-    try {
-      await deps.fileIndex.build(workDir)
-    } catch (err: unknown) {
-      const msg = errorMessage(err)
-      log.error(`Построение файлового индекса не выполнено: ${msg}`)
-    }
-
-    // ── Шаг 2: Индексация кодовой базы ────────────────────
-    progress.report({ message: "Индексация кодовой базы..." })
-    try {
-      await deps.codebaseIndexer.start(vscode.workspace.workspaceFolders![0].uri)
-    } catch (err: unknown) {
-      const msg = errorMessage(err)
-      log.error(`Индексация кодовой базы не выполнена: ${msg}`)
-    }
-  })
+  try {
+    await vscode.window.withProgress(progressOptions, async (progress) => {
+      // codebaseIndexer.start() сам строит файловый индекс внутри fullIndex()
+      progress.report({ message: "Индексация кодовой базы..." })
+      try {
+        await deps.codebaseIndexer.start(vscode.workspace.workspaceFolders![0].uri)
+      } catch (err: unknown) {
+        const msg = errorMessage(err)
+        log.error(`Индексация кодовой базы не выполнена: ${msg}`)
+      }
+    })
+  } finally {
+    initInProgress = false
+  }
 }
 
 export function deactivate(): void {

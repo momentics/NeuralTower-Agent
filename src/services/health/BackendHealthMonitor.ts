@@ -47,7 +47,14 @@ export class BackendHealthMonitor extends StatusBarIndicator implements IPlugin 
       /* unref не поддерживается в окружении */
     }
     // Первая проверка — в фоне, не блокируем активацию
-    setImmediate(async () => { await this.check() })
+    setImmediate(async () => {
+      try {
+        await this.check()
+      } catch (err: unknown) {
+        const msg = errorMessage(err)
+        log.error(`Фоновая проверка здоровья не выполнена: ${msg}`)
+      }
+    })
   }
 
   /** Вернуть текущий статус подключения. */
