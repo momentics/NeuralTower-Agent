@@ -99,6 +99,23 @@ code --install-extension NeuralTower-Agent-*.*.*.vsix
 - **Контекстные провайдеры** — 16+ источников контекста: открытые файлы, проблемы, отладчик, терминал, Git Diff, репозиторий и др.
 - **Команды для кода** — «Улучшить код» (контекстное меню редактора), «Сгенерировать текст коммита» (панель SCM)
 
+## Используемые архитектурные паттерны
+
+Использовано 11 паттернов проектирования (список обновляется редко и действителен на момент коммита):
+
+- Dependency Injection, 
+- Interface-Driven Design, 
+- Strategy, 
+- Factory, 
+- Repository, 
+- Observer, 
+- Facade, 
+- Template Method, 
+- Tombstone Deletion, 
+- Mutex-Protected Write
+- Open/Closed Principle
+
+
 ## Лицензия
 
 MIT
