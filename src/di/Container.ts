@@ -418,9 +418,9 @@ export function createUIDomain(
   permissionManager: IPermissionManager,
   backend: IBackend,
 ): IUIDepsResult {
-  const chatProvider = new ChatProvider(extUri, agent, sessionStore, notificationService, permissionManager)
-  const diffViewer = new DiffViewerProvider(extUri)
   const settingsProvider = new SettingsProvider(extUri, backend)
+  const chatProvider = new ChatProvider(extUri, agent, sessionStore, notificationService, permissionManager, settingsProvider)
+  const diffViewer = new DiffViewerProvider(extUri)
 
   return { chatProvider, diffViewer, settingsProvider }
 }

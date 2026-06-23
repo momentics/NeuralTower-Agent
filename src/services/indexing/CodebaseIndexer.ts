@@ -86,7 +86,8 @@ export class CodebaseIndexer implements IPlugin, ICodebaseIndexer {
       })
     )
 
-    await this.fullIndex(workspaceUri.fsPath)
+    // TODO: Отключено для отладки — восстановить индексацию при старте
+    // await this.fullIndex(workspaceUri.fsPath)
   }
 
   private setState(newState: IndexingState): void {

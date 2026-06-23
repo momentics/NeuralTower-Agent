@@ -4,6 +4,7 @@ import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { INotificationService } from "../services/notification/NotificationService"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
+import type { ISettingsProvider } from "./SettingsProvider"
 import type { ExtToWebview } from "../shared/Messages"
 import { buildWebviewHtml } from "../shared/WebviewBuilder"
 import { ChatMessageHandler } from "./ChatMessageHandler"
@@ -24,6 +25,7 @@ export class ChatProvider implements IProvider {
     private readonly sessionStore: ISessionStore,
     private readonly notificationService: INotificationService,
     private readonly permissionManager: IPermissionManager,
+    private readonly settingsProvider: ISettingsProvider,
   ) {}
 
   async resolveWebviewView(
@@ -44,6 +46,7 @@ export class ChatProvider implements IProvider {
       this.notificationService,
       this.permissionManager,
       view.webview,
+      this.settingsProvider,
     )
 
     this.messageHandler.subscribe(this.disposables)

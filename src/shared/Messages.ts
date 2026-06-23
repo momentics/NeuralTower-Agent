@@ -8,6 +8,7 @@ export type WebviewToExt =
   | { type: "sessionList" }
   | { type: "permissionResponse"; requestId: string; allowed: boolean; always: boolean }
   | { type: "stopAgent" }
+  | { type: "settings" }
 
 export type ExtToWebview =
   | { type: "messageConfirmed"; content: string }

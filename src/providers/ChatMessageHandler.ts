@@ -3,6 +3,7 @@ import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { INotificationService } from "../services/notification/NotificationService"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
+import type { ISettingsProvider } from "./SettingsProvider"
 import type { WebviewToExt, ExtToWebview } from "../shared/Messages"
 import { handleBackendError, errorMessage } from "../core/Errors"
 import { UI_ARGS_LOG_TRUNCATE } from "../core/Config"
@@ -23,6 +24,7 @@ export class ChatMessageHandler {
     private readonly notificationService: INotificationService,
     private readonly permissionManager: IPermissionManager,
     private readonly webview: vscode.Webview,
+    private readonly settingsProvider: ISettingsProvider,
   ) {}
 
   /** Получить disposable для всех подписок. */
@@ -107,6 +109,9 @@ export class ChatMessageHandler {
             break
           case "stopAgent":
             this.abortController?.abort()
+            break
+          case "settings":
+            this.settingsProvider.show()
             break
         }
       } catch (err: unknown) {
