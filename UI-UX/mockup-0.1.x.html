@@ -1,0 +1,2080 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NeuralTower Agent — UI Mockup</title>
+<style>
+  /* ═══════════════════════════════════════════
+     RESET & BASE
+     ═══════════════════════════════════════════ */
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+  :root {
+    --bg-primary: #1e1e2e;
+    --bg-secondary: #181825;
+    --bg-tertiary: #11111b;
+    --bg-surface: #313244;
+    --bg-hover: #45475a;
+    --bg-active: #585b70;
+    --text-primary: #cdd6f4;
+    --text-secondary: #a6adc8;
+    --text-muted: #6c7086;
+    --accent: #89b4fa;
+    --accent-hover: #74c7ec;
+    --green: #a6e3a1;
+    --red: #f38ba8;
+    --yellow: #f9e2af;
+    --peach: #fab387;
+    --mauve: #cba6f7;
+    --teal: #94e2d5;
+    --pink: #f5c2e7;
+    --border: #45475a;
+    --radius: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  }
+
+  body {
+    font-family: var(--font);
+    background: #0f0f17;
+    color: var(--text-primary);
+    line-height: 1.5;
+    padding: 40px;
+  }
+
+  /* ═══════════════════════════════════════════
+     MOCKUP LAYOUT
+     ═══════════════════════════════════════════ */
+  .mockup-title {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  .mockup-title h1 {
+    font-size: 32px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--mauve));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+
+  .mockup-title p {
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+
+  .screens-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 32px;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  .screen-card {
+    background: var(--bg-secondary);
+    border-radius: var(--radius-xl);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+
+  .screen-label {
+    padding: 12px 16px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .screen-label .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  /* ═══════════════════════════════════════════
+     VS CODE SIDEBAR FRAME
+     ═══════════════════════════════════════════ */
+  .sidebar-frame {
+    display: flex;
+    flex-direction: column;
+    height: 680px;
+    background: var(--bg-primary);
+  }
+
+  /* Activity bar (left strip) */
+  .activity-bar {
+    width: 48px;
+    background: var(--bg-tertiary);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 8px;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .activity-icon {
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    cursor: pointer;
+    opacity: 0.5;
+    transition: opacity 0.15s;
+  }
+
+  .activity-icon:hover, .activity-icon.active {
+    opacity: 1;
+  }
+
+  .activity-icon.active {
+    background: var(--bg-surface);
+  }
+
+  .activity-icon.active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    background: var(--accent);
+    border-radius: 1px;
+  }
+
+  .activity-icon svg {
+    width: 22px;
+    height: 22px;
+    stroke: var(--text-secondary);
+    fill: none;
+    stroke-width: 1.5;
+  }
+
+  /* ═══════════════════════════════════════════
+     CHAT HEADER
+     ═══════════════════════════════════════════ */
+  .chat-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+  }
+
+  .chat-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .nt-logo {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, var(--accent), var(--mauve));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .nt-logo svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  .chat-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .chat-header-actions {
+    display: flex;
+    gap: 2px;
+  }
+
+  .icon-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.15s;
+  }
+
+  .icon-btn:hover {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+  }
+
+  .icon-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* ═══════════════════════════════════════════
+     MODE SELECTOR
+     ═══════════════════════════════════════════ */
+  .mode-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .mode-chip {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.15s;
+  }
+
+  .mode-chip svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .mode-chip.build {
+    background: rgba(137,180,250,0.12);
+    color: var(--accent);
+    border-color: rgba(137,180,250,0.25);
+  }
+
+  .mode-chip.plan {
+    background: rgba(203,166,247,0.12);
+    color: var(--mauve);
+    border-color: rgba(203,166,247,0.25);
+  }
+
+  .mode-chip.explore {
+    background: rgba(148,226,213,0.12);
+    color: var(--teal);
+    border-color: rgba(148,226,213,0.25);
+  }
+
+  .mode-chip.inactive {
+    background: transparent;
+    color: var(--text-muted);
+    border-color: var(--border);
+  }
+
+  .mode-chip.inactive svg {
+    opacity: 0.5;
+  }
+
+  /* ═══════════════════════════════════════════
+     SESSIONS / TASKS
+     ═══════════════════════════════════════════ */
+  .sessions-section {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .sessions-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .sessions-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .session-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.1s;
+    font-size: 12px;
+  }
+
+  .session-item:hover {
+    background: var(--bg-surface);
+  }
+
+  .session-item.active {
+    background: var(--bg-surface);
+  }
+
+  .session-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .session-dot.live {
+    background: var(--green);
+    box-shadow: 0 0 6px rgba(166,227,161,0.5);
+  }
+
+  .session-dot.done {
+    background: var(--text-muted);
+  }
+
+  .session-title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-secondary);
+  }
+
+  .session-time {
+    font-size: 10px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  /* ═══════════════════════════════════════════
+     MESSAGES AREA
+     ═══════════════════════════════════════════ */
+  .messages-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* Empty state */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: var(--text-muted);
+  }
+
+  .empty-logo {
+    width: 56px;
+    height: 56px;
+    border-radius: 16px;
+    background: linear-gradient(135deg, rgba(137,180,250,0.15), rgba(203,166,247,0.15));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 4px;
+  }
+
+  .empty-logo svg {
+    width: 28px;
+    height: 28px;
+    stroke: var(--accent);
+  }
+
+  .empty-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .empty-subtitle {
+    font-size: 12px;
+    text-align: center;
+    max-width: 220px;
+    line-height: 1.5;
+  }
+
+  .quick-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 8px;
+    width: 100%;
+    max-width: 260px;
+  }
+
+  .quick-action {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 10px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+  }
+
+  .quick-action:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .quick-action svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  /* Messages */
+  .msg {
+    display: flex;
+    gap: 8px;
+    max-width: 100%;
+  }
+
+  .msg.user {
+    flex-direction: row-reverse;
+  }
+
+  .msg-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .msg.assistant .msg-avatar {
+    background: linear-gradient(135deg, var(--accent), var(--mauve));
+    color: var(--bg-tertiary);
+  }
+
+  .msg.user .msg-avatar {
+    background: var(--bg-surface);
+    color: var(--text-muted);
+  }
+
+  .msg-bubble {
+    padding: 8px 12px;
+    border-radius: var(--radius);
+    font-size: 12px;
+    line-height: 1.6;
+    max-width: 85%;
+  }
+
+  .msg.assistant .msg-bubble {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+    border-top-left-radius: 2px;
+  }
+
+  .msg.user .msg-bubble {
+    background: rgba(137,180,250,0.12);
+    color: var(--text-primary);
+    border-top-right-radius: 2px;
+  }
+
+  .msg-bubble code {
+    background: var(--bg-tertiary);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+
+  .msg-bubble pre {
+    background: var(--bg-tertiary);
+    padding: 8px 10px;
+    border-radius: 6px;
+    margin: 6px 0;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.5;
+  }
+
+  /* Tool use messages */
+  .tool-use {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    margin-left: 32px;
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    border-left: 2px solid var(--peach);
+  }
+
+  .tool-use svg {
+    width: 12px;
+    height: 12px;
+    flex-shrink: 0;
+  }
+
+  .tool-result {
+    margin-left: 32px;
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-muted);
+    max-height: 60px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .tool-result::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 20px;
+    background: linear-gradient(transparent, var(--bg-tertiary));
+  }
+
+  /* Streaming indicator */
+  .streaming-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 1s ease-in-out infinite;
+    margin-left: 4px;
+    vertical-align: middle;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ═══════════════════════════════════════════
+     INPUT AREA
+     ═══════════════════════════════════════════ */
+  .input-area {
+    padding: 8px 12px 12px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+  }
+
+  .context-pills {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+
+  .context-pill {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: var(--bg-surface);
+    border-radius: 10px;
+    font-size: 10px;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+
+  .context-pill .remove {
+    cursor: pointer;
+    opacity: 0.5;
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .context-pill .remove:hover {
+    opacity: 1;
+    color: var(--red);
+  }
+
+  .input-box {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: border-color 0.15s;
+  }
+
+  .input-box:focus-within {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 1px rgba(137,180,250,0.15);
+  }
+
+  .input-box textarea {
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: var(--font);
+    outline: none;
+    resize: none;
+    min-height: 22px;
+    max-height: 100px;
+    line-height: 1.5;
+  }
+
+  .input-box textarea::placeholder {
+    color: var(--text-muted);
+  }
+
+  .input-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .tb-btn {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 0.15s;
+  }
+
+  .tb-btn:hover {
+    background: var(--bg-surface);
+    color: var(--text-primary);
+  }
+
+  .tb-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .tb-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+    margin: 0 2px;
+  }
+
+  .tb-spacer {
+    flex: 1;
+  }
+
+  .send-btn {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .send-btn.send {
+    background: var(--accent);
+    color: var(--bg-tertiary);
+  }
+
+  .send-btn.send:hover {
+    background: var(--accent-hover);
+  }
+
+  .send-btn.send:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .send-btn.stop {
+    background: var(--red);
+    color: var(--bg-tertiary);
+  }
+
+  .send-btn svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  /* ═══════════════════════════════════════════
+     PERMISSION DIALOG
+     ═══════════════════════════════════════════ */
+  .perm-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+
+  .perm-dialog {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px;
+    width: 280px;
+    box-shadow: var(--shadow);
+  }
+
+  .perm-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .perm-title .warn {
+    color: var(--yellow);
+  }
+
+  .perm-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    line-height: 1.5;
+  }
+
+  .perm-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+
+  .perm-btn {
+    padding: 5px 14px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--font);
+  }
+
+  .perm-btn.deny {
+    background: var(--bg-primary);
+    color: var(--text-muted);
+  }
+
+  .perm-btn.deny:hover {
+    color: var(--text-primary);
+  }
+
+  .perm-btn.allow {
+    background: var(--accent);
+    color: var(--bg-tertiary);
+    border-color: var(--accent);
+  }
+
+  .perm-btn.allow:hover {
+    background: var(--accent-hover);
+  }
+
+  /* ═══════════════════════════════════════════
+     SETTINGS PANEL
+     ═══════════════════════════════════════════ */
+  .settings-frame {
+    height: 680px;
+    overflow-y: auto;
+    padding: 20px;
+    background: var(--bg-primary);
+  }
+
+  .settings-frame h2 {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .settings-section {
+    margin-bottom: 20px;
+  }
+
+  .settings-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .setting-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    gap: 12px;
+  }
+
+  .setting-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .setting-desc {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .setting-input {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: var(--mono);
+    outline: none;
+    width: 200px;
+    transition: border-color 0.15s;
+  }
+
+  .setting-input:focus {
+    border-color: var(--accent);
+  }
+
+  .setting-select {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 5px 10px;
+    color: var(--text-primary);
+    font-size: 12px;
+    outline: none;
+    width: 200px;
+    cursor: pointer;
+  }
+
+  .toggle {
+    width: 36px;
+    height: 20px;
+    border-radius: 10px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .toggle.on {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .toggle::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--text-primary);
+    transition: transform 0.2s;
+  }
+
+  .toggle.on::after {
+    transform: translateX(16px);
+  }
+
+  .settings-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .s-btn {
+    padding: 7px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--font);
+    transition: all 0.15s;
+  }
+
+  .s-btn.primary {
+    background: var(--accent);
+    color: var(--bg-tertiary);
+    border-color: var(--accent);
+  }
+
+  .s-btn.primary:hover {
+    background: var(--accent-hover);
+  }
+
+  .s-btn.secondary {
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+  }
+
+  .s-btn.secondary:hover {
+    color: var(--text-primary);
+  }
+
+  .status-line {
+    font-size: 11px;
+    margin-top: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .status-line.ok { color: var(--green); }
+  .status-line.err { color: var(--red); }
+
+  /* ═══════════════════════════════════════════
+     DIFF VIEWER
+     ═══════════════════════════════════════════ */
+  .diff-frame {
+    height: 680px;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-primary);
+  }
+
+  .diff-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-secondary);
+    flex-shrink: 0;
+  }
+
+  .diff-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .diff-title {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .diff-stats {
+    display: flex;
+    gap: 12px;
+    margin-left: 16px;
+  }
+
+  .diff-stat {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+
+  .diff-stat.add { color: var(--green); }
+  .diff-stat.del { color: var(--red); }
+
+  .diff-actions {
+    display: flex;
+    gap: 4px;
+  }
+
+  .diff-body {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .diff-file-list {
+    width: 180px;
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    flex-shrink: 0;
+    padding: 8px;
+  }
+
+  .diff-file {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-secondary);
+    transition: background 0.1s;
+  }
+
+  .diff-file:hover { background: var(--bg-surface); }
+  .diff-file.active { background: var(--bg-surface); color: var(--text-primary); }
+
+  .diff-file svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+  .diff-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.6;
+  }
+
+  .diff-line {
+    display: flex;
+    padding: 0 12px;
+  }
+
+  .diff-line.added {
+    background: rgba(166,227,161,0.08);
+  }
+
+  .diff-line.removed {
+    background: rgba(243,139,168,0.08);
+  }
+
+  .diff-line-num {
+    width: 40px;
+    text-align: right;
+    padding-right: 12px;
+    color: var(--text-muted);
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .diff-line.added .diff-line-num { color: var(--green); }
+  .diff-line.removed .diff-line-num { color: var(--red); }
+
+  .diff-line-sign {
+    width: 16px;
+    flex-shrink: 0;
+  }
+
+  .diff-line.added .diff-line-sign { color: var(--green); }
+  .diff-line.removed .diff-line-sign { color: var(--red); }
+
+  .diff-line-text {
+    flex: 1;
+    white-space: pre;
+  }
+
+  .diff-line.added .diff-line-text { color: var(--green); }
+  .diff-line.removed .diff-line-text { color: var(--red); }
+
+  /* ═══════════════════════════════════════════
+     STATUS BAR
+     ═══════════════════════════════════════════ */
+  .status-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 3px 12px;
+    background: var(--bg-tertiary);
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .status-left, .status-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .status-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  .status-dot.green { background: var(--green); }
+  .status-dot.yellow { background: var(--yellow); }
+  .status-dot.red { background: var(--red); }
+
+  /* ═══════════════════════════════════════════
+     AGENT WORKFLOW
+     ═══════════════════════════════════════════ */
+  .workflow-card {
+    padding: 20px;
+  }
+
+  .workflow-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 0;
+    position: relative;
+  }
+
+  .workflow-step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 38px;
+    bottom: -2px;
+    width: 2px;
+    background: var(--border);
+  }
+
+  .wf-num {
+    width: 32px;
+    height: 32px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  .wf-num.blue { background: rgba(137,180,250,0.15); color: var(--accent); }
+  .wf-num.purple { background: rgba(203,166,247,0.15); color: var(--mauve); }
+  .wf-num.green { background: rgba(166,227,161,0.15); color: var(--green); }
+  .wf-num.peach { background: rgba(250,179,135,0.15); color: var(--peach); }
+  .wf-num.teal { background: rgba(148,226,213,0.15); color: var(--teal); }
+  .wf-num.pink { background: rgba(245,194,231,0.15); color: var(--pink); }
+
+  .wf-content h4 {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .wf-content p {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* ═══════════════════════════════════════════
+     COLOR PALETTE
+     ═══════════════════════════════════════════ */
+  .palette-card {
+    padding: 20px;
+  }
+
+  .palette-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .palette-swatch {
+    aspect-ratio: 1;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 600;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .palette-swatch span {
+    font-size: 8px;
+    opacity: 0.7;
+    margin-top: 2px;
+  }
+
+  /* ═══════════════════════════════════════════
+     KEYBOARD SHORTCUTS
+     ═══════════════════════════════════════════ */
+  .shortcuts-card {
+    padding: 20px;
+  }
+
+  .shortcut-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+  }
+
+  .shortcut-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .shortcut-keys {
+    display: flex;
+    gap: 4px;
+  }
+
+  kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 6px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--text-muted);
+    min-width: 20px;
+  }
+
+  /* ═══════════════════════════════════════════
+     STATUS BAR (VS CODE BOTTOM)
+     ═══════════════════════════════════════════ */
+  .vscode-statusbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 12px;
+    background: var(--accent);
+    height: 22px;
+    font-size: 11px;
+    color: var(--bg-tertiary);
+    font-weight: 500;
+  }
+
+  .vscode-statusbar-left, .vscode-statusbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .statusbar-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .statusbar-item svg {
+    width: 13px;
+    height: 13px;
+  }
+
+  /* ═══════════════════════════════════════════
+     SECTION TITLES
+     ═══════════════════════════════════════════ */
+  .section-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-title svg {
+    width: 16px;
+    height: 16px;
+    color: var(--accent);
+  }
+
+  /* Full width cards */
+  .full-width {
+    grid-column: 1 / -1;
+  }
+</style>
+</head>
+<body>
+
+<div class="mockup-title">
+  <h1>NeuralTower Agent — UI Mockup</h1>
+  <p>Макет пользовательского интерфейса VS Code расширения • Catppuccin Mocha тема</p>
+</div>
+
+<div class="screens-grid">
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 1: EMPTY STATE
+       ═══════════════════════════════════════════ -->
+  <div class="screen-card">
+    <div class="screen-label"><span class="dot"></span> Чат — пустое состояние</div>
+    <div class="sidebar-frame">
+      <!-- Header -->
+      <div class="chat-header">
+        <div class="chat-header-left">
+          <div class="nt-logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+          <span class="chat-title">NeuralTower</span>
+        </div>
+        <div class="chat-header-actions">
+          <button class="icon-btn" title="Новый чат">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button class="icon-btn" title="Настройки">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mode bar -->
+      <div class="mode-bar">
+        <div class="mode-chip build">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+          Построение
+        </div>
+        <div class="mode-chip plan inactive">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+          Планирование
+        </div>
+        <div class="mode-chip explore inactive">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Исследование
+        </div>
+      </div>
+
+      <!-- Sessions -->
+      <div class="sessions-section">
+        <div class="sessions-header">
+          <span class="sessions-label">Сессии</span>
+          <button class="icon-btn" style="width:20px;height:20px;" title="Все сессии">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+        </div>
+        <div class="session-item">
+          <span class="session-dot done"></span>
+          <span class="session-title">Рефакторинг auth.ts</span>
+          <span class="session-time">2h</span>
+        </div>
+        <div class="session-item">
+          <span class="session-dot done"></span>
+          <span class="session-title">Добавить тесты для API</span>
+          <span class="session-time">5h</span>
+        </div>
+        <div class="session-item">
+          <span class="session-dot done"></span>
+          <span class="session-title">Фикс бага #142</span>
+          <span class="session-time">1d</span>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div class="messages-area">
+        <div class="empty-state">
+          <div class="empty-logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 2a7 7 0 017 7c0 2.5-1.5 4.5-3 6 1.5 1 3 2.5 3 5a7 7 0 01-14 0c0-2.5 1.5-4 3-6-1.5-1.5-3-3.5-3-6a7 7 0 017-7z"/>
+              <circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="9" r="1" fill="currentColor"/>
+              <path d="M9 13c1 1 5 1 6 0"/>
+            </svg>
+          </div>
+          <div class="empty-title">NeuralTower Agent</div>
+          <div class="empty-subtitle">ИИ-ассистент для разработки. Задайте задачу — и агент выполнит её.</div>
+          <div class="quick-actions">
+            <div class="quick-action">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+              Исправить баг
+            </div>
+            <div class="quick-action">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+              Объяснить код
+            </div>
+            <div class="quick-action">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+              Написать тесты
+            </div>
+            <div class="quick-action">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Искать в коде
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="input-area">
+        <div class="input-box">
+          <textarea placeholder="Опишите задачу..." rows="1"></textarea>
+          <div class="input-toolbar">
+            <button class="tb-btn" title="Прикрепить">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <button class="tb-btn" title="Контекст IDE">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+            </button>
+            <button class="tb-btn" title="Модель">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            </button>
+            <div class="tb-spacer"></div>
+            <button class="send-btn send" title="Отправить">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Status bar -->
+      <div class="status-bar">
+        <div class="status-left">
+          <div class="status-item">
+            <span class="status-dot green"></span>
+            Подключено
+          </div>
+          <div class="status-item">qwen3.6-27b</div>
+        </div>
+        <div class="status-right">
+          <div class="status-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px"><path d="M12 2a7 7 0 017 7c0 2.5-1.5 4.5-3 6 1.5 1 3 2.5 3 5a7 7 0 01-14 0c0-2.5 1.5-4 3-6-1.5-1.5-3-3.5-3-6a7 7 0 017-7z"/></svg>
+            Построение
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 2: ACTIVE CHAT
+       ═══════════════════════════════════════════ -->
+  <div class="screen-card">
+    <div class="screen-label"><span class="dot" style="background:var(--green)"></span> Чат — активный диалог</div>
+    <div class="sidebar-frame">
+      <div class="chat-header">
+        <div class="chat-header-left">
+          <div class="nt-logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+          <span class="chat-title">NeuralTower</span>
+        </div>
+        <div class="chat-header-actions">
+          <button class="icon-btn" title="Новый чат">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+          <button class="icon-btn" title="Настройки">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="mode-bar">
+        <div class="mode-chip build">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+          Построение
+        </div>
+        <div class="mode-chip plan inactive">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+          Планирование
+        </div>
+        <div class="mode-chip explore inactive">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          Исследование
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div class="messages-area">
+        <div class="msg user">
+          <div class="msg-avatar">U</div>
+          <div class="msg-bubble">Исправь баг в auth.ts — функция validateToken не обрабатывает истёкшие токены</div>
+        </div>
+
+        <div class="msg assistant">
+          <div class="msg-avatar">N</div>
+          <div class="msg-bubble">Исправлю. Сначала изучу код.<span class="streaming-dot"></span></div>
+        </div>
+
+        <div class="tool-use">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--peach)" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          read_file: src/auth.ts
+        </div>
+
+        <div class="tool-result">
+          // validateToken — проверка токена...
+        </div>
+
+        <div class="tool-use">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--peach)" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+          edit_file: src/auth.ts
+        </div>
+
+        <div class="msg assistant">
+          <div class="msg-avatar">N</div>
+          <div class="msg-bubble">Готово. Добавлена проверка <code>token.expired</code> в <code>validateToken</code>. Файл обновлён.</div>
+        </div>
+      </div>
+
+      <!-- Input (with stop) -->
+      <div class="input-area">
+        <div class="context-pills">
+          <div class="context-pill">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            auth.ts
+            <span class="remove">×</span>
+          </div>
+        </div>
+        <div class="input-box">
+          <textarea placeholder="Ответить..." rows="1"></textarea>
+          <div class="input-toolbar">
+            <button class="tb-btn" title="Прикрепить">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+            </button>
+            <button class="tb-btn" title="Контекст IDE">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+            </button>
+            <div class="tb-spacer"></div>
+            <button class="send-btn stop" title="Остановить">
+              <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-bar">
+        <div class="status-left">
+          <div class="status-item">
+            <span class="status-dot green"></span>
+            Подключено
+          </div>
+          <div class="status-item">qwen3.6-27b</div>
+        </div>
+        <div class="status-right">
+          <div class="status-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+            Построение
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 3: PERMISSION REQUEST
+       ═══════════════════════════════════════════ -->
+  <div class="screen-card">
+    <div class="screen-label"><span class="dot" style="background:var(--yellow)"></span> Запрос разрешения</div>
+    <div class="sidebar-frame" style="position:relative;">
+      <div class="chat-header">
+        <div class="chat-header-left">
+          <div class="nt-logo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+            </svg>
+          </div>
+          <span class="chat-title">NeuralTower</span>
+        </div>
+        <div class="chat-header-actions">
+          <button class="icon-btn" title="Новый чат">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="mode-bar">
+        <div class="mode-chip build">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+          Построение
+        </div>
+      </div>
+
+      <div class="messages-area">
+        <div class="msg user">
+          <div class="msg-avatar">U</div>
+          <div class="msg-bubble">Удали папку dist/ и пересобери проект</div>
+        </div>
+
+        <div class="msg assistant">
+          <div class="msg-avatar">N</div>
+          <div class="msg-bubble">Выполняю. Удаляю папку dist/...</div>
+        </div>
+
+        <div class="tool-use" style="border-left-color: var(--yellow);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--yellow)" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+          delete_file: dist/
+        </div>
+      </div>
+
+      <!-- Permission overlay -->
+      <div class="perm-overlay">
+        <div class="perm-dialog">
+          <div class="perm-title">
+            <span class="warn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </span>
+            Запрос разрешения
+          </div>
+          <div class="perm-desc">Агент хочет удалить папку <code style="font-family:var(--mono);font-size:10px;background:var(--bg-primary);padding:1px 4px;border-radius:3px;">dist/</code> (рекурсивно). Разрешить?</div>
+          <div class="perm-actions">
+            <button class="perm-btn deny">Отклонить</button>
+            <button class="perm-btn allow">Разрешить</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-area">
+        <div class="input-box">
+          <textarea placeholder="Ожидание разрешения..." rows="1" style="opacity:0.5"></textarea>
+          <div class="input-toolbar">
+            <div class="tb-spacer"></div>
+            <button class="send-btn stop" title="Остановить">
+              <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="status-bar">
+        <div class="status-left">
+          <div class="status-item">
+            <span class="status-dot yellow"></span>
+            Ожидание
+          </div>
+          <div class="status-item">qwen3.6-27b</div>
+        </div>
+        <div class="status-right">
+          <div class="status-item">Построение</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 4: SETTINGS
+       ═══════════════════════════════════════════ -->
+  <div class="screen-card">
+    <div class="screen-label"><span class="dot" style="background:var(--mauve)"></span> Настройки</div>
+    <div class="settings-frame">
+      <h2>
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="width:18px;height:18px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        Настройки
+      </h2>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Бэкенд</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Адрес сервера</div>
+            <div class="setting-desc">URL NeuralTower-сервера</div>
+          </div>
+          <input class="setting-input" value="http://localhost:30000">
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Модель</div>
+            <div class="setting-desc">ИИ-модель для агента</div>
+          </div>
+          <select class="setting-select">
+            <option>qwen3.6-27b</option>
+            <option>llama-3.1-70b</option>
+          </select>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Макс. повторов</div>
+          </div>
+          <input class="setting-input" value="3" style="width:60px">
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Таймаут (мс)</div>
+          </div>
+          <input class="setting-input" value="60000" style="width:100px">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Агент</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Макс. итераций</div>
+            <div class="setting-desc">Лимит шагов агента за один запрос</div>
+          </div>
+          <input class="setting-input" value="20" style="width:60px">
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Макс. сессий</div>
+          </div>
+          <input class="setting-input" value="50" style="width:60px">
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Разрешения</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Автоодобрение</div>
+            <div class="setting-desc">Автоматически разрешать инструменты</div>
+          </div>
+          <div class="toggle"></div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Уведомления</div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Включить уведомления</div>
+          </div>
+          <div class="toggle on"></div>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Завершение агента</div>
+          </div>
+          <div class="toggle on"></div>
+        </div>
+        <div class="setting-row">
+          <div>
+            <div class="setting-label">Запросы разрешений</div>
+          </div>
+          <div class="toggle on"></div>
+        </div>
+      </div>
+
+      <div class="settings-actions">
+        <button class="s-btn secondary">Проверить соединение</button>
+        <button class="s-btn primary">Сохранить</button>
+      </div>
+
+      <div class="status-line ok">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Подключено к серверу
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 5: DIFF VIEWER
+       ═══════════════════════════════════════════ -->
+  <div class="screen-card">
+    <div class="screen-label"><span class="dot" style="background:var(--teal)"></span> Просмотр изменений</div>
+    <div class="diff-frame">
+      <div class="diff-header">
+        <div class="diff-header-left">
+          <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="width:16px;height:16px"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          <span class="diff-title">Изменения агента</span>
+          <div class="diff-stats">
+            <span class="diff-stat add">+42</span>
+            <span class="diff-stat del">-18</span>
+            <span style="font-size:11px;color:var(--text-muted)">3 файла</span>
+          </div>
+        </div>
+        <div class="diff-actions">
+          <button class="icon-btn" title="Принять все">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+          </button>
+          <button class="icon-btn" title="Отклонить все">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--red)" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="diff-body">
+        <div class="diff-file-list">
+          <div class="diff-file active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            src/auth.ts
+          </div>
+          <div class="diff-file">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            src/middleware.ts
+          </div>
+          <div class="diff-file">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+            tests/auth.test.ts
+          </div>
+        </div>
+
+        <div class="diff-content">
+          <div class="diff-line"><div class="diff-line-num">42</div><div class="diff-line-text">  function validateToken(token: string): boolean {</div></div>
+          <div class="diff-line"><div class="diff-line-num">43</div><div class="diff-line-text">    if (!token) return false;</div></div>
+          <div class="diff-line removed"><div class="diff-line-num">44</div><div class="diff-line-sign">-</div><div class="diff-line-text">    const decoded = jwt.verify(token, SECRET);</div></div>
+          <div class="diff-line added"><div class="diff-line-num">44</div><div class="diff-line-sign">+</div><div class="diff-line-text">    let decoded;</div></div>
+          <div class="diff-line added"><div class="diff-line-num">45</div><div class="diff-line-sign">+</div><div class="diff-line-text">    try {</div></div>
+          <div class="diff-line added"><div class="diff-line-num">46</div><div class="diff-line-sign">+</div><div class="diff-line-text">      decoded = jwt.verify(token, SECRET);</div></div>
+          <div class="diff-line added"><div class="diff-line-num">47</div><div class="diff-line-sign">+</div><div class="diff-line-text">    } catch (e) {</div></div>
+          <div class="diff-line added"><div class="diff-line-num">48</div><div class="diff-line-sign">+</div><div class="diff-line-text">      if (e.name === 'TokenExpiredError') return false;</div></div>
+          <div class="diff-line added"><div class="diff-line-num">49</div><div class="diff-line-sign">+</div><div class="diff-line-text">      throw e;</div></div>
+          <div class="diff-line added"><div class="diff-line-num">50</div><div class="diff-line-sign">+</div><div class="diff-line-text">    }</div></div>
+          <div class="diff-line"><div class="diff-line-num">51</div><div class="diff-line-text">    return decoded !== null;</div></div>
+          <div class="diff-line"><div class="diff-line-num">52</div><div class="diff-line-text">  }</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 6: VS CODE STATUS BAR
+       ═══════════════════════════════════════════ -->
+  <div class="screen-card full-width">
+    <div class="screen-label"><span class="dot" style="background:var(--green)"></span> Строка состояния VS Code</div>
+    <div class="vscode-statusbar">
+      <div class="vscode-statusbar-left">
+        <div class="statusbar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0020 4.77 5.07 5.07 0 0019.91 1S18.73.65 16 2.48a13.38 13.38 0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 005 4.77a5.44 5.44 0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 009 18.13V22"/></svg>
+          main
+        </div>
+        <div class="statusbar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          0 ошибок, 0 предупреждений
+        </div>
+      </div>
+      <div class="vscode-statusbar-right">
+        <div class="statusbar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px"><path d="M12 2a7 7 0 017 7c0 2.5-1.5 4.5-3 6 1.5 1 3 2.5 3 5a7 7 0 01-14 0c0-2.5 1.5-4 3-6-1.5-1.5-3-3.5-3-6a7 7 0 017-7z"/></svg>
+          Построение
+        </div>
+        <div class="statusbar-item">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:11px;height:11px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Индексация...
+        </div>
+        <div class="statusbar-item">Ln 42, Col 15</div>
+        <div class="statusbar-item">TypeScript</div>
+        <div class="statusbar-item">UTF-8</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 7: AGENT WORKFLOW
+       ═══════════════════════════════════════════ -->
+  <div class="screen-card">
+    <div class="screen-label"><span class="dot" style="background:var(--peach)"></span> Цикл агента</div>
+    <div class="workflow-card">
+      <div class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        Цикл выполнения агента
+      </div>
+
+      <div class="workflow-step">
+        <div class="wf-num blue">1</div>
+        <div class="wf-content">
+          <h4>Планирование</h4>
+          <p>Агент анализирует запрос и строит план действий с использованием структурированного планировщика</p>
+        </div>
+      </div>
+
+      <div class="workflow-step">
+        <div class="wf-num purple">2</div>
+        <div class="wf-content">
+          <h4>Выбор инструментов</h4>
+          <p>Определяются необходимые инструменты из 13 встроенных + MCP-инструментов</p>
+        </div>
+      </div>
+
+      <div class="workflow-step">
+        <div class="wf-num green">3</div>
+        <div class="wf-content">
+          <h4>Выполнение</h4>
+          <p>Инструменты выполняются с проверкой разрешений. Опасные операции требуют подтверждения</p>
+        </div>
+      </div>
+
+      <div class="workflow-step">
+        <div class="wf-num peach">4</div>
+        <div class="wf-content">
+          <h4>Наблюдение</h4>
+          <p>Результаты выполнения анализируются. При ошибках — автоматический реплан</p>
+        </div>
+      </div>
+
+      <div class="workflow-step">
+        <div class="wf-num teal">5</div>
+        <div class="wf-content">
+          <h4>Уточнение</h4>
+          <p>План корректируется на основе результатов. Память сжимается для экономии токенов</p>
+        </div>
+      </div>
+
+      <div class="workflow-step">
+        <div class="wf-num pink">6</div>
+        <div class="wf-content">
+          <h4>Ответ</h4>
+          <p>Финальный ответ пользователю с изменениями и пояснениями</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 8: COLOR PALETTE
+       ═══════════════════════════════════════════ -->
+  <div class="screen-card">
+    <div class="screen-label"><span class="dot" style="background:var(--pink)"></span> Палитра</div>
+    <div class="palette-card">
+      <div class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
+        Catppuccin Mocha
+      </div>
+
+      <div class="palette-grid">
+        <div class="palette-swatch" style="background:#89b4fa;color:#1e1e2e">Blue<span>accent</span></div>
+        <div class="palette-swatch" style="background:#cba6f7;color:#1e1e2e">Mauve<span>purple</span></div>
+        <div class="palette-swatch" style="background:#a6e3a1;color:#1e1e2e">Green<span>success</span></div>
+        <div class="palette-swatch" style="background:#f38ba8;color:#1e1e2e">Red<span>error</span></div>
+        <div class="palette-swatch" style="background:#f9e2af;color:#1e1e2e">Yellow<span>warn</span></div>
+        <div class="palette-swatch" style="background:#fab387;color:#1e1e2e">Peach<span>tools</span></div>
+        <div class="palette-swatch" style="background:#94e2d5;color:#1e1e2e">Teal<span>info</span></div>
+        <div class="palette-swatch" style="background:#f5c2e7;color:#1e1e2e">Pink<span>special</span></div>
+        <div class="palette-swatch" style="background:#313244;color:#cdd6f4">Surface<span>bg</span></div>
+        <div class="palette-swatch" style="background:#45475a;color:#cdd6f4">Overlay<span>hover</span></div>
+        <div class="palette-swatch" style="background:#1e1e2e;color:#cdd6f4">Base<span>primary</span></div>
+        <div class="palette-swatch" style="background:#11111b;color:#cdd6f4">Mantle<span>dark</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 9: KEYBOARD SHORTCUTS
+       ═══════════════════════════════════════════ -->
+  <div class="screen-card">
+    <div class="screen-label"><span class="dot" style="background:var(--teal)"></span> Горячие клавиши</div>
+    <div class="shortcuts-card">
+      <div class="section-title">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="6" y1="8" x2="6.01" y2="8"/><line x1="10" y1="8" x2="10.01" y2="8"/><line x1="14" y1="8" x2="14.01" y2="8"/><line x1="18" y1="8" x2="18.01" y2="8"/><line x1="6" y1="12" x2="6.01" y2="12"/><line x1="10" y1="12" x2="10.01" y2="12"/><line x1="14" y1="12" x2="14.01" y2="12"/><line x1="18" y1="12" x2="18.01" y2="12"/><line x1="8" y1="16" x2="16" y2="16"/></svg>
+        Горячие клавиши
+      </div>
+
+      <div class="shortcut-row">
+        <span class="shortcut-label">Фокус на чат</span>
+        <div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>A</kbd></div>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Новый чат</span>
+        <div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>U</kbd></div>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Объяснить код</span>
+        <div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>E</kbd></div>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Исправить код</span>
+        <div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>Shift</kbd><kbd>F</kbd></div>
+      </div>
+      <div class="shortcut-row">
+        <span class="shortcut-label">Добавить в контекст</span>
+        <div class="shortcut-keys"><kbd>Ctrl</kbd><kbd>K</kbd><kbd>A</kbd></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       SCREEN 10: MODES
+       ═══════════════════════════════════════════ -->
+  <div class="screen-card full-width">
+    <div class="screen-label"><span class="dot" style="background:var(--accent)"></span> Режимы доступа</div>
+    <div style="padding:24px; display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+      <!-- Build mode -->
+      <div style="background:var(--bg-secondary); border:1px solid rgba(137,180,250,0.25); border-radius:var(--radius-lg); padding:16px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:rgba(137,180,250,0.15);display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="width:18px;height:18px"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:600;color:var(--accent)">Построение</div>
+            <div style="font-size:10px;color:var(--text-muted)">build</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);line-height:1.6;margin-bottom:10px;">Основной режим. Агент может выполнять задачи, редактировать файлы и запускать команды.</div>
+        <div style="font-size:10px;color:var(--text-muted);">
+          <div style="margin-bottom:4px;"><span style="color:var(--green)">✓</span> read / glob / grep / web_fetch</div>
+          <div style="margin-bottom:4px;"><span style="color:var(--yellow)">⚠</span> edit / write / bash (с подтверждением)</div>
+        </div>
+      </div>
+
+      <!-- Plan mode -->
+      <div style="background:var(--bg-secondary); border:1px solid rgba(203,166,247,0.25); border-radius:var(--radius-lg); padding:16px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:rgba(203,166,247,0.15);display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--mauve)" stroke-width="2" style="width:18px;height:18px"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:600;color:var(--mauve)">Планирование</div>
+            <div style="font-size:10px;color:var(--text-muted)">plan</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);line-height:1.6;margin-bottom:10px;">Только анализ и планирование. Агент не может вносить изменения в файлы.</div>
+        <div style="font-size:10px;color:var(--text-muted);">
+          <div style="margin-bottom:4px;"><span style="color:var(--green)">✓</span> read / glob / grep / web_fetch</div>
+          <div style="margin-bottom:4px;"><span style="color:var(--red)">✗</span> edit / write / bash</div>
+        </div>
+      </div>
+
+      <!-- Explore mode -->
+      <div style="background:var(--bg-secondary); border:1px solid rgba(148,226,213,0.25); border-radius:var(--radius-lg); padding:16px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <div style="width:32px;height:32px;border-radius:8px;background:rgba(148,226,213,0.15);display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--teal)" stroke-width="2" style="width:18px;height:18px"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          </div>
+          <div>
+            <div style="font-size:14px;font-weight:600;color:var(--teal)">Исследование</div>
+            <div style="font-size:10px;color:var(--text-muted)">explore</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary);line-height:1.6;margin-bottom:10px;">Только чтение. Поиск и анализ кода без изменений.</div>
+        <div style="font-size:10px;color:var(--text-muted);">
+          <div style="margin-bottom:4px;"><span style="color:var(--green)">✓</span> read / glob / grep / web_fetch</div>
+          <div style="margin-bottom:4px;"><span style="color:var(--red)">✗</span> edit / write / bash</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
