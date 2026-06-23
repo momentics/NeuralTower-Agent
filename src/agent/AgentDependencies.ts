@@ -16,7 +16,7 @@ import type { TodoStore } from "./TodoStore"
  * прямой зависимости от AgentOrchestrator.
  */
 export type AgentSpawnFactory = (
-  deps: IAgentDependencies,
+  deps: IAgentFullDependencies,
   backend: IBackend,
   toolRegistry: IToolRegistry,
   skillManager: ISkillManager,
@@ -24,14 +24,11 @@ export type AgentSpawnFactory = (
 ) => import("./AgentOrchestrator").AgentOrchestrator
 
 /**
- * AgentDependencies — иммутабельный набор внешних зависимостей агента.
+ * AgentDependencies — обязательные зависимости агента.
  *
- * Все зависимости передаются через конструктор и не могут быть
- * изменены после создания. Это гарантирует, что AgentCore
- * всегда работает с полным и консистентным окружением.
- *
- * Опциональные зависимости (gitService, permissionManager, mcpManager)
- * могут быть null, если компонент это документирует.
+ * Все поля обязательны. Компоненты, которые работают только
+ * с базовым контекстом, зависят только от этого интерфейса
+ * (принцип ISP).
  */
 export interface IAgentDependencies {
   /** Функция получения рабочей директории (может меняться). */
@@ -48,7 +45,17 @@ export interface IAgentDependencies {
 
   /** Файловый индекс. */
   readonly fileIndex: IFileIndex
+}
 
+/**
+ * Опциональные зависимости агента.
+ *
+ * Поля могут быть null, если соответствующий компонент
+ * не доступен или не настроен. Вынесены в отдельный
+ * интерфейс для соблюдения ISP: потребитель, который не
+ * использует эти зависимости, не должен о них знать.
+ */
+export interface IAgentOptionalDependencies {
   /** Сервис git (null если не доступен). */
   readonly gitService: IGitService | null
 
@@ -58,3 +65,11 @@ export interface IAgentDependencies {
   /** Менеджер MCP (null если не подключен). */
   readonly mcpManager: IMCPManager | null
 }
+
+/**
+ * Полный набор зависимостей агента (обязательные + опциональные).
+ *
+ * Используется в местах, где создаётся или передаётся полный
+ * контекст агента (AgentOrchestrator, AgentCore, Container).
+ */
+export type IAgentFullDependencies = IAgentDependencies & IAgentOptionalDependencies

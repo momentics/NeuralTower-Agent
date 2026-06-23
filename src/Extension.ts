@@ -24,12 +24,11 @@ function setupUnhandledRejectionHandler(): void {
   })
 }
 
-let app: App | undefined
 let initInProgress = false
 
 export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
-  app = new App(ctx)
-  const currentApp = app
+  const currentApp = new App(ctx)
+  ctx.subscriptions.push(currentApp)
   setupUnhandledRejectionHandler()
   const deps = await createDeps(ctx)
   const outputChannel = createOutputChannel()
@@ -235,5 +234,4 @@ async function initInBackground(deps: Awaited<ReturnType<typeof createDeps>>): P
 
 export function deactivate(): void {
   initInProgress = false
-  app?.dispose()
 }

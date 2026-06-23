@@ -2,7 +2,7 @@
   "name": "NeuralTower-Agent",
   "displayName": "NeuralTower Agent",
   "description": "Интеллектуальный ассистент для разработки на базе локальной модели Neural Tower",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "repository": "https://github.com/NeuralTower-Agent/NeuralTower-Agent",
   "engines": {
     "vscode": "^1.85.0"

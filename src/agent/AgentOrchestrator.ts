@@ -4,13 +4,13 @@ import type { IToolRegistry } from "../tools/ToolRegistry"
 import type { ISkillManager } from "../skills/SkillManager"
 import type { ISkill } from "../skills/ISkill"
 import { AgentCore } from "./AgentCore"
+import { SubAgentSpawner } from "./SubAgentSpawner"
 import type { AgentModeName } from "./AgentMode"
-import type { IAgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
+import type { IAgentFullDependencies, AgentSpawnFactory } from "./AgentDependencies"
 import type { Plan } from "./Plan"
 import type { TodoStore } from "./TodoStore"
 import type { IToolResult } from "./AgentTypes"
 import type { IContextItem } from "../core/providers/context/Types"
-import { errorMessage } from "../core/Errors"
 
 /**
  * AgentOrchestrator — тонкий фасад над AgentCore.
@@ -18,10 +18,12 @@ import { errorMessage } from "../core/Errors"
  * Содержит только маршрутизацию публичного API и делегирует
  * всю логику выполнения в AgentCore. SubagentRunner
  * подключается через фабрику (AgentSpawnFactory), что
- * разрывает циклическую зависимость.
+ * разрывает циклическую зависимость. Спавн субагентов
+ * вынесен в SubAgentSpawner для соблюдения SRP.
  */
 export class AgentOrchestrator implements IAgentOrchestrator {
   private core: AgentCore
+  private spawner: SubAgentSpawner
   private disposed = false
   private abortController: AbortController = new AbortController()
 
@@ -29,11 +31,19 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     private readonly backend: IBackend,
     private readonly toolRegistry: IToolRegistry,
     private readonly skillManager: ISkillManager,
-    private readonly deps: IAgentDependencies,
+    private readonly deps: IAgentFullDependencies,
     private readonly spawnFactory: AgentSpawnFactory | null = null,
     private readonly todoStore: TodoStore,
   ) {
     this.core = this.createCore()
+    this.spawner = new SubAgentSpawner(
+      this.deps,
+      this.backend,
+      this.toolRegistry,
+      this.skillManager,
+      this.todoStore,
+      this.spawnFactory,
+    )
   }
 
   private createCore(): AgentCore {
@@ -107,32 +117,13 @@ export class AgentOrchestrator implements IAgentOrchestrator {
   // ── Контекст ───────────────────────────────────────────
 
   async resolveContextProvider(name: string, query: string): Promise<IContextItem[]> {
-    const provider = this.deps.contextProviderRegistry.get(name)
-    if (!provider) return []
-    return provider.resolve(query)
+    return this.core.resolveContextProvider(name, query)
   }
 
   // ── Субагенты ──────────────────────────────────────────
 
   async spawnExplore(task: string): Promise<string> {
-    if (!this.spawnFactory) {
-      return "SubagentRunner не настроен"
-    }
-    const subagent = this.spawnFactory(
-      this.deps,
-      this.backend,
-      this.toolRegistry,
-      this.skillManager,
-      this.todoStore,
-    )
-    try {
-      const handle = await subagent.run(task, () => {})
-      subagent.dispose()
-      return handle.content
-    } catch (err: unknown) {
-      subagent.dispose()
-      return `Ошибка субагента: ${errorMessage(err)}`
-    }
+    return this.spawner.spawnExplore(task)
   }
 
   // ── Жизненный цикл ─────────────────────────────────────

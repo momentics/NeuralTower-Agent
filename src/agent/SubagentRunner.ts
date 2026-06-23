@@ -3,7 +3,7 @@ import type { IToolRegistry } from "../tools/ToolRegistry"
 import type { ISkillManager } from "../skills/SkillManager"
 import type { AgentModeName } from "./AgentMode"
 import type { AgentOrchestrator } from "./AgentOrchestrator"
-import type { IAgentDependencies, AgentSpawnFactory } from "./AgentDependencies"
+import type { IAgentFullDependencies, AgentSpawnFactory } from "./AgentDependencies"
 import type { TodoStore } from "./TodoStore"
 import { errorMessage } from "../core/Errors"
 
@@ -83,7 +83,7 @@ export class SubagentRunner {
     private readonly backend: IBackend,
     private readonly toolRegistry: IToolRegistry,
     private readonly skillManager: ISkillManager,
-    private readonly deps: IAgentDependencies,
+    private readonly deps: IAgentFullDependencies,
     private readonly spawnFactory: AgentSpawnFactory,
     private readonly todoStore: TodoStore,
     maxConcurrent = 4,

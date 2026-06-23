@@ -70,6 +70,7 @@ export interface IContextManager {
  */
 export class ContextManager implements IContextManager {
   private providers: IContextProvider[] = []
+  private sortedProviders: IContextProvider[] = []
   private snapshot: IContextSnapshot[] = []
   private revision = 0
   private previousContent: Map<string, string> = new Map()
@@ -85,6 +86,7 @@ export class ContextManager implements IContextManager {
    */
   register(provider: IContextProvider): void {
     this.providers.push(provider)
+    this.rebuildSortedProviders()
   }
 
   /**
@@ -93,6 +95,17 @@ export class ContextManager implements IContextManager {
   unregister(name: string): void {
     this.providers = this.providers.filter(
       (p) => p.description.name !== name,
+    )
+    this.rebuildSortedProviders()
+  }
+
+  /**
+   * Перестроить отсортированный массив провайдеров.
+   * Вызывается при изменении списка провайдеров.
+   */
+  private rebuildSortedProviders(): void {
+    this.sortedProviders = [...this.providers].sort(
+      (a, b) => (b.description.priority ?? 0) - (a.description.priority ?? 0),
     )
   }
 
@@ -134,11 +147,7 @@ export class ContextManager implements IContextManager {
     this.revision = 1
     let usedTokens = 0
 
-    const sorted = [...this.providers].sort(
-      (a, b) => (b.description.priority ?? 0) - (a.description.priority ?? 0),
-    )
-
-    for (const provider of sorted) {
+    for (const provider of this.sortedProviders) {
       try {
         const items = await provider.resolve("")
         const content = extractContent(items)
@@ -194,11 +203,7 @@ export class ContextManager implements IContextManager {
     const newContent: Map<string, string> = new Map()
     this.revision++
 
-    const sorted = [...this.providers].sort(
-      (a, b) => (b.description.priority ?? 0) - (a.description.priority ?? 0),
-    )
-
-    for (const provider of sorted) {
+    for (const provider of this.sortedProviders) {
       try {
         const items = await provider.resolve("")
         const current = extractContent(items)

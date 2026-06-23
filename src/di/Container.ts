@@ -15,7 +15,7 @@ import type { IToolRegistry } from "../tools/ToolRegistry"
 import type { ISkillManager } from "../skills/SkillManager"
 import type { IDiffViewerProvider } from "../providers/DiffViewerProvider"
 import type { INotificationService } from "../services/notification/NotificationService"
-import type { IAgentDependencies, AgentSpawnFactory } from "../agent/AgentDependencies"
+import type { IAgentFullDependencies, AgentSpawnFactory } from "../agent/AgentDependencies"
 import type { IContextProvider } from "../core/providers/context/Types"
 import {
   NeuralTowerBackend,
@@ -114,7 +114,7 @@ export interface IExtensionDeps {
   contextManager: IContextManager
   subagentRunner: SubagentRunner
  config: IAppConfig
-  agentDeps: IAgentDependencies
+  agentDeps: IAgentFullDependencies
   fileIndex: IFileIndex
   codebaseSearch: ICodebaseSearch
   codebaseIndexer: CodebaseIndexer
@@ -152,7 +152,7 @@ export interface IAgentDepsResult {
   agent: IAgentOrchestrator
   subagentRunner: SubagentRunner
   todoStore: TodoStore
-  agentDeps: IAgentDependencies
+  agentDeps: IAgentFullDependencies
 }
 
 export interface IContextDepsResult {
@@ -326,7 +326,7 @@ export function createAgentDomain(
   backend: IBackend,
   tools: IToolRegistry,
   skills: ISkillManager,
-  agentDeps: IAgentDependencies,
+  agentDeps: IAgentFullDependencies,
   spawnFactory: AgentSpawnFactory,
   todoStore: TodoStore,
 ): IAgentDepsResult {
@@ -527,7 +527,7 @@ export async function createDeps(
   )
 
   // ── Агент ───────────────────────────────────────────────
-  const agentDeps: IAgentDependencies = {
+  const agentDeps: IAgentFullDependencies = {
     getWorkDir: () => workDirState.current,
     config,
     contextProviderRegistry,

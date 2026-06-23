@@ -11,9 +11,10 @@ import { AgentToolExecutor } from "./AgentToolExecutor"
 import { AgentPlanner } from "./AgentPlanner"
 import { Replanner } from "./Replanner"
 import { SessionContext } from "./SessionContext"
-import type { IAgentDependencies } from "./AgentDependencies"
+import type { IAgentFullDependencies } from "./AgentDependencies"
 import type { IToolResult } from "./AgentTypes"
 import type { AgentModeName } from "./AgentMode"
+import type { IContextItem } from "../core/providers/context/Types"
 import { TodoStore } from "./TodoStore"
 import type { Plan } from "./Plan"
 import { PlanRepository } from "./PlanRepository"
@@ -21,6 +22,80 @@ import { AbortError, AgentError, errorMessage } from "../core/Errors"
 import { createDomainLogger } from "../core/Logger"
 
 const log = createDomainLogger("AgentCore")
+
+/**
+ * Создать внутренние компоненты агента.
+ * Вынесено из конструктора для снижения глубины вложенности.
+ */
+function createAgentInternals(
+  backend: IBackend,
+  toolRegistry: IToolRegistry,
+  skillManager: ISkillManager,
+ deps: IAgentFullDependencies,
+) {
+  const memory = new AgentMemory(deps.config.agent.maxTokens)
+  const modeManager = new AgentModeManager()
+  const sessionContext = new SessionContext(
+    `session-${Date.now()}`,
+    deps.contextManager,
+  )
+  const planRepo = new PlanRepository(deps.getWorkDir() || "")
+
+  const contextBuilder = new AgentContextBuilder(
+    toolRegistry,
+    skillManager,
+    memory,
+    deps.fileIndex,
+    deps.gitService,
+    deps.getWorkDir,
+    deps.config.agent.injectDiffContext,
+    deps.contextManager,
+  )
+
+  const toolExecutor = new AgentToolExecutor(
+    backend,
+    toolRegistry,
+    deps.permissionManager,
+    modeManager,
+  )
+
+  const replanner = new Replanner(backend, toolRegistry)
+
+  const planner = new AgentPlanner(
+    backend,
+    toolRegistry,
+    sessionContext,
+    replanner,
+    planRepo,
+  )
+
+  const compactor = new Compactor(backend, deps.config.compactor)
+
+  const agentLoop = new AgentLoop(
+    backend,
+    memory,
+    compactor,
+    modeManager,
+    sessionContext,
+    contextBuilder,
+    toolExecutor,
+    planner,
+    {
+      replanOnFailure: deps.config.agent.replanOnFailure,
+      maxReplanAttempts: deps.config.agent.maxReplanAttempts,
+    },
+  )
+
+  return {
+    memory,
+    modeManager,
+    sessionContext,
+    planRepo,
+    toolExecutor,
+    planner,
+    agentLoop,
+  }
+}
 
 /**
  * AgentCore — ядро выполнения агента.
@@ -44,60 +119,18 @@ export class AgentCore {
     private readonly backend: IBackend,
     private readonly toolRegistry: IToolRegistry,
     private readonly skillManager: ISkillManager,
-    private readonly deps: IAgentDependencies,
+    private readonly deps: IAgentFullDependencies,
     todoStore: TodoStore,
   ) {
-    this.memory = new AgentMemory(deps.config.agent.maxTokens)
-    this.modeManager = new AgentModeManager()
-    this.sessionContext = new SessionContext(
-      `session-${Date.now()}`,
-      deps.contextManager,
-    )
-    this.planRepo = new PlanRepository(deps.getWorkDir() || "")
+    const internals = createAgentInternals(backend, toolRegistry, skillManager, deps)
+    this.memory = internals.memory
+    this.modeManager = internals.modeManager
+    this.sessionContext = internals.sessionContext
+    this.planRepo = internals.planRepo
     this.todoStore = todoStore
-
-    const contextBuilder = new AgentContextBuilder(
-      toolRegistry,
-      skillManager,
-      this.memory,
-      deps.fileIndex,
-      deps.gitService,
-      deps.getWorkDir,
-      deps.config.agent.injectDiffContext,
-      deps.contextManager,
-    )
-
-    this.toolExecutor = new AgentToolExecutor(
-      backend,
-      toolRegistry,
-      deps.permissionManager,
-      this.modeManager,
-    )
-
-    this.planner = new AgentPlanner(
-      backend,
-      toolRegistry,
-      this.sessionContext,
-      new Replanner(backend, toolRegistry),
-      this.planRepo,
-    )
-
-    const compactor = new Compactor(backend, deps.config.compactor)
-
-    this.agentLoop = new AgentLoop(
-      backend,
-      this.memory,
-      compactor,
-      this.modeManager,
-      this.sessionContext,
-      contextBuilder,
-      this.toolExecutor,
-      this.planner,
-      {
-        replanOnFailure: deps.config.agent.replanOnFailure,
-        maxReplanAttempts: deps.config.agent.maxReplanAttempts,
-      },
-    )
+    this.toolExecutor = internals.toolExecutor
+    this.planner = internals.planner
+    this.agentLoop = internals.agentLoop
   }
 
   /**
@@ -225,6 +258,15 @@ export class AgentCore {
     this.planner.clearPlan()
     this.todoStore.clear()
     this.deps.contextManager.reset()
+  }
+
+  /**
+   * Разрешить провайдер контекста по имени.
+   */
+  async resolveContextProvider(name: string, query: string): Promise<IContextItem[]> {
+    const provider = this.deps.contextProviderRegistry.get(name)
+    if (!provider) return []
+    return provider.resolve(query)
   }
 
   /**

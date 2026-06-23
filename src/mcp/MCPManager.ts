@@ -95,14 +95,27 @@ export class MCPManager implements IMCPManager {
 
   async connect(): Promise<void> {
     for (const server of this.servers) {
+      // Очистить старые слушатели и состояние перед переподключением
+      if (server.transport) {
+        server.transport.removeAllListeners()
+        server.transport.close()
+        server.transport = null
+      }
+      if (server.pendingRequests) {
+        for (const req of server.pendingRequests.values()) {
+          req.reject(new ExecutionError("MCP-сервер переподключается"))
+        }
+        server.pendingRequests.clear()
+        server.pendingRequests = null
+      }
+      server.ready = false
+      server.tools = []
+
       const transport = createTransport(server.config)
       if (!transport) {
         server.ready = false
         continue
       }
-
-      // Удалить старые слушатели перед подключением новых, чтобы избежать накопления при переподключении
-      transport.removeAllListeners()
 
       server.transport = transport
       server.ready = true

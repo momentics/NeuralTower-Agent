@@ -63,7 +63,22 @@ const DENIED_PATTERNS = [
   /cat\s+.*\s*\|\s*(bash|sh|zsh|powershell|cmd)/i,
   // Обход через python/perl/ruby
   /\b(python|python3|perl|ruby|node)\s+.*-e\s/i,
+  // Подстановка переменных окружения (инъекция через $)
+  /\$\w+/,
+  // Подстановка команд через $(())
+  /\$\(\(/,
+  // Process substitution
+  /<</,
+  /<\(/,
+  />\(/,
+  // Обход через base64
+  /base64\s+.*\s*-\s*d/i,
+  // Обход через xxd
+  /xxd\s+.*\s*-r/i,
 ]
+
+/** Максимальная длина команды для предотвращения DoS через длинные строки. */
+const BASH_MAX_COMMAND_LENGTH = 4096
 
 /**
  * Выполнить команду оболочки. Настраиваемый таймаут и рабочая директория.
@@ -97,6 +112,11 @@ export class BashTool extends BaseTool {
    */
   validateCommand(cmd: string): string | null {
     const trimmed = cmd.trim()
+
+    // Проверка длины команды для предотвращения DoS
+    if (trimmed.length > BASH_MAX_COMMAND_LENGTH) {
+      return `Команда слишком длинная (макс. ${BASH_MAX_COMMAND_LENGTH} символов)`
+    }
 
     // Unicode NFKC: нормализация гомоглифов (напр. кириллический "р" → латинский "р")
     // для предотвращения атак через подмену символов

@@ -45,6 +45,7 @@ export class FileIndex implements IFileIndex {
   private langMap = new Map<string, string[]>()
   private pathToEntry = new Map<string, IIndexEntry>()
   private regexCache = new LRUCache<string, RegExp>(50)
+  private prefixIndex = new Map<string, IIndexEntry[]>()
 
   /**
    * Построить индекс для директории. Сканирует только имена
@@ -55,6 +56,7 @@ export class FileIndex implements IFileIndex {
     this.nameMap.clear()
     this.langMap.clear()
     this.regexCache.clear()
+    this.prefixIndex.clear()
 
     const files = await walkDirectory(dir, { maxFiles, signal })
 
@@ -81,17 +83,48 @@ export class FileIndex implements IFileIndex {
       const langs = this.langMap.get(lang) ?? []
       langs.push(f)
       this.langMap.set(lang, langs)
+
+      // Построение префиксного индекса для быстрого поиска по префиксу пути
+      const lower = f.toLowerCase()
+      for (let i = 1; i <= lower.length; i++) {
+        const prefix = lower.slice(0, i)
+        const bucket = this.prefixIndex.get(prefix) ?? []
+        bucket.push(entry)
+        this.prefixIndex.set(prefix, bucket)
+      }
     }
   }
 
   /** Найти файлы по имени (частичное совпадение). */
   findByPattern(pattern: string): IIndexEntry[] {
+    // Быстрый путь: если паттерн не содержит спецсимволов regex, используем префиксный индекс
+    const lowerPattern = pattern.toLowerCase()
+    if (!this.hasRegexSpecialChars(lowerPattern)) {
+      const prefixMatches = this.prefixIndex.get(lowerPattern)
+      if (prefixMatches) {
+        return prefixMatches
+      }
+      // Попробовать найти по префиксу паттерна
+      for (let i = lowerPattern.length; i > 0; i--) {
+        const prefix = lowerPattern.slice(0, i)
+        const candidates = this.prefixIndex.get(prefix)
+        if (candidates) {
+          return candidates.filter((e) => e.path.toLowerCase().includes(lowerPattern))
+        }
+      }
+    }
+
     let re = this.regexCache.get(pattern)
     if (!re) {
       re = new RegExp(pattern, "i")
       this.regexCache.set(pattern, re)
     }
     return this.entries.filter((e) => re.test(e.path))
+  }
+
+  /** Проверить, содержит ли строка спецсимволы regex. */
+  private hasRegexSpecialChars(s: string): boolean {
+    return /[.*+?^${}()|[\]\\]/.test(s)
   }
 
   /** Найти файлы по языку. */

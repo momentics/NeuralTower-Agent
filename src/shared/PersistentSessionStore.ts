@@ -115,13 +115,24 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
   }
 
   async save(): Promise<void> {
-    await this.mutex.withLock(async () => {
-      try {
-        await this.persister.save(this.data)
-      } catch (err: unknown) {
-        log.error(`Ошибка сохранения сессий: ${errorMessage(err)}`)
-      }
-    })
+    try {
+      await this.persister.save(this.data)
+    } catch (err: unknown) {
+      log.error(`Ошибка сохранения сессий: ${errorMessage(err)}`)
+    }
+  }
+
+  /**
+   * Внутреннее сохранение с защитой mutex.
+   * Вызывается только из методов, которые уже владеют mutex.
+   * Публичный save() не использует mutex, чтобы избежать deadlock.
+   */
+  private async saveLocked(): Promise<void> {
+    try {
+      await this.persister.save(this.data)
+    } catch (err: unknown) {
+      log.error(`Ошибка сохранения сессий: ${errorMessage(err)}`)
+    }
   }
 
   get activeId(): string {
@@ -160,7 +171,7 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
       if (this.data.sessions.length > this.maxSessions) {
         this.trimOldSessions()
       }
-      await this.persister.save(this.data)
+      await this.saveLocked()
     })
   }
 
@@ -185,7 +196,7 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
         }
       }
       this.data.activeId = id
-      await this.persister.save(this.data)
+      await this.saveLocked()
       return id
     })
   }
@@ -202,7 +213,7 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
         this.data.activeId = this.data.sessions[0]?.id ?? ""
         if (!this.data.activeId) this.createDefault()
       }
-      await this.persister.save(this.data)
+      await this.saveLocked()
       return true
     })
   }
@@ -212,7 +223,7 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
       const session = this.data.sessions.find((s) => s.id === id)
       if (session) {
         session.pinned = !session.pinned
-        await this.persister.save(this.data)
+        await this.saveLocked()
       }
     })
   }
@@ -222,7 +233,7 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
       const session = this.data.sessions.find((s) => s.id === id)
       if (session) {
         session.title = title
-        await this.persister.save(this.data)
+        await this.saveLocked()
       }
     })
   }
@@ -248,7 +259,7 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
       )
       const session = this.data.sessions.find((s) => s.id === this.data.activeId)
       if (session) session.messageCount = 0
-      await this.persister.save(this.data)
+      await this.saveLocked()
     })
   }
 

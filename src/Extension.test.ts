@@ -459,11 +459,11 @@ describe("extension", () => {
   })
 
   describe("deactivate", () => {
-    it("disposes app", async () => {
+    it("disposes app via subscriptions", async () => {
       await activate(ctx)
-      deactivate()
       const { App: AppMock } = await import("./core/App")
       const app = AppMock.mock.results[0].value
+      ctx.subscriptions.forEach((s: any) => s.dispose())
       expect(app.dispose).toHaveBeenCalled()
     })
 

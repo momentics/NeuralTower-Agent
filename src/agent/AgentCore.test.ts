@@ -3,7 +3,7 @@ import { AgentCore } from "./AgentCore"
 import type { IBackend } from "../core/IBackend"
 import { ToolRegistry } from "../tools/ToolRegistry"
 import type { SkillManager } from "../skills/SkillManager"
-import type { IAgentDependencies } from "./AgentDependencies"
+import type { IAgentFullDependencies } from "./AgentDependencies"
 import { ContextManager } from "../core/ContextManager"
 import { ContextProviderRegistry } from "../core/providers/context/Registry"
 import { FileIndex } from "../repo/FileIndex"
@@ -26,7 +26,7 @@ const createMockSkillManager = (): SkillManager => ({
   list: vi.fn(() => []),
 } as unknown as SkillManager)
 
-const createDeps = (): IAgentDependencies => {
+const createDeps = (): IAgentFullDependencies => {
   const contextManager = new ContextManager()
   const registry = new ContextProviderRegistry()
   const fileIndex = new FileIndex()
@@ -52,7 +52,7 @@ describe("AgentCore", () => {
   let backend: IBackend
   let toolRegistry: ToolRegistry
   let skillManager: SkillManager
-  let deps: IAgentDependencies
+  let deps: IAgentFullDependencies
 
   beforeEach(() => {
     backend = createMockBackend()
