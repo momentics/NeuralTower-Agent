@@ -437,7 +437,6 @@ export async function createMonitoringDomain(
   embeddingProvider: NeuralTowerEmbeddingProvider,
 ): Promise<IMonitoringDepsResult> {
   const healthMonitor = new BackendHealthMonitor(backend, contextManager)
-  await healthMonitor.init()
 
   const commitMessageService = new CommitMessageService(backend, gitService)
   await commitMessageService.init()
@@ -556,6 +555,9 @@ export async function createDeps(
     await createMonitoringDomain(
       backend, contextManager, gitService, fileIndex, chunker, codebaseSearch, embeddingProvider,
     )
+
+  // Связать монитор здоровья с чат-провайдером для ленивой инициализации
+  chatProvider.setHealthMonitor?.(healthMonitor)
 
   // ── Постинициализация: определение рабочей директории ──
   if (vscode.workspace.workspaceFolders?.[0]) {

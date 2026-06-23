@@ -18,6 +18,7 @@ export class ChatProvider implements IProvider {
   private panel: vscode.WebviewView | undefined
   private disposables: vscode.Disposable[] = []
   private messageHandler: ChatMessageHandler | null = null
+  private healthMonitor: { init(): void | Promise<void>; resume(): void } | null = null
 
   constructor(
     private readonly extUri: vscode.Uri,
@@ -28,12 +29,18 @@ export class ChatProvider implements IProvider {
     private readonly settingsProvider: ISettingsProvider,
   ) {}
 
+  /** Установить монитор здоровья для ленивой инициализации при первом открытии sidebar. */
+  setHealthMonitor(monitor: { init(): void | Promise<void>; resume(): void }): void {
+    this.healthMonitor = monitor
+  }
+
   async resolveWebviewView(
     view: vscode.WebviewView,
     _ctx: vscode.WebviewViewResolveContext,
     _token: vscode.CancellationToken,
   ): Promise<void> {
     if (this.panel) {
+      this.healthMonitor?.resume()
       return
     }
     this.panel = view
@@ -52,6 +59,12 @@ export class ChatProvider implements IProvider {
     this.messageHandler.subscribe(this.disposables)
     this.messageHandler.sendSessionList()
     this.messageHandler.sendActiveMessages()
+
+    // Ленивая инициализация мониторинга здоровья — только когда пользователь открыл sidebar
+    if (this.healthMonitor) {
+      const r = this.healthMonitor.init()
+      if (r && typeof r.catch === "function") r.catch(() => {})
+    }
   }
 
   broadcastNewChat(): void {

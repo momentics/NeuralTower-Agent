@@ -14,6 +14,9 @@ export interface IProvider {
   /** Отправить сигнал о новом чате. */
   broadcastNewChat?(): void
 
+  /** Установить монитор здоровья для ленивой инициализации. */
+  setHealthMonitor?(monitor: { init(): void | Promise<void>; resume(): void }): void
+
   /** Освободить ресурсы. */
   dispose(): void
 }
