@@ -113,6 +113,8 @@ export class ChatMessageHandler {
           case "settings":
             this.settingsProvider.show()
             break
+          case "switchMode":
+            break
         }
       } catch (err: unknown) {
         const msg = errorMessage(err)

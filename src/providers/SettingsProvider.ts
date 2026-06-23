@@ -132,7 +132,7 @@ export class SettingsProvider implements ISettingsProvider {
             this.getWebview().postMessage({
               type: "settingsTestResult",
               success: ok,
-              message: ok ? "Подключено" : "Не удалось подключиться",
+              message: ok ? "Подключено к серверу" : "Ошибка подключения",
             } as ExtToSettings)
             break
           }
@@ -151,28 +151,97 @@ export class SettingsProvider implements ISettingsProvider {
       css: "settings.css",
       js: "settings.js",
       body: `
-<div class="container">
-  <h1>Настройки</h1>
-  <section>
-    <h2>Бэкенд</h2>
-    <label>Адрес сервера <input id="url" type="text"></label>
-    <label>Модель <select id="model"><option value="">(нет)</option></select></label>
-    <label>Макс. повторов <input id="maxRetries" type="number" value="3" min="0" max="10"></label>
-    <label>Таймаут (мс) <input id="timeoutMs" type="number" value="60000" min="1000"></label>
-  </section>
-  <section>
-    <h2>Разрешения</h2>
-    <label><input type="checkbox" id="autoApprove"> Автоодобрение небезопасных инструментов</label>
-  </section>
-  <section>
-    <h2>Действия</h2>
-    <div class="actions">
-      <button id="btn-test">Проверить соединение</button>
-      <button id="btn-save">Сохранить</button>
+  <h2>
+    <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="width:18px;height:18px"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    Настройки
+  </h2>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Бэкенд</div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Адрес сервера</div>
+        <div class="setting-desc">URL NeuralTower-сервера</div>
+      </div>
+      <input class="setting-input" id="url" type="text">
     </div>
-    <p id="status"></p>
-  </section>
-</div>`,
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Модель</div>
+        <div class="setting-desc">ИИ-модель для агента</div>
+      </div>
+      <select class="setting-select" id="model"><option value="">(нет)</option></select>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Макс. повторов</div>
+      </div>
+      <input class="setting-input" id="maxRetries" type="number" value="3" min="0" max="10" style="width:60px">
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Таймаут (мс)</div>
+      </div>
+      <input class="setting-input" id="timeoutMs" type="number" value="60000" min="1000" style="width:100px">
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Агент</div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Макс. итераций</div>
+        <div class="setting-desc">Лимит шагов агента за один запрос</div>
+      </div>
+      <input class="setting-input" id="maxIterations" type="number" value="20" style="width:60px">
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Макс. сессий</div>
+      </div>
+      <input class="setting-input" id="maxSessions" type="number" value="50" style="width:60px">
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Разрешения</div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Автоодобрение</div>
+        <div class="setting-desc">Автоматически разрешать инструменты</div>
+      </div>
+      <div class="toggle" id="autoApprove" onclick="toggleClick(this)"></div>
+    </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">Уведомления</div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Включить уведомления</div>
+      </div>
+      <div class="toggle on" id="notificationsEnabled" onclick="toggleClick(this)"></div>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Завершение агента</div>
+      </div>
+      <div class="toggle on" id="notifyAgentDone" onclick="toggleClick(this)"></div>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Запросы разрешений</div>
+      </div>
+      <div class="toggle on" id="notifyPermissions" onclick="toggleClick(this)"></div>
+    </div>
+  </div>
+
+  <div class="settings-actions">
+    <button class="s-btn secondary" id="btn-test">Проверить соединение</button>
+    <button class="s-btn primary" id="btn-save">Сохранить</button>
+  </div>
+
+  <div class="status-line" id="status"></div>`,
     })
   }
 }

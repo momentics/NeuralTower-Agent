@@ -9,6 +9,7 @@ export type WebviewToExt =
   | { type: "permissionResponse"; requestId: string; allowed: boolean; always: boolean }
   | { type: "stopAgent" }
   | { type: "settings" }
+  | { type: "switchMode"; mode: string }
 
 export type ExtToWebview =
   | { type: "messageConfirmed"; content: string }
@@ -24,10 +25,10 @@ export type ExtToWebview =
   | { type: "permissionRequest"; requestId: string; toolName: string; description: string }
 
 export type SettingsToExt =
-  | { type: "settingsSave"; url: string; model: string; maxRetries?: number; timeoutMs?: number; autoApprove?: boolean }
+  | { type: "settingsSave"; url: string; model: string; maxRetries?: number; timeoutMs?: number; autoApprove?: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean }
   | { type: "settingsTest"; url?: string }
 
 export type ExtToSettings =
-  | { type: "settingsData"; config: { url: string; model: string; maxRetries: number; timeoutMs: number; autoApprove: boolean }; models: string[] }
+  | { type: "settingsData"; config: { url: string; model: string; maxRetries: number; timeoutMs: number; autoApprove: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean }; models: string[] }
   | { type: "settingsSaved" }
   | { type: "settingsTestResult"; success: boolean; message: string }
