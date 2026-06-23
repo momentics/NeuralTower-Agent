@@ -5,14 +5,17 @@
   "version": "0.1.3",
   "repository": "https://github.com/NeuralTower-Agent/NeuralTower-Agent",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.85.0",
+    "node": ">=22.0.0"
   },
   "categories": [
     "AI",
     "Machine Learning",
     "Chat"
   ],
-  "activationEvents": ["onView:neuralTowerAgent.chat"],
+  "activationEvents": [
+    "onView:neuralTowerAgent.chat"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -91,42 +94,42 @@
     "menus": {
       "view/title": [
         {
-       "command": "neuralTowerAgent.newChat",
+          "command": "neuralTowerAgent.newChat",
           "when": "view == neuralTowerAgent.chat",
           "group": "navigation"
         },
         {
-       "command": "neuralTowerAgent.settings",
+          "command": "neuralTowerAgent.settings",
           "when": "view == neuralTowerAgent.chat",
           "group": "navigation"
         },
         {
-       "command": "neuralTowerAgent.openDiffViewer",
+          "command": "neuralTowerAgent.openDiffViewer",
           "when": "view == neuralTowerAgent.chat",
           "group": "navigation"
         }
       ],
       "editor/context": [
         {
-       "command": "neuralTowerAgent.explainCode",
+          "command": "neuralTowerAgent.explainCode",
           "group": "9_cutcopypaste@1"
         },
         {
-       "command": "neuralTowerAgent.fixCode",
+          "command": "neuralTowerAgent.fixCode",
           "group": "9_cutcopypaste@2"
         },
         {
-       "command": "neuralTowerAgent.improveCode",
+          "command": "neuralTowerAgent.improveCode",
           "group": "9_cutcopypaste@3"
         },
         {
-       "command": "neuralTowerAgent.addToContext",
+          "command": "neuralTowerAgent.addToContext",
           "group": "9_cutcopypaste@4"
         }
       ],
       "scm/title": [
         {
-       "command": "neuralTowerAgent.generateCommitMessage",
+          "command": "neuralTowerAgent.generateCommitMessage",
           "group": "navigation"
         }
       ]
@@ -268,7 +271,7 @@
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",
-    "@types/node": "^20.0.0",
+    "@types/node": "^22.0.0",
     "@types/vscode": "^1.85.0",
     "esbuild": "^0.20.0",
     "ovsx": "^1.0.0",
