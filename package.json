@@ -273,9 +273,9 @@
     "@types/glob": "^8.1.0",
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.85.0",
-    "esbuild": "^0.20.0",
+    "esbuild": "^0.28.1",
     "ovsx": "^1.0.0",
     "typescript": "^5.4.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.9"
   }
 }
