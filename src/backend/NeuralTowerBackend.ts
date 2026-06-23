@@ -19,12 +19,17 @@ const SSE_MAX_RESPONSE_CHARS = 5_000_000
  */
 export class NeuralTowerBackend implements IBackend {
   private config: IBackendConfig
+  private _resumeCallback: (() => void) | null = null
 
   constructor(
     config?: IBackendConfig,
     private readonly onConfigChange?: (partial: Partial<IBackendConfig>) => void,
   ) {
     this.config = config ?? loadDefaultBackendConfig()
+  }
+
+  setResumeCallback(cb: () => void): void {
+    this._resumeCallback = cb
   }
 
   async getConfig(): Promise<IBackendConfig> {
@@ -43,6 +48,7 @@ export class NeuralTowerBackend implements IBackend {
     if (partial.timeoutMs !== undefined) this.config.timeoutMs = partial.timeoutMs
 
     this.onConfigChange?.(partial)
+    this._resumeCallback?.()
   }
 
   async listModels(): Promise<string[]> {

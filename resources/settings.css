@@ -36,7 +36,7 @@ label {
   font-size: 12px;
 }
 
-label > input,
+label > input:not([type="checkbox"]),
 label > select {
   display: block;
   width: 100%;
@@ -48,6 +48,11 @@ label > select {
   border-radius: 4px;
   font-size: 12px;
   outline: none;
+}
+
+label > input[type="checkbox"] {
+  margin-right: 6px;
+  vertical-align: middle;
 }
 
 .actions {

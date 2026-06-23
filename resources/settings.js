@@ -59,8 +59,7 @@ btnSave.addEventListener("click", () => {
 })
 
 btnTest.addEventListener("click", () => {
-  cfg.url = urlInput.value
-  vscode.postMessage({ type: "settingsTest" })
+  vscode.postMessage({ type: "settingsTest", url: urlInput.value })
 })
 
 function setStatus(msg: string, ok: boolean): void {

@@ -39,6 +39,7 @@ export async function activate(ctx: vscode.ExtensionContext): Promise<void> {
   registerCommands(currentApp, deps, outputChannel)
   registerWebviewSerializers()
   registerWorkspaceListeners(deps)
+  registerConfigChangeListener(deps)
   setupDisposal(ctx, deps, outputChannel)
 
   await currentApp.init()
@@ -99,6 +100,39 @@ function registerWebviewSerializers(): void {
       },
     },
   )
+}
+
+/**
+ * Зарегистрировать слушатель изменений конфигурации.
+ * Синхронизирует изменения из settings.json с в-памяти конфигом бэкенда.
+ */
+function registerConfigChangeListener(deps: Awaited<ReturnType<typeof createDeps>>): void {
+  if (typeof vscode.workspace.onDidChangeConfiguration !== "function") return
+  vscode.workspace.onDidChangeConfiguration(async (e) => {
+    if (!e.affectsConfiguration("neuralTowerAgent")) return
+    const cfg = vscode.workspace.getConfiguration("neuralTowerAgent")
+    const current = await deps.backend.getConfig()
+    const updates: Record<string, unknown> = {}
+    const url = cfg.get<string>("neuralTowerUrl")
+    if (url && url !== current.url) updates.url = url
+    const model = cfg.get<string>("model")
+    if (model !== undefined && model !== current.model) updates.model = model
+    const maxRetries = cfg.get<number>("maxRetries")
+    if (maxRetries !== undefined && maxRetries !== current.maxRetries) updates.maxRetries = maxRetries
+    const timeoutMs = cfg.get<number>("timeoutMs")
+    if (timeoutMs !== undefined && timeoutMs !== current.timeoutMs) updates.timeoutMs = timeoutMs
+    if (Object.keys(updates).length > 0) {
+      try {
+        await deps.backend.updateConfig(updates)
+        log.info(`Конфигурация обновлена из settings.json: ${Object.keys(updates).join(", ")}`)
+        if ("url" in updates) {
+          deps.healthMonitor.resume()
+        }
+      } catch (err: unknown) {
+        log.error(`Ошибка обновления конфигурации из settings.json: ${errorMessage(err)}`)
+      }
+    }
+  })
 }
 
 /**

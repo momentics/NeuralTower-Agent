@@ -25,7 +25,7 @@ export type ExtToWebview =
 
 export type SettingsToExt =
   | { type: "settingsSave"; url: string; model: string; maxRetries?: number; timeoutMs?: number; autoApprove?: boolean }
-  | { type: "settingsTest" }
+  | { type: "settingsTest"; url?: string }
 
 export type ExtToSettings =
   | { type: "settingsData"; config: { url: string; model: string; maxRetries: number; timeoutMs: number; autoApprove: boolean }; models: string[] }

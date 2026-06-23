@@ -559,6 +559,11 @@ export async function createDeps(
   // Связать монитор здоровья с чат-провайдером для ленивой инициализации
   chatProvider.setHealthMonitor?.(healthMonitor)
 
+  // Разрешить бэкенду возобновлять монитор здоровья при изменении конфигурации
+  if (typeof (backend as NeuralTowerBackend).setResumeCallback === "function") {
+    ;(backend as NeuralTowerBackend).setResumeCallback(() => healthMonitor.resume())
+  }
+
   // ── Постинициализация: определение рабочей директории ──
   if (vscode.workspace.workspaceFolders?.[0]) {
     workDirState.current = vscode.workspace.workspaceFolders[0].uri.fsPath

@@ -116,14 +116,26 @@ export class SettingsProvider implements ISettingsProvider {
             vscode.window.showInformationMessage("Настройки сохранены")
             break
           }
-          case "settingsTest":
-            const ok = await this.backend.healthCheck()
+          case "settingsTest": {
+            const testUrl = typeof msg.url === "string" && msg.url.trim() ? msg.url.trim() : undefined
+            let ok: boolean
+            if (testUrl) {
+              const currentCfg = await this.backend.getConfig()
+              await this.backend.updateConfig({ url: testUrl })
+              ok = await this.backend.healthCheck()
+              if (!ok) {
+                await this.backend.updateConfig({ url: currentCfg.url })
+              }
+            } else {
+              ok = await this.backend.healthCheck()
+            }
             this.getWebview().postMessage({
               type: "settingsTestResult",
               success: ok,
               message: ok ? "Подключено" : "Не удалось подключиться",
             } as ExtToSettings)
             break
+          }
         }
       } catch (err: unknown) {
         const msg = errorMessage(err)
