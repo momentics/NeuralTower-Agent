@@ -39,9 +39,12 @@ export async function walkDirectory(
       if (opts.skipHidden && entry.name.startsWith(".")) continue
       if (opts.skipNodeModules && entry.name === "node_modules") continue
       const full = path.join(current, entry.name)
+      // Пропускать символические ссылки — они могут создавать циклы
+      // и приводить к бесконечному обходу или выходу за пределы рабочей области.
+      if (entry.isSymbolicLink()) continue
       if (entry.isDirectory()) {
         await walk(full)
-      } else {
+      } else if (entry.isFile()) {
         files.push(full)
       }
     }
