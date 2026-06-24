@@ -275,7 +275,7 @@ IGoModule — информация о Go модуле:
 export interface IGoModule {
   modulePath: string;
   goVersion: string;
-  dependencies: string[];
+  dependencies: Map<string, string>;
 }
 ```
 
@@ -298,34 +298,13 @@ export class ScopeIgnore {
 }
 ```
 
-### Subgraph и поиск (для Фазы 3, типы определяются в Фазе 2)
+### Subgraph и поиск (для Фазы 3, типы определяются в Фазе 1 и Фазе 3)
 
-```typescript
-export interface ISubgraph {
-  nodes: INode[];
-  edges: IEdge[];
-}
-
-export interface ITraversalOptions {
-  maxDepth?: number;
-  maxNodes?: number;
-  includeKinds?: NodeKind[];
-  excludeKinds?: NodeKind[];
-}
-
-export interface ISearchOptions {
-  query: string;
-  kinds?: NodeKind[];
-  languages?: Language[];
-  limit?: number;
-}
-
-export interface ISearchResult {
-  nodes: INode[];
-  edges: IEdge[];
-  total: number;
-}
-```
+Типы импортируются из Фазы 1 и Фазы 3:
+- `ISubgraph` — из Фазы 1 (`src/repo/ntgraph/Types.ts`): `nodes: Map<string, INode>`, `edges: IEdge[]`, `roots: string[]`, `confidence?: 'high' | 'low'`
+- `ITraversalOptions` — из Фазы 3: `maxDepth?`, `edgeKinds?`, `nodeKinds?`, `direction?`, `limit?`, `includeStart?`
+- `ISearchOptions` — из Фазы 1 (`src/repo/ntgraph/Types.ts`): `kinds?`, `languages?`, `includePatterns?`, `excludePatterns?`, `pathFilters?`, `nameFilters?`, `limit?`, `offset?`, `caseSensitive?`
+- `ISearchResult` — из Фазы 1 (`src/repo/ntgraph/Types.ts`): `node: INode`, `score: number`, `highlights?: string[]`
 
 ### ExtractionOrchestrator
 

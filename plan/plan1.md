@@ -93,13 +93,13 @@ SQL-паттерны:
 - `getExistingNodeIds(ids: string[]): Set<string>` — для валидации ребер
 
 Методы работы с файлами:
-- `getStaleFiles(currentHashes: Map<string, string>): IFileRecord[]` — для инкрементальной индексации
+- `getStaleFiles(currentHashes?: Map<string, string>): IFileRecord[]` — для инкрементальной индексации. Без параметров — все файлы с изменённым hash. С параметром — сравнение с переданными хешами.
 - `getLastIndexedAt(): number | null` — последняя метка индексации
 - `getAllFilePaths(): string[]` — легковесный запрос, только строки
 - `getAllNodeNames(): string[]` — легковесный запрос, только строки
 
 Аналитические методы:
-- `getDominantFile(): INode | null` — файл с наибольшим числом внутренних ребер (минимум DOMINANT_FILE_EDGE_THRESHOLD = 20 ребер)
+- `getDominantFile(): IDominantFile | null` — файл с наибольшим числом внутренних ребер (минимум DOMINANT_FILE_EDGE_THRESHOLD = 20 ребер). Возвращает `{ filePath: string; edgeCount: number; nextEdgeCount: number }` для ранжирования.
 - `getTopRouteFile(): INode | null` — файл с наибольшим числом route-узлов (требует TOP_ROUTE_MIN_TOTAL = 3 маршрутов и концентрации TOP_ROUTE_MIN_CONCENTRATION = 0.30)
 - `getRoutingManifest(): INode[]` — все route-узлы (дефолтный лимит ROUTING_MANIFEST_DEFAULT_LIMIT = 40)
 - `getDependentFilePaths(filePath: string): string[]` — файлы, зависящие от данного
@@ -265,7 +265,7 @@ export interface IExtractionError {
   filePath: string;
   line?: number;
   column?: number;
-  severity: 'warning' | 'error';
+  severity: 'error' | 'warning' | 'info';
   code: 'read_error' | 'size_exceeded' | 'parse_error' | 'path_traversal';
 }
 ```
@@ -291,6 +291,8 @@ export interface ISearchOptions {
   languages?: string[];
   includePatterns?: string[];
   excludePatterns?: string[];
+  pathFilters?: string[];
+  nameFilters?: string[];
   limit?: number;
   offset?: number;
   caseSensitive?: boolean;
@@ -306,6 +308,15 @@ export interface ISearchResult {
 }
 ```
 
+Доминирующий файл (DominantFile):
+```typescript
+export interface IDominantFile {
+  filePath: string;
+  edgeCount: number;
+  nextEdgeCount: number;
+}
+```
+
 Версия схемы (SchemaVersion):
 ```typescript
 export interface ISchemaVersion {
@@ -317,11 +328,11 @@ export interface ISchemaVersion {
 
 Подграф (Subgraph):
 ```typescript
-export interface Subgraph {
-  nodes: INode[];
+export interface ISubgraph {
+  nodes: Map<string, INode>;
   edges: IEdge[];
   roots: string[];
-  confidence: number;
+  confidence?: 'high' | 'low';
 }
 ```
 
@@ -438,12 +449,13 @@ export type EdgeKind =
 
 Тип языка (Language):
 ```typescript
-export const Language = [
+export const Language = Object.freeze([
   'typescript', 'javascript', 'tsx', 'jsx', 'python', 'go', 'rust', 'java',
   'c', 'cpp', 'csharp', 'razor', 'php', 'ruby', 'swift', 'kotlin', 'dart',
   'svelte', 'vue', 'astro', 'liquid', 'pascal', 'scala', 'lua', 'luau',
-  'objc', 'r', 'yaml', 'twig', 'xml', 'properties', 'unknown'
-] as const;
+  'objc', 'r', 'yaml', 'twig', 'xml', 'properties', 'unknown',
+  'html', 'css', 'sql', 'json', 'markdown', 'shell', 'dockerfile', 'toml', 'ini'
+] as const);
 
 export type Language = (typeof Language)[number];
 ```

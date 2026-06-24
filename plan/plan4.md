@@ -434,7 +434,6 @@ export class ToolHandler {
   setDefaultProjectHint(hint: string): void;
   toolAllowlist(): Set<string>;
   isToolAllowed(toolName: string): boolean;
-  getTools(): IToolDefinition[];
   findAllSymbols(symbol: string, options?: FindSymbolsOptions): { nodes: INode[]; note: string };
 }
 ```
@@ -456,6 +455,17 @@ export class ToolHandler {
 - `isToolAllowed()`: проверка, допущен ли инструмент
 - `getTools()`: динамический список инструментов с budget-aware описаниями, tiny-repo gating
 - `findAllSymbols()`: критический helper для callers/callees/impact/explore
+
+### MCPEngineOptions
+
+```typescript
+export interface MCPEngineOptions {
+  watch?: boolean;
+  debounceMs?: number;
+  idleTimeout?: number;
+  socketPath?: string;
+}
+```
 
 ### Класс MCPEngine
 
@@ -779,12 +789,16 @@ const tools: IToolDefinition[] = [
 
 ## Ленивая загрузка
 
-- `require()` паттерн: NtGraphDb НЕ загружается при import, только при выполнении инструмента
+- Динамический `import()`: NtGraphDb НЕ загружается при import, только при выполнении инструмента
 - Пример:
 ```typescript
-function loadNtGraph(): typeof NtGraphDb {
-  const NtGraphDb = require('./NtGraphDb');
-  return NtGraphDb;
+let _NtGraphDb: typeof import('./NtGraphDb') | null = null;
+
+async function loadNtGraph(): Promise<typeof import('./NtGraphDb')> {
+  if (!_NtGraphDb) {
+    _NtGraphDb = await import('./NtGraphDb');
+  }
+  return _NtGraphDb;
 }
 ```
 
@@ -843,7 +857,7 @@ function loadNtGraph(): typeof NtGraphDb {
 
 ### Оптимизация
 
-- Ленивая загрузка NtGraphDb (require() только при первом вызове инструмента)
+- Ленивая загрузка NtGraphDb (динамический import() только при первом вызове инструмента)
 - Кэширование результатов поиска (LRU)
 - Batch-запросы для узлов и ребер
 - Ограничение глубины обхода (depth) для предотвращения OOM

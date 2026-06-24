@@ -38,12 +38,8 @@ export interface ITraversalOptions {
 ### ISubgraph
 
 ```typescript
-export interface ISubgraph {
-  nodes: Map<string, INode>;
-  edges: IEdge[];
-  roots: string[];
-  confidence?: 'high' | 'low';
-}
+// Импортируется из Фазы 1 (src/repo/ntgraph/Types.ts)
+// export interface ISubgraph { nodes: Map<string, INode>; edges: IEdge[]; roots: string[]; confidence?: 'high' | 'low' }
 ```
 
 ### IUnresolvedRef
@@ -84,15 +80,14 @@ export interface IResolutionResult {
 
 ### IResolutionContext
 
-Интерфейс с 18 методами для доступа к данным графа из кода разрешения ссылок:
+Разбит на два под-интерфейса для соблюдения SRP:
 
 ```typescript
-export interface IResolutionContext {
+// Доступ к графу — делегируется QueryBuilder
+export interface IGraphQueryContext {
+  getNodeById(id: string): INode | null;
   getNodesByFile(filePath: string): INode[];
   getNodesByName(name: string): INode[];
-  getImportMappings(filePath: string): IImportMapping[];
-  getReExports(filePath: string): IReExport[];
-  getNodeById(id: string): INode | null;
   getNodesByKind(kind: NodeKind): INode[];
   getNodesByQualifiedName(qualifiedName: string): INode[];
   getNodesByLowerName(lowerName: string): INode[];
@@ -100,12 +95,22 @@ export interface IResolutionContext {
   getChildren(nodeId: string): INode[];
   getAncestors(nodeId: string): INode[];
   getIncomingEdges(nodeId: string, kinds?: EdgeKind[]): IEdge[];
-  getOutgoingEdges(nodeId: string, kinds?: EdgeKind[]): IEdge[];
-  getFileContent(filePath: string): string | null;
+  getOutgoingEdges(nodeId: string, kinds?: EdgeKind[], provenance?: string): IEdge[];
   getFilePathFromNodeId(nodeId: string): string | null;
-  getLanguageFromNodeId(nodeId: string): string | null;
+  getLanguageFromNodeId(nodeId: string): Language | null;
+}
+
+// Файловый I/O и мета-данные — отдельная ответственность
+export interface IFileContext {
+  getFileContent(filePath: string): string | null;
   getDetectedFrameworks(): string[];
   getAllFiles(): string[];
+}
+
+// Объединённый контекст разрешения ссылок
+export interface IResolutionContext extends IGraphQueryContext, IFileContext {
+  getImportMappings(filePath: string): IImportMapping[];
+  getReExports(filePath: string): IReExport[];
 }
 ```
 
@@ -215,27 +220,15 @@ export interface ISearchResult {
 ### ISearchOptions
 
 ```typescript
-export interface ISearchOptions {
-  kinds?: NodeKind[];
-  languages?: string[];
-  pathFilters?: string[];
-  nameFilters?: string[];
-  limit?: number;
-  offset?: number;
-}
+// Импортируется из Фазы 1 (src/repo/ntgraph/Types.ts)
+// export interface ISearchOptions { kinds?, languages?, includePatterns?, excludePatterns?, pathFilters?, nameFilters?, limit?, offset?, caseSensitive? }
 ```
 
 ### Language
 
 ```typescript
-export const Language = Object.freeze([
-  'typescript', 'javascript', 'python', 'go', 'rust', 'java', 'kotlin',
-  'csharp', 'swift', 'scala', 'dart', 'ruby', 'php', 'cpp', 'c',
-  'pascal', 'objc', 'html', 'css', 'sql', 'json', 'yaml', 'xml',
-  'markdown', 'shell', 'dockerfile', 'toml', 'ini', 'razor', 'vue', 'svelte'
-] as const);
-
-export type Language = (typeof Language)[number];
+// Импортируется из Фазы 1 (src/repo/ntgraph/Types.ts)
+// 41 язык: typescript, javascript, tsx, jsx, python, go, rust, java, c, cpp, csharp, razor, php, ruby, swift, kotlin, dart, svelte, vue, astro, liquid, pascal, scala, lua, luau, objc, r, yaml, twig, xml, properties, unknown, html, css, sql, json, markdown, shell, dockerfile, toml, ini
 ```
 
 ## Константы
@@ -653,7 +646,7 @@ export class ReferenceResolver {
   gateLanguage(result: IResolvedRef | null, ref: IUnresolvedRef): IResolvedRef | null;
   gateFrameworkLanguage(result: IResolvedRef | null, ref: IUnresolvedRef): IResolvedRef | null;
   getFilePathFromNodeId(nodeId: string): string | null;
-  getLanguageFromNodeId(nodeId: string): string | null;
+  getLanguageFromNodeId(nodeId: string): Language | null;
 }
 ```
 
@@ -836,6 +829,52 @@ src/repo/
     index.ts              — точка экспорта
     Resolver.ts           — ReferenceResolver
     LruCache.ts           — LRU-кэш
+
+```typescript
+export class LruCache<K, V> {
+  private map: Map<K, V>;
+  private limit: number;
+
+  constructor(limit?: number) {
+    this.limit = Number(process.env.NTGRAPH_RESOLVER_CACHE_SIZE) || limit || 5000;
+    this.map = new Map();
+  }
+
+  get(key: K): V | undefined {
+    if (!this.map.has(key)) return undefined;
+    const value = this.map.get(key)!;
+    this.map.delete(key);
+    this.map.set(key, value);
+    return value;
+  }
+
+  set(key: K, value: V): void {
+    if (this.map.has(key)) {
+      this.map.delete(key);
+    } else if (this.map.size >= this.limit) {
+      const firstKey = this.map.keys().next().value;
+      this.map.delete(firstKey);
+    }
+    this.map.set(key, value);
+  }
+
+  has(key: K): boolean {
+    return this.map.has(key);
+  }
+
+  delete(key: K): boolean {
+    return this.map.delete(key);
+  }
+
+  clear(): void {
+    this.map.clear();
+  }
+
+  get size(): number {
+    return this.map.size;
+  }
+}
+```
     NameMatcher.ts        — matchReference, matchFunctionRef, matchDottedCallChain, matchScopedCallChain, sameLanguageFamily, crossesKnownFamily
     ImportResolver.ts     — resolveViaImport, resolveJvmImport, extractImportMappings, extractReExports, loadCppIncludeDirs, isPhpIncludePathRef
     BuiltIns.ts           — встроенные символы по языкам
@@ -905,7 +944,7 @@ export class ReferenceResolver {
   gateLanguage(result: IResolvedRef | null, ref: IUnresolvedRef): IResolvedRef | null;
   gateFrameworkLanguage(result: IResolvedRef | null, ref: IUnresolvedRef): IResolvedRef | null;
   getFilePathFromNodeId(nodeId: string): string | null;
-  getLanguageFromNodeId(nodeId: string): string | null;
+  getLanguageFromNodeId(nodeId: string): Language | null;
 }
 ```
 
@@ -1000,7 +1039,7 @@ export class ContextBuilder {
 
 #### Кэширование
 
-- LRU-кэш с ограничением (по умолчанию 5000)
+- LRU-кэш с ограничением (по умолчанию 5000, настраивается через `NTGRAPH_RESOLVER_CACHE_SIZE`)
 - Кэши: nodeCache (узлы по файлу), fileCache (содержимое файлов, null для неудачных чтений), importMappingCache, reExportCache, nameCache, lowerNameCache, qualifiedNameCache, razorUsingsCache
 - Content cache получает меньший бюджет (`limit / 5`), минимальный размер 64
 - Инвалидация при изменении данных
@@ -1482,7 +1521,7 @@ function formatContextAsJson(context: ITaskContext): string
 - `insertEdges(edges: IEdge[]): void`
 - `deleteSpecificResolvedReferences(refs: IUnresolvedReference[]): number`
 - `updateNode(node: INode): void`
-- `getDominantFile(): { filePath: string; edgeCount: number; nextEdgeCount: number } | null`
+- `getDominantFile(): IDominantFile | null` — из Фазы 1
 - `getDependentFilePaths(filePath: string): string[]`
 - `getDependencyFilePaths(filePath: string): string[]`
 - `getCrossFileIncomingEdgesWithTarget(filePath: string): Array<{ edge: IEdge; targetName: string; targetKind: string }>`
