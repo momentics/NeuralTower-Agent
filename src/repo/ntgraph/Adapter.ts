@@ -25,6 +25,8 @@ export interface SqliteDatabase {
   transaction<T>(fn: (...args: any[]) => T): (...args: any[]) => T;
   close(): void;
   readonly open: boolean;
+  /** Лёгкое обслуживание после пакетных записей. */
+  runMaintenance(): void;
 }
 
 /** Тип активного бэкенда SQLite. */
@@ -105,6 +107,20 @@ class NodeSqliteAdapter implements SqliteDatabase {
 
   close(): void {
     if (this._db.isOpen) this._db.close();
+  }
+
+  /** Лёгкое обслуживание после пакетных записей: PRAGMA optimize + wal_checkpoint(PASSIVE). Ошибки тихо проглатываются. */
+  runMaintenance(): void {
+    try {
+      this._db.exec('PRAGMA optimize');
+    } catch {
+      // ignore
+    }
+    try {
+      this._db.exec('PRAGMA wal_checkpoint(PASSIVE)');
+    } catch {
+      // ignore (e.g., not in WAL mode)
+    }
   }
 }
 

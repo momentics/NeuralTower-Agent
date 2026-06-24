@@ -157,8 +157,8 @@ export class QueryBuilder {
   }
 
   /** Возвращает токены имени проекта. */
-  getProjectNameTokens(): Set<string> {
-    return this.projectNameTokens;
+  getProjectNameTokens(): string[] {
+    return Array.from(this.projectNameTokens);
   }
 
   /** Возвращает экземпляр FtsSearch. */
@@ -824,9 +824,12 @@ export class QueryBuilder {
     return row?.last ?? null;
   }
 
-  /** Устаревшие файлы (хеш изменился). */
-  getStaleFiles(currentHashes: Map<string, string>): IFileRecord[] {
+  /** Устаревшие файлы (хеш изменился). Без параметров — все файлы. С параметром — сравнение с переданными хешами. */
+  getStaleFiles(currentHashes?: Map<string, string>): IFileRecord[] {
     const files = this.getAllFiles();
+    if (!currentHashes) {
+      return files;
+    }
     return files.filter((f) => {
       const currentHash = currentHashes.get(f.path);
       return currentHash && currentHash !== f.contentHash;

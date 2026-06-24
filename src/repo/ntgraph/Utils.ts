@@ -669,23 +669,41 @@ export async function processInBatches<T, R>(
 
 /** Класс асинхронного мьютекса с очередью ожидания. */
 export class Mutex {
-  private queue: Array<{ resolve: () => void }> = [];
+  private locked = false;
+  private waitQueue: Array<() => void> = [];
 
-  async acquire(): Promise<void> {
-    if (this.queue.length === 0) {
-      return;
+  /** Приобрести блокировку, возвращает функцию освобождения. */
+  async acquire(): Promise<() => void> {
+    while (this.locked) {
+      await new Promise<void>((resolve) => {
+        this.waitQueue.push(resolve);
+      });
     }
 
-    return new Promise<void>((resolve) => {
-      this.queue.push({ resolve });
-    });
+    this.locked = true;
+
+    return () => {
+      this.locked = false;
+      const next = this.waitQueue.shift();
+      if (next) {
+        next();
+      }
+    };
   }
 
-  release(): void {
-    const next = this.queue.shift();
-    if (next) {
-      next.resolve();
+  /** Выполнить функцию под блокировкой. */
+  async withLock<T>(fn: () => Promise<T> | T): Promise<T> {
+    const release = await this.acquire();
+    try {
+      return await fn();
+    } finally {
+      release();
     }
+  }
+
+  /** Проверка, занята ли блокировка. */
+  isLocked(): boolean {
+    return this.locked;
   }
 }
 

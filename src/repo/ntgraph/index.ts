@@ -10,6 +10,7 @@ import { createDatabase } from './Adapter';
 import { QueryBuilder } from './QueryBuilder';
 import { FtsSearch } from './FtsSearch';
 import { applyMigrations, needsMigration, getMigrationHistory, CURRENT_SCHEMA_VERSION } from './Migration';
+import * as fs from 'fs';
 import {
   INode,
   IEdge,
@@ -67,9 +68,9 @@ export class NtGraphDb {
   /** Инициализация с настройкой PRAGMA. */
   static initialize(options: InitOptions): NtGraphDb {
     const { projectRoot, dbPath } = options;
-    const path = dbPath ?? getDatabasePath(projectRoot);
+    const resolvedPath = dbPath ?? getDatabasePath(projectRoot);
 
-    const { db } = createDatabase(path);
+    const { db } = createDatabase(resolvedPath);
 
     const instance = new NtGraphDb(db, projectRoot);
 
@@ -84,9 +85,38 @@ export class NtGraphDb {
     return instance;
   }
 
+  /** Открытие существующей БД. */
+  static open(options: InitOptions): NtGraphDb {
+    const { projectRoot, dbPath } = options;
+    const resolvedPath = dbPath ?? getDatabasePath(projectRoot);
+
+    if (!fs.existsSync(resolvedPath)) {
+      throw new Error(`База данных не найдена: ${resolvedPath}`);
+    }
+
+    const { db } = createDatabase(resolvedPath);
+
+    const instance = new NtGraphDb(db, projectRoot);
+
+    // PRAGMA в строгом порядке
+    instance.applyPragmas();
+
+    // Миграции (если схема устарела)
+    if (needsMigration(db)) {
+      applyMigrations(db);
+    }
+
+    return instance;
+  }
+
   /** Закрытие БД. */
   close(): void {
     this.db.close();
+  }
+
+  /** Лёгкое обслуживание после пакетных записей: PRAGMA optimize + wal_checkpoint(PASSIVE). Ошибки тихо проглатываются. */
+  runMaintenance(): void {
+    this.db.runMaintenance();
   }
 
   /** Применяет PRAGMA в строгом порядке. */
@@ -272,7 +302,7 @@ export class NtGraphDb {
     return this.qb.getLastIndexedAt();
   }
 
-  getStaleFiles(currentHashes: Map<string, string>): IFileRecord[] {
+  getStaleFiles(currentHashes?: Map<string, string>): IFileRecord[] {
     return this.qb.getStaleFiles(currentHashes);
   }
 
@@ -418,7 +448,7 @@ export class NtGraphDb {
   }
 
   /** Токены имени проекта. */
-  getProjectNameTokens(): Set<string> {
-    return this.projectNameTokens;
+  getProjectNameTokens(): string[] {
+    return Array.from(this.projectNameTokens);
   }
 }
