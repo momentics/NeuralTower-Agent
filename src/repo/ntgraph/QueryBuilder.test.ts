@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { NtGraphDb, INode, IEdge, IFileRecord, IUnresolvedReference } from "./ntgraph"
+import { NtGraphDb, INode, IEdge, IFileRecord, IUnresolvedReference } from "./index"
 import * as os from "os"
 import * as path from "path"
 import * as fs from "fs/promises"
@@ -16,10 +16,24 @@ describe("QueryBuilder", () => {
   let tmpDir: string
   let db: NtGraphDb
 
-  beforeAll(() => {
+  beforeAll(async () => {
     tmpDir = path.join(os.tmpdir(), `ntgraph-qb-test-${Date.now()}`)
-    fs.mkdir(tmpDir, { recursive: true })
+    await fs.mkdir(tmpDir, { recursive: true })
     db = NtGraphDb.initialize({ projectRoot: tmpDir })
+    // Node for unresolved ref FK constraint
+    db.insertNode({
+      id: "ref-node",
+      kind: "function",
+      name: "refNode",
+      qualifiedName: "refNode",
+      filePath: "src/test.ts",
+      language: "typescript",
+      startLine: 1,
+      endLine: 1,
+      startColumn: 0,
+      endColumn: 0,
+      updatedAt: Date.now(),
+    })
   })
 
   afterAll(async () => {
@@ -345,16 +359,38 @@ describe("QueryBuilder", () => {
   })
 
   it("gets unresolved references count", () => {
+    db.insertUnresolvedRef({
+      fromNodeId: "ref-node",
+      referenceName: "countFunc",
+      referenceKind: "function_ref",
+      line: 1,
+      column: 1,
+    })
     const count = db.getUnresolvedReferencesCount()
     expect(count).toBeGreaterThanOrEqual(1)
   })
 
   it("gets unresolved references batch", () => {
+    db.insertUnresolvedRef({
+      fromNodeId: "ref-node",
+      referenceName: "batchFunc",
+      referenceKind: "function_ref",
+      line: 1,
+      column: 1,
+    })
     const batch = db.getUnresolvedReferencesBatch(0, 5)
     expect(batch.length).toBeGreaterThanOrEqual(1)
   })
 
   it("gets unresolved references by files", () => {
+    db.insertUnresolvedRef({
+      fromNodeId: "ref-node",
+      referenceName: "fileFunc",
+      referenceKind: "function_ref",
+      line: 1,
+      column: 1,
+      filePath: "src/test.ts",
+    })
     const refs = db.getUnresolvedReferencesByFiles(["src/test.ts"])
     expect(refs.length).toBeGreaterThanOrEqual(1)
   })
@@ -366,16 +402,17 @@ describe("QueryBuilder", () => {
   })
 
   it("clears all unresolved references", () => {
+    db.clearUnresolvedReferences()
     db.insertUnresolvedRef({
-      fromNodeId: "a",
-      referenceName: "x",
+      fromNodeId: "ref-node",
+      referenceName: "clear-x",
       referenceKind: "function_ref",
       line: 1,
       column: 1,
     })
     db.insertUnresolvedRef({
-      fromNodeId: "b",
-      referenceName: "y",
+      fromNodeId: "ref-node",
+      referenceName: "clear-y",
       referenceKind: "function_ref",
       line: 2,
       column: 2,
@@ -385,14 +422,15 @@ describe("QueryBuilder", () => {
   })
 
   it("deletes resolved references by node ids", () => {
+    db.clearUnresolvedReferences()
     db.insertUnresolvedRef({
-      fromNodeId: "del-a",
-      referenceName: "x",
+      fromNodeId: "ref-node",
+      referenceName: "del-x",
       referenceKind: "function_ref",
       line: 1,
       column: 1,
     })
-    db.deleteResolvedReferences(["del-a"])
+    db.deleteResolvedReferences(["ref-node"])
     expect(db.getUnresolvedReferencesCount()).toBe(0)
   })
 

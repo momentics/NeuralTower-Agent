@@ -2,7 +2,7 @@
  * Объединённый поиск по репозиторию.
  *
  * Комбинирует семантический поиск (векторное хранилище)
- * и полнотекстовый поиск (FTS) для получения лучших результатов.
+ * и полнотекстовый поиск (FTS5 через NtGraphDb) для получения лучших результатов.
  *
  * Режимы поиска:
  * - semantic: только векторное хранилище
@@ -15,6 +15,8 @@ import type { IVectorStore } from "./IVectorStore"
 import type { ICodeChunk, ISearchConfig, SearchMode } from "./ChunkTypes"
 import { errorMessage } from "../core/Errors"
 import type { IFullTextSearch } from "./FullTextSearch"
+import { SqliteFullTextSearch } from "./SqliteFullTextSearch"
+import { NtGraphDb } from "./ntgraph"
 import { createDomainLogger } from "../core/Logger"
 
 const log = createDomainLogger("CodebaseSearch")
@@ -51,11 +53,34 @@ export interface ICodebaseSearch {
  * Объединённый поиск по репозиторию.
  */
 export class CodebaseSearch implements ICodebaseSearch {
+  private readonly fts: IFullTextSearch
+
   constructor(
     private readonly vectorStore: IVectorStore,
     private readonly embeddingProvider: IEmbeddingProvider | null,
-    private readonly fts: IFullTextSearch
-  ) {}
+    ftsOrGraphDb: IFullTextSearch | NtGraphDb | null,
+    private readonly graphDb?: NtGraphDb
+  ) {
+    // Если передан NtGraphDb — создаём SQLite-реализацию FTS
+    if (ftsOrGraphDb instanceof NtGraphDb) {
+      this.fts = new SqliteFullTextSearch(ftsOrGraphDb)
+      this.graphDb = ftsOrGraphDb
+    } else {
+      // Иначе используем переданный IFullTextSearch
+      this.fts = ftsOrGraphDb ?? new (require("./FullTextSearch").FullTextSearch)()
+    }
+  }
+
+  /**
+   * Фабричный метод для создания поиска с NtGraphDb.
+   */
+  static withGraphDb(
+    vectorStore: IVectorStore,
+    embeddingProvider: IEmbeddingProvider | null,
+    graphDb: NtGraphDb
+  ): CodebaseSearch {
+    return new CodebaseSearch(vectorStore, embeddingProvider, graphDb, graphDb)
+  }
 
   /**
    * Поиск по запросу.

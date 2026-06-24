@@ -54,10 +54,12 @@ export class NtGraphDb {
   private ftsSearch: FtsSearch;
   private projectRoot: string;
   private projectNameTokens: Set<string>;
+  private _dbPath: string;
 
-  constructor(db: SqliteDatabase, projectRoot: string) {
+  constructor(db: SqliteDatabase, projectRoot: string, dbPath?: string) {
     this.db = db;
     this.projectRoot = projectRoot;
+    this._dbPath = dbPath ?? getDatabasePath(projectRoot);
     this.projectNameTokens = deriveProjectNameTokens(projectRoot);
     this.qb = new QueryBuilder(db);
     this.qb.setProjectNameTokens(this.projectNameTokens);
@@ -72,10 +74,19 @@ export class NtGraphDb {
 
     const { db } = createDatabase(resolvedPath);
 
-    const instance = new NtGraphDb(db, projectRoot);
+    const instance = new NtGraphDb(db, projectRoot, resolvedPath);
 
     // PRAGMA в строгом порядке
     instance.applyPragmas();
+
+    // Создаём таблицу schema_versions до проверки миграций
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS schema_versions (
+        version INTEGER PRIMARY KEY,
+        applied_at INTEGER NOT NULL,
+        description TEXT
+      )
+    `);
 
     // Миграции
     if (needsMigration(db)) {
@@ -96,10 +107,19 @@ export class NtGraphDb {
 
     const { db } = createDatabase(resolvedPath);
 
-    const instance = new NtGraphDb(db, projectRoot);
+    const instance = new NtGraphDb(db, projectRoot, resolvedPath);
 
     // PRAGMA в строгом порядке
     instance.applyPragmas();
+
+    // Создаём таблицу schema_versions до проверки миграций
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS schema_versions (
+        version INTEGER PRIMARY KEY,
+        applied_at INTEGER NOT NULL,
+        description TEXT
+      )
+    `);
 
     // Миграции (если схема устарела)
     if (needsMigration(db)) {
@@ -132,20 +152,12 @@ export class NtGraphDb {
 
   /** Размер БД в байтах. */
   getSize(): number {
-    const fs = require('fs');
-    const path = require('path');
     try {
-      const dbPath = this.dbPath();
-      const stats = fs.statSync(dbPath);
+      const stats = fs.statSync(this._dbPath);
       return stats.size;
     } catch {
       return 0;
     }
-  }
-
-  /** Путь к файлу БД. */
-  private dbPath(): string {
-    return this.db.pragma('database_list', { simple: true }) as string;
   }
 
   /** Статистика графа. */

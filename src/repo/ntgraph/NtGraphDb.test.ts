@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest"
-import { NtGraphDb, INode } from "./ntgraph"
+import { NtGraphDb, INode } from "./index"
 import * as os from "os"
 import * as path from "path"
 import * as fs from "fs/promises"
@@ -122,13 +122,13 @@ describe("NtGraphDb", () => {
     expect(() => db.runMaintenance()).not.toThrow()
   })
 
-  it("close does not throw", () => {
+  it("close does not throw", async () => {
     const tmpDir2 = path.join(os.tmpdir(), `ntgraph-close-test-${Date.now()}`)
-    fs.mkdirSync(tmpDir2, { recursive: true })
+    await fs.mkdir(tmpDir2, { recursive: true })
     const db2 = NtGraphDb.initialize({ projectRoot: tmpDir2 })
     db2.close()
     expect(() => db2.close()).not.toThrow()
-    fs.rmSync(tmpDir2, { recursive: true, force: true })
+    await fs.rm(tmpDir2, { recursive: true, force: true })
   })
 
   it("getProjectRoot returns project root", () => {

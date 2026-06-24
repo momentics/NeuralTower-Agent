@@ -305,7 +305,7 @@ export class FtsSearch {
       score: r.score
         + kindBonus(r.node.kind)
         + scorePathRelevance(r.node.filePath, query, this.projectNameTokens)
-        + nameMatchBonus(r.node.name, query),
+        + nameMatchBonus(query, r.node.name),
     }));
   }
 
@@ -324,7 +324,7 @@ export class FtsSearch {
       .split(/\s+/)
       .filter(term => term.length > 0)
       .filter(term => !/^(AND|OR|NOT|NEAR)$/i.test(term))
-      .map(term => `"${term}"*`)
+      .map(term => `"${term}"`)
       .join(' OR ');
 
     return ftsQuery || null;

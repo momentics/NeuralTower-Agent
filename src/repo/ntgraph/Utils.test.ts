@@ -34,7 +34,7 @@ import {
   estimateSize,
   debounce,
   throttle,
-} from "./ntgraph/Utils"
+} from "./Utils"
 
 describe("Utils", () => {
   // ---- Конвертеры ----

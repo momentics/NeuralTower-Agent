@@ -437,56 +437,82 @@ export function parseQuery(raw: string): ParsedQuery {
       continue;
     }
 
-    // Поле:значение
+    // Поле:значение — только для известных полей
     const colonPos = raw.indexOf(':', i);
     if (colonPos !== -1 && colonPos > i) {
       const field = raw.slice(i, colonPos).toLowerCase();
-      let valueStart = colonPos + 1;
-      while (valueStart < raw.length && raw[valueStart] === ' ') valueStart++;
+      const knownFields = new Set(['kind', 'lang', 'language', 'path', 'name']);
 
-      let valueEnd = valueStart;
-      if (raw[valueStart] === '"') {
-        valueEnd = raw.indexOf('"', valueStart + 1);
-        if (valueEnd === -1) valueEnd = raw.length - 1;
-        valueEnd++;
-      } else {
-        while (valueEnd < raw.length && raw[valueEnd] !== ' ') valueEnd++;
-      }
+      if (knownFields.has(field)) {
+        let valueStart = colonPos + 1;
+        while (valueStart < raw.length && raw[valueStart] === ' ') valueStart++;
 
-      const value = raw.slice(valueStart, valueEnd).trim();
-
-      if (value) {
-        switch (field) {
-          case 'kind':
-            for (const k of value.split(',')) {
-              const trimmed = k.trim();
-              if (validKinds.has(trimmed)) result.kinds.push(trimmed as NodeKind);
-            }
-            break;
-          case 'lang':
-          case 'language':
-            for (const l of value.split(',')) {
-              const trimmed = l.trim();
-              if (trimmed) result.languages.push(trimmed);
-            }
-            break;
-          case 'path':
-            result.pathFilters.push(value);
-            break;
-          case 'name':
-            result.nameFilters.push(value);
-            break;
-          // Неизвестные поля пропускаются
+        // Если после двоеточия (и пробелов) снова пробел или конец строки — пустое значение
+        if (valueStart >= raw.length || raw[valueStart] === ' ') {
+          i = valueStart;
+          continue;
         }
-      }
 
-      i = valueEnd;
-      continue;
+        let valueEnd = valueStart;
+        if (raw[valueStart] === '"') {
+          valueEnd = raw.indexOf('"', valueStart + 1);
+          if (valueEnd === -1) valueEnd = raw.length - 1;
+          else valueEnd++;
+        } else {
+          while (valueEnd < raw.length && raw[valueEnd] !== ' ') valueEnd++;
+        }
+
+        let value = raw.slice(valueStart, valueEnd).trim();
+        // Убираем кавычки
+        if (value.startsWith('"') && value.endsWith('"')) {
+          value = value.slice(1, -1);
+        }
+
+        if (value) {
+          let added = false;
+          switch (field) {
+            case 'kind':
+              for (const k of value.split(',')) {
+                const trimmed = k.trim();
+                if (validKinds.has(trimmed)) {
+                  result.kinds.push(trimmed as NodeKind);
+                  added = true;
+                }
+              }
+              break;
+            case 'lang':
+            case 'language':
+              for (const l of value.split(',')) {
+                const trimmed = l.trim();
+                if (trimmed) {
+                  result.languages.push(trimmed);
+                  added = true;
+                }
+              }
+              break;
+            case 'path':
+              result.pathFilters.push(value);
+              added = true;
+              break;
+            case 'name':
+              result.nameFilters.push(value);
+              added = true;
+              break;
+          }
+          // Если значение не было добавлено (невалидный kind и т.д.), добавляем как свободный текст
+          if (!added) {
+            tokens.push(value);
+          }
+        }
+
+        i = valueEnd;
+        continue;
+      }
     }
 
     // Обычный токен
     let end = i;
-    while (end < raw.length && raw[end] !== ' ' && raw[end] !== ':') end++;
+    while (end < raw.length && raw[end] !== ' ') end++;
     const token = raw.slice(i, end);
     if (token) tokens.push(token);
     i = end;
