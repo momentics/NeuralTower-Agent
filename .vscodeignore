@@ -10,3 +10,4 @@ bump-version.js
 *.md 
 !README.md
 UI-UX/
+plan/
