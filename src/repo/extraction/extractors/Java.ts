@@ -44,7 +44,7 @@ export class JavaExtractor extends ExtractorBase {
       const tree = p.parse(content);
       if (!tree) {
         errors.push(this.createError(
-          'Failed to parse file',
+          'Не удалось разобрать файл',
           filePath,
           'error',
           'PARSE_FAILED'
@@ -54,7 +54,7 @@ export class JavaExtractor extends ExtractorBase {
 
       const root = tree.rootNode;
 
-      // Module node
+      // Узел модуля
       const moduleNode = this.createNode(
         filePath,
         NodeKind.Module,
@@ -66,7 +66,7 @@ export class JavaExtractor extends ExtractorBase {
       );
       nodes.push(moduleNode);
 
-      // Process top-level declarations
+      // Обработка объявлений верхнего уровня
       this.processJavaNodes(
         root,
         filePath,
@@ -80,7 +80,7 @@ export class JavaExtractor extends ExtractorBase {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(
-        `Tree-sitter error: ${message}`,
+        `Ошибка tree-sitter: ${message}`,
         filePath,
         'error',
         'TREE_SITTER_ERROR'
@@ -170,7 +170,7 @@ export class JavaExtractor extends ExtractorBase {
         break;
 
       default:
-        // Recurse into children
+        // Рекурсия по дочерним узлам
         let child = node.firstChild;
         while (child) {
           this.processJavaNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
@@ -315,13 +315,13 @@ export class JavaExtractor extends ExtractorBase {
     nodes.push(classNode);
     edges.push(this.createEdge(parentId, classNode.id, EdgeKind.Contains));
 
-    // Type parameters
+    // Параметры типов
     const typeParams = node.childForFieldName('type_parameters');
     if (typeParams) {
       this.processTypeParameters(typeParams, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors);
     }
 
-    // Extends
+    // Наследование
     const superClass = node.childForFieldName('superclass');
     if (superClass) {
       const superName = superClass.text;
@@ -340,7 +340,7 @@ export class JavaExtractor extends ExtractorBase {
       ));
     }
 
-    // Implements
+    // Реализует
     const implementsList = node.childForFieldName('interfaces');
     if (implementsList) {
       let impl = implementsList.firstChild;
@@ -363,7 +363,7 @@ export class JavaExtractor extends ExtractorBase {
       }
     }
 
-    // Process body
+    // Обработка тела
     const body = node.childForFieldName('body');
     if (body) {
       let child = body.firstChild;
@@ -410,13 +410,13 @@ export class JavaExtractor extends ExtractorBase {
     nodes.push(ifaceNode);
     edges.push(this.createEdge(parentId, ifaceNode.id, EdgeKind.Contains));
 
-    // Type parameters
+    // Параметры типов
     const typeParams = node.childForFieldName('type_parameters');
     if (typeParams) {
       this.processTypeParameters(typeParams, filePath, content, ifaceNode.id, nodes, edges, unresolvedRefs, errors);
     }
 
-    // Extends
+    // Наследование
     const extendsList = node.childForFieldName('interfaces');
     if (extendsList) {
       let ext = extendsList.firstChild;
@@ -439,7 +439,7 @@ export class JavaExtractor extends ExtractorBase {
       }
     }
 
-    // Process body
+    // Обработка тела
     const body = node.childForFieldName('body');
     if (body) {
       let child = body.firstChild;
@@ -486,7 +486,7 @@ export class JavaExtractor extends ExtractorBase {
     nodes.push(enumNode);
     edges.push(this.createEdge(parentId, enumNode.id, EdgeKind.Contains));
 
-    // Process body for enum constants
+    // Обработка тела для констант перечисления
     const body = node.childForFieldName('body');
     if (body) {
       let child = body.firstChild;
@@ -561,19 +561,19 @@ export class JavaExtractor extends ExtractorBase {
     nodes.push(methodNode);
     edges.push(this.createEdge(parentId, methodNode.id, EdgeKind.Contains));
 
-    // Type parameters
+    // Параметры типов
     const typeParams = node.childForFieldName('type_parameters');
     if (typeParams) {
       this.processTypeParameters(typeParams, filePath, content, methodNode.id, nodes, edges, unresolvedRefs, errors);
     }
 
-    // Parameters
+    // Параметры
     const params = node.childForFieldName('parameters');
     if (params) {
       this.processParameters(params, filePath, content, methodNode.id, nodes, edges, unresolvedRefs, errors);
     }
 
-    // Process body for calls and references
+    // Обработка тела для вызовов и ссылок
     const body = node.childForFieldName('body');
     if (body) {
       this.processFunctionBody(body, filePath, content, methodNode.id, nodes, edges, unresolvedRefs, errors);
@@ -618,13 +618,13 @@ export class JavaExtractor extends ExtractorBase {
     nodes.push(funcNode);
     edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Contains));
 
-    // Parameters
+    // Параметры
     const params = node.childForFieldName('parameters');
     if (params) {
       this.processParameters(params, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors);
     }
 
-    // Process body
+    // Обработка тела
     const body = node.childForFieldName('body');
     if (body) {
       this.processFunctionBody(body, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors);
@@ -749,7 +749,7 @@ export class JavaExtractor extends ExtractorBase {
     nodes.push(tryNode);
     edges.push(this.createEdge(parentId, tryNode.id, EdgeKind.Contains));
 
-    // Process catch clauses
+    // Обработка блоков catch
     let child = node.firstChild;
     while (child) {
       if (child.type === 'catch_clause') {
@@ -782,7 +782,7 @@ export class JavaExtractor extends ExtractorBase {
     nodes.push(catchNode);
     edges.push(this.createEdge(parentId, catchNode.id, EdgeKind.Catches));
 
-    // Catch parameter
+    // Параметр catch
     const param = node.childForFieldName('parameter');
     if (param) {
       const paramName = param.text;
@@ -893,7 +893,7 @@ export class JavaExtractor extends ExtractorBase {
     nodes.push(tpNode);
     edges.push(this.createEdge(parentId, tpNode.id, EdgeKind.Contains));
 
-    // Bounded type
+    // Ограниченный тип
     const bound = node.childForFieldName('bound');
     if (bound) {
       const boundName = bound.text;
@@ -1024,7 +1024,7 @@ export class JavaExtractor extends ExtractorBase {
       } else if (child.type === 'local_variable_declaration') {
         this.processLocalVariableDeclaration(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, '');
       } else {
-        // Recurse into control flow and other blocks
+        // Рекурсия по управлению потоком и другим блокам
         let inner = child.firstChild;
         while (inner) {
           this.processFunctionBody(inner, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);

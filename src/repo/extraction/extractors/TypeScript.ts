@@ -47,7 +47,7 @@ export class TypeScriptExtractor extends ExtractorBase {
       const tree = p.parse(content);
       if (!tree) {
         errors.push(this.createError(
-          'Failed to parse file',
+          'Не удалось разобрать файл',
           filePath,
           'error',
           'PARSE_FAILED'
@@ -57,11 +57,11 @@ export class TypeScriptExtractor extends ExtractorBase {
 
       const root = tree.rootNode;
       if (root.type === 'lexical_declaration' || root.type === 'statement_block') {
-        // Empty or malformed file
+        // Пустой или повреждённый файл
         return { nodes, edges, unresolvedRefs, errors };
       }
 
-      // Module node
+      // Узел модуля
       const moduleNode = this.createNode(
         filePath,
         NodeKind.Module,
@@ -73,7 +73,7 @@ export class TypeScriptExtractor extends ExtractorBase {
       );
       nodes.push(moduleNode);
 
-      // Process top-level declarations
+      // Обработка объявлений верхнего уровня
       this.processTsNodes(
         root,
         filePath,
@@ -87,7 +87,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(
-        `Tree-sitter error: ${message}`,
+        `Ошибка tree-sitter: ${message}`,
         filePath,
         'error',
         'TREE_SITTER_ERROR'
@@ -190,7 +190,7 @@ export class TypeScriptExtractor extends ExtractorBase {
         break;
 
       default:
-        // Recurse into children
+        // Рекурсия по дочерним узлам
         let child = node.firstChild;
         while (child) {
           this.processTsNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
@@ -257,13 +257,13 @@ export class TypeScriptExtractor extends ExtractorBase {
     nodes.push(classNode);
     edges.push(this.createEdge(parentId, classNode.id, EdgeKind.Contains));
 
-    // Type parameters
+    // Параметры типов
     const typeParams = node.childForFieldName('type_parameters');
     if (typeParams) {
       this.processTypeParameters(typeParams, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors);
     }
 
-    // Extends
+    // Наследование
     const superClass = node.childForFieldName('superclass');
     if (superClass) {
       const superName = superClass.text;
@@ -282,7 +282,7 @@ export class TypeScriptExtractor extends ExtractorBase {
       ));
     }
 
-    // Implements
+    // Реализует
     const implementsList = node.childForFieldName('implements');
     if (implementsList) {
       let impl = implementsList.firstChild;
@@ -305,7 +305,7 @@ export class TypeScriptExtractor extends ExtractorBase {
       }
     }
 
-    // Process body
+    // Обработка тела
     const body = node.childForFieldName('body');
     if (body) {
       let child = body.firstChild;
@@ -405,19 +405,19 @@ export class TypeScriptExtractor extends ExtractorBase {
     nodes.push(funcNode);
     edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Contains));
 
-    // Type parameters
+    // Параметры типов
     const typeParams = node.childForFieldName('type_parameters');
     if (typeParams) {
       this.processTypeParameters(typeParams, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors);
     }
 
-    // Parameters
+    // Параметры
     const params = node.childForFieldName('parameters');
     if (params) {
       this.processParameters(params, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors);
     }
 
-    // Process body for calls and references
+    // Обработка тела для вызовов и ссылок
     const body = node.childForFieldName('body');
     if (body) {
       this.processFunctionBody(body, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors);
@@ -520,19 +520,19 @@ export class TypeScriptExtractor extends ExtractorBase {
     nodes.push(methodNode);
     edges.push(this.createEdge(parentId, methodNode.id, EdgeKind.Contains));
 
-    // Type parameters
+    // Параметры типов
     const typeParams = node.childForFieldName('type_parameters');
     if (typeParams) {
       this.processTypeParameters(typeParams, filePath, content, methodNode.id, nodes, edges, unresolvedRefs, errors);
     }
 
-    // Parameters
+    // Параметры
     const params = node.childForFieldName('parameters');
     if (params) {
       this.processParameters(params, filePath, content, methodNode.id, nodes, edges, unresolvedRefs, errors);
     }
 
-    // Process body
+    // Обработка тела
     const body = node.childForFieldName('body');
     if (body) {
       this.processFunctionBody(body, filePath, content, methodNode.id, nodes, edges, unresolvedRefs, errors);
@@ -601,7 +601,7 @@ export class TypeScriptExtractor extends ExtractorBase {
           const name = nameNode.text;
           const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${name}` : name;
 
-          // Check if value is a class expression
+          // Проверка, является ли значение выражением класса
           if (valueNode && valueNode.type === 'class_expression') {
             const classNode = this.createNode(
               filePath,
@@ -683,7 +683,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     nodes.push(ifaceNode);
     edges.push(this.createEdge(parentId, ifaceNode.id, EdgeKind.Contains));
 
-    // Extends
+    // Наследование
     const extendsList = node.childForFieldName('extends');
     if (extendsList) {
       let ext = extendsList.firstChild;
@@ -706,13 +706,13 @@ export class TypeScriptExtractor extends ExtractorBase {
       }
     }
 
-    // Type parameters
+    // Параметры типов
     const typeParams = node.childForFieldName('type_parameters');
     if (typeParams) {
       this.processTypeParameters(typeParams, filePath, content, ifaceNode.id, nodes, edges, unresolvedRefs, errors);
     }
 
-    // Process body
+    // Обработка тела
     const body = node.childForFieldName('body');
     if (body) {
       let child = body.firstChild;
@@ -759,6 +759,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     nodes.push(typeNode);
     edges.push(this.createEdge(parentId, typeNode.id, EdgeKind.Contains));
 
+    // Параметры типов
     const typeParams = node.childForFieldName('type_parameters');
     if (typeParams) {
       this.processTypeParameters(typeParams, filePath, content, typeNode.id, nodes, edges, unresolvedRefs, errors);
@@ -801,7 +802,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     nodes.push(enumNode);
     edges.push(this.createEdge(parentId, enumNode.id, EdgeKind.Contains));
 
-    // Process members
+    // Обработка членов
     const body = node.childForFieldName('body');
     if (body) {
       let child = body.firstChild;
@@ -867,7 +868,7 @@ export class TypeScriptExtractor extends ExtractorBase {
       filePath
     ));
 
-    // Process imported specifiers
+    // Обработка импортируемых спецификаторов
     let child = node.firstChild;
     while (child) {
       if (child.type === 'import_clause') {
@@ -959,7 +960,7 @@ export class TypeScriptExtractor extends ExtractorBase {
         ));
       }
 
-      // Process exported declarations
+      // Обработка экспортируемых объявлений
       let child = node.firstChild;
       while (child) {
         if (child.type !== 'string' && child.type !== 'import_clause') {
@@ -1026,7 +1027,7 @@ export class TypeScriptExtractor extends ExtractorBase {
       }
     }
 
-    // Process finally
+    // Обработка finally
     const finallyClause = node.childForFieldName('finalizer');
     if (finallyClause) {
       let child = finallyClause.firstChild;
@@ -1165,7 +1166,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     errors: IExtractionError[]
   ): void {
     const line = node.startPosition.row + 1;
-    const decoratorText = node.text.slice(1); // Remove @
+    const decoratorText = node.text.slice(1); // Удаляем @
 
     const decNode = this.createNode(
       filePath,
@@ -1268,7 +1269,7 @@ export class TypeScriptExtractor extends ExtractorBase {
       } else if (child.type === 'try_statement') {
         this.processTryStatement(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       } else if (child.type === 'return_statement') {
-        // Skip return statements
+        // Пропускаем операторы return
       } else if (child.type === 'expression_statement') {
         let expr = child.firstChild;
         while (expr) {
@@ -1278,7 +1279,7 @@ export class TypeScriptExtractor extends ExtractorBase {
           expr = expr.nextSibling;
         }
       } else if (child.type === 'if_statement' || child.type === 'for_statement' || child.type === 'while_statement' || child.type === 'do_statement') {
-        // Recurse into control flow
+        // Рекурсия по управлению потоком
         let inner = child.firstChild;
         while (inner) {
           this.processFunctionBody(inner, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);

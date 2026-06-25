@@ -71,7 +71,7 @@ function hashContent(content: string): string {
 }
 
 /**
- * Кооперативная отдача управления — позволяет event loop обработать
+ * Кооперативная отдача управления — позволяет циклу событий обработать
  * отложенные задачи (например, прогресс-бар) во время длительных циклов.
  */
 function yieldToEventLoop(): Promise<void> {
@@ -141,7 +141,7 @@ async function scanDirectory(
     return files;
   }
 
-  // Fallback: обход файловой системы
+  // Фолбэк: обход файловой системы
   await walkDirectory(rootDir, rootDir, files, count, ignoreDirs ?? DEFAULT_IGNORE_DIRS, ignorePatterns ?? DEFAULT_IGNORE_PATTERNS, onProgress, signal);
   return files;
 }
@@ -562,7 +562,7 @@ export class IndexOrchestrator {
         await yieldToEventLoop();
       }
     } else {
-      // Fallback: полное сравнение файловой системы с БД
+      // Фолбэк: полное сравнение файловой системы с БД
       const currentFiles = await scanDirectory(this.projectRoot, this.options);
       filesChecked = currentFiles.length;
       const currentSet = new Set(currentFiles);

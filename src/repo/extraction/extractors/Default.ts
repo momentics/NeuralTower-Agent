@@ -59,7 +59,7 @@ export class DefaultExtractor extends ExtractorBase {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(
-        `Extraction error: ${message}`,
+        `Ошибка извлечения: ${message}`,
         filePath,
         'error',
         'EXTRACTION_ERROR'

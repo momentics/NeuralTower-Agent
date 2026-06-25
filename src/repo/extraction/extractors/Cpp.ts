@@ -150,7 +150,7 @@ export class CppExtractor extends ExtractorBase {
       return true;
     }
 
-    // Fallback на C
+    // Откат на C
     p.setLanguage(cGrammar.C);
     const cTree = p.parse(content);
 
@@ -1339,7 +1339,7 @@ export class CppExtractor extends ExtractorBase {
     if (inner) {
       return this.extractFunctionName(inner);
     }
-    // Для scope_resolution (например, MyClass::method)
+    // Для разрешения области видимости (например, MyClass::method)
     const nameNode = declarator.childForFieldName('name');
     if (nameNode) {
       return nameNode;

@@ -823,7 +823,7 @@ export class RustExtractor extends ExtractorBase {
         child = child.nextSibling;
       }
     } else if (node.type === 'use_wildcard') {
-      // Игнорируем wildcard импорты
+       // Игнорируем импорты со звёздочкой
     }
   }
 
@@ -884,7 +884,7 @@ export class RustExtractor extends ExtractorBase {
       if (arm.type === 'match_arm') {
         const pattern = arm.childForFieldName('pattern');
         if (pattern && pattern.text === '_') {
-          // catch_all арм
+          // catch_all ветвь
           const catchAllNode = this.createNode(
             filePath,
             NodeKind.Catch,
@@ -1490,13 +1490,13 @@ export class RustExtractor extends ExtractorBase {
     // Убираем рефы
     const withoutRefs = withoutPointers.replace(/&/g, '').trim();
 
-    // Убираем lifetime
+    // Убираем время жизни
     const withoutLifetime = withoutRefs.replace(/'<\w+>/g, '').trim();
 
     // Убираем аннотации mut
     const withoutMut = withoutLifetime.replace(/mut\s+/g, '').trim();
 
-    // Убираем Angle brackets для generics
+    // Убираем угловые скобки для обобщений
     const withoutGenerics = withoutMut.replace(/<[^>]*>/g, '').trim();
 
     // Берём базовое имя типа

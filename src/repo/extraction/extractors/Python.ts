@@ -242,7 +242,7 @@ export class PythonExtractor extends ExtractorBase {
             }
           }
         }
-        // Mixin — Implements
+        // Mixin — реализует
         else if (scText.includes('Mixin')) {
           edges.push(this.createEdge(classNode.id, this.nodeId(filePath, NodeKind.Class, scText, 0), EdgeKind.Implements, {
             metadata: { referenceName: scText },
@@ -258,7 +258,7 @@ export class PythonExtractor extends ExtractorBase {
             filePath
           ));
         }
-        // Обычное наследование — Extends
+        // Обычное наследование — наследует
         else {
           edges.push(this.createEdge(classNode.id, this.nodeId(filePath, NodeKind.Class, scText, 0), EdgeKind.Extends, {
             metadata: { referenceName: scText },
@@ -575,7 +575,7 @@ export class PythonExtractor extends ExtractorBase {
     nodes.push(tryNode);
     edges.push(this.createEdge(parentId, tryNode.id, EdgeKind.Contains));
 
-    // except clauses
+       // Обработка except
     let child = node.firstChild;
     while (child) {
       if (child.type === 'except_clause') {
@@ -692,7 +692,7 @@ export class PythonExtractor extends ExtractorBase {
       }
     }
 
-    // TypeVar — TypeParameter
+       // TypeVar — параметр типа
     if (funcName === 'TypeVar') {
       const args = node.childForFieldName('arguments');
       if (args) {

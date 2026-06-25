@@ -44,7 +44,7 @@ export class GoExtractor extends ExtractorBase {
       const tree = p.parse(content);
       if (!tree) {
         errors.push(this.createError(
-          'Failed to parse file',
+          'Не удалось разобрать файл',
           filePath,
           'error',
           'PARSE_FAILED'
@@ -84,7 +84,7 @@ export class GoExtractor extends ExtractorBase {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(
-        `Tree-sitter error: ${message}`,
+        `Ошибка tree-sitter: ${message}`,
         filePath,
         'error',
         'TREE_SITTER_ERROR'
@@ -319,7 +319,7 @@ export class GoExtractor extends ExtractorBase {
         break;
 
       case 'type_identifier':
-        // TypeAlias: type Foo = Bar
+        // Псевдоним типа: type Foo = Bar
         this.processTypeAlias(node, name, qualifiedName, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, docstring);
         break;
 
@@ -1134,9 +1134,9 @@ export class GoExtractor extends ExtractorBase {
     return (node as any)._cachedLines;
   }
 
-  /** Извлекает контент из узла через source field. */
+  /** Извлекает контент из узла через поле source. */
   protected _extractContentFromNode(node: any): string {
-    // tree-sitter node.text содержит текст узла
+    // node.text в tree-sitter содержит текст узла
     return node.text || '';
   }
 }
