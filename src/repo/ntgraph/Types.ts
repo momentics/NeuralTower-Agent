@@ -8,17 +8,59 @@
 // =============================================================================
 
 /** Вид узла графа (22 значения). */
-export type NodeKind =
-  | 'file' | 'class' | 'function' | 'method' | 'property' | 'field'
-  | 'interface' | 'struct' | 'enum' | 'type_alias' | 'constant' | 'variable'
-  | 'namespace' | 'module' | 'route' | 'trait' | 'protocol' | 'enum_member'
-  | 'parameter' | 'import' | 'export' | 'component';
+export const NodeKind = Object.freeze({
+  File: 'file',
+  Class: 'class',
+  Function: 'function',
+  Method: 'method',
+  Property: 'property',
+  Field: 'field',
+  Interface: 'interface',
+  Struct: 'struct',
+  Enum: 'enum',
+  TypeAlias: 'type_alias',
+  Constant: 'constant',
+  Variable: 'variable',
+  Namespace: 'namespace',
+  Module: 'module',
+  Route: 'route',
+  Trait: 'trait',
+  Protocol: 'protocol',
+  EnumMember: 'enum_member',
+  Parameter: 'parameter',
+  Import: 'import',
+  Export: 'export',
+  Component: 'component',
+  Try: 'try',
+  Catch: 'catch',
+  Throw: 'throw',
+  Decorator: 'decorator',
+  TypeParameter: 'type_parameter',
+  Generic: 'generic',
+} as const);
+
+export type NodeKind = (typeof NodeKind)[keyof typeof NodeKind];
 
 /** Вид ребра графа (12 значений). */
-export type EdgeKind =
-  | 'contains' | 'calls' | 'imports' | 'extends' | 'implements'
-  | 'references' | 'type_of' | 'returns' | 'instantiates' | 'overrides'
-  | 'decorates' | 'exports';
+export const EdgeKind = Object.freeze({
+  Contains: 'contains',
+  Calls: 'calls',
+  Imports: 'imports',
+  Extends: 'extends',
+  Implements: 'implements',
+  References: 'references',
+  TypeOf: 'type_of',
+  Returns: 'returns',
+  Instantiates: 'instantiates',
+  Overrides: 'overrides',
+  Decorates: 'decorates',
+  Exports: 'exports',
+  Catches: 'catches',
+  Throws: 'throws',
+  ReExports: 're_exports',
+} as const);
+
+export type EdgeKind = (typeof EdgeKind)[keyof typeof EdgeKind];
 
 /** Поддерживаемые языки (39 значений). */
 export const Language = Object.freeze([
@@ -57,6 +99,7 @@ export interface INode {
   decorators?: string[];
   typeParameters?: string[];
   returnType?: string;
+  metadata?: Record<string, unknown>;
   updatedAt: number;
 }
 
@@ -99,9 +142,10 @@ export interface IUnresolvedReference {
 export interface IExtractionResult {
   nodes: INode[];
   edges: IEdge[];
-  unresolvedReferences: IUnresolvedReference[];
+  unresolvedReferences?: IUnresolvedReference[];
+  unresolvedRefs?: IUnresolvedReference[];
   errors: IExtractionError[];
-  durationMs: number;
+  durationMs?: number;
 }
 
 /** Ошибка извлечения. */
@@ -298,6 +342,109 @@ export const SQLITE_PARAM_CHUNK_SIZE = 500;
 /** Размер LRU-кэша узлов. */
 export const LRU_CACHE_SIZE = 1000;
 
+// =============================================================================
+// Типы экстракции
+// =============================================================================
+
+/** Прогресс индексации. */
+export interface IIndexProgress {
+  phase: 'scanning' | 'parsing' | 'storing' | 'resolving';
+  current: number;
+  total: number;
+  currentFile?: string;
+}
+
+/** Результат индексации. */
+export interface IIndexResult {
+  success: boolean;
+  filesIndexed: number;
+  filesSkipped: number;
+  filesErrored: number;
+  nodesCreated: number;
+  edgesCreated: number;
+  errors: IExtractionError[];
+  durationMs: number;
+}
+
+/** Результат синхронизации. */
+export interface ISyncResult {
+  filesChecked: number;
+  filesAdded: number;
+  filesModified: number;
+  filesRemoved: number;
+  nodesUpdated: number;
+  durationMs: number;
+  changedFilePaths?: string[];
+}
+
+/** Контекст разрешения ссылок. */
+export interface IResolutionContext {
+  getNodesInFile(filePath: string): INode[];
+  getNodesByName(name: string): INode[];
+  getNodesByQualifiedName(qualifiedName: string): INode[];
+  getNodesByKind(kind: NodeKind): INode[];
+  getNodesByLowerName(lowerName: string): INode[];
+  getImportMappings(): IImportMapping[];
+  getAllFiles(): string[];
+  getProjectRoot(): string;
+  fileExists(relativePath: string): boolean;
+  readFile(relativePath: string): string | null;
+  listDirectories?(relativePath: string): string[];
+}
+
+/** Разрешённая ссылка. */
+export interface IResolvedRef {
+  fromNodeId: string;
+  toNodeId: string;
+  referenceKind: EdgeKind;
+}
+
+/** Результат разрешения. */
+export interface IResolutionResult {
+  resolved: IResolvedRef[];
+  unresolved: IUnresolvedReference[];
+}
+
+/** Re-export из модуля. */
+export interface IReExport {
+  sourceFile: string;
+  exportedName: string;
+  originalName?: string;
+}
+
+/** Карта алиасов импортов (tsconfig paths и т.д.). */
+export interface IAliasMap {
+  alias: string;
+  target: string;
+}
+
+/** Информация о Go-модуле. */
+export interface IGoModule {
+  moduleName: string;
+  goModPath: string;
+  replaceMap?: Record<string, string>;
+}
+
+/** Пакеты workspace (monorepo). */
+export interface IWorkspacePackages {
+  packages: string[];
+  packageJsonPaths: Record<string, string>;
+}
+
+/** Маппинг импорта на файл. */
+export interface IImportMapping {
+  importPath: string;
+  resolvedFile: string;
+  language: string;
+}
+
+/** Резолвер фреймворков. */
+export interface IFrameworkResolver {
+  name: string;
+  detect(context: IResolutionContext): boolean;
+  resolveRefs(context: IResolutionContext): IResolvedRef[];
+}
+
 /** Паттерны для генерируемых файлов. */
 export const GENERATED_PATTERNS: RegExp[] = [
   /\/generated\//i, /\/gen\//i, /\/proto\//i, /\/__generated__/i,
@@ -316,4 +463,63 @@ export const GENERATED_PATTERNS: RegExp[] = [
   /\/__snapshots__\//i, /\/\.jest\//i,
   /\/\.cache\//i, /\/\.rollup\//i,
   /\/\.eslintrc\//i, /\/\.prettierrc\//i
+];
+
+/** Максимальный размер файла для индексации (1 МБ). */
+export const MAX_FILE_SIZE = 1024 * 1024;
+
+/** Интервал пересоздания worker-потока (250 файлов). */
+export const WORKER_RECYCLE_INTERVAL = 250;
+
+/** Базовый таймаут парсинга (10 секунд). */
+export const PARSE_TIMEOUT_MS = 10_000;
+
+/** Доп. таймаут на каждые 100 КБ (10 секунд). */
+export const PARSE_TIMEOUT_PER_100KB = 10_000;
+
+/** Размер батча для чтения файлов. */
+export const FILE_IO_BATCH_SIZE = 10;
+
+/** Интервал cooperative yield при сканировании. */
+export const SCAN_YIELD_INTERVAL = 100;
+
+/** Интервал cooperative yield при синхронизации. */
+export const SYNC_YIELD_INTERVAL = 1000;
+
+/** Глубина поиска вложенных репозиториев. */
+export const EMBEDDED_REPO_SEARCH_DEPTH = 4;
+
+/** Лимит директорий при поиске вложенных репозиториев. */
+export const EMBEDDED_REPO_SEARCH_ENTRIES = 2000;
+
+/** Директории по умолчанию для игнорирования. */
+export const DEFAULT_IGNORE_DIRS: ReadonlySet<string> = new Set([
+  'node_modules', 'bower_components', 'jspm_packages', 'web_modules',
+  '.yarn', '.pnpm-store',
+  '.next', '.nuxt', '.svelte-kit', '.turbo', '.vite', '.parcel-cache', '.angular',
+  '.docusaurus', 'storybook-static', '.vinxi', '.nitro', 'out-tsc',
+  '.vercel', '.netlify', '.wrangler',
+  'dist', 'build', 'out', '.output',
+  'coverage', '.nyc_output',
+  '__pycache__', '__pypackages__', '.venv', 'venv', '.pixi', '.pdm-build',
+  '.mypy_cache', '.pytest_cache', '.ruff_cache', '.tox', '.nox', '.hypothesis',
+  '.ipynb_checkpoints', '.eggs',
+  'target', '.gradle',
+  'obj',
+  'vendor',
+  '.build', 'Pods', 'Carthage', 'DerivedData', '.swiftpm',
+  '.dart_tool', '.pub-cache',
+  '.cxx', '.externalNativeBuild', 'vcpkg_installed',
+  '.bloop', '.metals',
+  'lua_modules', '.luarocks',
+  '__history', '__recovery',
+  '.cache',
+]);
+
+/** Паттерны игнорирования по умолчанию. */
+export const DEFAULT_IGNORE_PATTERNS: string[] = [
+  ...Array.from(DEFAULT_IGNORE_DIRS, (d) => `${d}/`),
+  '*.egg-info/',
+  'cmake-build-*/',
+  'bazel-*/',
 ];
