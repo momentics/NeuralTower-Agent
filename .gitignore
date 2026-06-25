@@ -37,5 +37,6 @@ ref/
 .*
 *.md 
 !README.md
-!UI-UX/*
-!plan/*
+!UI-UX/**/*
+!plan/**/*
+!docs/**/*
