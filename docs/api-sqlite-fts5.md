@@ -2,7 +2,7 @@
 
 ## Обзор
 
-Модуль `ntgraph` предоставляет постоянное хранилище графа кода на базе SQLite с полнотекстовым поиском FTS5. Включает адаптер базы данных, построитель запросов и класс управления.
+Модуль `ntgraph` предоставляет постоянное хранилище графа кода на базе SQLite с полнотекстовым поиском FTS5. Включает адаптер базы данных, построитель запросов, класс FTS-поиска и класс управления.
 
 ---
 
@@ -19,7 +19,7 @@
 | `name` | `string` | Имя символа |
 | `qualifiedName` | `string` | Квалифицированное имя |
 | `filePath` | `string` | Путь к файлу |
-| `language` | `string` | Язык программирования |
+| `language` | `Language` | Язык программирования |
 | `startLine` / `endLine` | `number` | Диапазон строк |
 | `startColumn` / `endColumn` | `number` | Диапазон столбцов |
 | `docstring` | `string?` | Документация |
@@ -28,6 +28,7 @@
 | `isExported` / `isAsync` / `isStatic` / `isAbstract` | `boolean?` | Флаги |
 | `decorators` / `typeParameters` | `string[]?` | Декораторы и параметры типов |
 | `returnType` | `string?` | Тип возвращаемого значения |
+| `metadata` | `Record<string, unknown>?` | Произвольные метаданные |
 | `updatedAt` | `number` | Временная метка обновления |
 
 ### IEdge — Ребро графа
@@ -48,7 +49,7 @@
 |---|---|---|
 | `path` | `string` | Путь к файлу |
 | `contentHash` | `string` | Хеш содержимого |
-| `language` | `string` | Язык |
+| `language` | `Language` | Язык |
 | `size` | `number` | Размер в байтах |
 | `modifiedAt` / `indexedAt` | `number` | Временные метки |
 | `nodeCount` | `number` | Количество узлов |
@@ -60,9 +61,9 @@
 |---|---|---|
 | `fromNodeId` | `string` | ID узла-источника |
 | `referenceName` | `string` | Имя ссылки |
-| `referenceKind` | `EdgeKind \| 'function_ref'` | Вид ссылки |
+| `referenceKind` | `ReferenceKind` | Вид ссылки (`EdgeKind \| 'function_ref'`) |
 | `line` / `column` | `number` | Позиция |
-| `filePath` / `language` | `string?` | Контекст файла |
+| `filePath` / `language` | `string?` / `Language?` | Контекст файла |
 | `candidates` | `string[]?` | Кандидаты на разрешение |
 
 ### ISearchResult — Результат поиска
@@ -92,7 +93,7 @@
 | `nodesByKind` | `Record<NodeKind, number>` | Узлы по видам |
 | `edgesByKind` | `Record<EdgeKind, number>` | Ребра по видам |
 | `filesByLanguage` | `Record<string, number>` | Файлы по языкам |
-| `dbSizeBytes` | `number` | Размер БД |
+| `dbSizeBytes` | `number` | Размер БД (добавляется в NtGraphDb.getStats()) |
 | `lastUpdated` | `number` | Последнее обновление |
 
 ### IDominantFile — Доминирующий файл
@@ -155,7 +156,7 @@
 | Поле | Тип | Описание |
 |---|---|---|
 | `query` | `string` | Запрос |
-| `subgraph` | `Subgraph` | Подграф |
+| `subgraph` | `ISubgraph` | Подграф |
 | `entryPoints` | `INode[]` | Точки входа |
 | `codeBlocks` | `CodeBlock[]` | Блоки кода |
 | `relatedFiles` | `string[]` | Связанные файлы |
@@ -215,6 +216,96 @@
 type TaskInput = string | { title: string; description: string }
 ```
 
+### IIndexProgress — Прогресс индексации
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `current` / `total` | `number` | Текущий / всего файлов |
+| `file` | `string` | Обрабатываемый файл |
+| `phase` | `'scanning' \| 'parsing' \| 'storing' \| 'resolving'` | Фаза |
+| `durationMs` | `number` | Время выполнения |
+
+### IIndexResult — Результат индексации
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `indexed` / `updated` / `removed` | `number` | Количество обработанных |
+| `errors` | `IExtractionError[]` | Ошибки |
+| `durationMs` | `number` | Время выполнения |
+
+### ISyncResult — Результат синхронизации
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `added` / `updated` / `removed` | `number` | Количество обработанных |
+| `errors` | `IExtractionError[]` | Ошибки |
+| `durationMs` | `number` | Время выполнения |
+
+### IResolutionContext — Контекст разрешения ссылок
+
+Интерфейс для разрешения неразрешённых ссылок. Методы: `getNodesByFile`, `getNodesByName`, `getImportMappings`, `getReExports`, `getNodeById`, `getNodesByKind`, `getNodesByQualifiedName`, `getNodesByLowerName`, `getSupertypes`, `getChildren`, `getAncestors`, `getIncomingEdges`, `getOutgoingEdges`, `getFileContent`, `getFilePathFromNodeId`, `getLanguageFromNodeId`, `getDetectedFrameworks`, `getAllFiles`.
+
+### IResolvedRef — Разрешённая ссылка
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `original` | `IUnresolvedReference` | Исходная ссылка |
+| `targetNodeId` | `string` | ID целевого узла |
+| `confidence` | `number` | Уверенность |
+| `provenance` | `string` | Источник разрешения |
+
+### IResolutionResult — Результат разрешения
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `resolved` | `IResolvedRef[]` | Разрешённые ссылки |
+| `unresolved` | `IUnresolvedReference[]` | Неразрешённые ссылки |
+| `durationMs` | `number` | Время выполнения |
+
+### IReExport — Re-export из модуля
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `sourcePath` / `sourceName` | `string` | Источник |
+| `language` | `Language` | Язык |
+
+### IAliasMap — Карта алиасов импортов
+
+```
+type IAliasMap = { [alias: string]: string[] }
+```
+
+### IGoModule — Информация о Go-модуле
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `modulePath` / `goVersion` | `string` | Путь модуля и версия Go |
+| `dependencies` | `Map<string, string>` | Зависимости |
+
+### IWorkspacePackages — Пакеты workspace (monorepo)
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `packages` | `Map<string, string>` | Пакеты по путям |
+| `workspaces` | `string[]` | Пути рабочих пространств |
+
+### IImportMapping — Маппинг импорта на файл
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `sourcePath` / `sourceName` | `string` | Источник |
+| `targetPath` / `targetName` | `string` | Цель |
+| `language` | `Language` | Язык |
+
+### IFrameworkResolver — Резолвер фреймворков
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `name` | `string` | Имя фреймворка |
+| `resolve(ref, context)` | `IResolvedRef \| null` | Разрешить ссылку |
+| `postExtract(context)` | `INode[]` | Пост-обработка |
+| `claimsReference?(name)` | `boolean?` | Заявляет ли право на имя |
+
 ---
 
 ## Перечисления
@@ -227,9 +318,13 @@ type TaskInput = string | { title: string; description: string }
 
 12 значений: `contains`, `calls`, `imports`, `extends`, `implements`, `references`, `type_of`, `returns`, `instantiates`, `overrides`, `decorates`, `exports`.
 
+### ReferenceKind
+
+Алиас типа: `EdgeKind | 'function_ref'`.
+
 ### Language
 
-41 значение: `typescript`, `javascript`, `tsx`, `jsx`, `python`, `go`, `rust`, `java`, `c`, `cpp`, `csharp`, `razor`, `php`, `ruby`, `swift`, `kotlin`, `dart`, `svelte`, `vue`, `astro`, `liquid`, `pascal`, `scala`, `lua`, `luau`, `objc`, `r`, `yaml`, `twig`, `xml`, `properties`, `unknown`, `html`, `css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`.
+39 значений: `typescript`, `javascript`, `tsx`, `jsx`, `python`, `go`, `rust`, `java`, `c`, `cpp`, `csharp`, `razor`, `php`, `ruby`, `swift`, `kotlin`, `dart`, `svelte`, `vue`, `astro`, `liquid`, `pascal`, `scala`, `lua`, `luau`, `objc`, `r`, `yaml`, `twig`, `xml`, `properties`, `unknown`, `html`, `css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`.
 
 ---
 
@@ -243,7 +338,7 @@ type TaskInput = string | { title: string; description: string }
 constructor(dbPath: string)
 ```
 
-Принимает путь к файлу БД.
+Принимает путь к файлу БД. Автоматически определяет корень проекта и токены имени проекта.
 
 ### Методы
 
@@ -251,8 +346,102 @@ constructor(dbPath: string)
 |---|---|---|
 | `initialize()` | `void` | Создает БД в WAL-режиме, применяет PRAGMA, создает таблицы, индексы, FTS5 и триггеры |
 | `close()` | `void` | Закрывает БД (идемпотентно) |
-| `getStats()` | `IGraphStats` | Статистика графа |
+| `runMaintenance()` | `void` | PRAGMA optimize + wal_checkpoint(PASSIVE) |
+| `getStats()` | `IGraphStats & { dbSizeBytes: number }` | Статистика графа с размером БД |
 | `getSize()` | `number` | Размер БД в байтах |
+| `getDatabase()` | `SqliteDatabase` | Прямой доступ к БД |
+| `getFtsSearch()` | `FtsSearch` | Прямой доступ к FtsSearch |
+| `getSchemaVersion()` | `number` | Текущая версия схемы |
+| `getMigrationHistory()` | `ISchemaVersion[]` | История миграций |
+| `getProjectRoot()` | `string` | Корень проекта |
+| `getProjectNameTokens()` | `string[]` | Токены имени проекта |
+| `clear()` | `void` | Очистка всей БД |
+| `clearCache()` | `void` | Очистка LRU-кэша |
+| `getNodeAndEdgeCount()` | `{nodeCount, edgeCount}` | Количество узлов и ребер |
+
+### Узлы
+
+| Метод | Возврат | Описание |
+|---|---|---|
+| `insertNode(node)` | `Promise<void>` | Вставка узла (с FileLock) |
+| `insertNodes(nodes)` | `void` | Пакетная вставка узлов в транзакции |
+| `insertNodesBatch(nodes)` | `Promise<void>` | Пакетная вставка с FileLock, Mutex, MemoryMonitor, чанки |
+| `updateNode(node)` | `Promise<void>` | Обновление узла (с FileLock) |
+| `deleteNode(id)` | `Promise<void>` | Удаление узла (с FileLock) |
+| `deleteNodesByFile(filePath)` | `number` | Удаление всех узлов файла, возвращает число удаленных |
+| `getNodeById(id)` | `INode \| null` | Поиск узла по ID |
+| `getNodesByIds(ids)` | `INode[]` | Пакетный поиск (чанки по 500) |
+| `getNodesByFile(filePath)` | `INode[]` | Узлы файла |
+| `getNodesByKind(kind)` | `INode[]` | Узлы по виду |
+| `iterateNodesByKind(kind)` | `IterableIterator<INode>` | Ленивый итератор узлов вида |
+| `getAllNodes()` | `INode[]` | Все узлы |
+| `getNodesByName(name)` | `INode[]` | Точный поиск по имени |
+| `getNodesByQualifiedNameExact(qn)` | `INode[]` | Точный поиск по квалифицированному имени |
+| `getNodesByLowerName(lowerName)` | `INode[]` | Поиск по нижнему регистру имени |
+| `getDominantFile()` | `IDominantFile \| null` | Файл с наибольшим числом ребер |
+| `getTopRouteFile()` | `INode \| null` | Файл с наибольшим числом route-узлов |
+| `getRoutingManifest(limit?)` | `INode[]` | Все route-узлы |
+| `getDependentFilePaths(filePath)` | `string[]` | Файлы, зависящие от данного |
+| `getDependencyFilePaths(filePath)` | `string[]` | Файлы, от которых зависит данный |
+| `getCrossFileIncomingEdgesWithTarget(filePath)` | `Array<{edge, targetKind, targetName}>` | Входящие межфайловые ребра |
+| `findEdgesBetweenNodes(nodeIds, kinds?)` | `IEdge[]` | Ребра между заданными узлами |
+
+### Ребра
+
+| Метод | Возврат | Описание |
+|---|---|---|
+| `insertEdge(edge)` | `Promise<void>` | Вставка ребра (с FileLock) |
+| `insertEdges(edges)` | `void` | Пакетная вставка в транзакции |
+| `insertEdgesBatch(edges)` | `Promise<void>` | Пакетная вставка с FileLock, Mutex, чанки |
+| `getOutgoingEdges(source, kinds?, provenance?)` | `IEdge[]` | Исходящие ребра с фильтрами |
+| `getIncomingEdges(target, kinds?)` | `IEdge[]` | Входящие ребра с фильтром видов |
+| `deleteEdgesBySource(sourceId)` | `number` | Удаление по источнику |
+| `deleteEdgesByTarget(targetId)` | `number` | Удаление по цели |
+
+### Файлы
+
+| Метод | Возврат | Описание |
+|---|---|---|
+| `upsertFile(file)` | `Promise<void>` | Вставка или обновление файла (с FileLock) |
+| `deleteFile(filePath)` | `Promise<void>` | Удаление файла и его узлов (с FileLock) |
+| `getFileByPath(path)` | `IFileRecord \| null` | Поиск файла по пути |
+| `getAllFiles()` | `IFileRecord[]` | Все файлы |
+| `getStaleFiles(currentHashes?)` | `IFileRecord[]` | Устаревшие файлы для инкрементальной индексации |
+| `getLastIndexedAt()` | `number \| null` | Последняя метка индексации |
+| `getAllFilePaths()` | `string[]` | Все пути файлов |
+| `getAllNodeNames()` | `string[]` | Все имена узлов |
+
+### Поиск
+
+| Метод | Возврат | Описание |
+|---|---|---|
+| `search(query, options?)` | `ISearchResult[]` | Основной поиск через QueryBuilder.searchNodes (FTS5 → LIKE → Fuzzy) |
+| `findNodesByExactName(names, options?)` | `ISearchResult[]` | Точный поиск по множеству имён |
+| `findNodesByNameSubstring(sub, options?)` | `INode[]` | Поиск по подстроке имени (опция excludePrefix) |
+
+### Неразрешенные ссылки
+
+| Метод | Возврат | Описание |
+|---|---|---|
+| `insertUnresolvedRef(ref)` | `void` | Вставка ссылки |
+| `insertUnresolvedRefsBatch(refs)` | `void` | Пакетная вставка |
+| `deleteUnresolvedByNode(nodeId)` | `void` | Удаление по узлу |
+| `getUnresolvedByName(name)` | `IUnresolvedReference[]` | Поиск по имени |
+| `getUnresolvedReferences()` | `IUnresolvedReference[]` | Все ссылки |
+| `getUnresolvedReferencesCount()` | `number` | Количество ссылок |
+| `getUnresolvedReferencesBatch(offset, limit)` | `IUnresolvedReference[]` | Пагинированный запрос |
+| `getUnresolvedReferencesByFiles(filePaths)` | `IUnresolvedReference[]` | По файлам (чанки по 500) |
+| `deleteResolvedReferences(fromNodeIds)` | `void` | Удаление по ID узлов |
+| `deleteSpecificResolvedReferences(refs)` | `number` | Удаление конкретных ссылок |
+| `clearUnresolvedReferences()` | `void` | Очистка всех ссылок |
+
+### Метаданные
+
+| Метод | Возврат | Описание |
+|---|---|---|
+| `getMetadata(key)` | `string \| null` | Значение по ключу |
+| `setMetadata(key, value)` | `void` | Установка или обновление (upsert) |
+| `getAllMetadata()` | `Map<string, string>` | Все метаданные |
 
 ### Свойства
 
@@ -270,42 +459,43 @@ constructor(dbPath: string)
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `insertNode(node: INode)` | `void` | Вставка узла (upsert через INSERT OR REPLACE) |
-| `insertNodes(nodes: INode[])` | `void` | Пакетная вставка узлов в транзакции |
-| `updateNode(node: INode)` | `void` | Обновление узла |
-| `deleteNode(id: string)` | `void` | Удаление узла по ID |
-| `deleteNodesByFile(filePath: string)` | `void` | Удаление всех узлов файла |
-| `getNodeById(id: string)` | `INode \| null` | Поиск узла по ID |
-| `getNodesByFile(filePath: string)` | `INode[]` | Узлы файла |
-| `getNodesByKind(kind: NodeKind)` | `INode[]` | Узлы по виду |
-| `getNodesByName(name: string)` | `INode[]` | Точный поиск по имени |
-| `getNodesByQualifiedNameExact(qn: string)` | `INode[]` | Точный поиск по квалифицированному имени |
-| `getNodesByLowerName(lowerName: string)` | `INode[]` | Поиск по нижнему регистру имени |
+| `insertNode(node)` | `void` | Вставка узла (upsert через INSERT OR REPLACE) |
+| `insertNodes(nodes)` | `void` | Пакетная вставка узлов в транзакции |
+| `updateNode(node)` | `void` | Обновление узла |
+| `deleteNode(id)` | `void` | Удаление узла по ID |
+| `deleteNodesByFile(filePath)` | `number` | Удаление всех узлов файла, возвращает число удаленных |
+| `getNodeById(id)` | `INode \| null` | Поиск узла по ID |
+| `getNodesByIds(ids)` | `INode[]` | Пакетный поиск (чанки по 500) |
+| `getExistingNodeIds(ids)` | `Set<string>` | Существующие ID для валидации |
+| `getNodesByFile(filePath)` | `INode[]` | Узлы файла |
+| `getNodesByKind(kind)` | `INode[]` | Узлы по виду |
+| `iterateNodesByKind(kind)` | `IterableIterator<INode>` | Ленивый итератор узлов вида, память O(1) |
 | `getAllNodes()` | `INode[]` | Все узлы |
-| `iterateNodesByKind(kind: NodeKind)` | `Generator<INode>` | Ленивый итератор узлов вида, память O(1) |
-| `getNodesByIds(ids: string[])` | `INode[]` | Пакетный поиск (чанки по 500) |
-| `getExistingNodeIds(ids: string[])` | `Set<string>` | Существующие ID для валидации |
+| `getNodesByName(name)` | `INode[]` | Точный поиск по имени |
+| `getNodesByQualifiedNameExact(qn)` | `INode[]` | Точный поиск по квалифицированному имени |
+| `getNodesByLowerName(lowerName)` | `INode[]` | Поиск по нижнему регистру имени |
 
 ### Ребра
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `insertEdge(edge: IEdge)` | `void` | Вставка ребра (INSERT OR IGNORE) |
-| `insertEdges(edges: IEdge[])` | `void` | Пакетная вставка в транзакции |
-| `getOutgoingEdges(source: string, kinds?: EdgeKind[], provenance?: string)` | `IEdge[]` | Исходящие ребра с фильтрами |
-| `getIncomingEdges(target: string, kinds?: EdgeKind[])` | `IEdge[]` | Входящие ребра с фильтром видов |
-| `deleteEdgesBySource(sourceId: string)` | `number` | Удаление по источнику, возвращает число удаленных |
-| `deleteEdgesByTarget(targetId: string)` | `number` | Удаление по цели, возвращает число удаленных |
-| `findEdgesBetweenNodes(nodeIds: string[], kinds?: EdgeKind[])` | `IEdge[]` | Ребра между заданными узлами |
+| `insertEdge(edge)` | `void` | Вставка ребра (INSERT OR IGNORE) |
+| `insertEdges(edges)` | `void` | Пакетная вставка в транзакции с проверкой узлов |
+| `getOutgoingEdges(source, kinds?, provenance?)` | `IEdge[]` | Исходящие ребра с фильтрами |
+| `getIncomingEdges(target, kinds?)` | `IEdge[]` | Входящие ребра с фильтром видов |
+| `deleteEdgesBySource(sourceId)` | `number` | Удаление по источнику, возвращает число удаленных |
+| `deleteEdgesByTarget(targetId)` | `number` | Удаление по цели, возвращает число удаленных |
+| `findEdgesBetweenNodes(nodeIds, kinds?)` | `IEdge[]` | Ребра между заданными узлами |
 
 ### Файлы
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `upsertFile(file: IFileRecord)` | `void` | Вставка или обновление файла |
-| `getFileByPath(path: string)` | `IFileRecord \| null` | Поиск файла по пути |
+| `upsertFile(file)` | `void` | Вставка или обновление файла |
+| `deleteFile(filePath)` | `void` | Удаление файла и его узлов |
+| `getFileByPath(path)` | `IFileRecord \| null` | Поиск файла по пути |
 | `getAllFiles()` | `IFileRecord[]` | Все файлы |
-| `getStaleFiles(currentHashes?: Map<string, string>)` | `IFileRecord[]` | Устаревшие файлы для инкрементальной индексации |
+| `getStaleFiles(currentHashes?)` | `IFileRecord[]` | Устаревшие файлы для инкрементальной индексации |
 | `getLastIndexedAt()` | `number \| null` | Последняя метка индексации |
 | `getAllFilePaths()` | `string[]` | Все пути файлов |
 | `getAllNodeNames()` | `string[]` | Все имена узлов |
@@ -314,35 +504,36 @@ constructor(dbPath: string)
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `searchNodesFTS(query: string, options?: ISearchOptions)` | `ISearchResult[]` | Полнотекстовый поиск FTS5 с BM25 |
-| `searchNodesLike(query: string, options?: ISearchOptions)` | `ISearchResult[]` | LIKE-поиск (фоллбэк, длина запроса >= 2) |
-| `searchNodesFuzzy(query: string, options?: ISearchOptions)` | `ISearchResult[]` | Fuzzy-поиск (фоллбэк, длина >= 3) |
-| `findNodesByExactName(name: string)` | `INode[]` | Точный поиск по имени |
-| `findNodesByNameSubstring(sub: string, options?: ISearchOptions)` | `INode[]` | Поиск по подстроке имени |
-| `searchAllByFilters(options?: ISearchOptions)` | `ISearchResult[]` | Поиск только по фильтрам без текста |
+| `searchNodes(query, options?)` | `ISearchResult[]` | Основной поиск: FTS5 → LIKE → Fuzzy (через FtsSearch) |
+| `searchNodesFTS(query, options?)` | `ISearchResult[]` | FTS5-поиск напрямую (через FtsSearch) |
+| `searchNodesLike(query, options?)` | `ISearchResult[]` | LIKE-фоллбэк (через FtsSearch) |
+| `searchNodesFuzzy(query, options?)` | `ISearchResult[]` | Fuzzy-фоллбэк (через FtsSearch) |
+| `findNodesByExactName(names, options?)` | `ISearchResult[]` | Точный поиск по множеству имён с co-location boost |
+| `findNodesByNameSubstring(sub, options?)` | `INode[]` | Поиск по подстроке имени (опция excludePrefix) |
+| `searchAllByFilters(options)` | `ISearchResult[]` | Поиск только по фильтрам без текста |
 
 ### Неразрешенные ссылки
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `insertUnresolvedRef(ref: IUnresolvedReference)` | `void` | Вставка ссылки |
-| `insertUnresolvedRefsBatch(refs: IUnresolvedReference[])` | `void` | Пакетная вставка |
-| `deleteUnresolvedByNode(nodeId: string)` | `void` | Удаление по узлу |
-| `getUnresolvedByName(name: string)` | `IUnresolvedReference[]` | Поиск по имени |
+| `insertUnresolvedRef(ref)` | `void` | Вставка ссылки |
+| `insertUnresolvedRefsBatch(refs)` | `void` | Пакетная вставка |
+| `deleteUnresolvedByNode(nodeId)` | `void` | Удаление по узлу |
+| `getUnresolvedByName(name)` | `IUnresolvedReference[]` | Поиск по имени |
 | `getUnresolvedReferences()` | `IUnresolvedReference[]` | Все ссылки |
 | `getUnresolvedReferencesCount()` | `number` | Количество ссылок |
-| `getUnresolvedReferencesBatch(offset: number, limit: number)` | `IUnresolvedReference[]` | Пагинированный запрос |
-| `getUnresolvedReferencesByFiles(filePaths: string[])` | `IUnresolvedReference[]` | По файлам (чанки по 500) |
-| `deleteResolvedReferences(fromNodeIds: string[])` | `void` | Удаление по ID узлов |
-| `deleteSpecificResolvedReferences(refs: IUnresolvedReference[])` | `number` | Удаление конкретных ссылок |
+| `getUnresolvedReferencesBatch(offset, limit)` | `IUnresolvedReference[]` | Пагинированный запрос |
+| `getUnresolvedReferencesByFiles(filePaths)` | `IUnresolvedReference[]` | По файлам (чанки по 500) |
+| `deleteResolvedReferences(fromNodeIds)` | `void` | Удаление по ID узлов |
+| `deleteSpecificResolvedReferences(refs)` | `number` | Удаление конкретных ссылок |
 | `clearUnresolvedReferences()` | `void` | Очистка всех ссылок |
 
 ### Метаданные
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `getMetadata(key: string)` | `string \| null` | Значение по ключу |
-| `setMetadata(key: string, value: string)` | `void` | Установка или обновление (upsert) |
+| `getMetadata(key)` | `string \| null` | Значение по ключу |
+| `setMetadata(key, value)` | `void` | Установка или обновление (upsert) |
 | `getAllMetadata()` | `Map<string, string>` | Все метаданные |
 
 ### Аналитика
@@ -351,10 +542,12 @@ constructor(dbPath: string)
 |---|---|---|
 | `getDominantFile()` | `IDominantFile \| null` | Файл с наибольшим числом ребер (порог 20) |
 | `getTopRouteFile()` | `INode \| null` | Файл с наибольшим числом route-узлов |
-| `getRoutingManifest()` | `INode[]` | Все route-узлы (лимит 40) |
-| `getDependentFilePaths(filePath: string)` | `string[]` | Файлы, зависящие от данного |
-| `getDependencyFilePaths(filePath: string)` | `string[]` | Файлы, от которых зависит данный |
-| `getCrossFileIncomingEdgesWithTarget(filePath: string)` | `Array<{edge: IEdge, targetKind: string, targetName: string}>` | Входящие ребра из других файлов |
+| `getRoutingManifest(limit?)` | `INode[]` | Все route-узлы (лимит 40) |
+| `getDependentFilePaths(filePath)` | `string[]` | Файлы, зависящие от данного |
+| `getDependencyFilePaths(filePath)` | `string[]` | Файлы, от которых зависит данный |
+| `getCrossFileIncomingEdgesWithTarget(filePath)` | `Array<{edge, targetKind, targetName}>` | Входящие межфайловые ребра |
+| `getNodeAndEdgeCount()` | `{nodeCount, edgeCount}` | Количество узлов и ребер |
+| `getStats()` | `{nodeCount, edgeCount, fileCount, nodesByKind, edgesByKind, filesByLanguage, lastUpdated}` | Статистика графа |
 
 ### Утилиты
 
@@ -362,9 +555,35 @@ constructor(dbPath: string)
 |---|---|---|
 | `clear()` | `void` | Очистка всей БД |
 | `clearCache()` | `void` | Очистка LRU-кэша |
-| `getNodeAndEdgeCount()` | `{nodeCount: number, edgeCount: number}` | Количество узлов и ребер |
-| `setProjectNameTokens(tokens: Set<string>)` | `void` | Токены имени проекта для подавления в поиске |
+| `setProjectNameTokens(tokens)` | `void` | Токены имени проекта для подавления в поиске |
 | `getProjectNameTokens()` | `string[]` | Получить токены имени проекта |
+| `getFtsSearch()` | `FtsSearch` | Экземпляр FtsSearch |
+
+---
+
+## Класс FtsSearch
+
+Трёхуровневый FTS-поиск: FTS5 → LIKE → Fuzzy, BM25 с весами, over-fetch x5, rescoring, exact-match supplement, экранирование спецсимволов.
+
+### Методы
+
+| Метод | Возврат | Описание |
+|---|---|---|
+| `search(query, options?)` | `ISearchResult[]` | Полный поиск с fallback (FTS5 → LIKE → Fuzzy) |
+| `searchFTS(query, options)` | `ISearchResult[]` | FTS5-поиск с BM25, весовая схема: name=20, qualified_name=5, docstring=1, signature=2 |
+| `searchLike(query, options?)` | `ISearchResult[]` | LIKE-фоллбэк |
+| `searchFuzzy(query, options?)` | `ISearchResult[]` | Fuzzy-фоллбэк через bounded edit distance |
+| `buildFtsQuery(query)` | `string \| null` | Построение FTS5-запроса с экранированием спецсимволов |
+| `setProjectNameTokens(tokens)` | `void` | Токены имени проекта |
+
+### Параметры IFtsSearchOptions
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `kinds` | `NodeKind[]?` | Фильтр по видам узлов |
+| `languages` | `string[]?` | Фильтр по языкам |
+| `limit` / `offset` | `number?` | Пагинация |
+| `pathFilters` / `nameFilters` | `string[]?` | Фильтры пути и имени |
 
 ---
 
@@ -381,6 +600,28 @@ constructor(dbPath: string)
 | `files` | Отслеживаемые файлы |
 | `unresolved_refs` | Неразрешенные ссылки |
 | `nodes_fts` | Виртуальная таблица FTS5 для полнотекстового поиска |
+
+### Индексы
+
+| Индекс | Описание |
+|---|---|
+| `idx_nodes_kind` | По виду узла |
+| `idx_nodes_name` | По имени узла |
+| `idx_nodes_qualified_name` | По квалифицированному имени |
+| `idx_nodes_file_path` | По пути файла |
+| `idx_nodes_language` | По языку |
+| `idx_nodes_file_line` | Комбинированный: путь + строка |
+| `idx_nodes_lower_name` | По имени в нижнем регистре (выражение) |
+| `idx_edges_kind` | По виду ребра |
+| `idx_edges_source_kind` | Комбинированный: источник + вид |
+| `idx_edges_target_kind` | Комбинированный: цель + вид |
+| `idx_edges_provenance` | По источнику ребра |
+| `idx_files_language` | По языку файла |
+| `idx_files_modified_at` | По времени модификации |
+| `idx_unresolved_from_node` | По узлу-источнику |
+| `idx_unresolved_name` | По имени ссылки |
+| `idx_unresolved_file_path` | По пути файла |
+| `idx_unresolved_from_name` | Комбинированный: узел + имя |
 
 ### Триггеры FTS5
 
@@ -402,28 +643,6 @@ constructor(dbPath: string)
 
 ---
 
-## Маппинг типов
-
-### ICodeChunk -> INode
-
-| ICodeChunk | INode | Примечание |
-|---|---|---|
-| `filePath` | `filePath` | — |
-| `nodeKind` | `kind` | Маппинг: class->class, function->function, method->method, interface->interface, type->type_alias, enum->enum, const->constant, block->variable, top_level->variable |
-| `symbolName` | `name` | — |
-| `content` | `signature` | — |
-| `startLine` / `endLine` | `startLine` / `endLine` | — |
-
-### IFtsResult -> ISearchResult
-
-| IFtsResult | ISearchResult | Примечание |
-|---|---|---|
-| `chunk` | `node` | Через маппинг ICodeChunk -> INode |
-| `score` | `score` | — |
-| `matchCount` | `highlights` | Длина массива |
-
----
-
 ## Адаптер SQLite
 
 Абстракция над `node:sqlite` (DatabaseSync).
@@ -432,50 +651,61 @@ constructor(dbPath: string)
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `run(...params)` | `void` | Выполнение без результата |
-| `get(...params)` | `Row \| null` | Одна строка |
-| `all(...params)` | `Row[]` | Все строки |
-| `iterate(...params)` | `Iterator<Row>` | Ленивый итератор, память O(1) |
+| `run(...params)` | `{ changes: number; lastInsertRowid: number \| bigint }` | Выполнение, возвращает число измененных строк и lastInsertRowid |
+| `get(...params)` | `any` | Одна строка |
+| `all(...params)` | `any[]` | Все строки |
+| `iterate(...params)` | `IterableIterator<any>` | Ленивый итератор, память O(1) |
 
 ### SqliteDatabase
 
-| Метод | Возврат | Описание |
+| Метод / Свойство | Возврат | Описание |
 |---|---|---|
 | `prepare(sql)` | `SqliteStatement` | Создание prepared statement |
 | `exec(sql)` | `void` | Выполнение SQL без результатов |
 | `pragma(str, options?)` | `any` | Выполнение PRAGMA |
-| `transaction(fn)` | `void` | Обертка функции в транзакцию |
+| `transaction(fn)` | `(...args) => T` | Обертка функции в транзакцию |
 | `close()` | `void` | Закрытие БД |
+| `runMaintenance()` | `void` | PRAGMA optimize + wal_checkpoint(PASSIVE) |
+| `open` | `boolean` | Флаг открытости БД |
 
 ---
 
 ## Утилиты
 
+### Конвертеры
+
+| Функция | Возврат | Описание |
+|---|---|---|
+| `rowToNode(row)` | `INode` | Конвертация строки БД в узел |
+| `rowToEdge(row)` | `IEdge` | Конвертация строки БД в ребро |
+| `rowToFileRecord(row)` | `IFileRecord` | Конвертация строки БД в запись файла |
+| `safeJsonParse<T>(str, fallback)` | `T` | Безопасный парсинг JSON из SQLite |
+
 ### Строковые
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `normalizeNameToken(raw: string)` | `string` | Приведение к нижнему регистру, фильтрация символов |
-| `deriveProjectNameTokens(projectRoot: string)` | `Set<string>` | Токены из go.mod, package.json, имени директории |
-| `getStemVariants(term: string)` | `string[]` | Варианты основы: -ing, -tion, -ment, -ies, -es, -s, -ed, -er |
-| `extractSearchTerms(query: string)` | `string[]` | Разделение camelCase, PascalCase, snake_case, dot.notation |
-| `unquote(s: string)` | `string` | Удаление внешних кавычек |
+| `normalizeNameToken(raw)` | `string` | Приведение к нижнему регистру, фильтрация символов |
+| `deriveProjectNameTokens(projectRoot)` | `Set<string>` | Токены из go.mod, package.json, имени директории |
+| `getStemVariants(term)` | `string[]` | Варианты основы: -ing, -tion, -ment, -ies, -es, -s, -ed, -er |
+| `extractSearchTerms(query, options?)` | `string[]` | Разделение camelCase, PascalCase, snake_case, dot.notation |
+| `unquote(s)` | `string` | Удаление внешних кавычек |
 | `boundedEditDistance(a, b, maxDist)` | `number` | Расстояние Левенштейна с ранним выходом |
 
 ### Поиск
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `kindBonus(kind: NodeKind)` | `number` | Бонус по виду узла |
+| `kindBonus(kind)` | `number` | Бонус по виду узла |
 | `nameMatchBonus(query, name)` | `number` | Бонус по совпадению имени |
-| `scorePathRelevance(path, query)` | `number` | Релевантность пути |
+| `scorePathRelevance(path, query, projectNameTokens?)` | `number` | Релевантность пути |
 | `isLowValueFile(path)` | `boolean` | Определение тестовых и генерируемых файлов |
 
 ### Парсер запросов
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `parseQuery(raw: string)` | `ParsedQuery` | Разбор с префиксами kind:, lang:, path:, name: |
+| `parseQuery(raw)` | `ParsedQuery` | Разбор с префиксами kind:, lang:, path:, name: |
 
 ### Классификаторы файлов
 
@@ -490,9 +720,22 @@ constructor(dbPath: string)
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `validatePathWithinRoot(projectRoot, filePath)` | `void` | Проверка вложенности (лексическая + realpath) |
-| `validateProjectPath(dirPath)` | `string \| null` | Отклонение системных директорий |
 | `isWithinDir(child, parent)` | `boolean` | Проверка вложенности (нечувствительно к регистру на Windows) |
+| `validatePathWithinRoot(projectRoot, filePath)` | `boolean` | Проверка вложенности (лексическая + realpath) |
+| `validateProjectPath(dirPath)` | `string \| null` | Отклонение системных директорий |
+
+### Пути
+
+| Функция | Возврат | Описание |
+|---|---|---|
+| `normalizePath(filePath)` | `string` | Нормализация с прямым слэшем |
+| `getDatabasePath(projectRoot)` | `string` | Путь к БД по умолчанию |
+
+### Числовые
+
+| Функция | Возврат | Описание |
+|---|---|---|
+| `clamp(value, min, max)` | `number` | Численное ограничение |
 
 ### Асинхронные утилиты
 
@@ -500,46 +743,50 @@ constructor(dbPath: string)
 |---|---|
 | `Mutex` | Асинхронный мьютекс с очередью ожидания |
 | `FileLock` | Межпроцессная блокировка с отслеживанием PID и устареванием (2 минуты) |
-| `processInBatches(items, batchSize, processor)` | Пакетная обработка с GC между батчами |
-| `readFileInChunks` | Генератор постраничного чтения файлов |
-| `debounce` / `throttle` | Дебаунсинг и троттлинг функций |
+| `processInBatches(items, batchSize, processor, onBatchComplete?)` | Пакетная обработка с GC между батчами |
+| `readFileInChunks(filePath, chunkSize?)` | Генератор постраничного чтения файлов |
+| `debounce(fn, delay)` | Дебаунсинг функций |
+| `throttle(fn, interval)` | Троттлинг функций |
 
-### Прочее
+### Память
 
-| Функция | Возврат | Описание |
+| Класс / Функция | Описание |
+|---|---|
+| `estimateSize(obj)` | Приблизительная оценка размера объекта в памяти |
+| `MemoryMonitor` | Мониторинг памяти с callback при достижении порога |
+
+---
+
+## Класс ScopeIgnore
+
+Класс для управления игнорированием файлов с поддержкой вложенных репозиториев и glob-паттернов.
+
+### Методы
+
+| Метод | Возврат | Описание |
 |---|---|---|
-| `rowToNode(row)` | `INode` | Конвертация строки БД в узел |
-| `rowToEdge(row)` | `IEdge` | Конвертация строки БД в ребро |
-| `rowToFileRecord(row)` | `IFileRecord` | Конвертация строки БД в запись файла |
-| `safeJsonParse<T>(str, fallback)` | `T` | Безопасный парсинг JSON из SQLite |
-| `clamp(value, min, max)` | `number` | Численное ограничение |
-| `normalizePath(filePath)` | `string` | Нормализация с прямым слэшем |
-| `getDatabasePath(projectRoot)` | `string` | Путь к БД по умолчанию |
-| `estimateSize(obj)` | `number` | Оценка размера объекта в памяти |
-| `MemoryMonitor` | Класс | Мониторинг памяти с callback при достижении порога |
+| `shouldIgnore(filePath)` | `boolean` | Следует ли игнорировать файл |
+| `addPattern(pattern)` | `void` | Добавить пользовательский паттерн игнорирования |
 
 ---
 
 ## Миграции
 
-Инфраструктура инкрементальных миграций схемы. Текущая версия: 5.
+Инфраструктура инкрементальных миграций схемы. Текущая версия: 1.
 
 | Метод | Возврат | Описание |
 |---|---|---|
 | `needsMigration(db)` | `boolean` | Проверка необходимости миграции |
 | `getPendingMigrations(db)` | `Migration[]` | Список ожидающих миграций |
-| `getMigrationHistory(db)` | `Array<{version, appliedAt, description}>` | История примененных миграций |
+| `getMigrationHistory(db)` | `ISchemaVersion[]` | История примененных миграций |
 | `recordMigration(db, version, description)` | `void` | Фиксация примененной миграции |
+| `applyMigrations(db)` | `void` | Применение всех ожидающих миграций |
 
 ### Версии
 
 | Версия | Изменения |
 |---|---|
-| v1 | Начальная схема: таблицы, индексы, FTS5, триггеры |
-| v2 | Таблица project_metadata с updated_at; колонки file_path, language в unresolved_refs; provenance в edges |
-| v3 | Выражение-индекс idx_nodes_lower_name |
-| v4 | Удалены избыточные индексы idx_edges_source и idx_edges_target |
-| v5 | Колонка nodes.return_type |
+| v1 | Начальная схема: все таблицы, индексы, FTS5, триггеры |
 
 ---
 
@@ -559,8 +806,20 @@ constructor(dbPath: string)
 | `ROUTING_MANIFEST_DEFAULT_LIMIT` | `40` | Лимит для getRoutingManifest |
 | `FileLock_STALE_TIMEOUT_MS` | `120000` | Время устаревания блокировки (2 минуты) |
 | `SQLITE_PARAM_CHUNK_SIZE` | `500` | Размер чанка для пакетных запросов |
-| `FUZZY_FOLLOWUP_CAP` | `max(limit * 2, 50)` | Лимит дополнительных запросов в fuzzy-поиске |
+| `LRU_CACHE_SIZE` | `1000` | Размер LRU-кэша узлов |
 | `FILTER_ONLY_OVER_FETCH_MULTIPLIER` | `5` | Множитель перегрузки для запросов только по фильтрам |
 | `CONFIG_LEAF_LANGUAGES` | `Set('yaml', 'properties')` | Языки для leaf-конфигураций |
-| `SENSITIVE_PATHS` | `Set('/proc', '/sys', '/dev', 'C:\Windows', ...)` | Системные директории для блокировки |
+| `SENSITIVE_PATHS` | `Set('/proc', '/sys', '/dev', 'C:\Windows', 'C:\Program Files', 'C:\ProgramData')` | Системные директории для блокировки |
 | `GENERATED_PATTERNS` | `RegExp[]` | 30+ паттернов для генерируемых файлов |
+| `MAX_FILE_SIZE` | `1048576` | Максимальный размер файла для индексации (1 МБ) |
+| `WORKER_RECYCLE_INTERVAL` | `250` | Интервал пересоздания worker-потока |
+| `PARSE_TIMEOUT_MS` | `10000` | Базовый таймаут парсинга (10 секунд) |
+| `PARSE_TIMEOUT_PER_10KB` | `10000` | Доп. таймаут на каждые 10 КБ |
+| `FILE_IO_BATCH_SIZE` | `10` | Размер батча для чтения файлов |
+| `SCAN_YIELD_INTERVAL` | `100` | Интервал cooperative yield при сканировании |
+| `SYNC_YIELD_INTERVAL` | `1000` | Интервал cooperative yield при синхронизации |
+| `SYNC_RECONCILE_YIELD_INTERVAL` | `1000` | Интервал уступки event loop при sync |
+| `EMBEDDED_REPO_SEARCH_DEPTH` | `4` | Глубина поиска вложенных репозиториев |
+| `EMBEDDED_REPO_SEARCH_ENTRIES` | `2000` | Лимит директорий при поиске вложенных репозиториев |
+| `DEFAULT_IGNORE_DIRS` | `ReadonlySet<string>` | Директории по умолчанию для игнорирования |
+| `DEFAULT_IGNORE_PATTERNS` | `string[]` | Паттерны игнорирования по умолчанию |
