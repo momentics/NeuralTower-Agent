@@ -19,9 +19,11 @@ describe("QueryBuilder", () => {
   beforeAll(async () => {
     tmpDir = path.join(os.tmpdir(), `ntgraph-qb-test-${Date.now()}`)
     await fs.mkdir(tmpDir, { recursive: true })
-    db = NtGraphDb.initialize({ projectRoot: tmpDir })
+    const dbPath = path.join(tmpDir, 'ntgraph.db')
+    db = new NtGraphDb(dbPath)
+    db.initialize()
     // Узел для ограничения внешнего ключа неразрешённой ссылки
-    db.insertNode({
+    await db.insertNode({
       id: "ref-node",
       kind: "function",
       name: "refNode",
@@ -43,7 +45,7 @@ describe("QueryBuilder", () => {
 
   // ---- Узлы ----
 
-  it("inserts and retrieves a node", () => {
+  it("inserts and retrieves a node", async () => {
     const node: INode = {
       id: "node-1",
       kind: "function",
@@ -57,14 +59,14 @@ describe("QueryBuilder", () => {
       endColumn: 10,
       updatedAt: Date.now(),
     }
-    db.insertNode(node)
+    await db.insertNode(node)
     const found = db.getNodeById("node-1")
     expect(found).not.toBeNull()
     expect(found!.name).toBe("hello")
     expect(found!.kind).toBe("function")
   })
 
-  it("upsert replaces existing node", () => {
+  it("upsert replaces existing node", async () => {
     const node: INode = {
       id: "node-1",
       kind: "class",
@@ -78,7 +80,7 @@ describe("QueryBuilder", () => {
       endColumn: 10,
       updatedAt: Date.now(),
     }
-    db.insertNode(node)
+    await db.insertNode(node)
     const found = db.getNodeById("node-1")
     expect(found!.kind).toBe("class")
     expect(found!.name).toBe("HelloClass")
@@ -118,7 +120,7 @@ describe("QueryBuilder", () => {
     expect(db.getNodeById("node-3")).not.toBeNull()
   })
 
-  it("skips node with missing required fields", () => {
+  it("skips node with missing required fields", async () => {
     const node: INode = {
       id: "",
       kind: "function",
@@ -131,12 +133,12 @@ describe("QueryBuilder", () => {
       endColumn: 0,
       updatedAt: Date.now(),
     }
-    db.insertNode(node)
+    await db.insertNode(node)
     expect(db.getNodeById("")).toBeNull()
   })
 
-  it("deletes node by id", () => {
-    db.deleteNode("node-2")
+  it("deletes node by id", async () => {
+    await db.deleteNode("node-2")
     expect(db.getNodeById("node-2")).toBeNull()
   })
 
@@ -180,7 +182,7 @@ describe("QueryBuilder", () => {
     expect(collected).toContain("getName")
   })
 
-  it("updates node", () => {
+  it("updates node", async () => {
     const node: INode = {
       id: "node-3",
       kind: "method",
@@ -194,15 +196,15 @@ describe("QueryBuilder", () => {
       endColumn: 10,
       updatedAt: Date.now(),
     }
-    db.updateNode(node)
+    await db.updateNode(node)
     const found = db.getNodeById("node-3")
     expect(found!.name).toBe("getFullName")
   })
 
   // ---- Рёбра ----
 
-  it("inserts edge", () => {
-    db.insertEdge({
+  it("inserts edge", async () => {
+    await db.insertEdge({
       source: "node-3",
       target: "node-3",
       kind: "contains",
@@ -233,26 +235,26 @@ describe("QueryBuilder", () => {
     expect(changes).toBeGreaterThanOrEqual(2)
   })
 
-  it("deletes edges by target", () => {
-    db.insertEdge({ source: "node-3", target: "node-3", kind: "calls" })
+  it("deletes edges by target", async () => {
+    await db.insertEdge({ source: "node-3", target: "node-3", kind: "calls" })
     const changes = db.deleteEdgesByTarget("node-3")
     expect(changes).toBeGreaterThanOrEqual(1)
   })
 
-  it("gets incoming edges with kind filter", () => {
-    db.insertEdge({ source: "node-3", target: "node-3", kind: "calls" })
-    db.insertEdge({ source: "node-3", target: "node-3", kind: "references" })
+  it("gets incoming edges with kind filter", async () => {
+    await db.insertEdge({ source: "node-3", target: "node-3", kind: "calls" })
+    await db.insertEdge({ source: "node-3", target: "node-3", kind: "references" })
     const edges = db.getIncomingEdges("node-3", ["calls"])
     expect(edges.every((e) => e.kind === "calls")).toBe(true)
   })
 
-  it("gets outgoing edges with kind and provenance filter", () => {
-    db.insertEdge({ source: "node-3", target: "node-3", kind: "calls", provenance: "tree-sitter" })
+  it("gets outgoing edges with kind and provenance filter", async () => {
+    await db.insertEdge({ source: "node-3", target: "node-3", kind: "calls", provenance: "tree-sitter" })
     const edges = db.getOutgoingEdges("node-3", undefined, "lsp")
     expect(edges.every((e) => e.provenance === "lsp")).toBe(true)
   })
 
-  it("cascading delete removes edges", () => {
+  it("cascading delete removes edges", async () => {
     const node: INode = {
       id: "cascade-target",
       kind: "function",
@@ -266,11 +268,11 @@ describe("QueryBuilder", () => {
       endColumn: 0,
       updatedAt: Date.now(),
     }
-    db.insertNode(node)
-    db.insertEdge({ source: "node-3", target: "cascade-target", kind: "calls" })
+    await db.insertNode(node)
+    await db.insertEdge({ source: "node-3", target: "cascade-target", kind: "calls" })
     const edges = db.getIncomingEdges("cascade-target")
     expect(edges.length).toBe(1)
-    db.deleteNode("cascade-target")
+    await db.deleteNode("cascade-target")
     const edgesAfter = db.getIncomingEdges("cascade-target")
     expect(edgesAfter.length).toBe(0)
   })
@@ -282,7 +284,7 @@ describe("QueryBuilder", () => {
 
   // ---- Файлы ----
 
-  it("upserts file", () => {
+  it("upserts file", async () => {
     const file: IFileRecord = {
       path: "src/models.ts",
       contentHash: "abc123",
@@ -292,13 +294,13 @@ describe("QueryBuilder", () => {
       indexedAt: Date.now(),
       nodeCount: 1,
     }
-    db.upsertFile(file)
+    await db.upsertFile(file)
     const found = db.getFileByPath("src/models.ts")
     expect(found).not.toBeNull()
     expect(found!.contentHash).toBe("abc123")
   })
 
-  it("upsert updates existing file", () => {
+  it("upsert updates existing file", async () => {
     const file: IFileRecord = {
       path: "src/models.ts",
       contentHash: "def456",
@@ -308,7 +310,7 @@ describe("QueryBuilder", () => {
       indexedAt: Date.now(),
       nodeCount: 2,
     }
-    db.upsertFile(file)
+    await db.upsertFile(file)
     const found = db.getFileByPath("src/models.ts")
     expect(found!.contentHash).toBe("def456")
     expect(found!.size).toBe(200)
@@ -334,8 +336,8 @@ describe("QueryBuilder", () => {
     expect(stale.length).toBeGreaterThanOrEqual(1)
   })
 
-  it("deletes file and its nodes", () => {
-    db.deleteFile("src/models.ts")
+  it("deletes file and its nodes", async () => {
+    await db.deleteFile("src/models.ts")
     expect(db.getFileByPath("src/models.ts")).toBeNull()
     expect(db.getNodesByFile("src/models.ts").length).toBe(0)
   })
@@ -457,8 +459,8 @@ describe("QueryBuilder", () => {
 
   it("gets node and edge count", () => {
     const count = db.getNodeAndEdgeCount()
-    expect(typeof count.nodes).toBe("number")
-    expect(typeof count.edges).toBe("number")
+    expect(typeof count.nodeCount).toBe("number")
+    expect(typeof count.edgeCount).toBe("number")
   })
 
   it("gets graph stats", () => {
@@ -474,7 +476,7 @@ describe("QueryBuilder", () => {
   // ---- LRU-кэш ----
 
   it("LRU cache evicts oldest entry", () => {
-    const qb = db.getQueryBuilder()
+    const qb = db.queryBuilder
     qb.clearCache()
 
     const nodes: INode[] = []
@@ -510,7 +512,7 @@ describe("QueryBuilder", () => {
       ids.push(`lru-${i}`)
     }
     const result = db.getNodesByIds(ids)
-    expect(result.size).toBeGreaterThanOrEqual(0)
+    expect(result.length).toBeGreaterThanOrEqual(0)
   })
 
   // ---- Поиск ----
@@ -535,15 +537,15 @@ describe("QueryBuilder", () => {
   it("clear removes all data", () => {
     db.clear()
     expect(db.getAllNodes().length).toBe(0)
-    expect(db.getNodeAndEdgeCount().edges).toBe(0)
+    expect(db.getNodeAndEdgeCount().edgeCount).toBe(0)
   })
 
   it("clearCache clears LRU cache", () => {
     db.clearCache()
   })
 
-  it("getAllNodeNames returns names", () => {
-    db.insertNode({
+  it("getAllNodeNames returns names", async () => {
+    await db.insertNode({
       id: "name-test",
       kind: "function",
       name: "testFunc",

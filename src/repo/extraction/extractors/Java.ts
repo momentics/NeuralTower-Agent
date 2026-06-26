@@ -752,7 +752,7 @@ export class JavaExtractor extends ExtractorBase {
 
     const tryNode = this.createNode(
       filePath,
-      NodeKind.Try,
+      NodeKind.Function,
       'try',
       line,
       node.endPosition.row + 1,
@@ -785,7 +785,7 @@ export class JavaExtractor extends ExtractorBase {
   ): void {
     const catchNode = this.createNode(
       filePath,
-      NodeKind.Catch,
+      NodeKind.Function,
       'catch',
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -793,7 +793,7 @@ export class JavaExtractor extends ExtractorBase {
       node.endPosition.column
     );
     nodes.push(catchNode);
-    edges.push(this.createEdge(parentId, catchNode.id, EdgeKind.Catches));
+    edges.push(this.createEdge(parentId, catchNode.id, EdgeKind.References));
 
     // Параметр catch
     const param = node.childForFieldName('parameter');
@@ -829,7 +829,7 @@ export class JavaExtractor extends ExtractorBase {
 
     const throwNode = this.createNode(
       filePath,
-      NodeKind.Throw,
+      NodeKind.Function,
       'throw',
       line,
       line,
@@ -840,7 +840,7 @@ export class JavaExtractor extends ExtractorBase {
     edges.push(this.createEdge(parentId, throwNode.id, EdgeKind.Contains));
 
     if (argumentNode) {
-      edges.push(this.createEdge(throwNode.id, parentId, EdgeKind.Throws, {
+      edges.push(this.createEdge(throwNode.id, parentId, EdgeKind.References, {
         metadata: { expression: argumentNode.text },
         line,
         column: argumentNode.startPosition.column,
@@ -864,7 +864,7 @@ export class JavaExtractor extends ExtractorBase {
 
     const decNode = this.createNode(
       filePath,
-      NodeKind.Decorator,
+      NodeKind.Function,
       decoratorText,
       line,
       line,
@@ -896,7 +896,7 @@ export class JavaExtractor extends ExtractorBase {
 
     const tpNode = this.createNode(
       filePath,
-      NodeKind.TypeParameter,
+      NodeKind.Parameter,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -943,7 +943,7 @@ export class JavaExtractor extends ExtractorBase {
 
     const genNode = this.createNode(
       filePath,
-      NodeKind.Generic,
+      NodeKind.Variable,
       name,
       line,
       line,

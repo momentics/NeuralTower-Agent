@@ -533,7 +533,7 @@ export class ExtractionOrchestrator {
 
           // Сохранение в БД
           if (result.nodes.length > 0 || result.errors.length === 0) {
-            this.storeExtractionResult(fileRecord, result);
+await this.storeExtractionResult(fileRecord, result);
           }
 
           // Сбор ошибок извлечения
@@ -622,7 +622,7 @@ export class ExtractionOrchestrator {
         checkAbort(signal);
         const tracked = this.db.getFileByPath(filePath);
         if (tracked) {
-          this.db.deleteFile(filePath);
+          await this.db.deleteFile(filePath);
           filesRemoved++;
           changedFilePaths.push(filePath);
         }
@@ -680,7 +680,7 @@ export class ExtractionOrchestrator {
         checkAbort(signal);
 
         if (!currentSet.has(tracked.path) || !fs.existsSync(path.join(this.rootDir, tracked.path))) {
-          this.db.deleteFile(tracked.path);
+          await this.db.deleteFile(tracked.path);
           filesRemoved++;
           changedFilePaths.push(tracked.path);
         }
@@ -788,7 +788,7 @@ export class ExtractionOrchestrator {
         if (best) {
           // Создаём ребро
           const edgeKind = this.resolveEdgeKind(ref.referenceKind);
-          this.db.insertEdge({
+          await this.db.insertEdge({
             source: ref.fromNodeId,
             target: best.id,
             kind: edgeKind,
@@ -815,7 +815,7 @@ export class ExtractionOrchestrator {
         const best = qualifiedCandidates[0];
         const edgeKind = this.resolveEdgeKind(ref.referenceKind);
 
-        this.db.insertEdge({
+        await this.db.insertEdge({
           source: ref.fromNodeId,
           target: best.id,
           kind: edgeKind,
@@ -960,7 +960,7 @@ export class ExtractionOrchestrator {
 
         // Сохранение в БД
         if (result.nodes.length > 0 || result.errors.length === 0) {
-          this.storeExtractionResult(fileRecord, result);
+          await this.storeExtractionResult(fileRecord, result);
         }
 
         // Сбор ошибок извлечения
@@ -1101,7 +1101,7 @@ export class ExtractionOrchestrator {
 
     // Сохранение в БД
     if (result.nodes.length > 0 || result.errors.length === 0) {
-      this.storeExtractionResult(fileRecord, result);
+      await this.storeExtractionResult(fileRecord, result);
     }
 
     return result;
@@ -1225,10 +1225,10 @@ export class ExtractionOrchestrator {
     * 9. Вставка неразрешённых ссылок пакетом
     * 10. Upsert записи файла
     */
-  public storeExtractionResult(
+ public async storeExtractionResult(
     fileRecord: IFileRecord,
     result: IExtractionResult,
-  ): void {
+  ): Promise<void> {
     const filePath = fileRecord.path;
     const contentHash = fileRecord.contentHash;
     const language = fileRecord.language;
@@ -1248,7 +1248,7 @@ export class ExtractionOrchestrator {
 
     // 3. Удаление данных файла (FK cascade удалит узлы и рёбра)
     if (existingFile) {
-      this.db.deleteFile(filePath);
+      await this.db.deleteFile(filePath);
     }
 
     // 4. Фильтрация узлов — оставляем только с заполненными обязательными полями
@@ -1321,7 +1321,7 @@ export class ExtractionOrchestrator {
     }
 
     // 10. Upsert записи файла
-    this.db.upsertFile({
+    await this.db.upsertFile({
       ...fileRecord,
       indexedAt: Date.now(),
       nodeCount: result.nodes.length,
@@ -1379,7 +1379,7 @@ export class ExtractionOrchestrator {
       };
 
       if (result.nodes.length > 0 || result.errors.length === 0) {
-        this.storeExtractionResult(fileRecord, result);
+        await this.storeExtractionResult(fileRecord, result);
       }
     } catch {
       // Ошибка парсинга — пропускаем файл

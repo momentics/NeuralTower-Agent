@@ -31,12 +31,6 @@ export const NodeKind = Object.freeze({
   Import: 'import',
   Export: 'export',
   Component: 'component',
-  Try: 'try',
-  Catch: 'catch',
-  Throw: 'throw',
-  Decorator: 'decorator',
-  TypeParameter: 'type_parameter',
-  Generic: 'generic',
 } as const);
 
 export type NodeKind = (typeof NodeKind)[keyof typeof NodeKind];
@@ -55,9 +49,6 @@ export const EdgeKind = Object.freeze({
   Overrides: 'overrides',
   Decorates: 'decorates',
   Exports: 'exports',
-  Catches: 'catches',
-  Throws: 'throws',
-  ReExports: 're_exports',
 } as const);
 
 export type EdgeKind = (typeof EdgeKind)[keyof typeof EdgeKind];
@@ -114,7 +105,7 @@ export interface IEdge {
   metadata?: Record<string, unknown>;
   line?: number;
   column?: number;
-  provenance?: 'tree-sitter' | 'scip' | 'heuristic';
+  provenance?: string;
 }
 
 /** Запись о файле в БД. */
@@ -165,6 +156,11 @@ export interface IGraphStats {
   nodeCount: number;
   edgeCount: number;
   fileCount: number;
+  nodesByKind: Record<NodeKind, number>;
+  edgesByKind: Record<EdgeKind, number>;
+  filesByLanguage: Record<string, number>;
+  dbSizeBytes: number;
+  lastUpdated: number;
 }
 
 /** Параметры поиска. */

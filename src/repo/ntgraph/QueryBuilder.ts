@@ -355,9 +355,9 @@ export class QueryBuilder {
   }
 
   /** Пакетный поиск узлов по ID (устраняет паттерн N+1). */
-  getNodesByIds(ids: readonly string[]): Map<string, INode> {
+  getNodesByIds(ids: readonly string[]): INode[] {
     const out = new Map<string, INode>();
-    if (ids.length === 0) return out;
+    if (ids.length === 0) return [];
 
     // Кэш-хиты
     const misses: string[] = [];
@@ -371,7 +371,7 @@ export class QueryBuilder {
         misses.push(id);
       }
     }
-    if (misses.length === 0) return out;
+    if (misses.length === 0) return Array.from(out.values());
 
     // Чанки по 500
     for (let i = 0; i < misses.length; i += SQLITE_PARAM_CHUNK_SIZE) {
@@ -386,7 +386,7 @@ export class QueryBuilder {
         this.cacheNode(node);
       }
     }
-    return out;
+    return Array.from(out.values());
   }
 
   /** Получение существующих ID узлов (для валидации рёбер). */
@@ -514,7 +514,7 @@ export class QueryBuilder {
   }
 
   /** Файл с наибольшей концентрацией route-узлов. */
-  getTopRouteFile(): { filePath: string; routeCount: number; totalRoutes: number } | null {
+  getTopRouteFile(): INode | null {
     if (!this.stmts.getTopRouteFile) {
       this.stmts.getTopRouteFile = this.db.prepare(`
         SELECT file_path, COUNT(*) AS cnt
@@ -532,64 +532,17 @@ export class QueryBuilder {
     const top = filtered[0]!;
     if (totalRoutes < TOP_ROUTE_MIN_TOTAL || top.cnt < TOP_ROUTE_MIN_TOTAL) return null;
     if (top.cnt / totalRoutes < TOP_ROUTE_MIN_CONCENTRATION) return null;
-    return { filePath: top.file_path, routeCount: top.cnt, totalRoutes };
+    const node = this.db.prepare('SELECT * FROM nodes WHERE kind = ? AND file_path = ? LIMIT 1')
+      .get('route', top.file_path) as NodeRow | undefined;
+    return node ? rowToNode(node) : null;
   }
 
-  /** Манифест маршрутизации. */
-  getRoutingManifest(limit: number = ROUTING_MANIFEST_DEFAULT_LIMIT): {
-    entries: Array<{ url: string; handler: string; handlerFile: string; handlerLine: number; handlerKind: string }>;
-    topHandlerFile: string | null;
-    topHandlerFileCount: number;
-    totalRoutes: number;
-  } | null {
-    if (!this.stmts.getRoutingManifest) {
-      this.stmts.getRoutingManifest = this.db.prepare(`
-        SELECT
-          r.name AS url,
-          h.name AS handler,
-          h.file_path AS handler_file,
-          h.start_line AS handler_line,
-          h.kind AS handler_kind
-        FROM nodes r
-        JOIN edges e ON e.source = r.id
-        JOIN nodes h ON e.target = h.id
-        WHERE r.kind = 'route'
-          AND e.kind IN ('references', 'calls')
-          AND h.kind IN ('function', 'method', 'class')
-        ORDER BY r.file_path, r.start_line
-        LIMIT ?
-      `);
-    }
-    const rows = this.stmts.getRoutingManifest.all(limit) as Array<{
-      url: string; handler: string; handler_file: string; handler_line: number; handler_kind: string;
-    }>;
-    const filtered = rows.filter(r => !isLowValueFile(r.handler_file));
-    if (filtered.length < 3) return null;
-
-    const fileCounts = new Map<string, number>();
-    for (const r of filtered) {
-      fileCounts.set(r.handler_file, (fileCounts.get(r.handler_file) ?? 0) + 1);
-    }
-    let topHandlerFile: string | null = null;
-    let topHandlerFileCount = 0;
-    for (const [file, count] of fileCounts) {
-      if (count > topHandlerFileCount) {
-        topHandlerFile = file;
-        topHandlerFileCount = count;
-      }
-    }
-    return {
-      entries: filtered.map(r => ({
-        url: r.url,
-        handler: r.handler,
-        handlerFile: r.handler_file,
-        handlerLine: r.handler_line,
-        handlerKind: r.handler_kind,
-      })),
-      topHandlerFile,
-      topHandlerFileCount,
-      totalRoutes: filtered.length,
-    };
+  /** Манифест маршрутизации — все route-узлы. */
+  getRoutingManifest(limit: number = ROUTING_MANIFEST_DEFAULT_LIMIT): INode[] {
+    const rows = this.db
+      .prepare('SELECT * FROM nodes WHERE kind = ? ORDER BY file_path, start_line LIMIT ?')
+      .all('route', limit) as NodeRow[];
+    return rows.filter(r => !isLowValueFile(r.file_path)).map(rowToNode);
   }
 
   /** Файлы, зависящие от данного. */
@@ -827,18 +780,24 @@ export class QueryBuilder {
     return row?.last ?? null;
   }
 
-  /** Устаревшие файлы — хеш изменился с момента индексации. Сравнивает с текущим состоянием файловой системы. */
-  getStaleFiles(): IFileRecord[] {
+  /** Устаревшие файлы — хеш изменился с момента индексации. Сравнивает с переданными хешами или с текущим состоянием файловой системы. */
+  getStaleFiles(currentHashes?: Map<string, string>): IFileRecord[] {
     const files = this.getAllFiles();
     const stale: IFileRecord[] = [];
     for (const file of files) {
-      try {
-        const content = fs.readFileSync(file.path, 'utf-8');
-        const currentHash = crypto.createHash('sha256').update(content).digest('hex');
-        if (currentHash !== file.contentHash) {
+      let currentHash: string | null = null;
+      if (currentHashes && currentHashes.has(file.path)) {
+        currentHash = currentHashes.get(file.path)!;
+      } else {
+        try {
+          const content = fs.readFileSync(file.path, 'utf-8');
+          currentHash = crypto.createHash('sha256').update(content).digest('hex');
+        } catch {
           stale.push(file);
+          continue;
         }
-      } catch {
+      }
+      if (currentHash !== file.contentHash) {
         stale.push(file);
       }
     }
@@ -1043,7 +1002,7 @@ export class QueryBuilder {
   }
 
   /** Поиск только по фильтрам без текста. */
-  private searchAllByFilters(options: {
+  searchAllByFilters(options: {
     kinds?: NodeKind[];
     languages?: string[];
     limit: number;
@@ -1132,6 +1091,24 @@ export class QueryBuilder {
     return allResults.slice(0, limit);
   }
 
+  /** FTS5-поиск напрямую. */
+  searchNodesFTS(query: string, options: ISearchOptions = {}): ISearchResult[] {
+    const ftsSearch = this.getFtsSearch();
+    return ftsSearch.search(query, options);
+  }
+
+  /** LIKE-фоллбэк поиска. */
+  searchNodesLike(query: string, options: ISearchOptions = {}): ISearchResult[] {
+    const ftsSearch = this.getFtsSearch();
+    return ftsSearch.searchLike(query, options);
+  }
+
+  /** Fuzzy-фоллбэк поиска. */
+  searchNodesFuzzy(query: string, options: ISearchOptions = {}): ISearchResult[] {
+    const ftsSearch = this.getFtsSearch();
+    return ftsSearch.searchFuzzy(query, options);
+  }
+
   /** LIKE-поиск по подстроке имени. */
   findNodesByNameSubstring(
     substring: string,
@@ -1199,10 +1176,11 @@ export class QueryBuilder {
   // ===================================================================
 
   /** Снапшот (узлы, рёбра). */
-  getNodeAndEdgeCount(): { nodes: number; edges: number } {
-    return this.db
+  getNodeAndEdgeCount(): { nodeCount: number; edgeCount: number } {
+    const row = this.db
       .prepare('SELECT (SELECT COUNT(*) FROM nodes) AS nodes, (SELECT COUNT(*) FROM edges) AS edges')
       .get() as { nodes: number; edges: number };
+    return { nodeCount: row.nodes, edgeCount: row.edges };
   }
 
   /** Статистика графа. */

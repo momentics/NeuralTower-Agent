@@ -280,7 +280,7 @@ export class GoExtractor extends ExtractorBase {
     const nameNode = node.childForFieldName('name');
     if (nameNode && nameNode.text !== '.') {
       const aliasName = nameNode.text;
-      edges.push(this.createEdge(importNode.id, this.nodeId(filePath, NodeKind.Import, aliasName, line), EdgeKind.ReExports, {
+      edges.push(this.createEdge(importNode.id, this.nodeId(filePath, NodeKind.Import, aliasName, line), EdgeKind.Exports, {
         metadata: { importedName: sourceText, localName: aliasName },
         line,
         column,
@@ -857,7 +857,7 @@ export class GoExtractor extends ExtractorBase {
       if (funcName === 'panic') {
         const throwNode = this.createNode(
           filePath,
-          NodeKind.Throw,
+          NodeKind.Function,
           'panic',
           line,
           line,
@@ -869,7 +869,7 @@ export class GoExtractor extends ExtractorBase {
 
         const argNode = node.childForFieldName('arguments');
         if (argNode) {
-          edges.push(this.createEdge(throwNode.id, parentId, EdgeKind.Throws, {
+          edges.push(this.createEdge(throwNode.id, parentId, EdgeKind.References, {
             metadata: { expression: argNode.text },
             line,
             column: argNode.startPosition.column,
@@ -882,7 +882,7 @@ export class GoExtractor extends ExtractorBase {
       if (funcName === 'recover') {
         const catchNode = this.createNode(
           filePath,
-          NodeKind.Catch,
+          NodeKind.Function,
           'recover',
           line,
           line,
@@ -924,7 +924,7 @@ export class GoExtractor extends ExtractorBase {
 
     const tryNode = this.createNode(
       filePath,
-      NodeKind.Try,
+         NodeKind.Function,
       'defer',
       line,
       node.endPosition.row + 1,

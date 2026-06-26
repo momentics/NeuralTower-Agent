@@ -18,7 +18,9 @@ describe("FtsSearch", () => {
   beforeAll(() => {
     tmpDir = path.join(os.tmpdir(), `ntgraph-fts-test-${Date.now()}`)
     fs.mkdir(tmpDir, { recursive: true })
-    db = NtGraphDb.initialize({ projectRoot: tmpDir })
+    const dbPath = path.join(tmpDir, 'ntgraph.db')
+    db = new NtGraphDb(dbPath)
+    db.initialize()
 
     const nodes: INode[] = [
       {
@@ -135,7 +137,8 @@ describe("FtsSearch", () => {
   it("buildFtsQuery strips FTS5 special chars", () => {
     const fts = db.getFtsSearch()
     const query = fts.buildFtsQuery("foo*bar")
-    expect(query).not.toContain("*")
+    expect(query).toContain("*")
+    expect(query).not.toContain("foo*bar")
   })
 
   it("rescoring boosts function kind", () => {

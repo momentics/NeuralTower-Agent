@@ -907,7 +907,7 @@ export class RustExtractor extends ExtractorBase {
 
     const tryNode = this.createNode(
       filePath,
-      NodeKind.Try,
+      NodeKind.Function,
       'try',
       line,
       node.endPosition.row + 1,
@@ -933,7 +933,7 @@ export class RustExtractor extends ExtractorBase {
 
     const catchNode = this.createNode(
       filePath,
-      NodeKind.Catch,
+      NodeKind.Function,
       'match',
       line,
       node.endPosition.row + 1,
@@ -952,7 +952,7 @@ export class RustExtractor extends ExtractorBase {
           // catch_all ветвь
           const catchAllNode = this.createNode(
             filePath,
-            NodeKind.Catch,
+            NodeKind.Function,
             'catch_all',
             arm.startPosition.row + 1,
             arm.endPosition.row + 1,
@@ -989,7 +989,7 @@ export class RustExtractor extends ExtractorBase {
       // panic! — Throw
       const throwNode = this.createNode(
         filePath,
-        NodeKind.Throw,
+        NodeKind.Function,
         'panic!',
         line,
         line,
@@ -1002,7 +1002,7 @@ export class RustExtractor extends ExtractorBase {
       // unreachable! — Throw
       const throwNode = this.createNode(
         filePath,
-        NodeKind.Throw,
+        NodeKind.Function,
         'unreachable!',
         line,
         line,
@@ -1178,7 +1178,7 @@ export class RustExtractor extends ExtractorBase {
 
     const decNode = this.createNode(
       filePath,
-      NodeKind.Decorator,
+      NodeKind.Function,
       attrText,
       line,
       line,
@@ -1325,7 +1325,7 @@ export class RustExtractor extends ExtractorBase {
         const tpName = child.text;
         const tpNode = this.createNode(
           filePath,
-          NodeKind.TypeParameter,
+          NodeKind.Parameter,
           tpName,
           child.startPosition.row + 1,
           child.endPosition.row + 1,
@@ -1426,7 +1426,7 @@ export class RustExtractor extends ExtractorBase {
       if (funcName === 'unwrap' || funcName === 'expect') {
         const throwNode = this.createNode(
           filePath,
-          NodeKind.Throw,
+          NodeKind.Function,
           `${funcName}()`,
           line,
           line,

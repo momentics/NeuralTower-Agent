@@ -240,7 +240,7 @@ export class PythonExtractor extends ExtractorBase {
               const tpName = arg.text;
               const tpNode = this.createNode(
                 filePath,
-                NodeKind.TypeParameter,
+                NodeKind.Parameter,
                 tpName,
                 arg.startPosition.row + 1,
                 arg.endPosition.row + 1,
@@ -334,7 +334,7 @@ export class PythonExtractor extends ExtractorBase {
 
         const decNode = this.createNode(
           filePath,
-          NodeKind.Decorator as NodeKind,
+          NodeKind.Function,
           decoratorText,
           line,
           line,
@@ -616,7 +616,7 @@ export class PythonExtractor extends ExtractorBase {
           const imported = child.childForFieldName('name');
           if (imported) {
             const importedName = imported.text;
-            edges.push(this.createEdge(importNode.id, this.nodeId(filePath, NodeKind.Import, importedName, line), EdgeKind.ReExports as EdgeKind, {
+            edges.push(this.createEdge(importNode.id, this.nodeId(filePath, NodeKind.Import, importedName, line), EdgeKind.Exports, {
               metadata: { importedName },
               line,
               column,
@@ -624,7 +624,7 @@ export class PythonExtractor extends ExtractorBase {
           }
         } else if (child.type === 'identifier') {
           const importedName = child.text;
-          edges.push(this.createEdge(importNode.id, this.nodeId(filePath, NodeKind.Import, importedName, line), EdgeKind.ReExports as EdgeKind, {
+          edges.push(this.createEdge(importNode.id, this.nodeId(filePath, NodeKind.Import, importedName, line), EdgeKind.Exports, {
             metadata: { importedName },
             line,
             column,
@@ -650,7 +650,7 @@ export class PythonExtractor extends ExtractorBase {
 
     const tryNode = this.createNode(
       filePath,
-      NodeKind.Try as NodeKind,
+      NodeKind.Function,
       'try',
       line,
       node.endPosition.row + 1,
@@ -666,7 +666,7 @@ export class PythonExtractor extends ExtractorBase {
       if (child.type === 'except_clause') {
         const catchNode = this.createNode(
           filePath,
-          NodeKind.Catch as NodeKind,
+          NodeKind.Function,
           'except',
           child.startPosition.row + 1,
           child.endPosition.row + 1,
@@ -674,7 +674,7 @@ export class PythonExtractor extends ExtractorBase {
           child.endPosition.column
         );
         nodes.push(catchNode);
-        edges.push(this.createEdge(tryNode.id, catchNode.id, EdgeKind.Catches as EdgeKind));
+        edges.push(this.createEdge(tryNode.id, catchNode.id, EdgeKind.References));
 
         // Тип исключения
         const exceptionType = child.childForFieldName('type');
@@ -730,7 +730,7 @@ export class PythonExtractor extends ExtractorBase {
 
     const throwNode = this.createNode(
       filePath,
-      NodeKind.Throw as NodeKind,
+      NodeKind.Function,
       'raise',
       line,
       line,
@@ -742,7 +742,7 @@ export class PythonExtractor extends ExtractorBase {
 
     const argumentNode = node.childForFieldName('error');
     if (argumentNode) {
-      edges.push(this.createEdge(throwNode.id, parentId, EdgeKind.Throws as EdgeKind, {
+      edges.push(this.createEdge(throwNode.id, parentId, EdgeKind.References, {
         metadata: { expression: argumentNode.text },
         line,
         column: argumentNode.startPosition.column,
@@ -794,7 +794,7 @@ protected processCall(
             const tpName = arg.text.replace(/['"]/g, '');
             const tpNode = this.createNode(
               filePath,
-              NodeKind.TypeParameter,
+              NodeKind.Parameter,
               tpName,
               arg.startPosition.row + 1,
               arg.endPosition.row + 1,

@@ -20,7 +20,8 @@ describe("NtGraphDb", () => {
     tmpDir = path.join(os.tmpdir(), `ntgraph-db-test-${Date.now()}`)
     fs.mkdir(tmpDir, { recursive: true })
     dbPath = path.join(tmpDir, "ntgraph.db")
-    db = NtGraphDb.initialize({ projectRoot: tmpDir, dbPath })
+    db = new NtGraphDb(dbPath)
+    db.initialize()
   })
 
   afterAll(async () => {
@@ -33,7 +34,8 @@ describe("NtGraphDb", () => {
   })
 
   it("opens existing database", () => {
-    const opened = NtGraphDb.open({ projectRoot: tmpDir, dbPath })
+    const opened = new NtGraphDb(dbPath)
+    opened.initialize()
     expect(opened).toBeDefined()
     opened.close()
   })
@@ -44,7 +46,7 @@ describe("NtGraphDb", () => {
     }).toThrow()
   })
 
-  it("inserts and retrieves nodes", () => {
+  it("inserts and retrieves nodes", async () => {
     const node: INode = {
       id: "db-test-1",
       kind: "function",
@@ -58,13 +60,13 @@ describe("NtGraphDb", () => {
       endColumn: 10,
       updatedAt: Date.now(),
     }
-    db.insertNode(node)
+    await db.insertNode(node)
     const found = db.getNodeById("db-test-1")
     expect(found).not.toBeNull()
     expect(found!.name).toBe("testFunc")
   })
 
-  it("inserts and retrieves edges", () => {
+  it("inserts and retrieves edges", async () => {
     const node: INode = {
       id: "db-test-2",
       kind: "class",
@@ -78,8 +80,8 @@ describe("NtGraphDb", () => {
       endColumn: 10,
       updatedAt: Date.now(),
     }
-    db.insertNode(node)
-    db.insertEdge({ source: "db-test-1", target: "db-test-2", kind: "calls" })
+    await db.insertNode(node)
+    await db.insertEdge({ source: "db-test-1", target: "db-test-2", kind: "calls" })
     const edges = db.getOutgoingEdges("db-test-1")
     expect(edges.length).toBe(1)
     expect(edges[0]!.kind).toBe("calls")
@@ -114,8 +116,8 @@ describe("NtGraphDb", () => {
 
   it("getNodeAndEdgeCount returns counts", () => {
     const count = db.getNodeAndEdgeCount()
-    expect(count.nodes).toBeGreaterThanOrEqual(2)
-    expect(count.edges).toBeGreaterThanOrEqual(1)
+    expect(count.nodeCount).toBeGreaterThanOrEqual(2)
+    expect(count.edgeCount).toBeGreaterThanOrEqual(1)
   })
 
   it("runMaintenance does not throw", () => {
@@ -125,7 +127,9 @@ describe("NtGraphDb", () => {
   it("close does not throw", async () => {
     const tmpDir2 = path.join(os.tmpdir(), `ntgraph-close-test-${Date.now()}`)
     await fs.mkdir(tmpDir2, { recursive: true })
-    const db2 = NtGraphDb.initialize({ projectRoot: tmpDir2 })
+    const dbPath2 = path.join(tmpDir2, "ntgraph.db")
+    const db2 = new NtGraphDb(dbPath2)
+    db2.initialize()
     db2.close()
     expect(() => db2.close()).not.toThrow()
     await fs.rm(tmpDir2, { recursive: true, force: true })
@@ -143,11 +147,11 @@ describe("NtGraphDb", () => {
   it("clear removes all data", () => {
     db.clear()
     expect(db.getAllNodes().length).toBe(0)
-    expect(db.getNodeAndEdgeCount().edges).toBe(0)
+    expect(db.getNodeAndEdgeCount().edgeCount).toBe(0)
   })
 
-  it("getQueryBuilder returns QueryBuilder", () => {
-    const qb = db.getQueryBuilder()
+  it("queryBuilder returns QueryBuilder", () => {
+    const qb = db.queryBuilder
     expect(qb).toBeDefined()
   })
 

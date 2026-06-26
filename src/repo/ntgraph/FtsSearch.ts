@@ -55,6 +55,8 @@ interface IFtsSearchOptions {
   languages?: string[];
   limit?: number;
   offset?: number;
+  pathFilters?: string[];
+  nameFilters?: string[];
 }
 
 /**
@@ -79,14 +81,14 @@ export class FtsSearch {
    * Полный поиск с fallback.
    */
   search(query: string, options: IFtsSearchOptions = {}): ISearchResult[] {
-    const { kinds, languages, limit = 100, offset = 0 } = options;
+    const { kinds, languages, limit = 100, offset = 0, pathFilters, nameFilters } = options;
 
     // Уровень 1: FTS5
     let results = this.searchFTS(query, { kinds, languages, limit, offset });
 
     // Уровень 2: LIKE
     if (results.length === 0 && query.length >= 2) {
-      results = this.searchLIKE(query, { kinds, languages, limit, offset });
+      results = this.searchLike(query, { kinds, languages, limit, offset });
     }
 
     // Уровень 3: Fuzzy
@@ -103,6 +105,19 @@ export class FtsSearch {
     if (results.length > 0) {
       results = this.rescore(results, query);
       results.sort((a, b) => b.score - a.score);
+
+      // Path filter
+      if (pathFilters && pathFilters.length > 0) {
+        const pfLower = pathFilters.map(f => f.toLowerCase());
+        results = results.filter(r => pfLower.some(f => r.node.filePath.toLowerCase().includes(f)));
+      }
+
+      // Name filter
+      if (nameFilters && nameFilters.length > 0) {
+        const nfLower = nameFilters.map(f => f.toLowerCase());
+        results = results.filter(r => nfLower.some(f => r.node.name.toLowerCase().includes(f)));
+      }
+
       if (results.length > limit) {
         results = results.slice(0, limit);
       }
@@ -157,10 +172,10 @@ export class FtsSearch {
     }
   }
 
-  /**
-   * LIKE-фоллбэк.
-   */
-  searchLIKE(query: string, options: IFtsSearchOptions): ISearchResult[] {
+ /**
+    * LIKE-фоллбэк.
+    */
+  searchLike(query: string, options: IFtsSearchOptions = {}): ISearchResult[] {
     const { kinds, languages, limit = 100, offset = 0 } = options;
 
     let sql = `
@@ -214,9 +229,9 @@ export class FtsSearch {
    */
   searchFuzzy(
     text: string,
-    options: { kinds?: NodeKind[]; languages?: string[]; limit: number }
+    options: { kinds?: NodeKind[]; languages?: string[]; limit?: number } = {}
   ): ISearchResult[] {
-    const { kinds, languages, limit } = options;
+    const { kinds, languages, limit = 100 } = options;
     const lowered = text.toLowerCase();
     const maxDist = lowered.length <= 4 ? FUZZY_MAX_DIST_SHORT : FUZZY_MAX_DIST_DEFAULT;
 
@@ -324,7 +339,7 @@ export class FtsSearch {
       .split(/\s+/)
       .filter(term => term.length > 0)
       .filter(term => !/^(AND|OR|NOT|NEAR)$/i.test(term))
-      .map(term => `"${term}"`)
+      .map(term => `"${term}"*`)
       .join(' OR ');
 
     return ftsQuery || null;

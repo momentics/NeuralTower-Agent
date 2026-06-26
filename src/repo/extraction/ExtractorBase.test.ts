@@ -188,7 +188,8 @@ describe("extraction pipeline", () => {
       )
 
       const dbPath = path.join(tmpDir, "ts-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
@@ -221,7 +222,8 @@ export function add(a: number, b: number): number {
       )
 
       const dbPath = path.join(tmpDir, "ts-func-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
@@ -250,7 +252,8 @@ interface Extended extends Base {
       )
 
       const dbPath = path.join(tmpDir, "ts-iface-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
@@ -273,7 +276,8 @@ import React from 'react';`
       )
 
       const dbPath = path.join(tmpDir, "ts-import-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
@@ -299,7 +303,8 @@ import React from 'react';`
       )
 
       const dbPath = path.join(tmpDir, "ts-enum-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
@@ -321,7 +326,8 @@ import React from 'react';`
       )
 
       const dbPath = path.join(tmpDir, "ts-type-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
@@ -340,7 +346,8 @@ import React from 'react';`
       await fs.writeFile(path.join(srcDir, "empty.ts"), "")
 
       const dbPath = path.join(tmpDir, "ts-empty-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
@@ -372,7 +379,8 @@ import React from 'react';`
       )
 
       const dbPath = path.join(tmpDir, "py-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
@@ -397,7 +405,8 @@ import React from 'react';`
       )
 
       const dbPath = path.join(tmpDir, "py-func-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
@@ -434,12 +443,7 @@ import React from 'react';`
       expect(NodeKind.Import).toBe("import")
       expect(NodeKind.Export).toBe("export")
       expect(NodeKind.Component).toBe("component")
-      expect(NodeKind.Try).toBe("try")
-      expect(NodeKind.Catch).toBe("catch")
-      expect(NodeKind.Throw).toBe("throw")
-      expect(NodeKind.Decorator).toBe("decorator")
-      expect(NodeKind.TypeParameter).toBe("type_parameter")
-      expect(NodeKind.Generic).toBe("generic")
+ 
     })
 
     it("contains all expected EdgeKind values", () => {
@@ -455,9 +459,7 @@ import React from 'react';`
       expect(EdgeKind.Instantiates).toBe("instantiates")
       expect(EdgeKind.Overrides).toBe("overrides")
       expect(EdgeKind.Decorates).toBe("decorates")
-      expect(EdgeKind.Catches).toBe("catches")
-      expect(EdgeKind.Throws).toBe("throws")
-      expect(EdgeKind.ReExports).toBe("re_exports")
+      expect(EdgeKind.Exports).toBe("exports")
     })
   })
 
@@ -484,7 +486,8 @@ import React from 'react';`
       }
 
       const dbPath = path.join(tmpDir, "orch-progress-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       await orch.indexAll(onProgress)
 
@@ -509,7 +512,8 @@ import React from 'react';`
       controller.abort()
 
       const dbPath = path.join(tmpDir, "orch-abort-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll(undefined, controller.signal)
 
@@ -535,7 +539,8 @@ import React from 'react';`
       )
 
       const dbPath = path.join(tmpDir, "orch-binary-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
@@ -557,7 +562,8 @@ import React from 'react';`
       )
 
       const dbPath = path.join(tmpDir, "orch-size-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
@@ -587,7 +593,8 @@ import React from 'react';`
       )
 
       const dbPath = path.join(tmpDir, "orch-stats-test.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       await orch.indexAll()
 

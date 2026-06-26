@@ -1158,7 +1158,7 @@ export class TypeScriptExtractor extends ExtractorBase {
             if (nameNode) {
               const importedName = nameNode.text;
               const localName = aliasNode ? aliasNode.text : importedName;
-              edges.push(this.createEdge(importNode.id, this.nodeId(filePath, NodeKind.Import, localName, line), EdgeKind.ReExports, {
+              edges.push(this.createEdge(importNode.id, this.nodeId(filePath, NodeKind.Import, localName, line), EdgeKind.Exports, {
                 metadata: { importedName, localName },
                 line,
                 column,
@@ -1204,7 +1204,7 @@ export class TypeScriptExtractor extends ExtractorBase {
         unresolvedRefs.push(this.createUnresolvedRef(
           exportNode.id,
           sourceText,
-          EdgeKind.ReExports,
+          EdgeKind.Exports,
           line,
           node.startPosition.column,
           filePath
@@ -1231,7 +1231,7 @@ export class TypeScriptExtractor extends ExtractorBase {
         unresolvedRefs.push(this.createUnresolvedRef(
           exportNode.id,
           sourceText,
-          EdgeKind.ReExports,
+          EdgeKind.Exports,
           line,
           node.startPosition.column,
           filePath
@@ -1264,7 +1264,7 @@ export class TypeScriptExtractor extends ExtractorBase {
 
     const tryNode = this.createNode(
       filePath,
-      NodeKind.Try,
+      NodeKind.Function,
       'try',
       line,
       node.endPosition.row + 1,
@@ -1278,7 +1278,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     if (catchClause) {
       const catchNode = this.createNode(
         filePath,
-        NodeKind.Catch,
+        NodeKind.Function,
         'catch',
         catchClause.startPosition.row + 1,
         catchClause.endPosition.row + 1,
@@ -1286,7 +1286,7 @@ export class TypeScriptExtractor extends ExtractorBase {
         catchClause.endPosition.column
       );
       nodes.push(catchNode);
-      edges.push(this.createEdge(tryNode.id, catchNode.id, EdgeKind.Catches));
+      edges.push(this.createEdge(tryNode.id, catchNode.id, EdgeKind.References));
 
       const catchParam = catchClause.childForFieldName('parameter');
       if (catchParam) {
@@ -1332,7 +1332,7 @@ export class TypeScriptExtractor extends ExtractorBase {
 
     const throwNode = this.createNode(
       filePath,
-      NodeKind.Throw,
+      NodeKind.Function,
       'throw',
       line,
       line,
@@ -1343,7 +1343,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     edges.push(this.createEdge(parentId, throwNode.id, EdgeKind.Contains));
 
     if (argumentNode) {
-      edges.push(this.createEdge(throwNode.id, parentId, EdgeKind.Throws, {
+      edges.push(this.createEdge(throwNode.id, parentId, EdgeKind.References, {
         metadata: { expression: argumentNode.text },
         line,
         column: argumentNode.startPosition.column,
@@ -1450,7 +1450,7 @@ export class TypeScriptExtractor extends ExtractorBase {
 
     const decNode = this.createNode(
       filePath,
-      NodeKind.Decorator,
+      NodeKind.Function,
       decoratorText,
       line,
       line,
@@ -1536,7 +1536,7 @@ export class TypeScriptExtractor extends ExtractorBase {
         const tpName = child.text;
         const tpNode = this.createNode(
           filePath,
-          NodeKind.TypeParameter,
+          NodeKind.Parameter,
           tpName,
           child.startPosition.row + 1,
           child.endPosition.row + 1,

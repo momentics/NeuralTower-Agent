@@ -131,8 +131,8 @@ export class SqliteFullTextSearch implements IFullTextSearch {
    * Число фрагментов в индексе.
    */
   count(): number {
-    const { nodes } = this.graphDb.getNodeAndEdgeCount()
-    return nodes
+    const { nodeCount } = this.graphDb.getNodeAndEdgeCount()
+    return nodeCount
   }
 
   /**

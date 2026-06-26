@@ -821,7 +821,7 @@ export class CSharpExtractor extends ExtractorBase {
 
     const tryNode = this.createNode(
       filePath,
-      NodeKind.Try,
+      NodeKind.Function,
       'try',
       line,
       node.endPosition.row + 1,
@@ -837,7 +837,7 @@ export class CSharpExtractor extends ExtractorBase {
       if (child.type === 'catch_clause') {
         const catchNode = this.createNode(
           filePath,
-          NodeKind.Catch,
+          NodeKind.Function,
           'catch',
           child.startPosition.row + 1,
           child.endPosition.row + 1,
@@ -845,7 +845,7 @@ export class CSharpExtractor extends ExtractorBase {
           child.endPosition.column
         );
         nodes.push(catchNode);
-        edges.push(this.createEdge(tryNode.id, catchNode.id, EdgeKind.Catches));
+        edges.push(this.createEdge(tryNode.id, catchNode.id, EdgeKind.References));
 
         const catchParam = child.childForFieldName('declaration');
         if (catchParam) {
@@ -886,7 +886,7 @@ export class CSharpExtractor extends ExtractorBase {
 
     const throwNode = this.createNode(
       filePath,
-      NodeKind.Throw,
+      NodeKind.Function,
       'throw',
       line,
       line,
@@ -897,7 +897,7 @@ export class CSharpExtractor extends ExtractorBase {
     edges.push(this.createEdge(parentId, throwNode.id, EdgeKind.Contains));
 
     if (argumentNode) {
-      edges.push(this.createEdge(throwNode.id, parentId, EdgeKind.Throws, {
+      edges.push(this.createEdge(throwNode.id, parentId, EdgeKind.References, {
         metadata: { expression: argumentNode.text },
         line,
         column: argumentNode.startPosition.column,
@@ -921,7 +921,7 @@ export class CSharpExtractor extends ExtractorBase {
 
     const decNode = this.createNode(
       filePath,
-      NodeKind.Decorator,
+      NodeKind.Function,
       decoratorText,
       line,
       line,
@@ -997,7 +997,7 @@ export class CSharpExtractor extends ExtractorBase {
         const genericName = child.text;
         const genericNode = this.createNode(
           filePath,
-          NodeKind.Generic,
+          NodeKind.Variable,
           genericName,
           child.startPosition.row + 1,
           child.endPosition.row + 1,
@@ -1073,7 +1073,7 @@ export class CSharpExtractor extends ExtractorBase {
           const tpName = nameNode.text;
           const tpNode = this.createNode(
             filePath,
-            NodeKind.TypeParameter,
+            NodeKind.Parameter,
             tpName,
             child.startPosition.row + 1,
             child.endPosition.row + 1,
