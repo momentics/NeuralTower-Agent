@@ -254,7 +254,7 @@ export class NtGraphDb {
     return this.qb.getDependencyFilePaths(filePath);
   }
 
-  getCrossFileIncomingEdgesWithTarget(filePath: string): Array<IEdge & { targetName: string; targetKind: NodeKind }> {
+  getCrossFileIncomingEdgesWithTarget(filePath: string): Array<{ edge: IEdge; targetKind: NodeKind; targetName: string }> {
     return this.qb.getCrossFileIncomingEdgesWithTarget(filePath);
   }
 

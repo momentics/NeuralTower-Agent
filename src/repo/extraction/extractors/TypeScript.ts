@@ -17,6 +17,10 @@ import {
 import { ExtractorBase } from '../ExtractorBase';
 
 export class TypeScriptExtractor extends ExtractorBase {
+  private isReact: boolean = false;
+  private isNextjs: boolean = false;
+  private isExpress: boolean = false;
+
   public getLanguage(): Language {
     return 'typescript';
   }
@@ -28,8 +32,11 @@ export class TypeScriptExtractor extends ExtractorBase {
   public extract(
     content: string,
     filePath: string,
-    _frameworkNames?: string[]
+    frameworkNames?: string[]
   ): IExtractionResult {
+    this.isReact = frameworkNames?.includes('react') ?? false;
+    this.isNextjs = frameworkNames?.includes('nextjs') ?? false;
+    this.isExpress = frameworkNames?.includes('express') ?? false;
     const nodes: INode[] = [];
     const edges: IEdge[] = [];
     const unresolvedRefs: IUnresolvedReference[] = [];
@@ -85,6 +92,11 @@ export class TypeScriptExtractor extends ExtractorBase {
         unresolvedRefs,
         errors
       );
+
+      // Извлечение маршрутов Next.js
+      if (this.isNextjs) {
+        this.extractNextjsRoutes(filePath, content, moduleNode.id, nodes, edges);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(
@@ -108,7 +120,8 @@ export class TypeScriptExtractor extends ExtractorBase {
     edges: IEdge[],
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[],
-    qualifiedNamePrefix: string = ''
+    qualifiedNamePrefix: string = '',
+    componentId: string | undefined = undefined
   ): void {
     if (!node || node.isMissing || node.isError) return;
 
@@ -190,11 +203,17 @@ export class TypeScriptExtractor extends ExtractorBase {
         this.processDecorator(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
         break;
 
+      case 'JSXOpeningElement':
+        if (componentId) {
+          this.processJsxOpeningElement(node, filePath, content, componentId, nodes, edges, unresolvedRefs, errors);
+        }
+        break;
+
       default:
         // Рекурсия по дочерним узлам
         let child = node.firstChild;
         while (child) {
-          this.processTsNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
+          this.processTsNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, componentId);
           child = child.nextSibling;
         }
     }
@@ -211,10 +230,121 @@ export class TypeScriptExtractor extends ExtractorBase {
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[]
   ): void {
+    if (this.isExpress) {
+      this.processExpressRoutes(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+    }
+
     let child = node.firstChild;
     while (child) {
       this.processTsNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       child = child.nextSibling;
+    }
+  }
+
+  /** Извлекает маршруты Express из AST. */
+  protected processExpressRoutes(
+    node: any,
+    filePath: string,
+    content: string,
+    parentId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    errors: IExtractionError[]
+  ): void {
+    let child = node.firstChild;
+    while (child) {
+      if (child.type === 'call_expression' && this.isExpressRouteCall(child)) {
+        this.extractExpressRoute(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      } else {
+        this.processExpressRoutes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      }
+      child = child.nextSibling;
+    }
+  }
+
+  /** Проверяет, является ли вызов маршрутом Express. */
+  protected isExpressRouteCall(node: any): boolean {
+    const funcNode = node.childForFieldName('function');
+    if (!funcNode || funcNode.type !== 'member_expression') return false;
+
+    const obj = funcNode.childForFieldName('object');
+    if (!obj || obj.type !== 'identifier') return false;
+
+    const objName = obj.text;
+    if (objName !== 'app' && objName !== 'router') return false;
+
+    const prop = funcNode.childForFieldName('property');
+    if (!prop || prop.type !== 'identifier') return false;
+
+    const method = prop.text.toLowerCase();
+    const routeMethods = ['get', 'post', 'put', 'delete', 'patch', 'all', 'use'];
+    if (!routeMethods.includes(method)) return false;
+
+    const args = node.childForFieldName('arguments');
+    if (!args) return false;
+
+    const firstArg = args.firstChild;
+    return firstArg?.type === 'string';
+  }
+
+  /** Извлекает узел маршрута Express из вызова. */
+  protected extractExpressRoute(
+    node: any,
+    filePath: string,
+    content: string,
+    parentId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    errors: IExtractionError[]
+  ): void {
+    const funcNode = node.childForFieldName('function')!;
+    const prop = funcNode.childForFieldName('property')!;
+    const method = prop.text.toLowerCase();
+
+    const args = node.childForFieldName('arguments')!;
+    const firstArg = args.firstChild;
+    const routePath = firstArg.text.replace(/['"]/g, '');
+
+    const secondArg = firstArg.nextSibling;
+    if (!secondArg) return;
+
+    const routeName = `route:${method.toUpperCase()}:${routePath}`;
+    const line = node.startPosition.row + 1;
+    const column = node.startPosition.column;
+
+    const routeNode = this.createNode(
+      filePath,
+      NodeKind.Route,
+      routeName,
+      line,
+      node.endPosition.row + 1,
+      column,
+      node.endPosition.column,
+      {
+        method: method.toUpperCase(),
+        path: routePath,
+      }
+    );
+    nodes.push(routeNode);
+    edges.push(this.createEdge(parentId, routeNode.id, EdgeKind.Contains));
+
+    if (secondArg.type === 'identifier') {
+      const handlerName = secondArg.text;
+      edges.push(this.createEdge(routeNode.id, this.nodeId(filePath, NodeKind.Function, handlerName, 0), EdgeKind.Calls, {
+        metadata: { referenceName: handlerName },
+        line,
+        column,
+      }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        routeNode.id,
+        handlerName,
+        EdgeKind.Calls,
+        line,
+        column,
+        filePath
+      ));
     }
   }
 
@@ -236,12 +366,21 @@ export class TypeScriptExtractor extends ExtractorBase {
     const name = nameNode.text;
     const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${name}` : name;
     const isAbstract = this.hasModifier(node, 'abstract');
+    const isExported = this.hasModifier(node, 'export');
     const decorators = this.extractDecorators(node, content);
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
 
+    // Проверка на React-компонент: класс, наследующий React.Component или Component
+    const reactSuperClass = node.childForFieldName('superclass');
+    const isClassComponent = this.isReact
+      && reactSuperClass
+      && (reactSuperClass.text === 'React.Component' || reactSuperClass.text === 'Component');
+
+    const classKind = isClassComponent ? NodeKind.Component : NodeKind.Class;
+
     const classNode = this.createNode(
       filePath,
-      NodeKind.Class,
+      classKind,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -253,6 +392,7 @@ export class TypeScriptExtractor extends ExtractorBase {
         isAbstract,
         decorators,
         visibility: this.extractVisibility(node),
+        isExported: isClassComponent ? isExported : undefined,
       }
     );
     nodes.push(classNode);
@@ -311,7 +451,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     if (body) {
       let child = body.firstChild;
       while (child) {
-        this.processTsNodes(child, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName);
+        this.processTsNodes(child, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName, isClassComponent ? classNode.id : undefined);
         child = child.nextSibling;
       }
     }
@@ -384,10 +524,18 @@ export class TypeScriptExtractor extends ExtractorBase {
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
     const signature = this.extractFunctionSignature(node, content);
     const returnType = this.extractReturnType(node);
+    const isExported = this.hasModifier(node, 'export');
+
+    // Проверка на React-компонент: имя с заглавной буквы и тело содержит JSX
+    const isFunctionComponent = this.isReact
+      && name[0] >= 'A' && name[0] <= 'Z'
+      && this.hasJsx(node);
+
+    const funcKind = isFunctionComponent ? NodeKind.Component : NodeKind.Function;
 
     const funcNode = this.createNode(
       filePath,
-      NodeKind.Function,
+      funcKind,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -401,6 +549,7 @@ export class TypeScriptExtractor extends ExtractorBase {
         decorators,
         returnType,
         visibility: this.extractVisibility(node),
+        isExported: isFunctionComponent ? isExported : undefined,
       }
     );
     nodes.push(funcNode);
@@ -412,6 +561,26 @@ export class TypeScriptExtractor extends ExtractorBase {
       this.processTypeParameters(typeParams, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors);
     }
 
+    // Возвращаемый тип
+    if (returnType) {
+      const baseType = this.extractBaseType(returnType);
+      if (baseType && !this.isPrimitiveType(baseType)) {
+        edges.push(this.createEdge(funcNode.id, this.nodeId(filePath, NodeKind.Class, baseType, 0), EdgeKind.Returns, {
+          metadata: { referenceName: baseType },
+          line: funcNode.startLine,
+          column: funcNode.startColumn,
+        }));
+        unresolvedRefs.push(this.createUnresolvedRef(
+          funcNode.id,
+          baseType,
+          EdgeKind.Returns,
+          funcNode.startLine,
+          funcNode.startColumn,
+          filePath
+        ));
+      }
+    }
+
     // Параметры
     const params = node.childForFieldName('parameters');
     if (params) {
@@ -421,7 +590,15 @@ export class TypeScriptExtractor extends ExtractorBase {
     // Обработка тела для вызовов и ссылок
     const body = node.childForFieldName('body');
     if (body) {
-      this.processFunctionBody(body, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors);
+      if (isFunctionComponent) {
+        let child = body.firstChild;
+        while (child) {
+          this.processTsNodes(child, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName, funcNode.id);
+          child = child.nextSibling;
+        }
+      } else {
+        this.processFunctionBody(body, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors);
+      }
     }
   }
 
@@ -461,6 +638,26 @@ export class TypeScriptExtractor extends ExtractorBase {
     );
     nodes.push(funcNode);
     edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Contains));
+
+    // Возвращаемый тип
+    if (returnType) {
+      const baseType = this.extractBaseType(returnType);
+      if (baseType && !this.isPrimitiveType(baseType)) {
+        edges.push(this.createEdge(funcNode.id, this.nodeId(filePath, NodeKind.Class, baseType, 0), EdgeKind.Returns, {
+          metadata: { referenceName: baseType },
+          line: funcNode.startLine,
+          column: funcNode.startColumn,
+        }));
+        unresolvedRefs.push(this.createUnresolvedRef(
+          funcNode.id,
+          baseType,
+          EdgeKind.Returns,
+          funcNode.startLine,
+          funcNode.startColumn,
+          filePath
+        ));
+      }
+    }
 
     const params = node.childForFieldName('parameters');
     if (params) {
@@ -531,6 +728,56 @@ export class TypeScriptExtractor extends ExtractorBase {
     const params = node.childForFieldName('parameters');
     if (params) {
       this.processParameters(params, filePath, content, methodNode.id, nodes, edges, unresolvedRefs, errors);
+    }
+
+    // Возвращаемый тип
+    if (returnType) {
+      const baseType = this.extractBaseType(returnType);
+      if (baseType && !this.isPrimitiveType(baseType)) {
+        edges.push(this.createEdge(methodNode.id, this.nodeId(filePath, NodeKind.Class, baseType, 0), EdgeKind.Returns, {
+          metadata: { referenceName: baseType },
+          line: methodNode.startLine,
+          column: methodNode.startColumn,
+        }));
+        unresolvedRefs.push(this.createUnresolvedRef(
+          methodNode.id,
+          baseType,
+          EdgeKind.Returns,
+          methodNode.startLine,
+          methodNode.startColumn,
+          filePath
+        ));
+      }
+    }
+
+    // Переопределение
+    if (decorators.includes('override')) {
+      const extendsEdge = edges.find(e => e.source === parentId && e.kind === EdgeKind.Extends);
+      if (extendsEdge) {
+        const superClassName = (extendsEdge.metadata?.referenceName as string) ?? '';
+        edges.push(this.createEdge(methodNode.id, this.nodeId(filePath, NodeKind.Method, name, 0), EdgeKind.Overrides, {
+          metadata: { referenceName: `${superClassName}.${name}` },
+          line: methodNode.startLine,
+          column: methodNode.startColumn,
+        }));
+        unresolvedRefs.push(this.createUnresolvedRef(
+          methodNode.id,
+          `${superClassName}.${name}`,
+          EdgeKind.Overrides,
+          methodNode.startLine,
+          methodNode.startColumn,
+          filePath
+        ));
+      } else {
+        unresolvedRefs.push(this.createUnresolvedRef(
+          methodNode.id,
+          name,
+          EdgeKind.Overrides,
+          methodNode.startLine,
+          methodNode.startColumn,
+          filePath
+        ));
+      }
     }
 
     // Обработка тела
@@ -604,9 +851,17 @@ export class TypeScriptExtractor extends ExtractorBase {
 
           // Проверка, является ли значение выражением класса
           if (valueNode && valueNode.type === 'class_expression') {
+            // Проверка на React-компонент
+            const ceSuperClass = valueNode.childForFieldName('superclass');
+            const isCeComponent = this.isReact
+              && ceSuperClass
+              && (ceSuperClass.text === 'React.Component' || ceSuperClass.text === 'Component');
+
+            const ceKind = isCeComponent ? NodeKind.Component : NodeKind.Class;
+
             const classNode = this.createNode(
               filePath,
-              NodeKind.Class,
+              ceKind,
               name,
               child.startPosition.row + 1,
               child.endPosition.row + 1,
@@ -615,6 +870,7 @@ export class TypeScriptExtractor extends ExtractorBase {
               {
                 qualifiedName,
                 visibility: this.extractVisibility(node),
+                isExported: isCeComponent ? true : undefined,
               }
             );
             nodes.push(classNode);
@@ -622,7 +878,7 @@ export class TypeScriptExtractor extends ExtractorBase {
 
             let cchild = valueNode.firstChild;
             while (cchild) {
-              this.processTsNodes(cchild, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName);
+              this.processTsNodes(cchild, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName, isCeComponent ? classNode.id : undefined);
               cchild = cchild.nextSibling;
             }
           } else {
@@ -641,6 +897,27 @@ export class TypeScriptExtractor extends ExtractorBase {
             );
             nodes.push(varNode);
             edges.push(this.createEdge(parentId, varNode.id, EdgeKind.Contains));
+
+            // Тип переменной
+            const typeAnnotation = child.childForFieldName('type');
+            if (typeAnnotation) {
+              const baseType = this.extractBaseType(typeAnnotation.text);
+              if (baseType && !this.isPrimitiveType(baseType)) {
+                edges.push(this.createEdge(varNode.id, this.nodeId(filePath, NodeKind.Class, baseType, 0), EdgeKind.TypeOf, {
+                  metadata: { referenceName: baseType },
+                  line: child.startPosition.row + 1,
+                  column: child.startPosition.column,
+                }));
+                unresolvedRefs.push(this.createUnresolvedRef(
+                  varNode.id,
+                  baseType,
+                  EdgeKind.TypeOf,
+                  child.startPosition.row + 1,
+                  child.startPosition.column,
+                  filePath
+                ));
+              }
+            }
           }
         }
       }
@@ -1130,6 +1407,8 @@ export class TypeScriptExtractor extends ExtractorBase {
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[]
   ): void {
+    if (this.isExpress && this.isExpressRouteCall(node)) return;
+
     const funcNode = node.childForFieldName('function');
     if (!funcNode) return;
 
@@ -1213,6 +1492,27 @@ export class TypeScriptExtractor extends ExtractorBase {
           );
           nodes.push(paramNode);
           edges.push(this.createEdge(parentId, paramNode.id, EdgeKind.Contains));
+
+          // Тип параметра
+          const typeAnnotation = child.childForFieldName('type_annotation');
+          if (typeAnnotation) {
+            const baseType = this.extractBaseType(typeAnnotation.text);
+            if (baseType && !this.isPrimitiveType(baseType)) {
+              edges.push(this.createEdge(paramNode.id, this.nodeId(filePath, NodeKind.Class, baseType, 0), EdgeKind.TypeOf, {
+                metadata: { referenceName: baseType },
+                line: child.startPosition.row + 1,
+                column: child.startPosition.column,
+              }));
+              unresolvedRefs.push(this.createUnresolvedRef(
+                paramNode.id,
+                baseType,
+                EdgeKind.TypeOf,
+                child.startPosition.row + 1,
+                child.startPosition.column,
+                filePath
+              ));
+            }
+          }
         }
       }
       child = child.nextSibling;
@@ -1265,19 +1565,37 @@ export class TypeScriptExtractor extends ExtractorBase {
     while (child) {
       if (child.type === 'call_expression') {
         this.processCallExpression(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      } else if (child.type === 'NewExpression') {
+        this.processNewExpression(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       } else if (child.type === 'throw_statement') {
         this.processThrowStatement(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       } else if (child.type === 'try_statement') {
         this.processTryStatement(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       } else if (child.type === 'return_statement') {
-        // Пропускаем операторы return
+        const returnExpr = child.childForFieldName('value');
+        if (returnExpr && returnExpr.type === 'NewExpression') {
+          this.processNewExpression(returnExpr, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+        }
       } else if (child.type === 'expression_statement') {
         let expr = child.firstChild;
         while (expr) {
           if (expr.type === 'call_expression') {
             this.processCallExpression(expr, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+          } else if (expr.type === 'NewExpression') {
+            this.processNewExpression(expr, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
           }
           expr = expr.nextSibling;
+        }
+      } else if (child.type === 'lexical_declaration' || child.type === 'variable_declaration') {
+        let decl = child.firstChild;
+        while (decl) {
+          if (decl.type === 'variable_declarator') {
+            const valueNode = decl.childForFieldName('value');
+            if (valueNode && valueNode.type === 'NewExpression') {
+              this.processNewExpression(valueNode, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+            }
+          }
+          decl = decl.nextSibling;
         }
       } else if (child.type === 'if_statement' || child.type === 'for_statement' || child.type === 'while_statement' || child.type === 'do_statement') {
         // Рекурсия по управлению потоком
@@ -1371,5 +1689,202 @@ export class TypeScriptExtractor extends ExtractorBase {
       return retType.text;
     }
     return undefined;
+  }
+
+  /** Обрабатывает выражение new. */
+  protected processNewExpression(
+    node: any,
+    filePath: string,
+    content: string,
+    parentId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    errors: IExtractionError[]
+  ): void {
+    const constructorNode = node.childForFieldName('constructor');
+    if (!constructorNode) return;
+
+    let className: string | undefined;
+    if (constructorNode.type === 'identifier') {
+      className = constructorNode.text;
+    } else if (constructorNode.type === 'member_expression') {
+      const prop = constructorNode.childForFieldName('property');
+      if (prop) {
+        className = prop.text;
+      }
+    }
+
+    if (className) {
+      const line = node.startPosition.row + 1;
+      const column = node.startPosition.column;
+      edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Class, className, 0), EdgeKind.Instantiates, {
+        metadata: { referenceName: className },
+        line,
+        column,
+      }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        parentId,
+        className,
+        EdgeKind.Instantiates,
+        line,
+        column,
+        filePath
+      ));
+    }
+  }
+
+  /** Извлекает базовый тип из аннотации типа. */
+  protected extractBaseType(typeText: string): string | undefined {
+    const trimmed = typeText.trim();
+    if (trimmed.length === 0) return undefined;
+    if (!/[A-Z]/.test(trimmed[0])) return undefined;
+    const match = trimmed.match(/^([A-Z]\w*)/);
+    if (match) return match[1];
+    return undefined;
+  }
+
+  /** Проверяет, является ли тип примитивом или встроенным типом. */
+  protected isPrimitiveType(typeName: string): boolean {
+    const primitives = new Set([
+      'string', 'number', 'boolean', 'void', 'any', 'never',
+      'unknown', 'null', 'undefined', 'bigint', 'symbol',
+      'object', 'Array', 'Map', 'Set', 'Date', 'RegExp',
+      'Error', 'Function', 'Object', 'ArrayBuffer', 'Int8Array',
+      'Uint8Array', 'Float32Array', 'Float64Array',
+      'Int16Array', 'Int32Array', 'Uint16Array', 'Uint32Array',
+      'Uint8ClampedArray', 'Float32Array', 'Float64Array'
+    ]);
+    return primitives.has(typeName);
+  }
+
+  /** Проверяет, содержит ли тело функции JSX. */
+  protected hasJsx(node: any): boolean {
+    if (!node) return false;
+    if (node.type === 'JSXElement' || node.type === 'JSXFragment') return true;
+    let child = node.firstChild;
+    while (child) {
+      if (this.hasJsx(child)) return true;
+      child = child.nextSibling;
+    }
+    return false;
+  }
+
+  /** Обрабатывает JSXOpeningElement для извлечения ссылок на компоненты. */
+  protected processJsxOpeningElement(
+    node: any,
+    filePath: string,
+    content: string,
+    componentId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    errors: IExtractionError[]
+  ): void {
+    const tagName = node.childForFieldName('name');
+    if (!tagName) return;
+
+    let compName: string | undefined;
+
+    if (tagName.type === 'identifier') {
+      const text = tagName.text;
+      if (text[0] >= 'A' && text[0] <= 'Z') {
+        compName = text;
+      }
+    } else if (tagName.type === 'member_expression') {
+      const prop = tagName.childForFieldName('property');
+      if (prop && prop.type === 'identifier') {
+        const text = prop.text;
+        if (text[0] >= 'A' && text[0] <= 'Z') {
+          compName = text;
+        }
+      }
+    }
+
+    if (compName) {
+      const line = node.startPosition.row + 1;
+      const column = node.startPosition.column;
+
+      edges.push(this.createEdge(componentId, this.nodeId(filePath, NodeKind.Component, compName, 0), EdgeKind.Calls, {
+        metadata: { referenceName: compName },
+        line,
+        column,
+      }));
+
+      unresolvedRefs.push(this.createUnresolvedRef(
+        componentId,
+        compName,
+        EdgeKind.Calls,
+        line,
+        column,
+        filePath
+      ));
+    }
+  }
+
+  /** Извлекает маршруты Next.js из пути файла. */
+  protected extractNextjsRoutes(
+    filePath: string,
+    content: string,
+    moduleId: string,
+    nodes: INode[],
+    edges: IEdge[]
+  ): void {
+    const normalizedPath = filePath.replace(/\\/g, '/');
+
+    // Маршруты из директории pages/
+    const pagesMatch = normalizedPath.match(/pages\/(.+?)\.(tsx|ts|jsx|js)$/);
+    if (pagesMatch) {
+      const relativePath = pagesMatch[1];
+      let routePath: string;
+
+      if (relativePath === 'index') {
+        routePath = '/';
+      } else if (relativePath.startsWith('api/')) {
+        routePath = '/' + relativePath;
+      } else {
+        routePath = '/' + relativePath;
+      }
+
+      const routeNode = this.createNode(
+        filePath,
+        NodeKind.Route,
+        routePath,
+        1,
+        content.split('\n').length,
+        0,
+        0,
+        {
+          routePath,
+        }
+      );
+      nodes.push(routeNode);
+      edges.push(this.createEdge(moduleId, routeNode.id, EdgeKind.Contains));
+      return;
+    }
+
+    // Маршруты из директории app/ — файлы route.ts
+    const appRouteMatch = normalizedPath.match(/app\/(.+?)\/route\.(tsx|ts|jsx|js)$/);
+    if (appRouteMatch) {
+      let routePath = '/' + appRouteMatch[1];
+
+      // Удаляем параметры маршрута
+      routePath = routePath.replace(/\[\[.*?\]\]/g, '').replace(/\[.*?\]/g, '');
+
+      const routeNode = this.createNode(
+        filePath,
+        NodeKind.Route,
+        routePath,
+        1,
+        content.split('\n').length,
+        0,
+        0,
+        {
+          routePath,
+        }
+      );
+      nodes.push(routeNode);
+      edges.push(this.createEdge(moduleId, routeNode.id, EdgeKind.Contains));
+    }
   }
 }

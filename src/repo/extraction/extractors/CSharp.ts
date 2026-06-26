@@ -173,6 +173,10 @@ export class CSharpExtractor extends ExtractorBase {
         this.processTypeArgumentList(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
         break;
 
+      case 'invocation_expression':
+        this.processInvocationExpression(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+        break;
+
       default:
         // Рекурсия по дочерним узлам
         let child = node.firstChild;
@@ -1084,6 +1088,68 @@ export class CSharpExtractor extends ExtractorBase {
     }
   }
 
+  /** Обрабатывает выражение вызова (InvocationExpression). */
+  protected processInvocationExpression(
+    node: any,
+    filePath: string,
+    _content: string,
+    parentId: string,
+    _nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    _errors: IExtractionError[]
+  ): void {
+    const invocation = node.firstChild;
+    if (!invocation) return;
+
+    const expression = invocation.childForFieldName('expression');
+    if (!expression) return;
+
+    let methodName: string | undefined;
+
+    // member_access: obj.method -> name
+    if (expression.type === 'member_access') {
+      const nameNode = expression.childForFieldName('name');
+      if (nameNode) {
+        methodName = nameNode.text;
+      }
+    }
+
+    // Простой идентификатор: method()
+    if (!methodName) {
+      const nameNode = expression.childForFieldName('name');
+      if (nameNode) {
+        methodName = nameNode.text;
+      }
+    }
+
+    // identifier: method()
+    if (!methodName && expression.type === 'identifier') {
+      methodName = expression.text;
+    }
+
+    if (!methodName) return;
+
+    const line = node.startPosition.row + 1;
+    const column = node.startPosition.column;
+
+    // Создаём ребро calls от текущего метода к вызываемому
+    edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Method, methodName, 0), EdgeKind.Calls, {
+      metadata: { referenceName: methodName },
+      line,
+      column,
+    }));
+
+    unresolvedRefs.push(this.createUnresolvedRef(
+      parentId,
+      methodName,
+      EdgeKind.Calls,
+      line,
+      column,
+      filePath
+    ));
+  }
+
   /** Обрабатывает тело функции для вызовов и ссылок. */
   protected processFunctionBody(
     node: any,
@@ -1097,7 +1163,9 @@ export class CSharpExtractor extends ExtractorBase {
   ): void {
     let child = node.firstChild;
     while (child) {
-      if (child.type === 'throw_statement') {
+      if (child.type === 'invocation_expression') {
+        this.processInvocationExpression(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      } else if (child.type === 'throw_statement') {
         this.processThrowStatement(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       } else if (child.type === 'try_statement') {
         this.processTryStatement(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);

@@ -17,6 +17,8 @@ import {
 import { ExtractorBase } from '../ExtractorBase';
 
 export class JavaExtractor extends ExtractorBase {
+  private isSpringBoot: boolean = false;
+
   public getLanguage(): Language {
     return 'java';
   }
@@ -28,8 +30,9 @@ export class JavaExtractor extends ExtractorBase {
   public extract(
     content: string,
     filePath: string,
-    _frameworkNames?: string[]
+    frameworkNames?: string[]
   ): IExtractionResult {
+    this.isSpringBoot = frameworkNames?.includes('springboot') ?? false;
     const nodes: INode[] = [];
     const edges: IEdge[] = [];
     const unresolvedRefs: IUnresolvedReference[] = [];
@@ -168,6 +171,10 @@ export class JavaExtractor extends ExtractorBase {
 
       case 'type_argument':
         this.processTypeArgument(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+        break;
+
+      case 'method_invocation':
+        this.processMethodInvocation(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
         break;
 
       default:
@@ -372,6 +379,11 @@ export class JavaExtractor extends ExtractorBase {
         this.processJavaNodes(child, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName);
         child = child.nextSibling;
       }
+    }
+
+    // Обработка Spring Boot: компонент, маршруты, внедрение зависимостей
+    if (this.isSpringBoot) {
+      this.processSpringClass(node, filePath, content, classNode, nodes, edges, unresolvedRefs, errors);
     }
   }
 
@@ -1005,6 +1017,63 @@ export class JavaExtractor extends ExtractorBase {
     }
   }
 
+  /** Обрабатывает вызов метода (MethodInvocation). */
+  protected processMethodInvocation(
+    node: any,
+    filePath: string,
+    _content: string,
+    parentId: string,
+    _nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    _errors: IExtractionError[]
+  ): void {
+    const nameNode = node.childForFieldName('name');
+    if (!nameNode) return;
+
+    const methodName = nameNode.text;
+    const line = node.startPosition.row + 1;
+    const column = node.startPosition.column;
+
+    // Создаём ребро calls от текущего метода к вызываемому
+    edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Method, methodName, 0), EdgeKind.Calls, {
+      metadata: { referenceName: methodName },
+      line,
+      column,
+    }));
+
+    unresolvedRefs.push(this.createUnresolvedRef(
+      parentId,
+      methodName,
+      EdgeKind.Calls,
+      line,
+      column,
+      filePath
+    ));
+
+    // Если вызов на объекте, проверяем new-выражение для instantiates
+    const objectNode = node.childForFieldName('object');
+    if (objectNode && objectNode.type === 'object_creation_expression') {
+      const typeNameNode = objectNode.childForFieldName('type');
+      if (typeNameNode) {
+        const typeName = typeNameNode.text;
+        edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Class, typeName, 0), EdgeKind.Instantiates, {
+          metadata: { referenceName: typeName },
+          line,
+          column,
+        }));
+        unresolvedRefs.push(this.createUnresolvedRef(
+          parentId,
+          typeName,
+          EdgeKind.Instantiates,
+          line,
+          column,
+          filePath
+        ));
+      }
+    }
+  }
+
   /** Обрабатывает тело функции для вызовов и ссылок. */
   protected processFunctionBody(
     node: any,
@@ -1018,7 +1087,9 @@ export class JavaExtractor extends ExtractorBase {
   ): void {
     let child = node.firstChild;
     while (child) {
-      if (child.type === 'try_statement') {
+      if (child.type === 'method_invocation') {
+        this.processMethodInvocation(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      } else if (child.type === 'try_statement') {
         this.processTryStatement(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       } else if (child.type === 'throw_statement') {
         this.processThrowStatement(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
@@ -1114,5 +1185,274 @@ export class JavaExtractor extends ExtractorBase {
       return retType.text;
     }
     return undefined;
+  }
+
+  /** Определяет, является ли класс Spring-стереотипом. */
+  protected detectSpringStereotype(node: any): string | undefined {
+    const stereotypes = ['Controller', 'RestController', 'Service', 'Repository', 'Component'];
+    let child = node.firstChild;
+    while (child) {
+      if (child.type === 'annotation') {
+        const idNode = child.childForFieldName('name');
+        if (idNode && stereotypes.includes(idNode.text)) {
+          return idNode.text;
+        }
+      }
+      child = child.nextSibling;
+    }
+    return undefined;
+  }
+
+  /** Извлекает маршруты из аннотаций методов. */
+  protected extractSpringRoutes(node: any): Array<{ method: string; path: string }> {
+    const results: Array<{ method: string; path: string }> = [];
+    const mappingAnns: Record<string, string> = {
+      'GetMapping': 'GET',
+      'PostMapping': 'POST',
+      'PutMapping': 'PUT',
+      'DeleteMapping': 'DELETE',
+      'PatchMapping': 'PATCH',
+    };
+
+    let child = node.firstChild;
+    while (child) {
+      if (child.type === 'annotation') {
+        const idNode = child.childForFieldName('name');
+        if (!idNode) {
+          child = child.nextSibling;
+          continue;
+        }
+
+        const annName = idNode.text;
+
+        if (mappingAnns[annName]) {
+          const httpMethod = mappingAnns[annName];
+          const path = this.extractAnnotationPath(child);
+          results.push({ method: httpMethod, path });
+        } else if (annName === 'RequestMapping') {
+          const path = this.extractAnnotationPath(child);
+          const httpMethod = this.extractRequestMappingMethod(child);
+          if (httpMethod) {
+            results.push({ method: httpMethod, path });
+          }
+        }
+      }
+      child = child.nextSibling;
+    }
+    return results;
+  }
+
+  /** Извлекает путь из аргументов аннотации. */
+  protected extractAnnotationPath(annotationNode: any): string {
+    const args = annotationNode.childForFieldName('arguments');
+    if (!args) return '/';
+
+    const firstArg = args.firstChild;
+    if (!firstArg) return '/';
+
+    if (firstArg.type === 'string_literal') {
+      return firstArg.text.replace(/^"/, '').replace(/"$/, '');
+    }
+    return '/';
+  }
+
+  /** Извлекает HTTP-метод из аннотации RequestMapping. */
+  protected extractRequestMappingMethod(annotationNode: any): string | undefined {
+    const args = annotationNode.childForFieldName('arguments');
+    if (!args) return undefined;
+
+    let child = args.firstChild;
+    while (child) {
+      if (child.type === 'annotation_attribute') {
+        const nameNode = child.childForFieldName('name');
+        if (nameNode && nameNode.text === 'method') {
+          const valueNode = child.childForFieldName('value');
+          if (valueNode && valueNode.type === 'enum_constant') {
+            return valueNode.text;
+          }
+          if (valueNode) {
+            let vc = valueNode.firstChild;
+            while (vc) {
+              if (vc.type === 'enum_constant') {
+                return vc.text;
+              }
+              vc = vc.nextSibling;
+            }
+          }
+        }
+      }
+      child = child.nextSibling;
+    }
+    return undefined;
+  }
+
+  /** Проверяет наличие аннотации Autowired на узле. */
+  protected hasAutowired(node: any): boolean {
+    let child = node.firstChild;
+    while (child) {
+      if (child.type === 'annotation') {
+        const idNode = child.childForFieldName('name');
+        if (idNode && idNode.text === 'Autowired') {
+          return true;
+        }
+      }
+      child = child.nextSibling;
+    }
+    return false;
+  }
+
+  /** Проверяет наличие аннотации Autowired на параметре. */
+  protected hasParamAutowired(paramNode: any): boolean {
+    let child = paramNode.firstChild;
+    while (child) {
+      if (child.type === 'annotation') {
+        const idNode = child.childForFieldName('name');
+        if (idNode && idNode.text === 'Autowired') {
+          return true;
+        }
+      }
+      child = child.nextSibling;
+    }
+    return false;
+  }
+
+  /** Обрабатывает Spring Boot логику для класса. */
+  protected processSpringClass(
+    node: any,
+    filePath: string,
+    content: string,
+    classNode: INode,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    errors: IExtractionError[]
+  ): void {
+    const stereotype = this.detectSpringStereotype(node);
+    if (!stereotype) return;
+
+    // Создание узла компонента
+    const compNode = this.createNode(
+      filePath,
+      NodeKind.Component,
+      classNode.name,
+      classNode.startLine,
+      classNode.endLine,
+      classNode.startColumn,
+      classNode.endColumn,
+      {
+        qualifiedName: classNode.qualifiedName,
+        stereotype,
+      }
+    );
+    nodes.push(compNode);
+    edges.push(this.createEdge(classNode.id, compNode.id, EdgeKind.TypeOf));
+
+    // Извлечение маршрутов из методов класса
+    const body = node.childForFieldName('body');
+    if (body) {
+      let child = body.firstChild;
+      while (child) {
+        if (child.type === 'method_declaration') {
+          const routes = this.extractSpringRoutes(child);
+          for (const route of routes) {
+            const routeName = `route:${route.method}:${route.path}`;
+            const line = child.startPosition.row + 1;
+            const column = child.startPosition.column;
+
+            const routeNode = this.createNode(
+              filePath,
+              NodeKind.Route,
+              routeName,
+              line,
+              line,
+              column,
+              child.endPosition.column,
+              {
+                method: route.method,
+                path: route.path,
+              }
+            );
+            nodes.push(routeNode);
+            edges.push(this.createEdge(compNode.id, routeNode.id, EdgeKind.Contains));
+
+            const nameNode = child.childForFieldName('name');
+            if (nameNode) {
+              const methodName = nameNode.text;
+              edges.push(this.createEdge(routeNode.id, this.nodeId(filePath, NodeKind.Method, methodName, line), EdgeKind.Calls, {
+                metadata: { referenceName: methodName },
+                line,
+                column,
+              }));
+            }
+          }
+        }
+        child = child.nextSibling;
+      }
+
+      // Внедрение зависимостей через поля
+      let fchild = body.firstChild;
+      while (fchild) {
+        if (fchild.type === 'field_declaration' && this.hasAutowired(fchild)) {
+          const fieldTypeNode = fchild.childForFieldName('type');
+          if (fieldTypeNode) {
+            const typeName = fieldTypeNode.text;
+            const line = fchild.startPosition.row + 1;
+            const column = fchild.startPosition.column;
+
+            edges.push(this.createEdge(classNode.id, this.nodeId(filePath, NodeKind.Class, typeName, 0), EdgeKind.References, {
+              metadata: { referenceName: typeName },
+              line,
+              column,
+            }));
+            unresolvedRefs.push(this.createUnresolvedRef(
+              classNode.id,
+              typeName,
+              EdgeKind.References,
+              line,
+              column,
+              filePath
+            ));
+          }
+        }
+        fchild = fchild.nextSibling;
+      }
+
+      // Внедрение зависимостей через конструктор
+      let cchild = body.firstChild;
+      while (cchild) {
+        if (cchild.type === 'constructor_declaration' && this.hasAutowired(cchild)) {
+          const params = cchild.childForFieldName('parameters');
+          if (params) {
+            let param = params.firstChild;
+            while (param) {
+              if (param.type === 'formal_parameter') {
+                const paramTypeNode = param.childForFieldName('type');
+                if (paramTypeNode) {
+                  const typeName = paramTypeNode.text;
+                  const line = param.startPosition.row + 1;
+                  const column = param.startPosition.column;
+
+                  edges.push(this.createEdge(classNode.id, this.nodeId(filePath, NodeKind.Class, typeName, 0), EdgeKind.References, {
+                    metadata: { referenceName: typeName },
+                    line,
+                    column,
+                  }));
+                  unresolvedRefs.push(this.createUnresolvedRef(
+                    classNode.id,
+                    typeName,
+                    EdgeKind.References,
+                    line,
+                    column,
+                    filePath
+                  ));
+                }
+              }
+              param = param.nextSibling;
+            }
+          }
+        }
+        cchild = cchild.nextSibling;
+      }
+    }
   }
 }

@@ -28,8 +28,9 @@ export class PythonExtractor extends ExtractorBase {
   public extract(
     content: string,
     filePath: string,
-    _frameworkNames?: string[]
+    frameworkNames?: string[]
   ): IExtractionResult {
+    const isDjango = frameworkNames?.includes('django') ?? false;
     const nodes: INode[] = [];
     const edges: IEdge[] = [];
     const unresolvedRefs: IUnresolvedReference[] = [];
@@ -76,7 +77,10 @@ export class PythonExtractor extends ExtractorBase {
         nodes,
         edges,
         unresolvedRefs,
-        errors
+        errors,
+        '',
+        false,
+        isDjango
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -102,31 +106,30 @@ export class PythonExtractor extends ExtractorBase {
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[],
     qualifiedNamePrefix: string = '',
-    insideClass: boolean = false
+    insideClass: boolean = false,
+    isDjango: boolean = false
   ): void {
     if (!node || node.isMissing || node.isError) return;
 
     switch (node.type) {
       case 'module':
-        this.processModule(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+        this.processModule(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, isDjango);
         break;
 
       case 'class_definition':
-        this.processClassDefinition(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
+        this.processClassDefinition(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, isDjango);
         break;
 
       case 'function_definition':
-        this.processFunctionDefinition(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, insideClass);
+        this.processFunctionDefinition(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, insideClass, isDjango);
         break;
 
       case 'decorated_definition':
-        this.processDecoratedDefinition(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, insideClass);
+        this.processDecoratedDefinition(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, insideClass, isDjango);
         break;
 
       case 'assignment':
-        if (!insideClass) {
-          this.processAssignment(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
-        }
+        this.processAssignment(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, insideClass, isDjango);
         break;
 
       case 'import_statement':
@@ -146,14 +149,14 @@ export class PythonExtractor extends ExtractorBase {
         break;
 
       case 'call':
-        this.processCall(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+        this.processCall(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, isDjango);
         break;
 
       default:
         // Рекурсивный обход дочерних узлов
         let child = node.firstChild;
         while (child) {
-          this.processPyNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, insideClass);
+          this.processPyNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, insideClass, isDjango);
           child = child.nextSibling;
         }
     }
@@ -168,11 +171,12 @@ export class PythonExtractor extends ExtractorBase {
     nodes: INode[],
     edges: IEdge[],
     unresolvedRefs: IUnresolvedReference[],
-    errors: IExtractionError[]
+    errors: IExtractionError[],
+    isDjango: boolean = false
   ): void {
     let child = node.firstChild;
     while (child) {
-      this.processPyNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      this.processPyNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, '', false, isDjango);
       child = child.nextSibling;
     }
   }
@@ -187,7 +191,8 @@ export class PythonExtractor extends ExtractorBase {
     edges: IEdge[],
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[],
-    qualifiedNamePrefix: string
+    qualifiedNamePrefix: string,
+    isDjango: boolean = false
   ): void {
     const nameNode = node.childForFieldName('name');
     if (!nameNode) return;
@@ -197,9 +202,14 @@ export class PythonExtractor extends ExtractorBase {
     const decorators = this.extractDecorators(node, content);
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
 
+    // Определение: Django view или обычный класс
+    const isDjangoView = isDjango && this.isDjangoViewBaseClass(node);
+    const isDjangoModel = isDjango && this.isDjangoModelClass(node);
+    const kind = isDjangoView ? NodeKind.Component : NodeKind.Class;
+
     const classNode = this.createNode(
       filePath,
-      NodeKind.Class,
+      kind,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -285,7 +295,7 @@ export class PythonExtractor extends ExtractorBase {
     if (body) {
       let child = body.firstChild;
       while (child) {
-        this.processPyNodes(child, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName, true);
+        this.processPyNodes(child, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName, true, isDjango);
         child = child.nextSibling;
       }
     }
@@ -302,8 +312,19 @@ export class PythonExtractor extends ExtractorBase {
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[],
     qualifiedNamePrefix: string,
-    insideClass: boolean
+    insideClass: boolean,
+    isDjango: boolean = false
   ): void {
+    // Получаем имя метода из внутреннего определения
+    const inner = node.childForFieldName('definition');
+    let methodName: string | undefined;
+    if (inner) {
+      const nameNode = inner.childForFieldName('name');
+      if (nameNode) {
+        methodName = nameNode.text;
+      }
+    }
+
     // Обработка декораторов
     let child = node.firstChild;
     while (child) {
@@ -326,21 +347,24 @@ export class PythonExtractor extends ExtractorBase {
           column: child.startPosition.column,
         }));
 
-        // @override — ребро Overrides
-        if (decoratorText === 'override') {
-          edges.push(this.createEdge(parentId, parentId, EdgeKind.Overrides, {
+        // @override — неразрешённая ссылка на метод родительского класса
+        if (decoratorText === 'override' && methodName) {
+          unresolvedRefs.push(this.createUnresolvedRef(
+            parentId,
+            methodName,
+            'overrides',
             line,
-            column: child.startPosition.column,
-          }));
+            child.startPosition.column,
+            filePath
+          ));
         }
       }
       child = child.nextSibling;
     }
 
     // Внутреннее определение
-    const inner = node.childForFieldName('definition');
     if (inner) {
-      this.processPyNodes(inner, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, insideClass);
+      this.processPyNodes(inner, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, insideClass, isDjango);
     }
   }
 
@@ -355,7 +379,8 @@ export class PythonExtractor extends ExtractorBase {
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[],
     qualifiedNamePrefix: string,
-    insideClass: boolean
+    insideClass: boolean,
+    isDjango: boolean = false
   ): void {
     const nameNode = node.childForFieldName('name');
     if (!nameNode) return;
@@ -401,11 +426,11 @@ export class PythonExtractor extends ExtractorBase {
     // Обработка тела функции для вызовов и ссылок
     const body = node.childForFieldName('body');
     if (body) {
-      this.processFunctionBody(body, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors);
+      this.processFunctionBody(body, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors, insideClass ? parentId : undefined, insideClass ? qualifiedNamePrefix : '', isDjango);
     }
   }
 
-  /** Обрабатывает присваивание (переменная). */
+  /** Обрабатывает присваивание (переменная или поле). */
   protected processAssignment(
     node: any,
     filePath: string,
@@ -415,33 +440,92 @@ export class PythonExtractor extends ExtractorBase {
     edges: IEdge[],
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[],
-    qualifiedNamePrefix: string
+    qualifiedNamePrefix: string,
+    insideClass: boolean,
+    isDjango: boolean = false
   ): void {
     const lhs = node.childForFieldName('left');
     if (!lhs) return;
 
+    // self.field = value — поле экземпляра
+    if (lhs.type === 'attribute') {
+      const obj = lhs.childForFieldName('object');
+      const attr = lhs.childForFieldName('attribute');
+      if (obj && obj.text === 'self' && attr && attr.type === 'identifier') {
+        const fieldName = attr.text;
+        const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${fieldName}` : fieldName;
+
+        const fieldNode = this.createNode(
+          filePath,
+          NodeKind.Field,
+          fieldName,
+          attr.startPosition.row + 1,
+          attr.endPosition.row + 1,
+          attr.startPosition.column,
+          attr.endPosition.column,
+          {
+            qualifiedName,
+          }
+        );
+        nodes.push(fieldNode);
+        edges.push(this.createEdge(parentId, fieldNode.id, EdgeKind.Contains));
+        return;
+      }
+    }
+
+    // Обычное присваивание — поле или переменная
     let child = lhs.firstChild;
     while (child) {
       if (child.type === 'identifier') {
         const name = child.text;
         const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${name}` : name;
+        const kind = insideClass ? NodeKind.Field : NodeKind.Variable;
+
+        // Django модельное поле — определение типа поля
+        let fieldType: string | undefined;
+        if (isDjango && insideClass) {
+          const rhs = node.childForFieldName('right');
+          if (rhs && rhs.type === 'call') {
+            const func = rhs.childForFieldName('function');
+            if (func && func.type === 'attribute') {
+              const attr = func.childForFieldName('attribute');
+              if (attr && this.isDjangoFieldType(attr.text)) {
+                fieldType = func.text;
+              }
+            }
+          }
+        }
+
+        const fieldOpts: Record<string, unknown> = {
+          qualifiedName,
+        };
+        if (fieldType) {
+          fieldOpts.fieldType = fieldType;
+        }
 
         const varNode = this.createNode(
           filePath,
-          NodeKind.Variable,
+          kind,
           name,
           child.startPosition.row + 1,
           child.endPosition.row + 1,
           child.startPosition.column,
           child.endPosition.column,
-          {
-            qualifiedName,
-          }
+          fieldOpts
         );
         nodes.push(varNode);
         edges.push(this.createEdge(parentId, varNode.id, EdgeKind.Contains));
       }
       child = child.nextSibling;
+    }
+
+    // Django — рекурсивная обработка дочерних узлов для маршрутов
+    if (isDjango) {
+      let c = node.firstChild;
+      while (c) {
+        this.processPyNodes(c, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, insideClass, isDjango);
+        c = c.nextSibling;
+      }
     }
   }
 
@@ -667,7 +751,7 @@ export class PythonExtractor extends ExtractorBase {
   }
 
   /** Обрабатывает вызов функции. */
-  protected processCall(
+protected processCall(
     node: any,
     filePath: string,
     content: string,
@@ -675,7 +759,8 @@ export class PythonExtractor extends ExtractorBase {
     nodes: INode[],
     edges: IEdge[],
     unresolvedRefs: IUnresolvedReference[],
-    errors: IExtractionError[]
+    errors: IExtractionError[],
+    isDjango: boolean = false
   ): void {
     const funcNode = node.childForFieldName('function');
     if (!funcNode) return;
@@ -693,7 +778,13 @@ export class PythonExtractor extends ExtractorBase {
       }
     }
 
-       // TypeVar — параметр типа
+    // Django маршруты — path() и re_path()
+    if (isDjango && (funcName === 'path' || funcName === 're_path')) {
+      this.processDjangoRoute(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      return;
+    }
+
+        // TypeVar — параметр типа
     if (funcName === 'TypeVar') {
       const args = node.childForFieldName('arguments');
       if (args) {
@@ -737,16 +828,45 @@ export class PythonExtractor extends ExtractorBase {
     nodes: INode[],
     edges: IEdge[],
     unresolvedRefs: IUnresolvedReference[],
-    errors: IExtractionError[]
+    errors: IExtractionError[],
+    classNodeId: string | undefined = undefined,
+    qualifiedNamePrefix: string = '',
+    isDjango: boolean = false
   ): void {
     let child = node.firstChild;
     while (child) {
       if (child.type === 'call') {
-        this.processCall(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+        this.processCall(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, isDjango);
       } else if (child.type === 'raise_statement') {
         this.processRaiseStatement(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       } else if (child.type === 'try_statement') {
         this.processTryStatement(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      } else if (child.type === 'assignment' && classNodeId) {
+        // self.field = value — извлечение поля экземпляра
+        const lhs = child.childForFieldName('left');
+        if (lhs && lhs.type === 'attribute') {
+          const obj = lhs.childForFieldName('object');
+          const attr = lhs.childForFieldName('attribute');
+          if (obj && obj.text === 'self' && attr && attr.type === 'identifier') {
+            const fieldName = attr.text;
+            const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${fieldName}` : fieldName;
+
+            const fieldNode = this.createNode(
+              filePath,
+              NodeKind.Field,
+              fieldName,
+              attr.startPosition.row + 1,
+              attr.endPosition.row + 1,
+              attr.startPosition.column,
+              attr.endPosition.column,
+              {
+                qualifiedName,
+              }
+            );
+            nodes.push(fieldNode);
+            edges.push(this.createEdge(classNodeId, fieldNode.id, EdgeKind.Contains));
+          }
+        }
       } else if (child.type === 'if_statement' ||
                  child.type === 'for_statement' ||
                  child.type === 'while_statement' ||
@@ -754,7 +874,7 @@ export class PythonExtractor extends ExtractorBase {
         // Рекурсия в управляющие конструкции
         let inner = child.firstChild;
         while (inner) {
-          this.processFunctionBody(inner, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+          this.processFunctionBody(inner, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, classNodeId, qualifiedNamePrefix, isDjango);
           inner = inner.nextSibling;
         }
       }
@@ -892,5 +1012,120 @@ export class PythonExtractor extends ExtractorBase {
       return retType.text;
     }
     return undefined;
+  }
+
+  /** Проверяет, является ли класс базовым классом Django view. */
+  protected isDjangoViewBaseClass(node: any): boolean {
+    const superclasses = node.childForFieldName('superclasses');
+    if (!superclasses) return false;
+
+    const viewBases = new Set([
+      'View', 'APIView', 'ViewSet', 'ListView', 'DetailView',
+      'CreateView', 'UpdateView', 'DeleteView', 'TemplateView',
+      'RedirectView', 'GenericAPIView', 'ModelViewSet', 'ReadOnlyModelViewSet'
+    ]);
+
+    let sc = superclasses.firstChild;
+    while (sc) {
+      const scText = sc.text;
+      const baseName = this.extractBaseName(scText);
+      if (viewBases.has(baseName)) return true;
+      sc = sc.nextSibling;
+    }
+    return false;
+  }
+
+  /** Проверяет, является ли класс Django моделью. */
+  protected isDjangoModelClass(node: any): boolean {
+    const superclasses = node.childForFieldName('superclasses');
+    if (!superclasses) return false;
+
+    let sc = superclasses.firstChild;
+    while (sc) {
+      const scText = sc.text;
+      if (scText === 'models.Model') return true;
+      sc = sc.nextSibling;
+    }
+    return false;
+  }
+
+  /** Проверяет, является ли имя типом Django поля. */
+  protected isDjangoFieldType(name: string): boolean {
+    const fieldTypes = new Set([
+      'CharField', 'TextField', 'IntegerField', 'BooleanField',
+      'DateTimeField', 'DateField', 'TimeField', 'FloatField',
+      'DecimalField', 'EmailField', 'URLField', 'FileField',
+      'ImageField', 'ForeignKey', 'OneToOneField', 'ManyToManyField',
+      'JSONField', 'UUIDField', 'SlugField', 'PositiveIntegerField',
+      'PositiveSmallIntegerField', 'SmallIntegerField', 'BinaryField',
+      'NullBooleanField', 'AutoField', 'BigAutoField', 'DurationField'
+    ]);
+    return fieldTypes.has(name);
+  }
+
+  /** Извлекает имя базового класса из текста. */
+  protected extractBaseName(scText: string): string {
+    // Убираем путь модуля, например 'django.views.generic.base.View' -> 'View'
+    const dotIdx = scText.lastIndexOf('.');
+    if (dotIdx !== -1) {
+      return scText.slice(dotIdx + 1);
+    }
+    return scText;
+  }
+
+  /** Обрабатывает Django маршрут — path() или re_path(). */
+  protected processDjangoRoute(
+    node: any,
+    filePath: string,
+    content: string,
+    parentId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    errors: IExtractionError[]
+  ): void {
+    const args = node.childForFieldName('arguments');
+    if (!args) return;
+
+    const line = node.startPosition.row + 1;
+    const column = node.startPosition.column;
+
+    // Первый аргумент — URL-паттерн
+    const firstArg = args.firstChild;
+    if (!firstArg) return;
+
+    const urlPattern = firstArg.text;
+    const routeName = `route:${urlPattern}`;
+
+    const routeNode = this.createNode(
+      filePath,
+      NodeKind.Route,
+      routeName,
+      node.startPosition.row + 1,
+      node.endPosition.row + 1,
+      node.startPosition.column,
+      node.endPosition.column
+    );
+    nodes.push(routeNode);
+    edges.push(this.createEdge(parentId, routeNode.id, EdgeKind.Contains));
+
+    // Второй аргумент — ссылка на view
+    const secondArg = firstArg.nextSibling;
+    if (secondArg) {
+      const viewRef = secondArg.text;
+      edges.push(this.createEdge(routeNode.id, this.nodeId(filePath, NodeKind.Component, viewRef, 0), EdgeKind.Calls, {
+        metadata: { referenceName: viewRef },
+        line,
+        column,
+      }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        routeNode.id,
+        viewRef,
+        EdgeKind.Calls,
+        line,
+        column,
+        filePath
+      ));
+    }
   }
 }

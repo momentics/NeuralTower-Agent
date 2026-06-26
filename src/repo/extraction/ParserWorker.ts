@@ -4,7 +4,7 @@ import { fileURLToPath } from 'url';
 import {
   WORKER_RECYCLE_INTERVAL,
   PARSE_TIMEOUT_MS,
-  PARSE_TIMEOUT_PER_100KB,
+  PARSE_TIMEOUT_PER_10KB,
   IExtractionResult,
 } from '../ntgraph/Types';
 
@@ -14,6 +14,10 @@ interface PendingParse {
   resolve: (value: IExtractionResult) => void;
   reject: (reason: any) => void;
   timeout: NodeJS.Timeout;
+  filePath: string;
+  content: string;
+  frameworkNames: string[];
+  language: string;
 }
 
 /**
@@ -21,8 +25,7 @@ interface PendingParse {
  */
 function calcTimeout(content: string): number {
   const sizeKB = content.length / 1024;
-  const extraChunks = Math.floor(sizeKB / 100);
-  return PARSE_TIMEOUT_MS + extraChunks * PARSE_TIMEOUT_PER_100KB;
+  return PARSE_TIMEOUT_MS + (sizeKB / 10) * PARSE_TIMEOUT_PER_10KB;
 }
 
 /**
@@ -84,7 +87,15 @@ class ParserWorkerManager {
 
     // Ошибка в воркере.
     worker.on('error', (err) => {
+      const pending = Array.from(this.pendingParses.entries());
       this.rejectAllPending(err);
+      this.ensureWorker().then(() => {
+        this.loadGrammars(this.languages).then(() => {
+          for (const [id, req] of pending) {
+            this.retryParse(id, req);
+          }
+        });
+      });
     });
 
     // Обработка ответов от воркера.
@@ -187,6 +198,10 @@ class ParserWorkerManager {
           reject(reason);
         },
         timeout: timeoutId,
+        filePath,
+        content,
+        frameworkNames,
+        language,
       };
 
       this.pendingParses.set(requestId, pending);
@@ -204,7 +219,15 @@ class ParserWorkerManager {
   }
 
   private retryParse(id: number, req: PendingParse): void {
-    // Логика повтора обрабатывается механизмом повтора вызывающей стороны
+    // Повторная отправка запроса на парсинг в восстановленный воркер.
+    this.worker!.postMessage({
+      type: 'parse',
+      id,
+      filePath: req.filePath,
+      content: req.content,
+      frameworkNames: req.frameworkNames,
+      language: req.language,
+    });
   }
 
   private async parseWithRecovery(

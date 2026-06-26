@@ -289,11 +289,123 @@ export interface ParsedQuery {
 // Классы
 // =============================================================================
 
+/** Простое сопоставление glob-паттерна с путём файла. */
+function matchGlob(filePath: string, pattern: string): boolean {
+  // Разбираем паттерн на сегменты по разделителю
+  const pSegs = pattern.split('/');
+  const fSegs = filePath.split('/');
+  return matchGlobSegs(pSegs, 0, fSegs, 0);
+}
+
+/** Рекурсивное сопоставление сегментов паттерна и пути. */
+function matchGlobSegs(pSegs: string[], pi: number, fSegs: string[], fi: number): boolean {
+  // Паттерн исчерпан — путь тоже должен быть исчерпан
+  if (pi === pSegs.length) return fi === fSegs.length;
+
+  // Паттерн исчерпан, а путь нет — не совпадает
+  if (fi > fSegs.length) return false;
+
+  const pSeg = pSegs[pi];
+
+  // Паттерн ** — соответствует любому числу сегментов
+  if (pSeg === '**') {
+    // Пытаемся пропустить 0, 1, 2 ... сегментов пути
+    for (let skip = 0; skip <= fSegs.length - fi; skip++) {
+      if (matchGlobSegs(pSegs, pi + 1, fSegs, fi + skip)) return true;
+    }
+    return false;
+  }
+
+  // Текущий сегмент пути исчерпан, но паттерн ещё есть
+  if (fi === fSegs.length) return false;
+
+  // Сопоставляем текущий сегмент с учётом * и ?
+  if (segMatch(pSeg, fSegs[fi])) {
+    return matchGlobSegs(pSegs, pi + 1, fSegs, fi + 1);
+  }
+
+  return false;
+}
+
+/** Сопоставление одного сегмента с учётом * и ?. */
+function segMatch(pSeg: string, fSeg: string): boolean {
+  let pi = 0;
+  let fi = 0;
+  let starPi = -1;
+  let starFi = -1;
+
+  while (fi < fSeg.length) {
+    const pc = pSeg[pi];
+
+    if (pc === '*') {
+      // Запоминаем позицию звезды для бэктрекинга
+      starPi = pi + 1;
+      starFi = fi;
+      pi++;
+    } else if (pc === '?' || pc === fSeg[fi]) {
+      pi++;
+      fi++;
+    } else if (starPi !== -1) {
+      // Откат к последней звезде и продвигаем её на один символ
+      pi = starPi;
+      starFi++;
+      fi = starFi;
+    } else {
+      return false;
+    }
+  }
+
+  // Остаток паттерна может быть только звёздами
+  while (pi < pSeg.length && pSeg[pi] === '*') pi++;
+
+  return pi === pSeg.length;
+}
+
 /** Класс для управления игнорированием файлов с поддержкой вложенных репозиториев. */
 export class ScopeIgnore {
-  constructor(baseDir: string, embeddedRepoRoots: string[]) {}
-  shouldIgnore(filePath: string): boolean { return false; }
-  addPattern(pattern: string): void {}
+  private readonly _baseDir: string;
+  private readonly _embeddedRepoRoots: string[];
+  private readonly _customPatterns: Set<string>;
+
+  constructor(baseDir: string, embeddedRepoRoots: string[]) {
+    this._baseDir = baseDir.replace(/\\/g, '/');
+    this._embeddedRepoRoots = embeddedRepoRoots.map(r => r.replace(/\\/g, '/'));
+    this._customPatterns = new Set();
+  }
+
+  /** Проверяет, следует ли игнорировать указанный файл. */
+  shouldIgnore(filePath: string): boolean {
+    // Нормализуем разделители
+    const norm = filePath.replace(/\\/g, '/');
+
+    // Вложенные репозитории включаются — не игнорируем
+    for (const root of this._embeddedRepoRoots) {
+      if (norm.startsWith(root + '/') || norm === root) return false;
+    }
+
+    // Проверяем компоненты пути на совпадение с игнорируемыми директориями
+    const parts = norm.split('/');
+    for (const part of parts) {
+      if (DEFAULT_IGNORE_DIRS.has(part)) return true;
+    }
+
+    // Проверяем паттерны по умолчанию
+    for (const pat of DEFAULT_IGNORE_PATTERNS) {
+      if (matchGlob(norm, pat)) return true;
+    }
+
+    // Проверяем пользовательские паттерны
+    for (const pat of this._customPatterns) {
+      if (matchGlob(norm, pat)) return true;
+    }
+
+    return false;
+  }
+
+  /** Добавляет пользовательский паттерн игнорирования. */
+  addPattern(pattern: string): void {
+    this._customPatterns.add(pattern.replace(/\\/g, '/'));
+  }
 }
 
 // =============================================================================
@@ -489,8 +601,8 @@ export const WORKER_RECYCLE_INTERVAL = 250;
 /** Базовый таймаут парсинга (10 секунд). */
 export const PARSE_TIMEOUT_MS = 10_000;
 
-/** Доп. таймаут на каждые 100 КБ (10 секунд). */
-export const PARSE_TIMEOUT_PER_100KB = 10_000;
+/** Доп. таймаут на каждые 10 КБ (10 секунд). */
+export const PARSE_TIMEOUT_PER_10KB = 10_000;
 
 /** Размер батча для чтения файлов. */
 export const FILE_IO_BATCH_SIZE = 10;

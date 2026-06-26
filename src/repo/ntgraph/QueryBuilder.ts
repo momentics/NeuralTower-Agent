@@ -619,7 +619,7 @@ export class QueryBuilder {
   }
 
   /** Входящие межфайловые рёбра с данными о цели. */
-  getCrossFileIncomingEdgesWithTarget(filePath: string): Array<IEdge & { targetName: string; targetKind: NodeKind }> {
+  getCrossFileIncomingEdgesWithTarget(filePath: string): Array<{ edge: IEdge; targetKind: NodeKind; targetName: string }> {
     const sql = `SELECT e.*, tgt.name AS target_name, tgt.kind AS target_kind
       FROM edges e
       JOIN nodes tgt ON tgt.id = e.target
@@ -629,7 +629,7 @@ export class QueryBuilder {
         AND src.file_path != ?`;
     const rows = this.db.prepare(sql).all(filePath, filePath) as Array<EdgeRow & { target_name: string; target_kind: NodeKind }>;
     return rows.map(row => ({
-      ...rowToEdge(row),
+      edge: rowToEdge(row),
       targetName: row.target_name,
       targetKind: row.target_kind,
     }));

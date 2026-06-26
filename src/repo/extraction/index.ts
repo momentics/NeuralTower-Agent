@@ -81,6 +81,12 @@ export { detectFrameworks } from './FrameworkDetection';
 export { ExtractionOrchestrator, IndexOptions } from './Orchestrator';
 
 // =============================================================================
+// Gitignore
+// =============================================================================
+
+export { readGitignorePatterns, isValidUtf8, matchGitignorePattern } from './Gitignore';
+
+// =============================================================================
 // Типы из ntgraph
 // =============================================================================
 

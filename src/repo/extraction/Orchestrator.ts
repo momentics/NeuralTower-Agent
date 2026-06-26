@@ -279,7 +279,7 @@ function getGitVisibleFiles(rootDir: string): Set<string> | null {
 function getGitChangedFiles(rootDir: string): {
   modified: string[];
   added: string[];
-  deleted: string[];
+  removed: string[];
 } | null {
   try {
     const output = execFileSync(
@@ -297,7 +297,7 @@ function getGitChangedFiles(rootDir: string): {
 
     const modified: string[] = [];
     const added: string[] = [];
-    const deleted: string[] = [];
+    const removed: string[] = [];
 
     for (const line of output.split('\n')) {
       if (line.length < 4) continue;
@@ -306,7 +306,7 @@ function getGitChangedFiles(rootDir: string): {
       const rel = line.substring(3).replace(/\\/g, '/');
 
       if (statusCode.includes('D')) {
-        deleted.push(rel);
+        removed.push(rel);
       } else if (statusCode === '??') {
         if (isSourceFile(rel)) {
           added.push(rel);
@@ -318,7 +318,7 @@ function getGitChangedFiles(rootDir: string): {
       }
     }
 
-    return { modified, added, deleted };
+    return { modified, added, removed };
   } catch {
     return null;
   }
@@ -346,7 +346,7 @@ export class ExtractionOrchestrator {
   public getChangedFiles(): {
     modified: string[];
     added: string[];
-    deleted: string[];
+    removed: string[];
   } | null {
     return getGitChangedFiles(this.rootDir);
   }
@@ -615,10 +615,10 @@ export class ExtractionOrchestrator {
 
     if (gitChanges) {
       // Git-путь: быстрое обнаружение изменений
-      const { modified, added, deleted } = gitChanges;
+      const { modified, added, removed } = gitChanges;
 
       // Удалённые файлы — удаляем из БД
-      for (const filePath of deleted) {
+      for (const filePath of removed) {
         checkAbort(signal);
         const tracked = this.db.getFileByPath(filePath);
         if (tracked) {
@@ -1210,22 +1210,22 @@ export class ExtractionOrchestrator {
     return result;
   }
 
-  /**
-   * Сохраняет результат извлечения в БД.
-   *
-   * Алгоритм:
-   * 1. Проверка по хешу содержимого — пропускаем если не изменилось
-   * 2. Снэпшот входящих кросс-файловых рёбер
-   * 3. Удаление данных файла (FK cascade)
-   * 4. Фильтрация узлов
-   * 5. INSERT OR REPLACE узлов
-   * 6. Фильтрация рёбер
-   * 7. INSERT OR IGNORE рёбер
-   * 8. Восстановление входящих кросс-файловых рёбер
-   * 9. Вставка неразрешённых ссылок пакетом
-   * 10. Upsert записи файла
-   */
-  private storeExtractionResult(
+ /**
+    * Сохраняет результат извлечения в БД.
+    *
+    * Алгоритм:
+    * 1. Проверка по хешу содержимого — пропускаем если не изменилось
+    * 2. Снэпшот входящих кросс-файловых рёбер
+    * 3. Удаление данных файла (FK cascade)
+    * 4. Фильтрация узлов
+    * 5. INSERT OR REPLACE узлов
+    * 6. Фильтрация рёбер
+    * 7. INSERT OR IGNORE рёбер
+    * 8. Восстановление входящих кросс-файловых рёбер
+    * 9. Вставка неразрешённых ссылок пакетом
+    * 10. Upsert записи файла
+    */
+  public storeExtractionResult(
     fileRecord: IFileRecord,
     result: IExtractionResult,
   ): void {
@@ -1253,7 +1253,7 @@ export class ExtractionOrchestrator {
 
     // 4. Фильтрация узлов — оставляем только с заполненными обязательными полями
     const validNodes = result.nodes.filter(
-      (n) => n.id && n.kind && n.name && n.filePath && n.language,
+      (n) => n.id && n.kind && n.name && n.filePath && n.language && n.startLine != null && n.endLine != null,
     );
 
     // 5. INSERT OR REPLACE узлов
@@ -1288,13 +1288,13 @@ export class ExtractionOrchestrator {
         const newTargetId = newNodesByKindName.get(`${e.targetKind}\0${e.targetName}`);
         if (newTargetId) {
           reinserted.push({
-            source: e.source,
+            source: e.edge.source,
             target: newTargetId,
-            kind: e.kind,
-            metadata: e.metadata,
-            line: e.line,
-            column: e.column,
-            provenance: e.provenance,
+            kind: e.edge.kind,
+            metadata: e.edge.metadata,
+            line: e.edge.line,
+            column: e.edge.column,
+            provenance: e.edge.provenance,
           });
         }
       }

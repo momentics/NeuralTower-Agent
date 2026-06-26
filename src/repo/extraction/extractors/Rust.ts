@@ -113,6 +113,10 @@ export class RustExtractor extends ExtractorBase {
         this.processSourceFile(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
         break;
 
+      case 'const_item':
+        this.processConstItem(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
+        break;
+
       case 'struct_item':
         this.processStructItem(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
         break;
@@ -202,6 +206,66 @@ export class RustExtractor extends ExtractorBase {
     while (child) {
       this.processRustNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       child = child.nextSibling;
+    }
+  }
+
+  /** Обрабатывает объявление константы (Constant). */
+  protected processConstItem(
+    node: any,
+    filePath: string,
+    content: string,
+    parentId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    errors: IExtractionError[],
+    qualifiedNamePrefix: string
+  ): void {
+    const nameNode = node.childForFieldName('name');
+    if (!nameNode) return;
+
+    const name = nameNode.text;
+    const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}::${name}` : name;
+    const isPub = this.isPublic(node);
+    const docstring = this.extractDocstring(content, node.startPosition.row + 1);
+
+    const constNode = this.createNode(
+      filePath,
+      NodeKind.Constant,
+      name,
+      node.startPosition.row + 1,
+      node.endPosition.row + 1,
+      node.startPosition.column,
+      node.endPosition.column,
+      {
+        qualifiedName,
+        docstring,
+        visibility: isPub ? 'public' : undefined,
+        isExported: isPub,
+      }
+    );
+    nodes.push(constNode);
+    edges.push(this.createEdge(parentId, constNode.id, EdgeKind.Contains));
+
+    // Тип константы
+    const constType = node.childForFieldName('type');
+    if (constType) {
+      const typeName = this.extractTypeName(constType.text);
+      if (typeName) {
+        edges.push(this.createEdge(constNode.id, this.nodeId(filePath, NodeKind.Class, typeName, 0), EdgeKind.References, {
+          metadata: { referenceName: typeName },
+          line: constType.startPosition.row + 1,
+          column: constType.startPosition.column,
+        }));
+        unresolvedRefs.push(this.createUnresolvedRef(
+          constNode.id,
+          typeName,
+          EdgeKind.References,
+          constType.startPosition.row + 1,
+          constType.startPosition.column,
+          filePath
+        ));
+      }
     }
   }
 
