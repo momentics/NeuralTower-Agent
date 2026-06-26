@@ -1,5 +1,7 @@
+import { Language } from '../ntgraph/Types';
+
 // Карта соответствия расширений файлов языкам программирования
-export const EXTENSION_TO_LANGUAGE: Record<string, string> = {
+export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
   '.ts': 'typescript',
   '.tsx': 'typescript',
   '.js': 'typescript',
@@ -15,11 +17,11 @@ export const EXTENSION_TO_LANGUAGE: Record<string, string> = {
   '.cc': 'cpp',
   '.cxx': 'cpp',
   '.c++': 'cpp',
-  '.h': 'cpp',
+  '.h': 'c',
   '.hpp': 'cpp',
   '.hxx': 'cpp',
   '.h++': 'cpp',
-  '.c': 'cpp',
+  '.c': 'c',
   '.cs': 'csharp',
   '.rb': 'ruby',
   '.php': 'php',
@@ -66,7 +68,7 @@ export const EXTENSION_TO_LANGUAGE: Record<string, string> = {
  * @param content - Опциональное содержимое файла для проверки shebang.
  * @returns Название языка программирования.
  */
-export function detectLanguage(filePath: string, content?: string): string {
+export function detectLanguage(filePath: string, content?: string): Language {
   // Извлекаем расширение файла
   const ext = filePath.includes('.')
     ? filePath.slice(filePath.lastIndexOf('.'))
@@ -150,7 +152,7 @@ export function loadExtensionOverrides(rootDir: string): void {
       // Переопределяем стандартный маппинг
       for (const [ext, lang] of Object.entries(config.extensions)) {
         if (typeof lang === 'string') {
-          EXTENSION_TO_LANGUAGE[ext] = lang;
+          EXTENSION_TO_LANGUAGE[ext] = lang as Language;
         }
       }
     }

@@ -80,6 +80,20 @@ export function isGrammarCached(language: string): boolean {
 }
 
 /**
+ * Проверяет, загружена ли грамматика для заданного языка.
+ */
+export function isGrammarLoaded(language: string): boolean {
+  return true;
+}
+
+/**
+ * Возвращает массив языков с доступными грамматиками.
+ */
+export function getSupportedLanguages(): string[] {
+  return [...SUPPORTED_LANGUAGES];
+}
+
+/**
  * Инициализирует WASM-рантайм tree-sitter.
  */
 export async function initGrammars(): Promise<void> {

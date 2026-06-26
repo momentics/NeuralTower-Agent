@@ -62,6 +62,9 @@ export const EdgeKind = Object.freeze({
 
 export type EdgeKind = (typeof EdgeKind)[keyof typeof EdgeKind];
 
+/** Вид ссылки — вид ребра или функциональная ссылка. */
+export type ReferenceKind = EdgeKind | 'function_ref';
+
 /** Поддерживаемые языки (39 значений). */
 export const Language = Object.freeze([
   'typescript', 'javascript', 'tsx', 'jsx', 'python', 'go', 'rust', 'java',
@@ -118,7 +121,7 @@ export interface IEdge {
 export interface IFileRecord {
   path: string;
   contentHash: string;
-  language: string;
+  language: Language;
   size: number;
   modifiedAt: number;
   indexedAt: number;
@@ -130,11 +133,11 @@ export interface IFileRecord {
 export interface IUnresolvedReference {
   fromNodeId: string;
   referenceName: string;
-  referenceKind: EdgeKind | 'function_ref';
+  referenceKind: ReferenceKind;
   line: number;
   column: number;
   filePath?: string;
-  language?: string;
+  language?: Language;
   candidates?: string[];
 }
 
@@ -142,8 +145,7 @@ export interface IUnresolvedReference {
 export interface IExtractionResult {
   nodes: INode[];
   edges: IEdge[];
-  unresolvedReferences?: IUnresolvedReference[];
-  unresolvedRefs?: IUnresolvedReference[];
+  unresolvedReferences: IUnresolvedReference[];
   errors: IExtractionError[];
   durationMs: number;
 }
@@ -163,11 +165,6 @@ export interface IGraphStats {
   nodeCount: number;
   edgeCount: number;
   fileCount: number;
-  nodesByKind: Record<NodeKind, number>;
-  edgesByKind: Record<EdgeKind, number>;
-  filesByLanguage: Record<string, number>;
-  dbSizeBytes: number;
-  lastUpdated: number;
 }
 
 /** Параметры поиска. */

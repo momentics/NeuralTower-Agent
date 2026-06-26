@@ -12,12 +12,13 @@ import {
   IExtractionError,
   NodeKind,
   EdgeKind,
+  Language,
 } from '../../ntgraph/Types';
 import { ExtractorBase } from '../ExtractorBase';
 
 export class CSharpExtractor extends ExtractorBase {
-  public getLanguage(): string {
-    return 'c_sharp';
+  public getLanguage(): Language {
+    return 'csharp';
   }
 
   public getSupportedExtensions(): string[] {
@@ -25,8 +26,8 @@ export class CSharpExtractor extends ExtractorBase {
   }
 
   public extract(
-    filePath: string,
     content: string,
+    filePath: string,
     _frameworkNames?: string[]
   ): IExtractionResult {
     const nodes: INode[] = [];
@@ -49,12 +50,12 @@ export class CSharpExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
       }
 
       const root = tree.rootNode;
       if (root.type === 'compilation_unit' && root.childCount === 0) {
-        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
       }
 
       // Узел модуля
@@ -90,7 +91,7 @@ export class CSharpExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
   }
 
   /** Обрабатывает узлы AST для C#. */

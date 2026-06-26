@@ -32,6 +32,7 @@ import {
   MAX_FILE_SIZE,
   FILE_IO_BATCH_SIZE,
   SYNC_YIELD_INTERVAL,
+  SYNC_RECONCILE_YIELD_INTERVAL,
   SCAN_YIELD_INTERVAL,
   DEFAULT_IGNORE_DIRS,
   DEFAULT_IGNORE_PATTERNS,
@@ -43,6 +44,7 @@ import { discoverEmbeddedRepoRoots } from './EmbeddedRepos';
 import { IExtractor, ExtractorBase } from './ExtractorBase';
 import { TypeScriptExtractor } from './extractors/TypeScript';
 import { PythonExtractor } from './extractors/Python';
+import { parseFile as parseFileWorker, loadGrammars as loadGrammarsWorker, destroy as destroyWorker } from './ParserWorker';
 
 /** Параметры индексации. */
 export interface IndexOptions {
@@ -53,6 +55,43 @@ export interface IndexOptions {
   maxFileSize?: number;
   includeTests?: boolean;
   frameworkNames?: string[];
+}
+
+/** Карта расширение → язык. */
+const EXT_TO_LANGUAGE: Record<string, Language> = {
+  '.ts': 'typescript',
+  '.tsx': 'typescript',
+  '.js': 'javascript',
+  '.jsx': 'javascript',
+  '.mjs': 'javascript',
+  '.cjs': 'javascript',
+  '.py': 'python',
+  '.pyi': 'python',
+  '.go': 'go',
+  '.rs': 'rust',
+  '.java': 'java',
+  '.cpp': 'cpp',
+  '.cc': 'cpp',
+  '.cxx': 'cpp',
+  '.hpp': 'cpp',
+  '.h': 'cpp',
+  '.c': 'c',
+  '.cs': 'csharp',
+};
+
+/** Определяет язык по расширению файла. */
+function extToLanguage(filePath: string): Language {
+  const ext = path.extname(filePath).toLowerCase();
+  return EXT_TO_LANGUAGE[ext] ?? 'unknown';
+}
+
+/** Флаг: доступны ли воркеры для парсинга. */
+let PARSER_WORKER_AVAILABLE = false;
+try {
+  require.resolve('worker_threads');
+  PARSER_WORKER_AVAILABLE = true;
+} catch {
+  // Воркеры недоступны
 }
 
 /** Карта язык → экстрактор. */
@@ -302,6 +341,24 @@ export class ExtractionOrchestrator {
   }
 
   /**
+   * Получает изменённые файлы из git status.
+   */
+  public getChangedFiles(): {
+    modified: string[];
+    added: string[];
+    deleted: string[];
+  } | null {
+    return getGitChangedFiles(this.rootDir);
+  }
+
+  /**
+   * Вычисляет SHA-256 хеш содержимого.
+   */
+  public hashContent(content: string): string {
+    return hashContent(content);
+  }
+
+  /**
     * Полная индексация проекта.
     *
     * Алгоритм:
@@ -348,6 +405,22 @@ export class ExtractionOrchestrator {
 
       // Инициализация экстракторов
       ensureExtractors();
+
+      // Загрузка грамматик для воркера
+      if (PARSER_WORKER_AVAILABLE) {
+        const languages = new Set<string>();
+        for (const fp of files) {
+          const lang = extToLanguage(fp);
+          if (lang !== 'unknown') languages.add(lang);
+        }
+        if (languages.size > 0) {
+          try {
+            await loadGrammarsWorker([...languages]);
+          } catch {
+            // Игнорируем ошибки загрузки грамматик
+          }
+        }
+      }
 
       // Обработка батчами для параллельного чтения файлов
       for (let i = 0; i < files.length; i += FILE_IO_BATCH_SIZE) {
@@ -427,7 +500,11 @@ export class ExtractionOrchestrator {
           // Извлечение AST через экстрактор
           let result: IExtractionResult;
           try {
-            result = this.extractFile(filePath, content, language, frameworkNames);
+            if (PARSER_WORKER_AVAILABLE) {
+              result = await parseFileWorker(filePath, content, frameworkNames ?? [], language, [language]);
+            } else {
+              result = this.extractFile(filePath, content, language, frameworkNames);
+            }
           } catch (parseErr) {
             processed++;
             filesErrored++;
@@ -498,19 +575,27 @@ export class ExtractionOrchestrator {
         return this.abortResult(startTime, filesIndexed, filesSkipped, filesErrored, totalNodes, totalEdges, errors);
       }
       throw err;
+    } finally {
+      if (PARSER_WORKER_AVAILABLE) {
+        try {
+          await destroyWorker();
+        } catch {
+          // Игнорируем ошибки при уничтожении воркера
+        }
+      }
     }
   }
 
   /**
-   * Инкрементальная синхронизация.
-   *
-   * Алгоритм:
-   * 1. git status --porcelain --no-renames для обнаружения изменённых файлов
-   * 2. Для каждого изменённого файла: stat (размер, mtime) как префильтр
-   * 3. Сравнение по хешу содержимого только если stat изменился
-   * 4. Переизвлечение изменённых файлов, удаление удалённых
-   * 5. Кооперативная отдача каждые SYNC_YIELD_INTERVAL файлов
-   */
+    * Инкрементальная синхронизация.
+    *
+    * Алгоритм:
+    * 1. git status --porcelain --no-renames для обнаружения изменённых файлов
+    * 2. Для каждого изменённого файла: stat (размер, mtime) как префильтр
+    * 3. Сравнение по хешу содержимого только если stat изменился
+    * 4. Переизвлечение изменённых файлов, удаление удалённых
+    * 5. Кооперативная отдача каждые SYNC_RECONCILE_YIELD_INTERVAL файлов
+    */
   async sync(
     onProgress?: (progress: IIndexProgress) => void,
     signal?: AbortSignal,
@@ -600,7 +685,7 @@ export class ExtractionOrchestrator {
           changedFilePaths.push(tracked.path);
         }
 
-        if (++reconcileChecks % SYNC_YIELD_INTERVAL === 0) {
+        if (++reconcileChecks % SYNC_RECONCILE_YIELD_INTERVAL === 0) {
           await yieldToEventLoop();
         }
       }
@@ -609,7 +694,7 @@ export class ExtractionOrchestrator {
       for (const filePath of currentFiles) {
         checkAbort(signal);
 
-        if (++reconcileChecks % SYNC_YIELD_INTERVAL === 0) {
+        if (++reconcileChecks % SYNC_RECONCILE_YIELD_INTERVAL === 0) {
           await yieldToEventLoop();
         }
 
@@ -1119,7 +1204,7 @@ export class ExtractionOrchestrator {
     }
 
     const start = Date.now();
-    const result = extractor.extract(filePath, content, frameworkNames);
+    const result = extractor.extract(content, filePath, frameworkNames);
     result.durationMs = Date.now() - start;
 
     return result;
@@ -1220,7 +1305,7 @@ export class ExtractionOrchestrator {
     }
 
     // 9. Вставка неразрешённых ссылок пакетом
-    const unresolvedRefs = result.unresolvedReferences ?? result.unresolvedRefs ?? [];
+    const unresolvedRefs = result.unresolvedReferences;
     if (unresolvedRefs.length > 0) {
       const refsWithContext = unresolvedRefs
         .filter((ref) => insertedIds.has(ref.fromNodeId))
@@ -1328,7 +1413,7 @@ export class ExtractionOrchestrator {
     if (candidates.length === 0) return null;
 
     // Фильтруем по языку, если известен
-    const byLang = candidates.filter((c) => ref.language && c.language === ref.language);
+    const byLang = candidates.filter((c) => ref.language && c.language === (ref.language as Language));
     const pool = byLang.length > 0 ? byLang : candidates;
 
     // Фильтруем по виду узла, если referenceKind подсказывает

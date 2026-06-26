@@ -12,11 +12,12 @@ import {
   IExtractionError,
   NodeKind,
   EdgeKind,
+  Language,
 } from '../../ntgraph/Types';
 import { ExtractorBase } from '../ExtractorBase';
 
 export class DefaultExtractor extends ExtractorBase {
-  public getLanguage(): string {
+  public getLanguage(): Language {
     return 'unknown';
   }
 
@@ -25,8 +26,8 @@ export class DefaultExtractor extends ExtractorBase {
   }
 
   public extract(
-    filePath: string,
     content: string,
+    filePath: string,
     _frameworkNames?: string[]
   ): IExtractionResult {
     const nodes: INode[] = [];
@@ -66,7 +67,7 @@ export class DefaultExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
   }
 
   /** Извлекает функции по паттернам типа `func_name(`, `def func_name(` и т.д. */

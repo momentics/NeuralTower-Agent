@@ -17,8 +17,8 @@ import {
 
 /** Интерфейс экстрактора. */
 export interface IExtractor {
-  extract(filePath: string, content: string, frameworkNames?: string[]): IExtractionResult;
-  getLanguage(): string;
+  extract(content: string, filePath: string, frameworkNames?: string[]): IExtractionResult;
+ getLanguage(): Language;
   getSupportedExtensions(): string[];
 }
 
@@ -26,13 +26,13 @@ export interface IExtractor {
 export abstract class ExtractorBase implements IExtractor {
   /** Извлекает узлы, рёбра и неразрешённые ссылки из файла. */
   public abstract extract(
-    filePath: string,
     content: string,
+    filePath: string,
     frameworkNames?: string[]
   ): IExtractionResult;
 
   /** Возвращает имя языка. */
-  public abstract getLanguage(): string;
+  public abstract getLanguage(): Language;
 
   /** Возвращает список поддерживаемых расширений файлов. */
   public abstract getSupportedExtensions(): string[];

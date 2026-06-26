@@ -52,7 +52,7 @@ export function extractFromSource(
   }
 
   const start = Date.now();
-  const result = extractor.extract(filePath, content, frameworkNames);
+  const result = extractor.extract(content, filePath, frameworkNames);
   result.durationMs = Date.now() - start;
 
   return result;

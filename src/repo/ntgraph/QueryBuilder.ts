@@ -390,7 +390,7 @@ export class QueryBuilder {
   }
 
   /** Получение существующих ID узлов (для валидации рёбер). */
-  getExistingNodeIds(ids: readonly string[]): Set<string> {
+  getExistingNodeIds(ids: string[]): Set<string> {
     const out = new Set<string>();
     if (ids.length === 0) return out;
 
@@ -1206,7 +1206,7 @@ export class QueryBuilder {
   }
 
   /** Статистика графа. */
-  getStats(): Omit<IGraphStats, 'dbSizeBytes'> {
+  getStats(): { nodeCount: number; edgeCount: number; fileCount: number; nodesByKind: Record<NodeKind, number>; edgesByKind: Record<EdgeKind, number>; filesByLanguage: Record<string, number>; lastUpdated: number; } {
     const counts = this.db.prepare(`
       SELECT
         (SELECT COUNT(*) FROM nodes) AS node_count,

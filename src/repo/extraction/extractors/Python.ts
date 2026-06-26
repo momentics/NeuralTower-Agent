@@ -12,11 +12,12 @@ import {
   IExtractionError,
   NodeKind,
   EdgeKind,
+  Language,
 } from '../../ntgraph/Types';
 import { ExtractorBase } from '../ExtractorBase';
 
 export class PythonExtractor extends ExtractorBase {
-  public getLanguage(): string {
+  public getLanguage(): Language {
     return 'python';
   }
 
@@ -25,8 +26,8 @@ export class PythonExtractor extends ExtractorBase {
   }
 
   public extract(
-    filePath: string,
     content: string,
+    filePath: string,
     _frameworkNames?: string[]
   ): IExtractionResult {
     const nodes: INode[] = [];
@@ -49,7 +50,7 @@ export class PythonExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
       }
 
       const root = tree.rootNode;
@@ -87,7 +88,7 @@ export class PythonExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
   }
 
   /** Обрабатывает узлы AST для Python. */

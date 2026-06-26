@@ -12,11 +12,12 @@ import {
   IExtractionError,
   NodeKind,
   EdgeKind,
+  Language,
 } from '../../ntgraph/Types';
 import { ExtractorBase } from '../ExtractorBase';
 
 export class RustExtractor extends ExtractorBase {
-  public getLanguage(): string {
+  public getLanguage(): Language {
     return 'rust';
   }
 
@@ -25,8 +26,8 @@ export class RustExtractor extends ExtractorBase {
   }
 
   public extract(
-    filePath: string,
     content: string,
+    filePath: string,
     _frameworkNames?: string[]
   ): IExtractionResult {
     const nodes: INode[] = [];
@@ -49,12 +50,12 @@ export class RustExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
       }
 
       const root = tree.rootNode;
       if (root.type === 'ERROR') {
-        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
       }
 
       // Узел модуля
@@ -90,7 +91,7 @@ export class RustExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
   }
 
   /** Обрабатывает узлы AST для Rust. */

@@ -161,7 +161,7 @@ export class NtGraphDb {
   }
 
   /** Статистика графа. */
-  getStats(): IGraphStats {
+  getStats(): IGraphStats & { dbSizeBytes: number } {
     const base = this.qb.getStats();
     return {
       ...base,

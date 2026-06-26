@@ -12,11 +12,12 @@ import {
   IExtractionError,
   NodeKind,
   EdgeKind,
+  Language,
 } from '../../ntgraph/Types';
 import { ExtractorBase } from '../ExtractorBase';
 
 export class TypeScriptExtractor extends ExtractorBase {
-  public getLanguage(): string {
+  public getLanguage(): Language {
     return 'typescript';
   }
 
@@ -25,8 +26,8 @@ export class TypeScriptExtractor extends ExtractorBase {
   }
 
   public extract(
-    filePath: string,
     content: string,
+    filePath: string,
     _frameworkNames?: string[]
   ): IExtractionResult {
     const nodes: INode[] = [];
@@ -52,13 +53,13 @@ export class TypeScriptExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
       }
 
       const root = tree.rootNode;
       if (root.type === 'lexical_declaration' || root.type === 'statement_block') {
         // Пустой или повреждённый файл
-        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
       }
 
       // Узел модуля
@@ -94,7 +95,7 @@ export class TypeScriptExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
   }
 
   /** Обрабатывает узлы AST для TypeScript. */

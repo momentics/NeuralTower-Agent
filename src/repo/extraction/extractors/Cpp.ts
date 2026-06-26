@@ -13,11 +13,12 @@ import {
   IExtractionError,
   NodeKind,
   EdgeKind,
+  Language,
 } from '../../ntgraph/Types';
 import { ExtractorBase } from '../ExtractorBase';
 
 export class CppExtractor extends ExtractorBase {
-  public getLanguage(): string {
+  public getLanguage(): Language {
     return 'cpp';
   }
 
@@ -26,8 +27,8 @@ export class CppExtractor extends ExtractorBase {
   }
 
   public extract(
-    filePath: string,
     content: string,
+    filePath: string,
     _frameworkNames?: string[]
   ): IExtractionResult {
     const nodes: INode[] = [];
@@ -49,7 +50,7 @@ export class CppExtractor extends ExtractorBase {
           nodes, edges, unresolvedRefs, errors
         );
         if (result) {
-          return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+       return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
         }
       } else {
         // .c — только C, остальные — C++
@@ -68,7 +69,7 @@ export class CppExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+   return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
       }
 
       const root = tree.rootNode;
@@ -106,7 +107,7 @@ export class CppExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
+    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
   }
 
   /** Двойной парсинг для .h файлов: C++ сначала, затем C. */
