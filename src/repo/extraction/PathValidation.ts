@@ -3,6 +3,7 @@
  * Определяет, должен ли файл быть проиндексирован.
  */
 
+import fs from 'fs';
 import path from 'path';
 import { DEFAULT_IGNORE_DIRS, DEFAULT_IGNORE_PATTERNS, MAX_FILE_SIZE } from '../ntgraph/Types';
 
@@ -71,4 +72,60 @@ export function shouldIndexFile(
   }
 
   return true;
+}
+
+/**
+ * Защита от path traversal атак.
+ * Проверяет, что разрешённый путь находится внутри rootDir.
+ * Если путь выходит за пределы rootDir, бросает ошибку с кодом 'path_traversal'.
+ * Опция allowSymlinkEscape позволяет выходить за пределы через symlink (по умолчанию false).
+ */
+export function validatePathWithinRoot(
+  rootDir: string,
+  relativePath: string,
+  options?: { allowSymlinkEscape?: boolean },
+): void {
+  const resolved = path.resolve(rootDir, relativePath);
+
+  // Нормализуем rootDir для корректного сравнения
+  const normalizedRoot = path.resolve(rootDir);
+
+  // Проверяем, что путь находится внутри rootDir
+  if (!resolved.startsWith(normalizedRoot + path.sep) && resolved !== normalizedRoot) {
+    throw Object.assign(
+      new Error(`Обнаружен path traversal: ${resolved} находится вне ${normalizedRoot}`),
+      { code: 'path_traversal' },
+    );
+  }
+
+  // Если symlink escape запрещён, проверяем реальный путь
+  if (options?.allowSymlinkEscape !== true) {
+    try {
+      const realRoot = fs.realpathSync(normalizedRoot);
+      const realResolved = fs.realpathSync(resolved);
+
+      if (
+        !realResolved.startsWith(realRoot + path.sep) &&
+        realResolved !== realRoot
+      ) {
+        throw Object.assign(
+          new Error(`Обнаружен symlink escape: ${realResolved} находится вне ${realRoot}`),
+          { code: 'path_traversal' },
+        );
+      }
+    } catch (err: unknown) {
+      // Если ошибка не path_traversal, это может быть ошибка доступа — пропускаем
+      if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'path_traversal') {
+        throw err;
+      }
+    }
+  }
+}
+
+/**
+ * Нормализация пути: замена обратных слешей на прямые,
+ * разрешение '..' и '.' сегментов.
+ */
+export function normalizePath(filePath: string): string {
+  return path.normalize(filePath).replace(/\\/g, '/');
 }

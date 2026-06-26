@@ -49,7 +49,7 @@ export class JavaExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedRefs, errors };
+        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
       }
 
       const root = tree.rootNode;
@@ -87,7 +87,7 @@ export class JavaExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedRefs, errors };
+    return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
   }
 
   /** Обрабатывает узлы AST для Java. */

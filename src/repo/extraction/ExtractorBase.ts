@@ -12,6 +12,7 @@ import {
   IExtractionResult,
   IExtractionError,
   NodeKind,
+  Language,
 } from '../ntgraph/Types';
 
 /** Интерфейс экстрактора. */
@@ -84,7 +85,7 @@ export abstract class ExtractorBase implements IExtractor {
       name,
       qualifiedName: opts.qualifiedName ?? name,
       filePath,
-      language: this.getLanguage(),
+      language: this.getLanguage() as Language,
       startLine,
       endLine,
       startColumn,
@@ -177,7 +178,7 @@ export abstract class ExtractorBase implements IExtractor {
     const line = lines[lineIdx]?.trim();
     if (!line) return undefined;
 
-    // JSDoc / docstring patterns
+    // Паттерны JSDoc / docstring
     if (line.startsWith('/**') || line.startsWith('*') || line.startsWith('#')) {
       let docLines: string[] = [];
       let i = lineIdx;

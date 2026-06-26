@@ -24,9 +24,9 @@ describe("Migration", () => {
   let dbPath: string
   let db: SqliteDatabase
 
-  beforeAll(() => {
+  beforeAll(async () => {
     tmpDir = path.join(os.tmpdir(), `ntgraph-migration-test-${Date.now()}`)
-    fs.mkdir(tmpDir, { recursive: true })
+    await fs.mkdir(tmpDir, { recursive: true })
     dbPath = path.join(tmpDir, "ntgraph.db")
     const { db: sqliteDb } = createDatabase(dbPath)
     db = sqliteDb

@@ -49,7 +49,7 @@ export class CppExtractor extends ExtractorBase {
           nodes, edges, unresolvedRefs, errors
         );
         if (result) {
-          return { nodes, edges, unresolvedRefs, errors };
+          return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
         }
       } else {
         // .c — только C, остальные — C++
@@ -68,7 +68,7 @@ export class CppExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedRefs, errors };
+        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
       }
 
       const root = tree.rootNode;
@@ -106,7 +106,7 @@ export class CppExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedRefs, errors };
+    return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
   }
 
   /** Двойной парсинг для .h файлов: C++ сначала, затем C. */

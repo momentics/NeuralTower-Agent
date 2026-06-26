@@ -1,5 +1,5 @@
 // Карта соответствия расширений файлов языкам программирования
-export const EXTENSION_TO_LANGUAGE: Readonly<Record<string, string>> = Object.freeze({
+export const EXTENSION_TO_LANGUAGE: Record<string, string> = {
   '.ts': 'typescript',
   '.tsx': 'typescript',
   '.js': 'typescript',
@@ -21,7 +21,44 @@ export const EXTENSION_TO_LANGUAGE: Readonly<Record<string, string>> = Object.fr
   '.h++': 'cpp',
   '.c': 'cpp',
   '.cs': 'csharp',
-});
+  '.rb': 'ruby',
+  '.php': 'php',
+  '.swift': 'swift',
+  '.kt': 'kotlin',
+  '.kts': 'kotlin',
+  '.dart': 'dart',
+  '.scala': 'scala',
+  '.sc': 'scala',
+  '.lua': 'lua',
+  '.luau': 'lua',
+  '.m': 'objc',
+  '.r': 'r',
+  '.R': 'r',
+  '.yaml': 'yaml',
+  '.yml': 'yaml',
+  '.xml': 'xml',
+  '.properties': 'properties',
+  '.html': 'html',
+  '.htm': 'html',
+  '.css': 'css',
+  '.sql': 'sql',
+  '.json': 'json',
+  '.md': 'markdown',
+  '.sh': 'shell',
+  '.bash': 'shell',
+  '.zsh': 'shell',
+  '.toml': 'toml',
+  '.ini': 'ini',
+  '.svelte': 'svelte',
+  '.vue': 'vue',
+  '.astro': 'astro',
+  '.liquid': 'liquid',
+  '.pas': 'pascal',
+  '.pp': 'pascal',
+  '.twig': 'twig',
+  '.razor': 'razor',
+  '.cshtml': 'razor',
+};
 
 /**
  * Определяет язык программирования файла по расширению и содержимому.
@@ -52,4 +89,89 @@ export function detectLanguage(filePath: string, content?: string): string {
 
   // Язык не определён
   return 'unknown';
+}
+
+// Список языков, для которых есть tree-sitter экстракторы
+const SUPPORTED_LANGUAGES = ['typescript', 'python', 'go', 'rust', 'java', 'cpp', 'c', 'csharp'];
+
+// Языки, которые поддерживаются только на уровне файла (без символьной структуры)
+const FILE_LEVEL_ONLY_LANGUAGES = ['yaml', 'properties', 'xml'];
+
+/**
+ * Проверяет, является ли файл исходным (не бинарным, не генерированным).
+ */
+export function isSourceFile(filePath: string): boolean {
+  // Извлекаем расширение файла
+  const ext = filePath.includes('.')
+    ? filePath.slice(filePath.lastIndexOf('.'))
+    : '';
+
+  // Проверяем, есть ли расширение в карте языков
+  return ext in EXTENSION_TO_LANGUAGE;
+}
+
+/**
+ * Проверяет, поддерживается ли язык tree-sitter экстрактором.
+ */
+export function isLanguageSupported(lang: string): boolean {
+  // Возвращаем false для неизвестных или неподдерживаемых языков
+  if (lang === 'unknown') {
+    return false;
+  }
+
+  return SUPPORTED_LANGUAGES.includes(lang);
+}
+
+/**
+ * Проверяет, является ли языком только на уровне файла (без символьной структуры).
+ */
+export function isFileLevelOnlyLanguage(lang: string): boolean {
+  // Для yaml, properties, xml — файлов без символьной структуры
+  return FILE_LEVEL_ONLY_LANGUAGES.includes(lang);
+}
+
+/**
+ * Загружает переопределения расширений из ntgraph.json в корне проекта.
+ */
+export function loadExtensionOverrides(rootDir: string): void {
+  // Читаем ntgraph.json для кастомных маппингов расширений на языки
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const configPath = path.join(rootDir, 'ntgraph.json');
+
+    if (!fs.existsSync(configPath)) {
+      return;
+    }
+
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+
+    if (config.extensions && typeof config.extensions === 'object') {
+      // Переопределяем стандартный маппинг
+      for (const [ext, lang] of Object.entries(config.extensions)) {
+        if (typeof lang === 'string') {
+          EXTENSION_TO_LANGUAGE[ext] = lang;
+        }
+      }
+    }
+  } catch {
+    // Ошибка чтения конфигурации — игнорируем
+  }
+}
+
+/**
+ * Проверяет, загружена ли грамматика для заданного языка.
+ */
+export function isGrammarLoaded(language: string): boolean {
+  // Импортируем из модуля Grammars для проверки кэша
+  const { isGrammarCached } = require('./Grammars');
+  return isGrammarCached(language);
+}
+
+/**
+ * Возвращает массив языков с доступными tree-sitter грамматиками.
+ */
+export function getSupportedLanguages(): string[] {
+  // Возвращаем список языков с tree-sitter поддержкой
+  return [...SUPPORTED_LANGUAGES];
 }

@@ -1,14 +1,11 @@
 const { parentPort } = require('worker_threads');
 const path = require('path');
 
-// Экземпляр парсера tree-sitter.
 let parser = null;
-
-// Кэш загруженных грамматик.
 const grammarCache = new Map();
 
 /**
- * Инициализирует парсер tree-sitter.
+ * Инициализирует парсер tree-sitter с кэшированием.
  */
 async function initParser() {
   if (parser) return parser;
@@ -39,7 +36,7 @@ async function loadGrammar(language) {
 }
 
 /**
- * Возвращает вариант грамматики в зависимости от языка и пути к файлу.
+ * Возвращает вариант грамматики в зависимости от языка и расширения файла.
  */
 async function getGrammarVariant(language, filePath) {
   const ext = path.extname(filePath).toLowerCase();
@@ -69,42 +66,47 @@ async function getGrammarVariant(language, filePath) {
 }
 
 /**
- * Парсит содержимое файла и возвращает сериализованное AST.
+ * Загружает грамматики для всех указанных языков.
  */
-async function parseFile(language, content, filePath) {
-  const p = await initParser();
-  const grammar = await getGrammarVariant(language, filePath);
-
-  if (!grammar) {
-    throw new Error('Не удалось загрузить грамматику для языка: ' + language);
+async function loadGrammars(languages) {
+  for (const lang of languages) {
+    try {
+      await loadGrammar(lang);
+    } catch {
+      // Грамматика недоступна — пропускаем без ошибки
+    }
   }
-
-  p.setLanguage(grammar);
-  const tree = p.parse(content);
-
-  // Сериализуем дерево для передачи в основной поток.
-  return {
-    root: {
-      type: tree.rootNode.type,
-      start: tree.rootNode.startPosition,
-      end: tree.rootNode.endPosition,
-      childCount: tree.rootNode.childCount,
-    },
-    tree: tree.rootNode,
-  };
+  parentPort.postMessage({ type: 'grammars-loaded' });
 }
 
-// Обработка сообщений от основного потока.
+/**
+ * Парсит файл через tree-sitter и возвращает результат извлечения.
+ */
+async function parseFile(language, content, filePath, frameworkNames) {
+  const { extractFromSource } = await import(
+    path.join(__dirname, '..', 'tree-sitter.js')
+  );
+  // Сериализуем дерево для передачи в основной поток.
+  return extractFromSource(filePath, content, language, frameworkNames);
+}
+
 if (parentPort) {
   parentPort.on('message', async (msg) => {
     try {
-      if (msg.type === 'parse') {
-        const tree = await parseFile(msg.language, msg.content, msg.filePath);
+      if (msg.type === 'load-grammars') {
+        await loadGrammars(msg.languages);
+      } else if (msg.type === 'parse') {
+        const result = await parseFile(
+          msg.language,
+          msg.content,
+          msg.filePath,
+          msg.frameworkNames
+        );
 
         parentPort.postMessage({
-          type: 'result',
+          type: 'parse-result',
           id: msg.id,
-          tree: tree,
+          result: result,
         });
       }
     } catch (err) {

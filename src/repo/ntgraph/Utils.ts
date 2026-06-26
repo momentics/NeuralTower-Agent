@@ -87,7 +87,7 @@ export function rowToNode(row: NodeRow): INode {
     name: row.name,
     qualifiedName: row.qualified_name,
     filePath: row.file_path,
-    language: row.language,
+    language: row.language as Language,
     startLine: row.start_line,
     endLine: row.end_line,
     startColumn: row.start_column,
@@ -115,7 +115,7 @@ export function rowToEdge(row: EdgeRow): IEdge {
     metadata: row.metadata ? safeJsonParse(row.metadata, undefined) : undefined,
     line: row.line ?? undefined,
     column: row.col ?? undefined,
-    provenance: row.provenance ?? undefined,
+    provenance: (row.provenance ?? undefined) as IEdge['provenance'],
   };
 }
 
@@ -198,7 +198,7 @@ export function getStemVariants(term: string): string[] {
     }
   }
 
-  // -ies → -y (special case: "cities" → "cit" + "y")
+  // -ies → -y (особый случай: "cities" → "cit" + "y")
   if (term.endsWith('ies') && term.length >= 5) {
     variants.add(term.slice(0, -3) + 'y');
   }

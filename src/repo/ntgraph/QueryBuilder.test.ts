@@ -20,7 +20,7 @@ describe("QueryBuilder", () => {
     tmpDir = path.join(os.tmpdir(), `ntgraph-qb-test-${Date.now()}`)
     await fs.mkdir(tmpDir, { recursive: true })
     db = NtGraphDb.initialize({ projectRoot: tmpDir })
-    // Node for unresolved ref FK constraint
+    // Узел для ограничения внешнего ключа неразрешённой ссылки
     db.insertNode({
       id: "ref-node",
       kind: "function",
@@ -247,7 +247,7 @@ describe("QueryBuilder", () => {
   })
 
   it("gets outgoing edges with kind and provenance filter", () => {
-    db.insertEdge({ source: "node-3", target: "node-3", kind: "calls", provenance: "lsp" })
+    db.insertEdge({ source: "node-3", target: "node-3", kind: "calls", provenance: "tree-sitter" })
     const edges = db.getOutgoingEdges("node-3", undefined, "lsp")
     expect(edges.every((e) => e.provenance === "lsp")).toBe(true)
   })
@@ -330,7 +330,7 @@ describe("QueryBuilder", () => {
   })
 
   it("gets stale files", () => {
-    const stale = db.getStaleFiles(new Map([["src/models.ts", "oldhash"]]))
+    const stale = db.getStaleFiles()
     expect(stale.length).toBeGreaterThanOrEqual(1)
   })
 
@@ -502,7 +502,7 @@ describe("QueryBuilder", () => {
     expect(db.getNodeById("lru-0")).not.toBeNull()
   })
 
-  // ---- Batch chunking ----
+  // ---- Пакетное разделение на чанки ----
 
   it("batch getNodesByIds with >500 IDs", () => {
     const ids: string[] = []

@@ -84,7 +84,7 @@ export interface INode {
   name: string;
   qualifiedName: string;
   filePath: string;
-  language: string;
+  language: Language;
   startLine: number;
   endLine: number;
   startColumn: number;
@@ -111,7 +111,7 @@ export interface IEdge {
   metadata?: Record<string, unknown>;
   line?: number;
   column?: number;
-  provenance?: string;
+  provenance?: 'tree-sitter' | 'scip' | 'heuristic';
 }
 
 /** Запись о файле в БД. */
@@ -145,7 +145,7 @@ export interface IExtractionResult {
   unresolvedReferences?: IUnresolvedReference[];
   unresolvedRefs?: IUnresolvedReference[];
   errors: IExtractionError[];
-  durationMs?: number;
+  durationMs: number;
 }
 
 /** Ошибка извлечения. */
@@ -289,6 +289,17 @@ export interface ParsedQuery {
 }
 
 // =============================================================================
+// Классы
+// =============================================================================
+
+/** Класс для управления игнорированием файлов с поддержкой вложенных репозиториев. */
+export class ScopeIgnore {
+  constructor(baseDir: string, embeddedRepoRoots: string[]) {}
+  shouldIgnore(filePath: string): boolean { return false; }
+  addPattern(pattern: string): void {}
+}
+
+// =============================================================================
 // Константы
 // =============================================================================
 
@@ -348,101 +359,108 @@ export const LRU_CACHE_SIZE = 1000;
 
 /** Прогресс индексации. */
 export interface IIndexProgress {
-  phase: 'scanning' | 'parsing' | 'storing' | 'resolving';
   current: number;
   total: number;
-  currentFile?: string;
+  file: string;
+  phase: 'scanning' | 'parsing' | 'storing' | 'resolving';
+  durationMs: number;
 }
 
 /** Результат индексации. */
 export interface IIndexResult {
-  success: boolean;
-  filesIndexed: number;
-  filesSkipped: number;
-  filesErrored: number;
-  nodesCreated: number;
-  edgesCreated: number;
+  indexed: number;
+  updated: number;
+  removed: number;
   errors: IExtractionError[];
   durationMs: number;
 }
 
 /** Результат синхронизации. */
 export interface ISyncResult {
-  filesChecked: number;
-  filesAdded: number;
-  filesModified: number;
-  filesRemoved: number;
-  nodesUpdated: number;
+  added: number;
+  updated: number;
+  removed: number;
+  errors: IExtractionError[];
   durationMs: number;
-  changedFilePaths?: string[];
 }
 
 /** Контекст разрешения ссылок. */
 export interface IResolutionContext {
-  getNodesInFile(filePath: string): INode[];
+  getNodesByFile(filePath: string): INode[];
   getNodesByName(name: string): INode[];
-  getNodesByQualifiedName(qualifiedName: string): INode[];
+  getImportMappings(filePath: string): IImportMapping[];
+  getReExports(filePath: string): IReExport[];
+  getNodeById(id: string): INode | null;
   getNodesByKind(kind: NodeKind): INode[];
+  getNodesByQualifiedName(qualifiedName: string): INode[];
   getNodesByLowerName(lowerName: string): INode[];
-  getImportMappings(): IImportMapping[];
+  getSupertypes(nodeId: string): INode[];
+  getChildren(nodeId: string): INode[];
+  getAncestors(nodeId: string): INode[];
+  getIncomingEdges(nodeId: string): IEdge[];
+  getOutgoingEdges(nodeId: string): IEdge[];
+  getFileContent(filePath: string): string | null;
+  getFilePathFromNodeId(nodeId: string): string | null;
+  getLanguageFromNodeId(nodeId: string): Language | null;
+  getDetectedFrameworks(): string[];
   getAllFiles(): string[];
-  getProjectRoot(): string;
-  fileExists(relativePath: string): boolean;
-  readFile(relativePath: string): string | null;
-  listDirectories?(relativePath: string): string[];
 }
 
 /** Разрешённая ссылка. */
 export interface IResolvedRef {
-  fromNodeId: string;
-  toNodeId: string;
-  referenceKind: EdgeKind;
+  original: IUnresolvedReference;
+  targetNodeId: string;
+  confidence: number;
+  provenance: string;
 }
 
 /** Результат разрешения. */
 export interface IResolutionResult {
   resolved: IResolvedRef[];
   unresolved: IUnresolvedReference[];
+  durationMs: number;
 }
 
 /** Re-export из модуля. */
 export interface IReExport {
-  sourceFile: string;
-  exportedName: string;
-  originalName?: string;
+  sourcePath: string;
+  sourceName: string;
+  language: Language;
 }
 
 /** Карта алиасов импортов (tsconfig paths и т.д.). */
 export interface IAliasMap {
-  alias: string;
-  target: string;
+  [alias: string]: string[];
 }
 
 /** Информация о Go-модуле. */
 export interface IGoModule {
-  moduleName: string;
-  goModPath: string;
-  replaceMap?: Record<string, string>;
+  modulePath: string;
+  goVersion: string;
+  dependencies: Map<string, string>;
 }
 
 /** Пакеты workspace (monorepo). */
 export interface IWorkspacePackages {
-  packages: string[];
-  packageJsonPaths: Record<string, string>;
+  packages: Map<string, string>;
+  workspaces: string[];
 }
 
 /** Маппинг импорта на файл. */
 export interface IImportMapping {
-  importPath: string;
-  resolvedFile: string;
-  language: string;
+  sourcePath: string;
+  sourceName: string;
+  targetPath: string;
+  targetName: string;
+  language: Language;
 }
 
 /** Резолвер фреймворков. */
 export interface IFrameworkResolver {
   name: string;
-  detect(context: IResolutionContext): boolean;
-  resolveRefs(context: IResolutionContext): IResolvedRef[];
+  resolve(ref: IUnresolvedReference, context: IResolutionContext): IResolvedRef | null;
+  postExtract(context: IResolutionContext): INode[];
+  claimsReference?(name: string): boolean;
 }
 
 /** Паттерны для генерируемых файлов. */
@@ -485,6 +503,9 @@ export const SCAN_YIELD_INTERVAL = 100;
 
 /** Интервал cooperative yield при синхронизации. */
 export const SYNC_YIELD_INTERVAL = 1000;
+
+/** Интервал уступки event loop при sync (каждые 1000 файлов). */
+export const SYNC_RECONCILE_YIELD_INTERVAL = SYNC_YIELD_INTERVAL;
 
 /** Глубина поиска вложенных репозиториев. */
 export const EMBEDDED_REPO_SEARCH_DEPTH = 4;

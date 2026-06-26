@@ -26,14 +26,35 @@ export { DefaultExtractor } from './extractors/Default';
 // Детекция языка и грамматики
 // =============================================================================
 
-export { detectLanguage, EXTENSION_TO_LANGUAGE } from './LanguageDetector';
-export { loadGrammar, getGrammarName, getGrammarVariant } from './Grammars';
+// Экстракция
+export { extractFromSource } from './tree-sitter';
+
+// Языки
+export {
+  detectLanguage,
+  EXTENSION_TO_LANGUAGE,
+  isSourceFile,
+  isLanguageSupported,
+  isGrammarLoaded,
+  getSupportedLanguages,
+  isFileLevelOnlyLanguage,
+} from './LanguageDetector';
+
+// Грамматики
+export {
+  initGrammars,
+  loadGrammarsForLanguages,
+  loadAllGrammars,
+  loadGrammar,
+  getGrammarName,
+  getGrammarVariant,
+} from './Grammars';
 
 // =============================================================================
 // Парсер (worker-поток)
 // =============================================================================
 
-export { parseFile, destroy } from './ParserWorker';
+export { parseFile, destroy, loadGrammars } from './ParserWorker';
 
 // =============================================================================
 // Валидация путей
@@ -45,7 +66,7 @@ export { shouldIndexFile, isBinaryFile, isTooLarge, resolveRelativePath } from '
 // Вложенные репозитории
 // =============================================================================
 
-export { discoverEmbeddedRepos } from './EmbeddedRepos';
+export { discoverEmbeddedRepoRoots } from './EmbeddedRepos';
 
 // =============================================================================
 // Детекция фреймворков
@@ -57,7 +78,7 @@ export { detectFrameworks } from './FrameworkDetection';
 // Оркестратор индексации
 // =============================================================================
 
-export { IndexOrchestrator, IndexOptions } from './Orchestrator';
+export { ExtractionOrchestrator, IndexOptions } from './Orchestrator';
 
 // =============================================================================
 // Типы из ntgraph

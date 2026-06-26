@@ -25,6 +25,7 @@ import {
   IResolutionResult,
   IResolvedRef,
   IGraphStats,
+  IResolutionContext,
   NodeKind,
   EdgeKind,
   Language,
@@ -38,7 +39,7 @@ import {
 import { detectLanguage } from './LanguageDetector';
 import { shouldIndexFile, isBinaryFile, isTooLarge, resolveRelativePath } from './PathValidation';
 import { detectFrameworks } from './FrameworkDetection';
-import { discoverEmbeddedRepos } from './EmbeddedRepos';
+import { discoverEmbeddedRepoRoots } from './EmbeddedRepos';
 import { IExtractor, ExtractorBase } from './ExtractorBase';
 import { TypeScriptExtractor } from './extractors/TypeScript';
 import { PythonExtractor } from './extractors/Python';
@@ -134,7 +135,7 @@ async function scanDirectory(
       count++;
 
       if (count % SCAN_YIELD_INTERVAL === 0) {
-        onProgress?.({ phase: 'scanning', current: count, total: 0, currentFile: filePath });
+        onProgress?.({ phase: 'scanning', current: count, total: 0, file: filePath, durationMs: 0 });
         await yieldToEventLoop();
       }
     }
@@ -193,7 +194,7 @@ async function walkDirectory(
       countRef++;
 
       if (countRef % SCAN_YIELD_INTERVAL === 0) {
-        onProgress?.({ phase: 'scanning', current: countRef, total: 0, currentFile: relativePath });
+        onProgress?.({ phase: 'scanning', current: countRef, total: 0, file: relativePath, durationMs: 0 });
         await yieldToEventLoop();
       }
     }
@@ -290,31 +291,32 @@ function getGitChangedFiles(rootDir: string): {
  * Координирует сканирование файлов, определение языка, извлечение AST
  * через экстракторы, сохранение в БД и разрешение ссылок.
  */
-export class IndexOrchestrator {
+export class ExtractionOrchestrator {
+  private rootDir: string;
   private db: NtGraphDb;
-  private projectRoot: string;
-  private options: IndexOptions;
-  private detectedFrameworks: string[] | null = null;
+  private _detectedFrameworks: string[] | null = null;
 
-  constructor(db: NtGraphDb, projectRoot: string, options?: IndexOptions) {
+  constructor(rootDir: string, db: NtGraphDb) {
+    this.rootDir = rootDir;
     this.db = db;
-    this.projectRoot = projectRoot;
-    this.options = options ?? {};
   }
 
   /**
-   * Полная индексация проекта.
-   *
-   * Алгоритм:
-   * 1. Сканирование файлов (с учётом игнорируемых паттернов, размера, бинарности)
-   * 2. Для каждого файла: определение языка и извлечение AST через экстрактор
-   * 3. Сохранение результата через storeExtractionResult()
-   * 4. Отслеживание прогресса через onProgress
-   * 5. Поддержка AbortSignal — проверка перед каждым файлом, очистка при отмене
-   */
-  async index(): Promise<IIndexResult> {
+    * Полная индексация проекта.
+    *
+    * Алгоритм:
+    * 1. Сканирование файлов (с учётом игнорируемых паттернов, размера, бинарности)
+    * 2. Для каждого файла: определение языка и извлечение AST через экстрактор
+    * 3. Сохранение результата через storeExtractionResult()
+    * 4. Отслеживание прогресса через onProgress
+    * 5. Поддержка AbortSignal — проверка перед каждым файлом, очистка при отмене
+    */
+  async indexAll(
+    onProgress?: (progress: IIndexProgress) => void,
+    signal?: AbortSignal,
+    verbose?: boolean,
+  ): Promise<IIndexResult> {
     const startTime = Date.now();
-    const { onProgress, signal, ignoreDirs, ignorePatterns, maxFileSize } = this.options;
     const errors: IExtractionError[] = [];
     let filesIndexed = 0;
     let filesSkipped = 0;
@@ -322,24 +324,27 @@ export class IndexOrchestrator {
     let totalNodes = 0;
     let totalEdges = 0;
 
+    // Сброс кэша фреймворков при каждом запуске
+    this._detectedFrameworks = null;
+
     try {
       // Фаза 1: Сканирование файлов
-      onProgress?.({ phase: 'scanning', current: 0, total: 0 });
+      onProgress?.({ phase: 'scanning', current: 0, total: 0, file: '', durationMs: 0 });
 
-      const files = await scanDirectory(this.projectRoot, this.options);
+      const files = await scanDirectory(this.rootDir, { onProgress, signal });
 
       if (signal?.aborted) {
         return this.abortResult(startTime, filesIndexed, filesSkipped, filesErrored, totalNodes, totalEdges, errors);
       }
 
       // Обнаружение фреймворков
-      const frameworkNames = this.options.frameworkNames ?? await this.detectFrameworksInternal();
+      const frameworkNames = this.ensureDetectedFrameworks(files);
 
       // Фаза 2: Парсинг и извлечение
       const total = files.length;
       let processed = 0;
 
-      onProgress?.({ phase: 'parsing', current: 0, total });
+      onProgress?.({ phase: 'parsing', current: 0, total, file: '', durationMs: 0 });
 
       // Инициализация экстракторов
       ensureExtractors();
@@ -354,7 +359,7 @@ export class IndexOrchestrator {
         const fileContents = await Promise.all(
           batch.map(async (fp) => {
             try {
-              const fullPath = path.join(this.projectRoot, fp);
+              const fullPath = path.join(this.rootDir, fp);
               const stats = await fsp.stat(fullPath);
               const content = await fsp.readFile(fullPath, 'utf-8');
               return { filePath: fp, content, stats, error: null as Error | null };
@@ -372,7 +377,8 @@ export class IndexOrchestrator {
             phase: 'parsing',
             current: processed,
             total,
-            currentFile: filePath,
+            file: filePath,
+            durationMs: 0,
           });
 
           // Ошибка чтения
@@ -389,12 +395,11 @@ export class IndexOrchestrator {
           }
 
           // Проверка размера файла
-          const effectiveMaxSize = maxFileSize ?? MAX_FILE_SIZE;
-          if (isTooLarge(stats.size) || stats.size > effectiveMaxSize) {
+          if (isTooLarge(stats.size) || stats.size > MAX_FILE_SIZE) {
             processed++;
             filesSkipped++;
             errors.push({
-              message: `Файл превышает максимальный размер (${stats.size} > ${effectiveMaxSize})`,
+              message: `Файл превышает максимальный размер (${stats.size} > ${MAX_FILE_SIZE})`,
               filePath,
               severity: 'warning',
               code: 'size_exceeded',
@@ -437,9 +442,21 @@ export class IndexOrchestrator {
 
           processed++;
 
+          // Создание записи файла
+          const fileRecord: IFileRecord = {
+            path: filePath,
+            contentHash: hashContent(content),
+            language,
+            size: stats.size,
+            modifiedAt: stats.mtimeMs,
+            indexedAt: Date.now(),
+            nodeCount: result.nodes.length,
+            errors: result.errors.length > 0 ? result.errors : undefined,
+          };
+
           // Сохранение в БД
           if (result.nodes.length > 0 || result.errors.length === 0) {
-            this.storeExtractionResult(filePath, content, language, stats, result);
+            this.storeExtractionResult(fileRecord, result);
           }
 
           // Сбор ошибок извлечения
@@ -464,18 +481,15 @@ export class IndexOrchestrator {
       }
 
       // Финальный прогресс
-      onProgress?.({ phase: 'parsing', current: total, total });
+      onProgress?.({ phase: 'parsing', current: total, total, file: '', durationMs: 0 });
 
       // Отдача управления для флеша вывода
       await yieldToEventLoop();
 
       return {
-        success: filesIndexed > 0 || errors.filter((e) => e.severity === 'error').length === 0,
-        filesIndexed,
-        filesSkipped,
-        filesErrored,
-        nodesCreated: totalNodes,
-        edgesCreated: totalEdges,
+        indexed: filesIndexed,
+        updated: 0,
+        removed: 0,
         errors,
         durationMs: Date.now() - startTime,
       };
@@ -497,9 +511,11 @@ export class IndexOrchestrator {
    * 4. Переизвлечение изменённых файлов, удаление удалённых
    * 5. Кооперативная отдача каждые SYNC_YIELD_INTERVAL файлов
    */
-  async sync(): Promise<ISyncResult> {
+  async sync(
+    onProgress?: (progress: IIndexProgress) => void,
+    signal?: AbortSignal,
+  ): Promise<ISyncResult> {
     const startTime = Date.now();
-    const { onProgress, signal } = this.options;
     let filesChecked = 0;
     let filesAdded = 0;
     let filesModified = 0;
@@ -507,10 +523,10 @@ export class IndexOrchestrator {
     let nodesUpdated = 0;
     const changedFilePaths: string[] = [];
 
-    onProgress?.({ phase: 'scanning', current: 0, total: 0 });
+    onProgress?.({ phase: 'scanning', current: 0, total: 0, file: '', durationMs: 0 });
 
     // Пытаемся использовать git для быстрого обнаружения изменений
-    const gitChanges = getGitChangedFiles(this.projectRoot);
+    const gitChanges = getGitChangedFiles(this.rootDir);
 
     if (gitChanges) {
       // Git-путь: быстрое обнаружение изменений
@@ -531,7 +547,7 @@ export class IndexOrchestrator {
       // Изменённые и добавленные файлы — хеш-сравнение
       for (const filePath of [...modified, ...added]) {
         checkAbort(signal);
-        const fullPath = path.join(this.projectRoot, filePath);
+        const fullPath = path.join(this.rootDir, filePath);
 
         let content: string;
         try {
@@ -563,7 +579,7 @@ export class IndexOrchestrator {
       }
     } else {
       // Фолбэк: полное сравнение файловой системы с БД
-      const currentFiles = await scanDirectory(this.projectRoot, this.options);
+      const currentFiles = await scanDirectory(this.rootDir, { onProgress, signal });
       filesChecked = currentFiles.length;
       const currentSet = new Set(currentFiles);
 
@@ -578,7 +594,7 @@ export class IndexOrchestrator {
       for (const tracked of trackedFiles) {
         checkAbort(signal);
 
-        if (!currentSet.has(tracked.path) || !fs.existsSync(path.join(this.projectRoot, tracked.path))) {
+        if (!currentSet.has(tracked.path) || !fs.existsSync(path.join(this.rootDir, tracked.path))) {
           this.db.deleteFile(tracked.path);
           filesRemoved++;
           changedFilePaths.push(tracked.path);
@@ -597,7 +613,7 @@ export class IndexOrchestrator {
           await yieldToEventLoop();
         }
 
-        const fullPath = path.join(this.projectRoot, filePath);
+        const fullPath = path.join(this.rootDir, filePath);
         const tracked = trackedMap.get(filePath);
 
         // Префильтр: если размер и mtime совпадают, файл не изменился
@@ -641,13 +657,11 @@ export class IndexOrchestrator {
     }
 
     return {
-      filesChecked,
-      filesAdded,
-      filesModified,
-      filesRemoved,
-      nodesUpdated,
+      added: filesAdded,
+      updated: filesModified,
+      removed: filesRemoved,
+      errors: [],
       durationMs: Date.now() - startTime,
-      changedFilePaths: changedFilePaths.length > 0 ? changedFilePaths : undefined,
     };
   }
 
@@ -658,24 +672,26 @@ export class IndexOrchestrator {
    * по имени, квалифицированному имени и виду узла, создаёт рёбра
    * для разрешённых и оставляет неразрешённые.
    */
-  async resolveReferences(): Promise<IResolutionResult> {
-    const { onProgress, signal } = this.options;
+  async resolveReferences(
+    onProgress?: (progress: IIndexProgress) => void,
+    signal?: AbortSignal,
+  ): Promise<IResolutionResult> {
     const resolved: IResolvedRef[] = [];
     const unresolved: IUnresolvedReference[] = [];
 
-    onProgress?.({ phase: 'resolving', current: 0, total: 0 });
+    onProgress?.({ phase: 'resolving', current: 0, total: 0, file: '', durationMs: 0 });
 
     // Получаем все неразрешённые ссылки
     const allRefs = this.db.getUnresolvedReferences();
     const total = allRefs.length;
 
-    onProgress?.({ phase: 'resolving', current: 0, total });
+    onProgress?.({ phase: 'resolving', current: 0, total, file: '', durationMs: 0 });
 
     for (let i = 0; i < allRefs.length; i++) {
       checkAbort(signal);
 
       const ref = allRefs[i];
-      onProgress?.({ phase: 'resolving', current: i + 1, total });
+      onProgress?.({ phase: 'resolving', current: i + 1, total, file: '', durationMs: 0 });
 
       // Попытка разрешения по имени
       const candidates = this.db.getNodesByName(ref.referenceName);
@@ -691,13 +707,14 @@ export class IndexOrchestrator {
             source: ref.fromNodeId,
             target: best.id,
             kind: edgeKind,
-            provenance: 'resolver',
+            provenance: 'heuristic',
           });
 
           resolved.push({
-            fromNodeId: ref.fromNodeId,
-            toNodeId: best.id,
-            referenceKind: edgeKind,
+            original: ref,
+            targetNodeId: best.id,
+            confidence: 0.9,
+            provenance: 'heuristic',
           });
 
           // Удаляем неразрешённую ссылку
@@ -717,13 +734,14 @@ export class IndexOrchestrator {
           source: ref.fromNodeId,
           target: best.id,
           kind: edgeKind,
-          provenance: 'resolver',
+          provenance: 'heuristic',
         });
 
         resolved.push({
-          fromNodeId: ref.fromNodeId,
-          toNodeId: best.id,
-          referenceKind: edgeKind,
+          original: ref,
+          targetNodeId: best.id,
+          confidence: 0.95,
+          provenance: 'resolver',
         });
 
         this.db.deleteUnresolvedByNode(ref.fromNodeId);
@@ -734,19 +752,336 @@ export class IndexOrchestrator {
       unresolved.push(ref);
     }
 
-    onProgress?.({ phase: 'resolving', current: total, total });
+    onProgress?.({ phase: 'resolving', current: total, total, file: '', durationMs: 0 });
 
-    return { resolved, unresolved };
+    return { resolved, unresolved, durationMs: 0 };
+  }
+
+/**
+    * Статистика графа.
+    *
+    * Запрашивает данные из БД: количество узлов, рёбер, файлов,
+    * распределение по видам и языкам, размер БД.
+    */
+  async getStats(): Promise<IGraphStats> {
+    return this.db.getStats();
   }
 
   /**
-   * Статистика графа.
-   *
-   * Запрашивает данные из БД: количество узлов, рёбер, файлов,
-   * распределение по видам и языкам, размер БД.
-   */
-  async getStats(): Promise<IGraphStats> {
-    return this.db.getStats();
+    * Индексация конкретного списка файлов.
+    *
+    * Аналогично indexAll, но принимает список файлов вместо сканирования.
+    */
+  async indexFiles(filePaths: string[]): Promise<IIndexResult> {
+    const startTime = Date.now();
+    const errors: IExtractionError[] = [];
+    let filesIndexed = 0;
+    let filesSkipped = 0;
+    let filesErrored = 0;
+    let totalNodes = 0;
+    let totalEdges = 0;
+
+    this._detectedFrameworks = null;
+    const frameworkNames = this.ensureDetectedFrameworks(filePaths);
+
+    const total = filePaths.length;
+    let processed = 0;
+
+    ensureExtractors();
+
+    for (let i = 0; i < filePaths.length; i += FILE_IO_BATCH_SIZE) {
+      const batch = filePaths.slice(i, i + FILE_IO_BATCH_SIZE);
+
+      const fileContents = await Promise.all(
+        batch.map(async (fp) => {
+          try {
+            const fullPath = path.join(this.rootDir, fp);
+            const stats = await fsp.stat(fullPath);
+            const content = await fsp.readFile(fullPath, 'utf-8');
+            return { filePath: fp, content, stats, error: null as Error | null };
+          } catch (err) {
+            return { filePath: fp, content: null as string | null, stats: null as fs.Stats | null, error: err as Error };
+          }
+        }),
+      );
+
+      for (const { filePath, content, stats, error } of fileContents) {
+        // Ошибка чтения
+        if (error || content === null || stats === null) {
+          processed++;
+          filesErrored++;
+          errors.push({
+            message: `Ошибка чтения файла: ${error?.message ?? String(error)}`,
+            filePath,
+            severity: 'error',
+            code: 'read_error',
+          });
+          continue;
+        }
+
+        // Проверка размера файла
+        if (isTooLarge(stats.size) || stats.size > MAX_FILE_SIZE) {
+          processed++;
+          filesSkipped++;
+          continue;
+        }
+
+        // Проверка бинарности
+        const buffer = Buffer.from(content, 'utf-8');
+        if (isBinaryFile(buffer)) {
+          processed++;
+          filesSkipped++;
+          continue;
+        }
+
+        // Определение языка
+        const language = detectLanguage(filePath, content);
+
+        if (!isLanguageSupported(language)) {
+          processed++;
+          filesSkipped++;
+          continue;
+        }
+
+        // Извлечение AST через экстрактор
+        let result: IExtractionResult;
+        try {
+          result = this.extractFile(filePath, content, language, frameworkNames);
+        } catch (parseErr) {
+          processed++;
+          filesErrored++;
+          errors.push({
+            message: parseErr instanceof Error ? parseErr.message : String(parseErr),
+            filePath,
+            severity: 'error',
+            code: 'parse_error',
+          });
+          continue;
+        }
+
+        processed++;
+
+        // Создание записи файла
+        const fileRecord: IFileRecord = {
+          path: filePath,
+          contentHash: hashContent(content),
+          language,
+          size: stats.size,
+          modifiedAt: stats.mtimeMs,
+          indexedAt: Date.now(),
+          nodeCount: result.nodes.length,
+          errors: result.errors.length > 0 ? result.errors : undefined,
+        };
+
+        // Сохранение в БД
+        if (result.nodes.length > 0 || result.errors.length === 0) {
+          this.storeExtractionResult(fileRecord, result);
+        }
+
+        // Сбор ошибок извлечения
+        if (result.errors.length > 0) {
+          for (const err of result.errors) {
+            if (!err.filePath) err.filePath = filePath;
+          }
+          errors.push(...result.errors);
+        }
+
+        // Обновление счётчиков
+        if (result.nodes.length > 0) {
+          filesIndexed++;
+          totalNodes += result.nodes.length;
+          totalEdges += result.edges.length;
+        } else if (result.errors.some((e) => e.severity === 'error')) {
+          filesErrored++;
+        } else {
+          filesSkipped++;
+        }
+      }
+    }
+
+    return {
+      indexed: filesIndexed,
+      updated: 0,
+      removed: 0,
+      errors,
+      durationMs: Date.now() - startTime,
+    };
+  }
+
+  /**
+    * Индексация одного файла.
+    *
+    * Читает файл, определяет язык, извлекает AST, сохраняет результат.
+    */
+  async indexFile(relativePath: string): Promise<IExtractionResult> {
+    const fullPath = path.join(this.rootDir, relativePath);
+
+    let content: string;
+    let stats: fs.Stats;
+    try {
+      stats = await fsp.stat(fullPath);
+      content = await fsp.readFile(fullPath, 'utf-8');
+    } catch (err) {
+      return {
+        nodes: [],
+        edges: [],
+        unresolvedReferences: [],
+        errors: [{
+          message: err instanceof Error ? err.message : String(err),
+          filePath: relativePath,
+          severity: 'error',
+          code: 'read_error',
+        }],
+        durationMs: 0,
+      };
+    }
+
+    return this.indexFileWithContent(relativePath, content, {
+      size: stats.size,
+      mtimeMs: stats.mtimeMs,
+    });
+  }
+
+  /**
+    * Индексация файла с заранее прочитанным содержимым.
+    *
+    * Аналогично indexFile, но принимает содержимое и статистику напрямую
+    * (для пакетного чтения).
+    */
+  async indexFileWithContent(
+    relativePath: string,
+    content: string,
+    stats: { size: number; mtimeMs: number },
+  ): Promise<IExtractionResult> {
+    // Проверка размера файла
+    if (stats.size > MAX_FILE_SIZE) {
+      return {
+        nodes: [],
+        edges: [],
+        unresolvedReferences: [],
+        errors: [{
+          message: `Файл превышает максимальный размер (${stats.size} > ${MAX_FILE_SIZE})`,
+          filePath: relativePath,
+          severity: 'warning',
+          code: 'size_exceeded',
+        }],
+        durationMs: 0,
+      };
+    }
+
+    // Проверка бинарности
+    const buffer = Buffer.from(content, 'utf-8');
+    if (isBinaryFile(buffer)) {
+      return {
+        nodes: [],
+        edges: [],
+        unresolvedReferences: [],
+        errors: [],
+        durationMs: 0,
+      };
+    }
+
+    // Определение языка
+    const language = detectLanguage(relativePath, content);
+
+    if (!isLanguageSupported(language)) {
+      return {
+        nodes: [],
+        edges: [],
+        unresolvedReferences: [],
+        errors: [],
+        durationMs: 0,
+      };
+    }
+
+    ensureExtractors();
+
+    const frameworkNames = this._detectedFrameworks ?? undefined;
+
+    const start = Date.now();
+    const result = this.extractFile(relativePath, content, language, frameworkNames);
+    result.durationMs = Date.now() - start;
+
+    // Создание записи файла
+    const fileRecord: IFileRecord = {
+      path: relativePath,
+      contentHash: hashContent(content),
+      language,
+      size: stats.size,
+      modifiedAt: stats.mtimeMs,
+      indexedAt: Date.now(),
+      nodeCount: result.nodes.length,
+      errors: result.errors.length > 0 ? result.errors : undefined,
+    };
+
+    // Сохранение в БД
+    if (result.nodes.length > 0 || result.errors.length === 0) {
+      this.storeExtractionResult(fileRecord, result);
+    }
+
+    return result;
+  }
+
+  /**
+    * Построение контекста разрешения для детекции фреймворков.
+    *
+    * Создаёт объект, реализующий IResolutionContext, на основе списка файлов.
+    */
+  buildDetectionContext(files: string[]): IResolutionContext {
+    return {
+      getNodesByFile: (filePath: string) => this.db.getNodesByFile(filePath),
+      getNodesByName: (name: string) => this.db.getNodesByName(name),
+      getImportMappings: (_filePath: string) => [],
+      getReExports: (_filePath: string) => [],
+      getNodeById: (id: string) => this.db.getNodeById(id),
+      getNodesByKind: (kind: NodeKind) => this.db.getNodesByKind(kind),
+      getNodesByQualifiedName: (qualifiedName: string) => this.db.getNodesByQualifiedNameExact(qualifiedName),
+      getNodesByLowerName: (lowerName: string) => this.db.getNodesByLowerName(lowerName),
+      getSupertypes: (nodeId: string) => {
+        const node = this.db.getNodeById(nodeId);
+        if (!node) return [];
+        const edges = this.db.getIncomingEdges(nodeId, ['extends', 'implements']);
+        return edges.map((e) => this.db.getNodeById(e.source)).filter((n): n is INode => n !== null);
+      },
+      getChildren: (nodeId: string) => {
+        const edges = this.db.getOutgoingEdges(nodeId, ['contains']);
+        return edges.map((e) => this.db.getNodeById(e.target)).filter((n): n is INode => n !== null);
+      },
+      getAncestors: (nodeId: string) => {
+        const edges = this.db.getIncomingEdges(nodeId, ['contains']);
+        return edges.map((e) => this.db.getNodeById(e.source)).filter((n): n is INode => n !== null);
+      },
+      getIncomingEdges: (nodeId: string) => this.db.getIncomingEdges(nodeId),
+      getOutgoingEdges: (nodeId: string) => this.db.getOutgoingEdges(nodeId),
+      getFileContent: (_filePath: string) => null,
+      getFilePathFromNodeId: (nodeId: string) => {
+        const node = this.db.getNodeById(nodeId);
+        return node?.filePath ?? null;
+      },
+      getLanguageFromNodeId: (nodeId: string) => {
+        const node = this.db.getNodeById(nodeId);
+        return (node?.language as Language) ?? null;
+      },
+      getDetectedFrameworks: () => this.ensureDetectedFrameworks(files),
+      getAllFiles: () => files,
+    };
+  }
+
+  /**
+    * Обеспечивает детекцию фреймворков с кэшированием результата.
+    *
+    * Кэш сбрасывается при каждом вызове indexAll.
+    */
+  ensureDetectedFrameworks(files?: string[]): string[] {
+    if (this._detectedFrameworks) return this._detectedFrameworks;
+
+    try {
+      this._detectedFrameworks = detectFrameworks(files ?? []);
+    } catch {
+      this._detectedFrameworks = [];
+    }
+
+    return this._detectedFrameworks;
   }
 
   // ===================================================================
@@ -806,13 +1141,12 @@ export class IndexOrchestrator {
    * 10. Upsert записи файла
    */
   private storeExtractionResult(
-    filePath: string,
-    content: string,
-    language: string,
-    stats: fs.Stats,
+    fileRecord: IFileRecord,
     result: IExtractionResult,
   ): void {
-    const contentHash = hashContent(content);
+    const filePath = fileRecord.path;
+    const contentHash = fileRecord.contentHash;
+    const language = fileRecord.language;
 
     // 1. Проверка по хешу — пропускаем если не изменилось
     const existingFile = this.db.getFileByPath(filePath);
@@ -902,18 +1236,12 @@ export class IndexOrchestrator {
     }
 
     // 10. Upsert записи файла
-    const fileRecord: IFileRecord = {
-      path: filePath,
-      contentHash,
-      language,
-      size: stats.size,
-      modifiedAt: stats.mtimeMs,
+    this.db.upsertFile({
+      ...fileRecord,
       indexedAt: Date.now(),
       nodeCount: result.nodes.length,
-      errors: result.errors.length > 0 ? result.errors : undefined,
-    };
-
-    this.db.upsertFile(fileRecord);
+      errors: result.errors.length > 0 ? result.errors : fileRecord.errors,
+    });
   }
 
   /**
@@ -926,7 +1254,7 @@ export class IndexOrchestrator {
   ): Promise<void> {
     checkAbort(signal);
 
-    const fullPath = path.join(this.projectRoot, filePath);
+    const fullPath = path.join(this.rootDir, filePath);
 
     let content: string;
     let stats: fs.Stats;
@@ -949,32 +1277,43 @@ export class IndexOrchestrator {
 
     ensureExtractors();
 
-    const frameworkNames = this.options.frameworkNames ?? this.detectedFrameworks ?? undefined;
+    const frameworkNames = this._detectedFrameworks ?? undefined;
 
     try {
       const result = this.extractFile(filePath, content, language, frameworkNames);
 
+      const fileRecord: IFileRecord = {
+        path: filePath,
+        contentHash: hashContent(content),
+        language,
+        size: stats.size,
+        modifiedAt: stats.mtimeMs,
+        indexedAt: Date.now(),
+        nodeCount: result.nodes.length,
+        errors: result.errors.length > 0 ? result.errors : undefined,
+      };
+
       if (result.nodes.length > 0 || result.errors.length === 0) {
-        this.storeExtractionResult(filePath, content, language, stats, result);
+        this.storeExtractionResult(fileRecord, result);
       }
     } catch {
       // Ошибка парсинга — пропускаем файл
     }
   }
 
-  /**
-   * Обнаружение фреймворков в проекте.
-   */
-  private async detectFrameworksInternal(): Promise<string[]> {
-    if (this.detectedFrameworks) return this.detectedFrameworks;
+ /**
+    * Обнаружение фреймворков в проекте.
+    */
+  private detectFrameworksInternal(): string[] {
+    if (this._detectedFrameworks) return this._detectedFrameworks;
 
     try {
-      this.detectedFrameworks = await detectFrameworks(this.projectRoot);
+      this._detectedFrameworks = detectFrameworks([]);
     } catch {
-      this.detectedFrameworks = [];
+      this._detectedFrameworks = [];
     }
 
-    return this.detectedFrameworks;
+    return this._detectedFrameworks;
   }
 
   /**
@@ -1033,19 +1372,16 @@ export class IndexOrchestrator {
   private abortResult(
     startTime: number,
     filesIndexed: number,
-    filesSkipped: number,
-    filesErrored: number,
-    totalNodes: number,
-    totalEdges: number,
+    _filesSkipped: number,
+    _filesErrored: number,
+    _totalNodes: number,
+    _totalEdges: number,
     errors: IExtractionError[],
   ): IIndexResult {
     return {
-      success: false,
-      filesIndexed,
-      filesSkipped,
-      filesErrored,
-      nodesCreated: totalNodes,
-      edgesCreated: totalEdges,
+      indexed: filesIndexed,
+      updated: 0,
+      removed: 0,
       errors: [{ message: 'Операция отменена', severity: 'error', filePath: '', code: 'read_error' }, ...errors],
       durationMs: Date.now() - startTime,
     };

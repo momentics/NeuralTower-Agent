@@ -8,7 +8,7 @@
 import type { ICodeChunk, ChunkNodeKind } from "./ChunkTypes"
 import type { IFtsResult, IFullTextSearch } from "./FullTextSearch"
 import { NtGraphDb } from "./ntgraph"
-import type { INode, NodeKind } from "./ntgraph/Types"
+import type { INode, NodeKind, Language } from "./ntgraph/Types"
 
 /** Маппинг ChunkNodeKind → NodeKind. */
 const CHUNK_KIND_TO_NODE_KIND: Record<ChunkNodeKind, NodeKind> = {
@@ -49,7 +49,7 @@ function chunkToNode(chunk: ICodeChunk): INode {
     name: chunk.symbolName ?? chunk.id,
     qualifiedName,
     filePath: chunk.filePath,
-    language: chunk.language,
+    language: chunk.language as Language,
     startLine: chunk.startLine,
     endLine: chunk.endLine,
     startColumn: 0,

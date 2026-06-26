@@ -66,7 +66,7 @@ export class DefaultExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedRefs, errors };
+    return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
   }
 
   /** Извлекает функции по паттернам типа `func_name(`, `def func_name(` и т.д. */

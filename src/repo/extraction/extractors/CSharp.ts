@@ -49,12 +49,12 @@ export class CSharpExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedRefs, errors };
+        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
       }
 
       const root = tree.rootNode;
       if (root.type === 'compilation_unit' && root.childCount === 0) {
-        return { nodes, edges, unresolvedRefs, errors };
+        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
       }
 
       // Узел модуля
@@ -90,7 +90,7 @@ export class CSharpExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedRefs, errors };
+    return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
   }
 
   /** Обрабатывает узлы AST для C#. */

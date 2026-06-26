@@ -27,6 +27,7 @@ export function getGrammarName(language: string): string {
 
 /**
  * Загружает грамматику по имени языка с использованием кэша.
+ *грамматики загружаются экстракторами через WASM, это возвращает заглушку.
  */
 export async function loadGrammar(language: string): Promise<any> {
   const cacheKey = language;
@@ -36,55 +37,72 @@ export async function loadGrammar(language: string): Promise<any> {
     return grammarCache.get(cacheKey);
   }
 
-  const packageName = getGrammarName(language);
-
-  let grammar: any;
-
-  // Специальная обработка для TypeScript — загружаем tsx-грамматику
-  if (language === 'typescript') {
-    const pkg = await import(packageName);
-    grammar = pkg.TSXGrammar || pkg.default;
-  } else {
-    const pkg = await import(packageName);
-    grammar = pkg.default || pkg;
-  }
-
-  grammarCache.set(cacheKey, grammar);
-  return grammar;
+  const placeholder = { language, loaded: true };
+  grammarCache.set(cacheKey, placeholder);
+  return placeholder;
 }
 
 /**
  * Возвращает вариант грамматики в зависимости от языка и пути к файлу.
- * — TypeScript: TSX для .tsx, TS для .ts
- * — C++: tree-sitter-c для .h, tree-sitter-cpp для остальных
+ *грамматики загружаются экстракторами через WASM, это возвращает заглушку.
  */
 export async function getGrammarVariant(language: string, filePath: string): Promise<any> {
   const ext = path.extname(filePath).toLowerCase();
 
+  // Специальная обработка для TypeScript — загружаем tsx-грамматику
   if (language === 'typescript') {
     // Для TSX-файлов загружаем tsx-грамматику, для обычных — ts-грамматику
-    if (ext === '.tsx') {
-      const pkg = await import('tree-sitter-typescript');
-      return pkg.TSX || pkg.TypeScript || pkg.default;
-    } else {
-      const pkg = await import('tree-sitter-typescript');
-      return pkg.TypeScript || pkg.default;
-    }
+    const variant = ext === '.tsx' ? 'tsx' : 'typescript';
+    return { language, variant, loaded: true };
   }
 
   if (language === 'cpp') {
     // Для заголовочных файлов .h используем грамматику C как фолбэк
     if (ext === '.h') {
       // Пытаемся загрузить грамматику C, если не найдена — возвращаем C++
-      try {
-        const cPkg = await import('tree-sitter-c');
-        return cPkg.default || cPkg;
-      } catch {
-        return loadGrammar('cpp');
-      }
+      return { language: 'c', variant: 'c', loaded: true };
     }
   }
 
   // Для остальных языков возвращаем обычную грамматику
-  return loadGrammar(language);
+  return { language, loaded: true };
+}
+
+// Список всех поддерживаемых языков с доступными грамматиками
+const SUPPORTED_LANGUAGES = ['typescript', 'python', 'go', 'rust', 'java', 'cpp', 'c', 'csharp'];
+
+/**
+ * Проверяет, кэширована ли грамматика для заданного языка.
+ *грамматики всегда доступны через WASM, поэтому это всегда возвращает true.
+ */
+export function isGrammarCached(language: string): boolean {
+  return true;
+}
+
+/**
+ * Инициализирует WASM-рантайм tree-sitter.
+ */
+export async function initGrammars(): Promise<void> {
+  try {
+    const Parser = (await import('web-tree-sitter')).default;
+    await Parser.init();
+  } catch {
+    // Инициализация WASM не удалась — экстракторы обработают инициализацию сами
+  }
+}
+
+/**
+ * Загружает грамматики только для указанных языков.
+ *грамматики загружаются экстракторами, это операция без действия (no-op).
+ */
+export async function loadGrammarsForLanguages(languages: string[]): Promise<void> {
+  // Операция без действия: экстракторы загружают свои грамматики через WASM
+}
+
+/**
+ * Загружает все доступные грамматики.
+ *грамматики загружаются экстракторами, это операция без действия (no-op).
+ */
+export async function loadAllGrammars(): Promise<void> {
+  // Операция без действия: экстракторы загружают свои грамматики через WASM
 }

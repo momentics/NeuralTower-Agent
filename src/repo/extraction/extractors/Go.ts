@@ -49,13 +49,13 @@ export class GoExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedRefs, errors };
+        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
       }
 
       const root = tree.rootNode;
       if (!root || root.type === 'translation_unit') {
         // Пустой файл
-        return { nodes, edges, unresolvedRefs, errors };
+        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
       }
 
       // Узел модуля
@@ -91,7 +91,7 @@ export class GoExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedRefs, errors };
+    return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
   }
 
   /** Обрабатывает узлы AST для Go. */

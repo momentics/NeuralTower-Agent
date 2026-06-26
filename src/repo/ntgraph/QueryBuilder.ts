@@ -5,6 +5,8 @@
  * Batch-запросы — чанки по 500 (SQLITE_PARAM_CHUNK_SIZE).
  */
 
+import * as fs from 'fs';
+import * as crypto from 'crypto';
 import { SqliteDatabase, SqliteStatement } from './Adapter';
 import {
   NodeKind,
@@ -316,7 +318,7 @@ export class QueryBuilder {
   }
 
   /** Удаление всех узлов файла. */
-  deleteNodesByFile(filePath: string): void {
+  deleteNodesByFile(filePath: string): number {
     if (!this.stmts.deleteNodesByFile) {
       this.stmts.deleteNodesByFile = this.db.prepare('DELETE FROM nodes WHERE file_path = ?');
     }
@@ -326,7 +328,8 @@ export class QueryBuilder {
         this.nodeCache.delete(id);
       }
     }
-    this.stmts.deleteNodesByFile.run(filePath);
+    const result = this.stmts.deleteNodesByFile.run(filePath);
+    return result.changes;
   }
 
   /** Получение узла по ID (с LRU-кэшем). */
@@ -387,7 +390,7 @@ export class QueryBuilder {
   }
 
   /** Получение существующих ID узлов (для валидации рёбер). */
-  private getExistingNodeIds(ids: readonly string[]): Set<string> {
+  getExistingNodeIds(ids: readonly string[]): Set<string> {
     const out = new Set<string>();
     if (ids.length === 0) return out;
 
@@ -824,16 +827,22 @@ export class QueryBuilder {
     return row?.last ?? null;
   }
 
-  /** Устаревшие файлы (хеш изменился). Без параметров — все файлы. С параметром — сравнение с переданными хешами. */
-  getStaleFiles(currentHashes?: Map<string, string>): IFileRecord[] {
+  /** Устаревшие файлы — хеш изменился с момента индексации. Сравнивает с текущим состоянием файловой системы. */
+  getStaleFiles(): IFileRecord[] {
     const files = this.getAllFiles();
-    if (!currentHashes) {
-      return files;
+    const stale: IFileRecord[] = [];
+    for (const file of files) {
+      try {
+        const content = fs.readFileSync(file.path, 'utf-8');
+        const currentHash = crypto.createHash('sha256').update(content).digest('hex');
+        if (currentHash !== file.contentHash) {
+          stale.push(file);
+        }
+      } catch {
+        stale.push(file);
+      }
     }
-    return files.filter((f) => {
-      const currentHash = currentHashes.get(f.path);
-      return currentHash && currentHash !== f.contentHash;
-    });
+    return stale;
   }
 
   /** Все пути файлов (легковесный запрос). */

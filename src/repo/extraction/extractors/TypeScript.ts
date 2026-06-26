@@ -52,13 +52,13 @@ export class TypeScriptExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedRefs, errors };
+        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
       }
 
       const root = tree.rootNode;
       if (root.type === 'lexical_declaration' || root.type === 'statement_block') {
         // Пустой или повреждённый файл
-        return { nodes, edges, unresolvedRefs, errors };
+        return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
       }
 
       // Узел модуля
@@ -94,7 +94,7 @@ export class TypeScriptExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedRefs, errors };
+    return { nodes, edges, unresolvedRefs, errors, durationMs: 0 };
   }
 
   /** Обрабатывает узлы AST для TypeScript. */
@@ -329,7 +329,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     qualifiedNamePrefix: string
   ): void {
     const nameNode = node.childForFieldName('name');
-    const name = nameNode ? nameNode.text : 'AnonymousClass';
+    const name = nameNode ? nameNode.text : 'АнонимныйКласс';
     const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${name}` : name;
     const isAbstract = this.hasModifier(node, 'abstract');
     const decorators = this.extractDecorators(node, content);
@@ -437,7 +437,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     qualifiedNamePrefix: string
   ): void {
     const nameNode = node.childForFieldName('name');
-    const name = nameNode ? nameNode.text : (node.type === 'arrow_function' ? 'ArrowFunction' : 'AnonymousFunction');
+    const name = nameNode ? nameNode.text : (node.type === 'arrow_function' ? 'СтрелочнаяФункция' : 'АнонимнаяФункция');
     const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${name}` : name;
     const isAsync = this.hasModifier(node, 'async');
     const signature = this.extractFunctionSignature(node, content);

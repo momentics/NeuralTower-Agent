@@ -189,8 +189,8 @@ export class NtGraphDb {
     this.qb.deleteNode(id);
   }
 
-  deleteNodesByFile(filePath: string): void {
-    this.qb.deleteNodesByFile(filePath);
+  deleteNodesByFile(filePath: string): number {
+    return this.qb.deleteNodesByFile(filePath);
   }
 
   getNodeById(id: string): INode | null {
@@ -314,8 +314,8 @@ export class NtGraphDb {
     return this.qb.getLastIndexedAt();
   }
 
-  getStaleFiles(currentHashes?: Map<string, string>): IFileRecord[] {
-    return this.qb.getStaleFiles(currentHashes);
+  getStaleFiles(): IFileRecord[] {
+    return this.qb.getStaleFiles();
   }
 
   getAllFilePaths(): string[] {

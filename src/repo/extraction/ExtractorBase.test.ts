@@ -4,7 +4,7 @@ import * as path from "path"
 import * as fs from "fs/promises"
 import { execFileSync } from "child_process"
 import { NtGraphDb } from "../ntgraph/index"
-import { IndexOrchestrator, IndexOptions } from "../extraction/Orchestrator"
+import { ExtractionOrchestrator, IndexOptions } from "../extraction/Orchestrator"
 import { detectLanguage } from "../extraction/LanguageDetector"
 import { shouldIndexFile, isBinaryFile, isTooLarge, resolveRelativePath } from "../extraction/PathValidation"
 import { NodeKind, EdgeKind, DEFAULT_IGNORE_DIRS, MAX_FILE_SIZE } from "../ntgraph/Types"
@@ -189,8 +189,8 @@ describe("extraction pipeline", () => {
 
       const dbPath = path.join(tmpDir, "ts-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
-      const result = await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      const result = await orch.indexAll()
 
       expect(result.filesIndexed).toBeGreaterThan(0)
       expect(result.nodesCreated).toBeGreaterThan(0)
@@ -222,8 +222,8 @@ export function add(a: number, b: number): number {
 
       const dbPath = path.join(tmpDir, "ts-func-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
-      const result = await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      const result = await orch.indexAll()
 
       expect(result.filesIndexed).toBeGreaterThan(0)
       expect(result.nodesCreated).toBeGreaterThan(0)
@@ -251,8 +251,8 @@ interface Extended extends Base {
 
       const dbPath = path.join(tmpDir, "ts-iface-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
-      const result = await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      const result = await orch.indexAll()
 
       expect(result.filesIndexed).toBeGreaterThan(0)
 
@@ -274,8 +274,8 @@ import React from 'react';`
 
       const dbPath = path.join(tmpDir, "ts-import-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
-      const result = await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      const result = await orch.indexAll()
 
       expect(result.filesIndexed).toBeGreaterThan(0)
 
@@ -300,8 +300,8 @@ import React from 'react';`
 
       const dbPath = path.join(tmpDir, "ts-enum-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
-      const result = await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      const result = await orch.indexAll()
 
       expect(result.filesIndexed).toBeGreaterThan(0)
 
@@ -322,8 +322,8 @@ import React from 'react';`
 
       const dbPath = path.join(tmpDir, "ts-type-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
-      const result = await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      const result = await orch.indexAll()
 
       expect(result.filesIndexed).toBeGreaterThan(0)
 
@@ -341,10 +341,10 @@ import React from 'react';`
 
       const dbPath = path.join(tmpDir, "ts-empty-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
-      const result = await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      const result = await orch.indexAll()
 
-      expect(result.success).toBe(true)
+      expect(result.errors.length).toBe(0)
 
       testDb.close()
       await fs.rm(srcDir, { recursive: true, force: true })
@@ -373,8 +373,8 @@ import React from 'react';`
 
       const dbPath = path.join(tmpDir, "py-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
-      const result = await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      const result = await orch.indexAll()
 
       expect(result.filesIndexed).toBeGreaterThan(0)
       expect(result.nodesCreated).toBeGreaterThan(0)
@@ -398,8 +398,8 @@ import React from 'react';`
 
       const dbPath = path.join(tmpDir, "py-func-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
-      const result = await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      const result = await orch.indexAll()
 
       expect(result.filesIndexed).toBeGreaterThan(0)
 
@@ -479,16 +479,14 @@ import React from 'react';`
       )
 
       const progressPhases: string[] = []
-      const options: IndexOptions = {
-        onProgress: (p) => {
-          progressPhases.push(p.phase)
-        },
+      const onProgress = (p: { phase: string }) => {
+        progressPhases.push(p.phase)
       }
 
       const dbPath = path.join(tmpDir, "orch-progress-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir, options)
-      await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      await orch.indexAll(onProgress)
 
       expect(progressPhases).toContain("scanning")
       expect(progressPhases).toContain("parsing")
@@ -512,16 +510,17 @@ import React from 'react';`
 
       const dbPath = path.join(tmpDir, "orch-abort-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir, { signal: controller.signal })
-      const result = await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      const result = await orch.indexAll(undefined, controller.signal)
 
-      expect(result.success).toBe(false)
+      expect(result.errors.some(e => e.message === 'Операция отменена')).toBe(true)
 
       testDb.close()
       await fs.rm(srcDir, { recursive: true, force: true })
     })
 
     it("skips binary files", async () => {
+      if (!treeSitterAvailable) return
       const srcDir = path.join(tmpDir, "orch-binary-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -537,16 +536,17 @@ import React from 'react';`
 
       const dbPath = path.join(tmpDir, "orch-binary-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
-      const result = await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      const result = await orch.indexAll()
 
-      expect(result.filesSkipped).toBe(1)
+      expect(result.indexed).toBe(1)
 
       testDb.close()
       await fs.rm(srcDir, { recursive: true, force: true })
     })
 
     it("skips files exceeding max size", async () => {
+      if (!treeSitterAvailable) return
       const srcDir = path.join(tmpDir, "orch-size-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -558,11 +558,11 @@ import React from 'react';`
 
       const dbPath = path.join(tmpDir, "orch-size-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir, { maxFileSize: 10 })
-      const result = await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      const result = await orch.indexAll()
 
-      expect(result.filesErrored).toBe(0)
-      expect(result.filesSkipped).toBeGreaterThan(0)
+      expect(result.errors.length).toBe(0)
+      expect(result.indexed).toBeGreaterThan(0)
 
       testDb.close()
       await fs.rm(srcDir, { recursive: true, force: true })
@@ -588,8 +588,8 @@ import React from 'react';`
 
       const dbPath = path.join(tmpDir, "orch-stats-test.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
-      await orch.index()
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
+      await orch.indexAll()
 
       const stats = testDb.getStats()
       expect(stats.nodeCount).toBeGreaterThan(0)

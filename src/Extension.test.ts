@@ -4,216 +4,245 @@ import * as vscode from "vscode"
 // Заглушки для всех зависимостей
 const registeredCommands: Array<{ id: string; handler: (...args: unknown[]) => void }> = []
 
-vi.mock("./core/App", () => ({
-  App: vi.fn().mockImplementation(() => ({
-    registerProvider: vi.fn(),
-    registerCommand: vi.fn().mockImplementation((id: string, handler: (...args: unknown[]) => void) => {
-      registeredCommands.push({ id, handler })
-    }),
-    registerBoundCommand: vi.fn().mockImplementation((id: string, handler: (...args: unknown[]) => void) => {
-      registeredCommands.push({ id, handler })
-    }),
-    init: vi.fn().mockResolvedValue(undefined),
-    dispose: vi.fn(),
-    version: vi.fn(() => "0.1.1"),
-  })),
-}))
+vi.mock("./core/App", () => {
+  const App = vi.fn(function App() {
+    this.registerProvider = vi.fn();
+    this.registerCommand = vi.fn().mockImplementation((id: string, handler: (...args: unknown[]) => void) => {
+      registeredCommands.push({ id, handler });
+    });
+    this.registerBoundCommand = vi.fn().mockImplementation((id: string, handler: (...args: unknown[]) => void) => {
+      registeredCommands.push({ id, handler });
+    });
+    this.init = vi.fn().mockResolvedValue(undefined);
+    this.dispose = vi.fn();
+    this.version = vi.fn(() => "0.1.1");
+  });
+  return { App };
+});
 
-vi.mock("./backend/NeuralTowerBackend", () => ({
-  NeuralTowerBackend: vi.fn().mockImplementation(() => ({
-    chat: vi.fn(),
-    chatJson: vi.fn(),
-    getConfig: vi.fn(async () => ({})),
-    updateConfig: vi.fn(),
-    listModels: vi.fn(),
-    healthCheck: vi.fn(async () => true),
-  })),
-}))
+vi.mock("./backend/NeuralTowerBackend", () => {
+  const NeuralTowerBackend = vi.fn(function NeuralTowerBackend() {
+    this.chat = vi.fn();
+    this.chatJson = vi.fn();
+    this.getConfig = vi.fn(async () => ({}));
+    this.updateConfig = vi.fn();
+    this.listModels = vi.fn();
+    this.healthCheck = vi.fn(async () => true);
+  });
+  return { NeuralTowerBackend };
+});
 
-vi.mock("./agent/AgentOrchestrator", () => ({
-  AgentOrchestrator: vi.fn().mockImplementation(() => ({
-    reload: vi.fn().mockResolvedValue(undefined),
-    broadcastNewChat: vi.fn(),
-    clearPlan: vi.fn(),
-    restoreSession: vi.fn().mockResolvedValue(undefined),
-    resetSession: vi.fn(),
-    run: vi.fn().mockResolvedValue({ role: "assistant", content: "ok" }),
-    dispose: vi.fn(),
-    getTodoStore: vi.fn().mockReturnValue({
+vi.mock("./agent/AgentOrchestrator", () => {
+  const AgentOrchestrator = vi.fn(function AgentOrchestrator() {
+    this.reload = vi.fn().mockResolvedValue(undefined);
+    this.broadcastNewChat = vi.fn();
+    this.clearPlan = vi.fn();
+    this.restoreSession = vi.fn().mockResolvedValue(undefined);
+    this.resetSession = vi.fn();
+    this.run = vi.fn().mockResolvedValue({ role: "assistant", content: "ok" });
+    this.dispose = vi.fn();
+    this.getTodoStore = vi.fn().mockReturnValue({
       clear: vi.fn(),
       getItems: vi.fn(() => []),
-    }),
-  })),
-}))
+    });
+  });
+  return { AgentOrchestrator };
+});
 
-vi.mock("./tools/ToolRegistry", () => ({
-  ToolRegistry: vi.fn().mockImplementation(() => ({
-    register: vi.fn(),
-    registerMany: vi.fn(),
-  })),
-}))
+vi.mock("./tools/ToolRegistry", () => {
+  const ToolRegistry = vi.fn(function ToolRegistry() {
+    this.register = vi.fn();
+    this.registerMany = vi.fn();
+  });
+  return { ToolRegistry };
+});
 
-vi.mock("./skills/SkillManager", () => ({
-  SkillManager: vi.fn().mockImplementation(() => ({
-    register: vi.fn(),
-    registerMany: vi.fn(),
-  })),
-}))
+vi.mock("./skills/SkillManager", () => {
+  const SkillManager = vi.fn(function SkillManager() {
+    this.register = vi.fn();
+    this.registerMany = vi.fn();
+  });
+  return { SkillManager };
+});
 
 vi.mock("./skills/builtInSkills", () => ({
   BUILT_IN_SKILLS: [],
 }))
 
-vi.mock("./providers/ChatProvider", () => ({
-  ChatProvider: vi.fn().mockImplementation(() => ({
-    broadcastNewChat: vi.fn(),
-    dispose: vi.fn(),
-  })),
-}))
+vi.mock("./providers/ChatProvider", () => {
+  const ChatProvider = vi.fn(function ChatProvider() {
+    this.broadcastNewChat = vi.fn();
+    this.dispose = vi.fn();
+  });
+  return { ChatProvider };
+});
 
 vi.mock("./providers/SettingsProvider", () => {
-  const SettingsProviderMock = vi.fn().mockImplementation(() => ({
-    show: vi.fn(),
-    dispose: vi.fn(),
-  }))
-  return { SettingsProvider: SettingsProviderMock }
+  const SettingsProvider = vi.fn(function SettingsProvider() {
+    this.show = vi.fn();
+    this.dispose = vi.fn();
+  });
+  return { SettingsProvider };
 })
 
 vi.mock("./providers/DiffViewerProvider", () => {
-  const DiffViewerProviderMock = vi.fn().mockImplementation(() => ({
-    openPanel: vi.fn(),
-    dispose: vi.fn(),
-  }))
-  DiffViewerProviderMock.viewType = "diffViewer"
-  return { DiffViewerProvider: DiffViewerProviderMock }
+  const DiffViewerProvider = vi.fn(function DiffViewerProvider() {
+    this.openPanel = vi.fn();
+    this.dispose = vi.fn();
+  });
+  (DiffViewerProvider as any).viewType = "diffViewer";
+  return { DiffViewerProvider };
 })
 
-vi.mock("./services/telemetry/TelemetryService", () => ({
-  TelemetryService: vi.fn().mockImplementation(() => ({
-    init: vi.fn().mockResolvedValue(undefined),
-    capture: vi.fn(),
-    dispose: vi.fn(),
-  })),
-}))
+vi.mock("./services/telemetry/TelemetryService", () => {
+  const TelemetryService = vi.fn(function TelemetryService() {
+    this.init = vi.fn().mockResolvedValue(undefined);
+    this.capture = vi.fn();
+    this.dispose = vi.fn();
+  });
+  return { TelemetryService };
+});
 
 vi.mock("./shared/PersistentSessionStore", () => {
   const mockStore = {
     init: vi.fn().mockResolvedValue(undefined),
     dispose: vi.fn(),
     activeId: "session-1",
-  }
-  const cls = vi.fn().mockImplementation(() => mockStore)
-  cls.withFileStorage = vi.fn().mockReturnValue(mockStore)
-  return { PersistentSessionStore: cls }
+  };
+  const PersistentSessionStore = vi.fn(function PersistentSessionStore() {
+    this.init = vi.fn().mockResolvedValue(undefined);
+    this.dispose = vi.fn();
+    this.activeId = "session-1";
+  });
+  (PersistentSessionStore as any).withFileStorage = vi.fn().mockReturnValue(mockStore);
+  return { PersistentSessionStore };
 })
 
-vi.mock("./services/permission/PermissionManager", () => ({
-  PermissionManager: vi.fn().mockImplementation(() => ({
-    init: vi.fn(),
-    setAutoApprove: vi.fn(),
-    dispose: vi.fn(),
-  })),
-}))
+vi.mock("./services/permission/PermissionManager", () => {
+  const PermissionManager = vi.fn(function PermissionManager() {
+    this.init = vi.fn();
+    this.setAutoApprove = vi.fn();
+    this.dispose = vi.fn();
+  });
+  return { PermissionManager };
+});
 
-vi.mock("./services/git/GitService", () => ({
-  GitService: vi.fn().mockImplementation(() => ({
-    findRoot: vi.fn().mockResolvedValue("/work"),
-    getDiff: vi.fn().mockResolvedValue({ changed: [], additions: 0, deletions: 0 }),
-    resetRoot: vi.fn(),
-  })),
-}))
+vi.mock("./services/git/GitService", () => {
+  const GitService = vi.fn(function GitService() {
+    this.findRoot = vi.fn().mockResolvedValue("/work");
+    this.getDiff = vi.fn().mockResolvedValue({ changed: [], additions: 0, deletions: 0 });
+    this.resetRoot = vi.fn();
+  });
+  return { GitService };
+});
 
-vi.mock("./services/notification/NotificationService", () => ({
-  NotificationService: vi.fn().mockImplementation(() => ({
-    init: vi.fn().mockResolvedValue(undefined),
-    dispose: vi.fn(),
-  })),
-}))
+vi.mock("./services/notification/NotificationService", () => {
+  const NotificationService = vi.fn(function NotificationService() {
+    this.init = vi.fn().mockResolvedValue(undefined);
+    this.dispose = vi.fn();
+  });
+  return { NotificationService };
+});
 
-vi.mock("./services/health/BackendHealthMonitor", () => ({
-  BackendHealthMonitor: vi.fn().mockImplementation(() => ({
-    init: vi.fn().mockResolvedValue(undefined),
-    dispose: vi.fn(),
-  })),
-}))
+vi.mock("./services/health/BackendHealthMonitor", () => {
+  const BackendHealthMonitor = vi.fn(function BackendHealthMonitor() {
+    this.init = vi.fn().mockResolvedValue(undefined);
+    this.dispose = vi.fn();
+  });
+  return { BackendHealthMonitor };
+});
 
-vi.mock("./services/commit-message/CommitMessageService", () => ({
-  CommitMessageService: vi.fn().mockImplementation(() => ({
-    init: vi.fn().mockResolvedValue(undefined),
-    generate: vi.fn().mockResolvedValue("fix: test commit"),
-    dispose: vi.fn(),
-  })),
-}))
+vi.mock("./services/commit-message/CommitMessageService", () => {
+  const CommitMessageService = vi.fn(function CommitMessageService() {
+    this.init = vi.fn().mockResolvedValue(undefined);
+    this.generate = vi.fn().mockResolvedValue("fix: test commit");
+    this.dispose = vi.fn();
+  });
+  return { CommitMessageService };
+});
 
-vi.mock("./services/code-actions/AgentCodeActionProvider", () => ({
-  AgentCodeActionProvider: vi.fn().mockImplementation(() => ({})),
-  codeActionProviderMetadata: {},
-}))
+vi.mock("./services/code-actions/AgentCodeActionProvider", () => {
+  const AgentCodeActionProvider = vi.fn(function AgentCodeActionProvider() {});
+  return { AgentCodeActionProvider, codeActionProviderMetadata: {} };
+})
 
-vi.mock("./mcp/MCPManager", () => ({
-  MCPManager: vi.fn().mockImplementation(() => ({
-    connect: vi.fn().mockResolvedValue(undefined),
-    syncWithRegistry: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-  })),
-}))
+vi.mock("./mcp/MCPManager", () => {
+  const MCPManager = vi.fn(function MCPManager() {
+    this.connect = vi.fn().mockResolvedValue(undefined);
+    this.syncWithRegistry = vi.fn().mockResolvedValue(undefined);
+    this.disconnect = vi.fn().mockResolvedValue(undefined);
+  });
+  return { MCPManager };
+});
 
-vi.mock("./tools/builtins/ReadFileTool", () => ({
-  ReadFileTool: vi.fn().mockImplementation(() => ({})),
-}))
+vi.mock("./tools/builtins/ReadFileTool", () => {
+  const ReadFileTool = vi.fn(function ReadFileTool() {});
+  return { ReadFileTool };
+})
 
-vi.mock("./tools/builtins/WriteFileTool", () => ({
-  WriteFileTool: vi.fn().mockImplementation(() => ({})),
-}))
+vi.mock("./tools/builtins/WriteFileTool", () => {
+  const WriteFileTool = vi.fn(function WriteFileTool() {});
+  return { WriteFileTool };
+})
 
-vi.mock("./tools/builtins/BashTool", () => ({
-  BashTool: vi.fn().mockImplementation(() => ({})),
-}))
+vi.mock("./tools/builtins/BashTool", () => {
+  const BashTool = vi.fn(function BashTool() {});
+  return { BashTool };
+})
 
-vi.mock("./tools/builtins/EditFileTool", () => ({
-  EditFileTool: vi.fn().mockImplementation(() => ({})),
-}))
+vi.mock("./tools/builtins/EditFileTool", () => {
+  const EditFileTool = vi.fn(function EditFileTool() {});
+  return { EditFileTool };
+})
 
-vi.mock("./tools/builtins/GlobTool", () => ({
-  GlobTool: vi.fn().mockImplementation(() => ({})),
-}))
+vi.mock("./tools/builtins/GlobTool", () => {
+  const GlobTool = vi.fn(function GlobTool() {});
+  return { GlobTool };
+})
 
-vi.mock("./tools/builtins/GrepTool", () => ({
-  GrepTool: vi.fn().mockImplementation(() => ({})),
-}))
+vi.mock("./tools/builtins/GrepTool", () => {
+  const GrepTool = vi.fn(function GrepTool() {});
+  return { GrepTool };
+})
 
-vi.mock("./tools/builtins/WebFetchTool", () => ({
-  WebFetchTool: vi.fn().mockImplementation(() => ({})),
-}))
+vi.mock("./tools/builtins/WebFetchTool", () => {
+  const WebFetchTool = vi.fn(function WebFetchTool() {});
+  return { WebFetchTool };
+})
 
-vi.mock("./tools/builtins/TodoWriteTool", () => ({
-  TodoWriteTool: vi.fn().mockImplementation(() => ({})),
-}))
+vi.mock("./tools/builtins/TodoWriteTool", () => {
+  const TodoWriteTool = vi.fn(function TodoWriteTool() {});
+  return { TodoWriteTool };
+})
 
-vi.mock("./tools/builtins/LspTool", () => ({
-  LspTool: vi.fn().mockImplementation(() => ({})),
-}))
+vi.mock("./tools/builtins/LspTool", () => {
+  const LspTool = vi.fn(function LspTool() {});
+  return { LspTool };
+})
 
-vi.mock("./core/ContextManager", () => ({
-  ContextManager: vi.fn().mockImplementation(() => ({
-    register: vi.fn(),
-    list: vi.fn(() => []),
-    initialize: vi.fn().mockResolvedValue(undefined),
-    prepare: vi.fn().mockResolvedValue({ systemPrompt: "", contextItems: [] }),
-    getSnapshot: vi.fn(() => []),
-    getRevision: vi.fn(() => 0),
-    reset: vi.fn(),
-    estimateSystemTokens: vi.fn(() => 0),
-  })),
-}))
+vi.mock("./core/ContextManager", () => {
+  const ContextManager = vi.fn(function ContextManager() {
+    this.register = vi.fn();
+    this.list = vi.fn(() => []);
+    this.initialize = vi.fn().mockResolvedValue(undefined);
+    this.prepare = vi.fn().mockResolvedValue({ systemPrompt: "", contextItems: [] });
+    this.getSnapshot = vi.fn(() => []);
+    this.getRevision = vi.fn(() => 0);
+    this.reset = vi.fn();
+    this.estimateSystemTokens = vi.fn(() => 0);
+  });
+  return { ContextManager };
+});
 
-vi.mock("./agent/SessionContext", () => ({
-  SessionContext: vi.fn().mockImplementation(() => ({})),
-}))
+vi.mock("./agent/SessionContext", () => {
+  const SessionContext = vi.fn(function SessionContext() {});
+  return { SessionContext };
+})
 
-vi.mock("./agent/SubagentRunner", () => ({
-  SubagentRunner: vi.fn().mockImplementation(() => ({})),
-}))
+vi.mock("./agent/SubagentRunner", () => {
+  const SubagentRunner = vi.fn(function SubagentRunner() {});
+  return { SubagentRunner };
+})
 
 import { activate, deactivate } from "./Extension"
 import { App } from "./core/App"
@@ -446,14 +475,14 @@ describe("extension", () => {
 
     it("handles activation failure gracefully", async () => {
       const { App: AppMock } = await import("./core/App")
-      ;(AppMock as any).mockImplementationOnce(() => ({
-        registerProvider: vi.fn(),
-        registerCommand: vi.fn(),
-        registerBoundCommand: vi.fn(),
-        init: vi.fn().mockRejectedValue(new Error("init failed")),
-        dispose: vi.fn(),
-        version: vi.fn(() => "0.1.1"),
-      }))
+      ;(AppMock as any).mockImplementationOnce(function() {
+         this.registerProvider = vi.fn();
+         this.registerCommand = vi.fn();
+         this.registerBoundCommand = vi.fn();
+         this.init = vi.fn().mockRejectedValue(new Error("init failed"));
+         this.dispose = vi.fn();
+         this.version = vi.fn(() => "0.1.1");
+       })
       await expect(activate(ctx)).rejects.toThrow("init failed")
     })
   })
@@ -634,11 +663,11 @@ describe("extension", () => {
 
     it("generateCommitMessage shows message when no staged changes", async () => {
       const { CommitMessageService } = await import("./services/commit-message/CommitMessageService")
-      ;(CommitMessageService as any).mockImplementationOnce(() => ({
-        init: vi.fn().mockResolvedValue(undefined),
-        generate: vi.fn().mockResolvedValue(null),
-        dispose: vi.fn(),
-      }))
+     ;(CommitMessageService as any).mockImplementationOnce(function() {
+         this.init = vi.fn().mockResolvedValue(undefined);
+         this.generate = vi.fn().mockResolvedValue(null);
+         this.dispose = vi.fn();
+       })
       const infoSpy = vi.fn().mockResolvedValue(undefined)
       ;(vscode.window as any).showInformationMessage = infoSpy
       await activate(ctx)

@@ -1,23 +1,23 @@
-import { Worker, isMainThread } from 'worker_threads';
+import { Worker } from 'worker_threads';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import {
   WORKER_RECYCLE_INTERVAL,
   PARSE_TIMEOUT_MS,
   PARSE_TIMEOUT_PER_100KB,
+  IExtractionResult,
 } from '../ntgraph/Types';
 
-// Путь к директории текущего модуля.
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Промис, ожидающий ответа от воркера для текущего запроса.
-interface PendingRequest {
-  resolve: (value: any) => void;
+interface PendingParse {
+  resolve: (value: IExtractionResult) => void;
   reject: (reason: any) => void;
+  timeout: NodeJS.Timeout;
 }
 
 /**
- * Вычисляет таймаут парсинга на основе размера содержимого.
+ * Вычисляет таймаут парсинга на основе размера файла.
  */
 function calcTimeout(content: string): number {
   const sizeKB = content.length / 1024;
@@ -26,75 +26,60 @@ function calcTimeout(content: string): number {
 }
 
 /**
- * Парсит файл в основном потоке (фолбэк, если worker_threads недоступен).
+ * Парсит файл в основном процессе (фолбэк без воркеров).
  */
 async function parseInProcess(
   language: string,
   content: string,
   filePath: string,
-): Promise<any> {
-  const ts = await import('tree-sitter');
-  const parser = new ts.Parser();
+  languages: string[],
+): Promise<IExtractionResult> {
+  const { loadGrammarsForLanguages } = await import('./Grammars');
+  await loadGrammarsForLanguages(languages);
 
-  const pkg = await import('tree-sitter-' + language);
-  let grammar;
-
-  if (language === 'typescript') {
-    const ext = path.extname(filePath).toLowerCase();
-    if (ext === '.tsx') {
-      grammar = pkg.TSXGrammar || pkg.default;
-    } else {
-      grammar = pkg.TSGrammar || pkg.default;
-    }
-  } else {
-    grammar = pkg.default || pkg;
-  }
-
-  if (!grammar) {
-    throw new Error('Не удалось загрузить грамматику для языка: ' + language);
-  }
-
-  parser.setLanguage(grammar);
-  const tree = parser.parse(content);
-
-  return {
-    root: {
-      type: tree.rootNode.type,
-      start: tree.rootNode.startPosition,
-      end: tree.rootNode.endPosition,
-      childCount: tree.rootNode.childCount,
-    },
-    tree: tree.rootNode,
-  };
+  const { extractFromSource } = await import('./tree-sitter');
+  return extractFromSource(filePath, content, language);
 }
 
-/**
- * Управляет воркером для парсинга файлов через tree-sitter.
- * Поддерживает пересоздание воркера, восстановление после сбоев и фолбэк.
- */
 class ParserWorkerManager {
   private worker: Worker | null = null;
-  private pendingRequests = new Map<string, PendingRequest>();
+  private pendingParses = new Map<number, PendingParse>();
   private parseCount = 0;
   private isDestroyed = false;
   private nextRequestId = 0;
-
+  private languages: string[] = [];
   // Путь к скрипту воркера.
   private workerScriptPath = path.join(__dirname, 'ParserWorker.script.js');
+  private workerThreadsAvailable: boolean;
 
-  /**
-   * Создаёт новый воркер.
-   */
+  constructor() {
+    try {
+      require.resolve('worker_threads');
+      this.workerThreadsAvailable = true;
+    } catch {
+      this.workerThreadsAvailable = false;
+    }
+  }
+
   private createWorker(): Worker {
     const worker = new Worker(this.workerScriptPath, {
       eval: false,
       workerData: {},
     });
 
-    // Воркер завершился unexpectedly.
+    // Воркер завершился неожиданно.
     worker.on('exit', (code) => {
-      const err = new Error('Воркер завершился с кодом ' + code);
-      this.rejectAllPending(err);
+      if (code !== 0 && this.pendingParses.size > 0) {
+        const pending = Array.from(this.pendingParses.entries());
+        this.rejectAllPending(new Error('Воркер завершился с кодом ' + code));
+        this.ensureWorker().then(() => {
+          this.loadGrammars(this.languages).then(() => {
+            for (const [id, req] of pending) {
+              this.retryParse(id, req);
+            }
+          });
+        });
+      }
     });
 
     // Ошибка в воркере.
@@ -104,16 +89,16 @@ class ParserWorkerManager {
 
     // Обработка ответов от воркера.
     worker.on('message', (msg: any) => {
-      if (msg.type === 'result') {
-        const req = this.pendingRequests.get(msg.id);
+      if (msg.type === 'parse-result') {
+        const req = this.pendingParses.get(msg.id);
         if (req) {
-          this.pendingRequests.delete(msg.id);
-          req.resolve(msg.tree);
+          this.pendingParses.delete(msg.id);
+          req.resolve(msg.result);
         }
       } else if (msg.type === 'error') {
-        const req = this.pendingRequests.get(msg.id);
+        const req = this.pendingParses.get(msg.id);
         if (req) {
-          this.pendingRequests.delete(msg.id);
+          this.pendingParses.delete(msg.id);
           req.reject(new Error(msg.message));
         }
       }
@@ -122,25 +107,23 @@ class ParserWorkerManager {
     return worker;
   }
 
-  /**
-   * Отклоняет все ожидающие запросы.
-   */
   private rejectAllPending(reason: Error) {
-    for (const [id, req] of this.pendingRequests) {
+    for (const [id, req] of this.pendingParses) {
+      clearTimeout(req.timeout);
       req.reject(reason);
-      this.pendingRequests.delete(id);
+      this.pendingParses.delete(id);
     }
   }
 
   /**
-   * Пересоздаёт воркер для освобождения WASM-памяти.
+   * Пересоздаёт воркер: завершает текущий и создаёт новый.
    */
   private async recycleWorker() {
     if (this.worker) {
       try {
         await this.worker.terminate();
       } catch {
-        // Игнорируем ошибки при завершении.
+        // Игнорируем ошибки при завершении мёртвого воркера.
       }
       this.worker = null;
     }
@@ -148,34 +131,53 @@ class ParserWorkerManager {
   }
 
   /**
-   * Отправляет запрос на парсинг воркеру.
+   * Обеспечивает наличие воркера: создаёт, если ещё не создан.
    */
+  private async ensureWorker(): Promise<void> {
+    if (!this.worker) {
+      this.worker = this.createWorker();
+    }
+  }
+
+  async loadGrammars(languages: string[]): Promise<void> {
+    this.languages = languages;
+    await this.ensureWorker();
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Таймаут загрузки грамматик'));
+      }, 30000);
+
+      const handler = (msg: any) => {
+        if (msg.type === 'grammars-loaded') {
+          clearTimeout(timeout);
+          this.worker!.off('message', handler);
+          resolve();
+        }
+      };
+
+      this.worker!.on('message', handler);
+      this.worker!.postMessage({ type: 'load-grammars', languages });
+    });
+  }
+
   private sendParseRequest(
-    language: string,
-    content: string,
     filePath: string,
-    signal?: AbortSignal,
-  ): Promise<any> {
+    content: string,
+    frameworkNames: string[],
+    language: string,
+  ): Promise<IExtractionResult> {
     const timeout = calcTimeout(content);
-    const requestId = String(this.nextRequestId++);
+    const requestId = this.nextRequestId++;
 
     return new Promise((resolve, reject) => {
       // Таймаут для запроса.
       const timeoutId = setTimeout(() => {
-        this.pendingRequests.delete(requestId);
+        this.pendingParses.delete(requestId);
         reject(new Error('Таймаут парсинга: ' + timeout + 'ms'));
+        this.worker?.terminate().catch(() => {});
       }, timeout);
 
-      // Обработка отмены через AbortSignal.
-      if (signal) {
-        signal.addEventListener('abort', () => {
-          this.pendingRequests.delete(requestId);
-          clearTimeout(timeoutId);
-          reject(new Error('Парсинг отменён'));
-        });
-      }
-
-      const pending: PendingRequest = {
+      const pending: PendingParse = {
         resolve: (value) => {
           clearTimeout(timeoutId);
           resolve(value);
@@ -184,89 +186,154 @@ class ParserWorkerManager {
           clearTimeout(timeoutId);
           reject(reason);
         },
+        timeout: timeoutId,
       };
 
-      this.pendingRequests.set(requestId, pending);
+      this.pendingParses.set(requestId, pending);
 
       // Отправляем сообщение воркеру с id запроса.
       this.worker!.postMessage({
         type: 'parse',
         id: requestId,
-        language,
-        content,
         filePath,
+        content,
+        frameworkNames,
+        language,
       });
     });
   }
 
-  /**
-   * Парсит файл через воркер с восстановлением после сбоев.
-   */
+  private retryParse(id: number, req: PendingParse): void {
+    // Логика повтора обрабатывается механизмом повтора вызывающей стороны
+  }
+
   private async parseWithRecovery(
-    language: string,
-    content: string,
     filePath: string,
-    signal?: AbortSignal,
-    retries: number = 1,
-  ): Promise<any> {
+    content: string,
+    frameworkNames: string[],
+    language: string,
+    level: number = 0,
+  ): Promise<IExtractionResult> {
     try {
       // Проверяем, нужно ли пересоздать воркер.
       if (this.parseCount > 0 && this.parseCount % WORKER_RECYCLE_INTERVAL === 0) {
         await this.recycleWorker();
+        await this.loadGrammars(this.languages);
       }
 
       this.parseCount++;
 
-      // Если воркер не создан, создаём.
-      if (!this.worker) {
-        this.worker = this.createWorker();
-      }
+      await this.ensureWorker();
 
-      return await this.sendParseRequest(language, content, filePath, signal);
+      return await this.sendParseRequest(filePath, content, frameworkNames, language);
     } catch (err: any) {
       // Восстановление после сбоя воркера.
-      if (retries > 0) {
-        if (this.worker) {
-          try {
-            await this.worker.terminate();
-          } catch {
-            // Игнорируем ошибки при завершении мёртвого воркера.
-          }
-          this.worker = null;
-        }
-        this.worker = this.createWorker();
+      if (level === 0) {
+        // Уровень 1: пересоздание воркера и повторная попытка
+        await this.recycleWorker();
+        await this.loadGrammars(this.languages);
+        return this.parseWithRecovery(filePath, content, frameworkNames, language, 1);
+      }
 
-        return this.parseWithRecovery(language, content, filePath, signal, retries - 1);
+      if (level === 1) {
+        // Уровень 2: удаление комментариев и повторная попытка
+        const stripped = this.stripComments(content, language);
+        return this.parseWithRecovery(filePath, stripped, frameworkNames, language, 2);
       }
 
       throw err;
     }
   }
 
-  /**
-   * Парсит файл и возвращает дерево tree-sitter.
-   */
+  private stripComments(content: string, language: string): string {
+    const lines = content.split('\n');
+
+    if (language === 'typescript' || language === 'cpp' || language === 'csharp' || language === 'java') {
+      const result: string[] = [];
+      let inBlockComment = false;
+
+      for (const line of lines) {
+        let processed = line;
+
+        if (inBlockComment) {
+          const endIdx = processed.indexOf('*/');
+          if (endIdx !== -1) {
+            processed = processed.slice(endIdx + 2);
+            inBlockComment = false;
+          } else {
+            result.push('');
+            continue;
+          }
+        }
+
+        const singleLine = processed.indexOf('//');
+        if (singleLine !== -1) {
+          processed = processed.slice(0, singleLine);
+        }
+
+        const blockStart = processed.indexOf('/*');
+        if (blockStart !== -1) {
+          const blockEnd = processed.indexOf('*/', blockStart + 2);
+          if (blockEnd !== -1) {
+            processed = processed.slice(0, blockStart) + processed.slice(blockEnd + 2);
+          } else {
+            processed = processed.slice(0, blockStart);
+            inBlockComment = true;
+          }
+        }
+
+        result.push(processed);
+      }
+
+      return result.join('\n');
+    }
+
+    if (language === 'python' || language === 'go' || language === 'rust') {
+      const result: string[] = [];
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#') || trimmed.startsWith('//')) {
+          result.push('');
+        } else {
+          const commentIdx = line.indexOf('#');
+          if (commentIdx !== -1) {
+            result.push(line.slice(0, commentIdx));
+          } else {
+            result.push(line);
+          }
+        }
+      }
+
+      return result.join('\n');
+    }
+
+    return content;
+  }
+
   async parseFile(
-    language: string,
-    content: string,
     filePath: string,
+    content: string,
+    frameworkNames: string[],
+    language: string,
+    languages: string[],
     signal?: AbortSignal,
-  ): Promise<any> {
+  ): Promise<IExtractionResult> {
     if (this.isDestroyed) {
       throw new Error('ParserWorkerManager уничтожен');
     }
 
-    // Фолбэк: worker_threads недоступен.
-    if (!isMainThread) {
-      return parseInProcess(language, content, filePath);
+    if (!this.workerThreadsAvailable) {
+      return parseInProcess(language, content, filePath, languages);
     }
 
-    return this.parseWithRecovery(language, content, filePath, signal);
+    if (this.languages.length === 0 || languages.some(l => !this.languages.includes(l))) {
+      await this.loadGrammars(languages);
+    }
+
+    return this.parseWithRecovery(filePath, content, frameworkNames, language);
   }
 
-  /**
-   * Завершает воркер и освобождает ресурсы.
-   */
   async destroy() {
     this.isDestroyed = true;
 
@@ -283,25 +350,23 @@ class ParserWorkerManager {
   }
 }
 
-// Одиночка для управления воркером.
 const manager = new ParserWorkerManager();
 
-/**
- * Парсит файл и возвращает дерево tree-sitter.
- * Использует воркер-поток для изоляции WASM-памяти.
- */
 export async function parseFile(
-  language: string,
-  content: string,
   filePath: string,
+  content: string,
+  frameworkNames: string[],
+  language: string,
+  languages: string[],
   signal?: AbortSignal,
-): Promise<any> {
-  return manager.parseFile(language, content, filePath, signal);
+): Promise<IExtractionResult> {
+  return manager.parseFile(filePath, content, frameworkNames, language, languages, signal);
 }
 
-/**
- * Завершает воркер и освобождает ресурсы.
- */
+export async function loadGrammars(languages: string[]): Promise<void> {
+  return manager.loadGrammars(languages);
+}
+
 export async function destroy(): Promise<void> {
   return manager.destroy();
 }

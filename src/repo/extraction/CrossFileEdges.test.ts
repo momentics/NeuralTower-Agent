@@ -4,7 +4,7 @@ import * as path from "path"
 import * as fs from "fs/promises"
 import { execFileSync } from "child_process"
 import { NtGraphDb } from "../ntgraph/index"
-import { IndexOrchestrator } from "../extraction/Orchestrator"
+import { ExtractionOrchestrator } from "../extraction/Orchestrator"
 import { NodeKind, EdgeKind } from "../ntgraph/Types"
 
 let treeSitterAvailable = false
@@ -63,9 +63,9 @@ export function main() {
 
       const dbPath = path.join(tmpDir, "cross-import.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
 
-      const result1 = await orch.index()
+      const result1 = await orch.indexAll()
       expect(result1.filesIndexed).toBe(2)
 
       const stats1 = testDb.getStats()
@@ -77,7 +77,7 @@ export function main() {
         `export function helper() { return 100; }`
       )
 
-      const result2 = await orch.index()
+      const result2 = await orch.indexAll()
       expect(result2.filesIndexed).toBeGreaterThan(0)
 
       const stats2 = testDb.getStats()
@@ -111,9 +111,9 @@ export function process(s: string): string {
 
       const dbPath = path.join(tmpDir, "cross-calls.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
 
-      await orch.index()
+      await orch.indexAll()
 
       const stats1 = testDb.getStats()
       expect(stats1.edgeCount).toBeGreaterThan(0)
@@ -126,7 +126,7 @@ export function process(s: string): string {
 }`
       )
 
-      await orch.index()
+      await orch.indexAll()
 
       const stats2 = testDb.getStats()
       expect(stats2.edgeCount).toBeGreaterThan(0)
@@ -151,9 +151,9 @@ export function process(s: string): string {
 
       const dbPath = path.join(tmpDir, "node-id-change.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
 
-      await orch.index()
+      await orch.indexAll()
 
       const nodes1 = testDb.getNodesByFile("greet.ts")
       const greetNode1 = nodes1.find((n) => n.name === "greet")
@@ -168,7 +168,7 @@ export function greet() {
 }`
       await fs.writeFile(path.join(srcDir, "greet.ts"), modified)
 
-      await orch.index()
+      await orch.indexAll()
 
       const nodes2 = testDb.getNodesByFile("greet.ts")
       const greetNode2 = nodes2.find((n) => n.name === "greet")
@@ -195,9 +195,9 @@ export function greet() {
 
       const dbPath = path.join(tmpDir, "node-id-same.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
 
-      await orch.index()
+      await orch.indexAll()
 
       const nodes1 = testDb.getNodesByFile("stable.ts")
       const stableNode1 = nodes1.find((n) => n.name === "stable")
@@ -207,7 +207,7 @@ export function greet() {
       // Записываем тот же контент снова
       await fs.writeFile(path.join(srcDir, "stable.ts"), content)
 
-      await orch.index()
+      await orch.indexAll()
 
       const nodes2 = testDb.getNodesByFile("stable.ts")
       const stableNode2 = nodes2.find((n) => n.name === "stable")
@@ -236,15 +236,15 @@ export function greet() {
 
       const dbPath = path.join(tmpDir, "hash-skip.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
 
-      const result1 = await orch.index()
+      const result1 = await orch.indexAll()
       expect(result1.filesIndexed).toBeGreaterThan(0)
 
       const stats1 = testDb.getStats()
 
       // Переиндексируем без изменений
-      const result2 = await orch.index()
+      const result2 = await orch.indexAll()
 
       const stats2 = testDb.getStats()
 
@@ -272,9 +272,9 @@ export function oldFunc2() { return 2; }`
 
       const dbPath = path.join(tmpDir, "cascade-delete.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
 
-      await orch.index()
+      await orch.indexAll()
 
       const nodes1 = testDb.getNodesByFile("evolving.ts")
       const oldFuncCount = nodes1.filter((n) => n.name === "oldFunc" || n.name === "oldFunc2").length
@@ -286,7 +286,7 @@ export function oldFunc2() { return 2; }`
         `export function newFunc() { return 3; }`
       )
 
-      await orch.index()
+      await orch.indexAll()
 
       const nodes2 = testDb.getNodesByFile("evolving.ts")
       const oldFuncCount2 = nodes2.filter((n) => n.name === "oldFunc" || n.name === "oldFunc2").length
@@ -344,9 +344,9 @@ export class UserController {
 
       const dbPath = path.join(tmpDir, "multi-file.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
 
-      const result = await orch.index()
+      const result = await orch.indexAll()
       expect(result.filesIndexed).toBe(3)
 
       const stats = testDb.getStats()
@@ -354,7 +354,7 @@ export class UserController {
       expect(stats.edgeCount).toBeGreaterThan(0)
       expect(stats.fileCount).toBe(3)
 
-      // Verify each file has its nodes
+      // Проверяем, что каждый файл имеет свои узлы
       const typesNodes = testDb.getNodesByFile("types.ts")
       expect(typesNodes.length).toBeGreaterThan(0)
 
@@ -390,9 +390,9 @@ export function b() {
 
       const dbPath = path.join(tmpDir, "edge-validity.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
 
-      await orch.index()
+      await orch.indexAll()
 
       // Модифицируем a.ts (смещает номера строк, меняет ID узлов)
       await fs.writeFile(
@@ -402,7 +402,7 @@ export function b() {
 export function a() { return 1; }`
       )
 
-      await orch.index()
+      await orch.indexAll()
 
       const stats = testDb.getStats()
       expect(stats.edgeCount).toBeGreaterThan(0)
@@ -429,9 +429,9 @@ export class App {}`
 
       const dbPath = path.join(tmpDir, "unresolved-refs.db")
       const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
-      const orch = new IndexOrchestrator(testDb, srcDir)
+      const orch = new ExtractionOrchestrator(srcDir, testDb)
 
-      const result = await orch.index()
+      const result = await orch.indexAll()
       expect(result.filesIndexed).toBeGreaterThan(0)
 
       testDb.close()
