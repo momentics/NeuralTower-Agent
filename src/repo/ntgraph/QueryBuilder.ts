@@ -937,13 +937,13 @@ export class QueryBuilder {
   }
 
   /** Удаление конкретных разрешённых ссылок. */
-  deleteSpecificResolvedReferences(refs: Array<{ fromNodeId: string; referenceName: string; referenceKind: string }>): number {
+  deleteSpecificResolvedReferences(refs: IUnresolvedReference[]): number {
     if (refs.length === 0) return 0;
     const stmt = this.db.prepare(
       'DELETE FROM unresolved_refs WHERE from_node_id = ? AND reference_name = ? AND reference_kind = ?'
     );
     let total = 0;
-    const deleteMany = this.db.transaction((items: typeof refs) => {
+    const deleteMany = this.db.transaction((items: IUnresolvedReference[]) => {
       for (const ref of items) {
         const r = stmt.run(ref.fromNodeId, ref.referenceName, ref.referenceKind);
         total += r.changes;
@@ -1113,10 +1113,10 @@ export class QueryBuilder {
   findNodesByNameSubstring(
     substring: string,
     options: ISearchOptions & { excludePrefix?: boolean } = {}
-  ): ISearchResult[] {
+  ): INode[] {
     const { kinds, languages, limit = 30, excludePrefix } = options;
 
-    let sql = `SELECT nodes.*, 1.0 as score FROM nodes WHERE name LIKE ?`;
+    let sql = `SELECT nodes.* FROM nodes WHERE name LIKE ?`;
     const params: (string | number)[] = [`%${substring}%`];
 
     if (excludePrefix) {
@@ -1137,11 +1137,8 @@ export class QueryBuilder {
     sql += ' ORDER BY length(name) ASC LIMIT ?';
     params.push(limit);
 
-    const rows = this.db.prepare(sql).all(...params) as (NodeRow & { score: number })[];
-    return rows.map((row) => ({
-      node: rowToNode(row),
-      score: row.score,
-    }));
+    const rows = this.db.prepare(sql).all(...params) as NodeRow[];
+    return rows.map(rowToNode);
   }
 
   // ===================================================================

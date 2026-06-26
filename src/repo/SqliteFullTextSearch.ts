@@ -57,6 +57,7 @@ function chunkToNode(chunk: ICodeChunk): INode {
     docstring: chunk.docComment,
     signature: chunk.signature ?? chunk.content,
     isExported: false,
+    metadata: { content: chunk.content },
     updatedAt: Date.now(),
   }
 }
@@ -69,10 +70,12 @@ function nodeToChunk(node: INode): ICodeChunk {
   const symbolName = parts.length > 1 ? parts[parts.length - 1] : node.name
   const parentName = parts.length > 1 ? parts.slice(0, -1).join(".") : undefined
 
+  const content = (node.metadata?.content as string) ?? node.signature ?? ""
+
   return {
     id: node.id,
     filePath: node.filePath,
-    content: node.signature ?? "",
+    content,
     startLine: node.startLine,
     endLine: node.endLine,
     nodeKind: NODE_KIND_TO_CHUNK_KIND[node.kind] ?? "block",
@@ -81,7 +84,7 @@ function nodeToChunk(node: INode): ICodeChunk {
     language: node.language,
     signature: node.signature,
     docComment: node.docstring,
-    charLength: (node.signature ?? "").length,
+    charLength: content.length,
   }
 }
 

@@ -33,6 +33,7 @@ import {
   FileLock,
   processInBatches,
   Mutex,
+  MemoryMonitor,
 } from './Utils';
 
 /** Параметры инициализации. */
@@ -100,7 +101,9 @@ export class NtGraphDb {
 
   /** Закрытие БД. */
   close(): void {
-    this._db.close();
+    if (this._db.open) {
+      this._db.close();
+    }
   }
 
   /** Лёгкое обслуживание после пакетных записей: PRAGMA optimize + wal_checkpoint(PASSIVE). Ошибки тихо проглатываются. */
@@ -156,17 +159,19 @@ export class NtGraphDb {
     this._qb.insertNodes(nodes);
   }
 
-  /** Пакетная вставка узлов с FileLock, Mutex и разбиением на чанки. */
-  // TODO: Подключить MemoryMonitor для проверки памяти между батчами индексации.
-  // Пример: const monitor = new MemoryMonitor(threshold, () => /* GC / пауза */);
-  //         monitor.check() в onBatchComplete callback processInBatches.
+  /** Пакетная вставка узлов с FileLock, Mutex, MemoryMonitor и разбиением на чанки. */
   async insertNodesBatch(nodes: INode[]): Promise<void> {
     const acquired = await this._fileLock.acquire();
     if (!acquired) throw new Error('Failed to acquire file lock');
     try {
+      const monitor = new MemoryMonitor(512 * 1024 * 1024, () => {
+        global.gc?.();
+      });
       await this._mutex.withLock(async () => {
         await processInBatches(nodes, SQLITE_PARAM_CHUNK_SIZE, async (batch) => {
           this._qb.insertNodes(batch);
+        }, () => {
+          monitor.check();
         });
       });
     } finally {
@@ -405,7 +410,7 @@ export class NtGraphDb {
     this._qb.deleteResolvedReferences(fromNodeIds);
   }
 
-  deleteSpecificResolvedReferences(refs: Array<{ fromNodeId: string; referenceName: string; referenceKind: string }>): number {
+  deleteSpecificResolvedReferences(refs: IUnresolvedReference[]): number {
     return this._qb.deleteSpecificResolvedReferences(refs);
   }
 
@@ -424,7 +429,7 @@ export class NtGraphDb {
   findNodesByNameSubstring(
     substring: string,
     options: ISearchOptions & { excludePrefix?: boolean } = {}
-  ): ISearchResult[] {
+  ): INode[] {
     return this._qb.findNodesByNameSubstring(substring, options);
   }
 
