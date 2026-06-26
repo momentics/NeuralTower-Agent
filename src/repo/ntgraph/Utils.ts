@@ -54,7 +54,7 @@ interface EdgeRow {
   kind: string;
   metadata: string | null;
   line: number | null;
-  col: number | null;
+  column: number | null;
   provenance: string | null;
 }
 
@@ -114,7 +114,7 @@ export function rowToEdge(row: EdgeRow): IEdge {
     kind: row.kind as EdgeKind,
     metadata: row.metadata ? safeJsonParse(row.metadata, undefined) : undefined,
     line: row.line ?? undefined,
-    column: row.col ?? undefined,
+    column: row.column ?? undefined,
     provenance: (row.provenance ?? undefined) as IEdge['provenance'],
   };
 }

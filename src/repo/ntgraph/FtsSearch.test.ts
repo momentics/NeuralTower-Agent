@@ -147,4 +147,75 @@ describe("FtsSearch", () => {
     expect(fnResult).toBeDefined()
     expect(fnResult!.score).toBeGreaterThan(0)
   })
+
+  // ---- FTS5 триггерная синхронизация ----
+
+  it("FTS5 INSERT trigger makes new node searchable", () => {
+    db.insertNodes([{
+      id: "fts-trigger-insert",
+      kind: "function",
+      name: "triggerTestFn",
+      qualifiedName: "triggerTestFn",
+      filePath: "src/trigger.ts",
+      language: "typescript",
+      startLine: 1,
+      endLine: 1,
+      startColumn: 0,
+      endColumn: 0,
+      updatedAt: Date.now(),
+    }])
+    const results = db.search("triggerTest")
+    expect(results.length).toBeGreaterThan(0)
+    expect(results.some((r) => r.node.name === "triggerTestFn")).toBe(true)
+  })
+
+  it("FTS5 DELETE trigger removes node from search", async () => {
+    const beforeCount = db.search("triggerTest").length
+    await db.deleteNode("fts-trigger-insert")
+    const afterCount = db.search("triggerTest").length
+    expect(afterCount).toBeLessThan(beforeCount)
+  })
+
+  it("FTS5 UPDATE trigger reflects changes in search", () => {
+    db.insertNodes([{
+      id: "fts-trigger-update",
+      kind: "function",
+      name: "updateBefore",
+      qualifiedName: "updateBefore",
+      filePath: "src/trigger.ts",
+      language: "typescript",
+      startLine: 1,
+      endLine: 1,
+      startColumn: 0,
+      endColumn: 0,
+      updatedAt: Date.now(),
+    }])
+    let results = db.search("updateBefore")
+    expect(results.some((r) => r.node.name === "updateBefore")).toBe(true)
+    db.insertNodes([{
+      id: "fts-trigger-update",
+      kind: "function",
+      name: "updateAfter",
+      qualifiedName: "updateAfter",
+      filePath: "src/trigger.ts",
+      language: "typescript",
+      startLine: 1,
+      endLine: 1,
+      startColumn: 0,
+      endColumn: 0,
+      updatedAt: Date.now(),
+    }])
+    results = db.search("updateAfter")
+    expect(results.some((r) => r.node.name === "updateAfter")).toBe(true)
+    results = db.search("updateBefore")
+    expect(results.some((r) => r.node.name === "updateBefore")).toBe(false)
+  })
+
+  // ---- Three-tier: Fuzzy уровень ----
+
+  it("Fuzzy tier activates when FTS5 and LIKE return no results", () => {
+    const results = db.search("handleRequst")
+    expect(results.length).toBeGreaterThan(0)
+    expect(results.some((r) => r.node.name === "handleRequest")).toBe(true)
+  })
 })

@@ -561,4 +561,229 @@ describe("QueryBuilder", () => {
     const names = db.getAllNodeNames()
     expect(names).toContain("testFunc")
   })
+
+  // ---- Неразрешённые ссылки: чанкинг ----
+
+  it("getUnresolvedReferencesByFiles handles >500 file paths", async () => {
+    await db.insertNode({
+      id: "chunk-ref-node",
+      kind: "function",
+      name: "chunkRefNode",
+      qualifiedName: "chunkRefNode",
+      filePath: "src/chunk.ts",
+      language: "typescript",
+      startLine: 1,
+      endLine: 1,
+      startColumn: 0,
+      endColumn: 0,
+      updatedAt: Date.now(),
+    })
+    const filePaths: string[] = []
+    const refs: IUnresolvedReference[] = []
+    for (let i = 0; i < 510; i++) {
+      const fp = `src/chunk-file-${i}.ts`
+      filePaths.push(fp)
+      refs.push({
+        fromNodeId: "chunk-ref-node",
+        referenceName: `chunkRef${i}`,
+        referenceKind: "function_ref",
+        line: 1,
+        column: 1,
+        filePath: fp,
+      })
+    }
+    db.insertUnresolvedRefsBatch(refs)
+    const results = db.getUnresolvedReferencesByFiles(filePaths)
+    expect(results.length).toBe(510)
+  })
+
+  // ---- getDominantFile ----
+
+  it("getDominantFile returns file with most internal edges", async () => {
+    const nodes: INode[] = []
+    const edges: IEdge[] = []
+    for (let i = 0; i < 25; i++) {
+      const srcId = `dom-src-${i}`
+      const tgtId = `dom-tgt-${i}`
+      nodes.push(
+        {
+          id: srcId,
+          kind: "function",
+          name: `domSrc${i}`,
+          qualifiedName: `domSrc${i}`,
+          filePath: "src/dominant.ts",
+          language: "typescript",
+          startLine: i,
+          endLine: i,
+          startColumn: 0,
+          endColumn: 0,
+          updatedAt: Date.now(),
+        },
+        {
+          id: tgtId,
+          kind: "function",
+          name: `domTgt${i}`,
+          qualifiedName: `domTgt${i}`,
+          filePath: "src/dominant.ts",
+          language: "typescript",
+          startLine: i + 100,
+          endLine: i + 100,
+          startColumn: 0,
+          endColumn: 0,
+          updatedAt: Date.now(),
+        }
+      )
+      edges.push({ source: srcId, target: tgtId, kind: "calls" })
+    }
+    db.insertNodes(nodes)
+    db.insertEdges(edges)
+    const dominant = db.getDominantFile()
+    expect(dominant).not.toBeNull()
+    expect(dominant!.filePath).toBe("src/dominant.ts")
+    expect(dominant!.edgeCount).toBe(25)
+  })
+
+  it("getDominantFile returns null below threshold", async () => {
+    db.clear()
+    db.clearCache()
+    const nodes: INode[] = []
+    const edges: IEdge[] = []
+    for (let i = 0; i < 5; i++) {
+      const srcId = `below-src-${i}`
+      const tgtId = `below-tgt-${i}`
+      nodes.push(
+        {
+          id: srcId,
+          kind: "function",
+          name: `belowSrc${i}`,
+          qualifiedName: `belowSrc${i}`,
+          filePath: "src/below.ts",
+          language: "typescript",
+          startLine: i,
+          endLine: i,
+          startColumn: 0,
+          endColumn: 0,
+          updatedAt: Date.now(),
+        },
+        {
+          id: tgtId,
+          kind: "function",
+          name: `belowTgt${i}`,
+          qualifiedName: `belowTgt${i}`,
+          filePath: "src/below.ts",
+          language: "typescript",
+          startLine: i + 100,
+          endLine: i + 100,
+          startColumn: 0,
+          endColumn: 0,
+          updatedAt: Date.now(),
+        }
+      )
+      edges.push({ source: srcId, target: tgtId, kind: "calls" })
+    }
+    db.insertNodes(nodes)
+    db.insertEdges(edges)
+    const dominant = db.getDominantFile()
+    expect(dominant).toBeNull()
+  })
+
+  // ---- foreign_keys cascade ----
+
+  it("cascading delete removes edges on source side", async () => {
+    const srcNode: INode = {
+      id: "cascade-source",
+      kind: "function",
+      name: "cascadeSource",
+      qualifiedName: "cascadeSource",
+      filePath: "src/cascade.ts",
+      language: "typescript",
+      startLine: 1,
+      endLine: 1,
+      startColumn: 0,
+      endColumn: 0,
+      updatedAt: Date.now(),
+    }
+    const tgtNode: INode = {
+      id: "cascade-source-target",
+      kind: "function",
+      name: "cascadeSourceTarget",
+      qualifiedName: "cascadeSourceTarget",
+      filePath: "src/cascade.ts",
+      language: "typescript",
+      startLine: 2,
+      endLine: 2,
+      startColumn: 0,
+      endColumn: 0,
+      updatedAt: Date.now(),
+    }
+    await db.insertNode(srcNode)
+    await db.insertNode(tgtNode)
+    await db.insertEdge({ source: "cascade-source", target: "cascade-source-target", kind: "calls" })
+    const edges = db.getOutgoingEdges("cascade-source")
+    expect(edges.length).toBe(1)
+    await db.deleteNode("cascade-source")
+    const edgesAfter = db.getOutgoingEdges("cascade-source")
+    expect(edgesAfter.length).toBe(0)
+  })
+
+  it("cascading delete removes unresolved_refs", async () => {
+    const refNode: INode = {
+      id: "cascade-unresolved-node",
+      kind: "function",
+      name: "cascadeUnresolvedNode",
+      qualifiedName: "cascadeUnresolvedNode",
+      filePath: "src/cascade.ts",
+      language: "typescript",
+      startLine: 3,
+      endLine: 3,
+      startColumn: 0,
+      endColumn: 0,
+      updatedAt: Date.now(),
+    }
+    await db.insertNode(refNode)
+    db.insertUnresolvedRef({
+      fromNodeId: "cascade-unresolved-node",
+      referenceName: "unresolvedCascade",
+      referenceKind: "function_ref",
+      line: 1,
+      column: 1,
+    })
+    const refs = db.getUnresolvedReferences()
+    expect(refs.some((r) => r.fromNodeId === "cascade-unresolved-node")).toBe(true)
+    await db.deleteNode("cascade-unresolved-node")
+    const refsAfter = db.getUnresolvedReferences()
+    expect(refsAfter.some((r) => r.fromNodeId === "cascade-unresolved-node")).toBe(false)
+  })
+
+  // ---- LRU-кэш: вытеснение ----
+
+  it("LRU cache evicts oldest accessed node after exceeding capacity", async () => {
+    db.clear()
+    db.clearCache()
+    // Вставка узлов в БД для проверки вытеснения кэша
+    for (let i = 0; i < 1005; i++) {
+      await db.insertNode({
+        id: `lru-${i}`,
+        kind: "function",
+        name: `lruFn${i}`,
+        qualifiedName: `lruFn${i}`,
+        filePath: "src/lru.ts",
+        language: "typescript",
+        startLine: i,
+        endLine: i,
+        startColumn: 0,
+        endColumn: 0,
+        updatedAt: Date.now(),
+      })
+    }
+    // Доступ к каждому узлу — заполняет LRU-кэш
+    for (let i = 0; i < 1005; i++) {
+      db.getNodeById(`lru-${i}`)
+    }
+    const qb = db.queryBuilder
+    expect(qb.nodeCache.size).toBeLessThanOrEqual(1000)
+    // Узел lru-0 был вытеснен из кэша, но всё ещё существует в БД
+    const evicted = db.getNodeById("lru-0")
+    expect(evicted).not.toBeNull()
+  })
 })

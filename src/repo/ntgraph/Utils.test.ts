@@ -7,12 +7,15 @@
  */
 
 import { describe, it, expect } from "vitest"
+import * as os from "os"
+import * as fs from "fs/promises"
 import {
   rowToNode,
   rowToEdge,
   rowToFileRecord,
   safeJsonParse,
   normalizeNameToken,
+  deriveProjectNameTokens,
   getStemVariants,
   extractSearchTerms,
   unquote,
@@ -80,7 +83,7 @@ describe("Utils", () => {
       kind: "calls",
       metadata: '{"foo":"bar"}',
       line: 10,
-      col: 5,
+      column: 5,
       provenance: "lsp",
     }
     const edge = rowToEdge(row)
@@ -285,6 +288,75 @@ describe("Utils", () => {
     expect(normalizePath("src//main.ts")).toBe("src/main.ts")
   })
 
+  // ---- deriveProjectNameTokens ----
+
+  it("deriveProjectNameTokens extracts from package.json", async () => {
+    const fs = require("fs")
+    const path = require("path")
+    const tmpDir = path.join(os.tmpdir(), `ntgraph-tokens-test-${Date.now()}`)
+    await fs.promises.mkdir(tmpDir, { recursive: true })
+    try {
+      await fs.promises.writeFile(
+        path.join(tmpDir, "package.json"),
+        JSON.stringify({ name: "my-awesome-project" })
+      )
+      const tokens = deriveProjectNameTokens(tmpDir)
+      expect(tokens.has("awesome")).toBe(true)
+      expect(tokens.has("project")).toBe(true)
+    } finally {
+      await fs.promises.rm(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it("deriveProjectNameTokens extracts from go.mod", async () => {
+    const fs = require("fs")
+    const path = require("path")
+    const tmpDir = path.join(os.tmpdir(), `ntgraph-gomod-test-${Date.now()}`)
+    await fs.promises.mkdir(tmpDir, { recursive: true })
+    try {
+      await fs.promises.writeFile(
+        path.join(tmpDir, "go.mod"),
+        "module github.com/example/mygoproject\n"
+      )
+      const tokens = deriveProjectNameTokens(tmpDir)
+      expect(tokens.has("mygoproject")).toBe(true)
+    } finally {
+      await fs.promises.rm(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it("deriveProjectNameTokens falls back to directory name", async () => {
+    const fs = require("fs")
+    const path = require("path")
+    const tmpDir = path.join(os.tmpdir(), "fallbackdir")
+    await fs.promises.mkdir(tmpDir, { recursive: true })
+    try {
+      const tokens = deriveProjectNameTokens(tmpDir)
+      expect(tokens.has("fallbackdir")).toBe(true)
+    } finally {
+      await fs.promises.rm(tmpDir, { recursive: true, force: true })
+    }
+  })
+
+  it("deriveProjectNameTokens filters short tokens", async () => {
+    const fs = require("fs")
+    const path = require("path")
+    const tmpDir = path.join(os.tmpdir(), `ntgraph-short-test-${Date.now()}`)
+    await fs.promises.mkdir(tmpDir, { recursive: true })
+    try {
+      await fs.promises.writeFile(
+        path.join(tmpDir, "package.json"),
+        JSON.stringify({ name: "ab-cdef-ghijkl" })
+      )
+      const tokens = deriveProjectNameTokens(tmpDir)
+      expect(tokens.has("ab")).toBe(false)
+      expect(tokens.has("cdef")).toBe(false)
+      expect(tokens.has("ghijkl")).toBe(true)
+    } finally {
+      await fs.promises.rm(tmpDir, { recursive: true, force: true })
+    }
+  })
+
   // ---- Числовые утилиты ----
 
   it("clamp clamps value to range", () => {
@@ -330,6 +402,24 @@ describe("Utils", () => {
     const acquired = await lock2.acquire()
     expect(acquired).toBe(false)
     lock.release()
+  })
+
+  it("FileLock reclaims stale lock by old mtime", async () => {
+    const fs = require("fs")
+    const lockPath = "/tmp/ntgraph-test-lock-stale"
+    const lockFile = `${lockPath}.lock`
+    try {
+      if (fs.existsSync(lockFile)) fs.unlinkSync(lockFile)
+      fs.writeFileSync(lockFile, String(99999))
+      const oldTime = Date.now() - 300000
+      fs.utimesSync(lockFile, oldTime / 1000, oldTime / 1000)
+      const lock = new FileLock(lockPath)
+      const acquired = await lock.acquire()
+      expect(acquired).toBe(true)
+      lock.release()
+    } finally {
+      try { if (fs.existsSync(lockFile)) fs.unlinkSync(lockFile) } catch {}
+    }
   })
 
   // ---- Память ----

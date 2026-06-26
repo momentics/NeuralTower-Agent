@@ -118,7 +118,7 @@ const migrationV1: Migration = {
         kind TEXT NOT NULL,
         metadata TEXT,
         line INTEGER,
-        col INTEGER,
+        "column" INTEGER,
         provenance TEXT DEFAULT NULL,
         FOREIGN KEY (source) REFERENCES nodes(id) ON DELETE CASCADE,
         FOREIGN KEY (target) REFERENCES nodes(id) ON DELETE CASCADE
