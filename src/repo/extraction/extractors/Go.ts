@@ -30,6 +30,8 @@ export class GoExtractor extends ExtractorBase {
     filePath: string,
     _frameworkNames?: string[]
   ): IExtractionResult {
+    // Измеряем время извлечения
+    const start = Date.now();
     const nodes: INode[] = [];
     const edges: IEdge[] = [];
     const unresolvedRefs: IUnresolvedReference[] = [];
@@ -50,7 +52,7 @@ export class GoExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
 
       const root = tree.rootNode;
@@ -61,13 +63,13 @@ export class GoExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
 
       // Узел модуля
       const moduleNode = this.createNode(
         filePath,
-        NodeKind.Module,
+        NodeKind.File,
         filePath,
         1,
         content.split('\n').length,
@@ -97,7 +99,7 @@ export class GoExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
   }
 
   /** Обрабатывает узлы AST для Go. */
@@ -271,6 +273,8 @@ export class GoExtractor extends ExtractorBase {
     );
     nodes.push(importNode);
     edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Contains));
+    // Ребро Imports от файла к узлу импорта
+    edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Imports));
 
     unresolvedRefs.push(this.createUnresolvedRef(
       importNode.id,
@@ -404,9 +408,10 @@ export class GoExtractor extends ExtractorBase {
     const isTag = node.childForFieldName('tag') !== null;
     const tagNode = node.childForFieldName('tag');
 
+    // Поле структуры — используем Field, а не Property
     const propNode = this.createNode(
       filePath,
-      NodeKind.Property,
+      NodeKind.Field,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -653,6 +658,20 @@ export class GoExtractor extends ExtractorBase {
     const result = node.childForFieldName('result');
     if (result) {
       this.processResult(result, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors);
+      // Ребро returns
+      if (returnType) {
+        const returnTypeNode = this.createNode(
+          filePath,
+          NodeKind.Variable,
+          returnType,
+          node.startPosition.row + 1,
+          node.endPosition.row + 1,
+          0,
+          0
+        );
+        nodes.push(returnTypeNode);
+        edges.push(this.createEdge(funcNode.id, returnTypeNode.id, EdgeKind.Returns));
+      }
     }
 
     // Тело функции
@@ -727,6 +746,20 @@ export class GoExtractor extends ExtractorBase {
     const result = node.childForFieldName('result');
     if (result) {
       this.processResult(result, filePath, content, methodNode.id, nodes, edges, unresolvedRefs, errors);
+      // Ребро returns
+      if (returnType) {
+        const returnTypeNode = this.createNode(
+          filePath,
+          NodeKind.Variable,
+          returnType,
+          node.startPosition.row + 1,
+          node.endPosition.row + 1,
+          0,
+          0
+        );
+        nodes.push(returnTypeNode);
+        edges.push(this.createEdge(methodNode.id, returnTypeNode.id, EdgeKind.Returns));
+      }
     }
 
     // Тело метода
@@ -795,6 +828,20 @@ export class GoExtractor extends ExtractorBase {
       );
       nodes.push(varNode);
       edges.push(this.createEdge(parentId, varNode.id, EdgeKind.Contains));
+      // Ребро type_of
+      if (typeNode) {
+        const typeTypeNode = this.createNode(
+          filePath,
+          NodeKind.Variable,
+          typeNode.text,
+          typeNode.startPosition.row + 1,
+          typeNode.endPosition.row + 1,
+          typeNode.startPosition.column,
+          typeNode.endPosition.column
+        );
+        nodes.push(typeTypeNode);
+        edges.push(this.createEdge(varNode.id, typeTypeNode.id, EdgeKind.TypeOf));
+      }
 
       nameNode = nameNode.nextSibling;
     }
@@ -844,7 +891,8 @@ export class GoExtractor extends ExtractorBase {
       const valueNode = node.childForFieldName('value');
       const docstring = this.extractDocstring(content, node.startPosition.row + 1);
 
-      const varNode = this.createNode(
+      // Константа — используем NodeKind.Constant
+      const constNode = this.createNode(
         filePath,
         NodeKind.Constant,
         name,
@@ -859,8 +907,22 @@ export class GoExtractor extends ExtractorBase {
           value: valueNode ? valueNode.text : undefined,
         }
       );
-      nodes.push(varNode);
-      edges.push(this.createEdge(parentId, varNode.id, EdgeKind.Contains));
+      nodes.push(constNode);
+      edges.push(this.createEdge(parentId, constNode.id, EdgeKind.Contains));
+      // Ребро type_of
+      if (typeNode) {
+        const typeTypeNode = this.createNode(
+          filePath,
+          NodeKind.Variable,
+          typeNode.text,
+          typeNode.startPosition.row + 1,
+          typeNode.endPosition.row + 1,
+          typeNode.startPosition.column,
+          typeNode.endPosition.column
+        );
+        nodes.push(typeTypeNode);
+        edges.push(this.createEdge(constNode.id, typeTypeNode.id, EdgeKind.TypeOf));
+      }
 
       nameNode = nameNode.nextSibling;
     }
@@ -987,7 +1049,7 @@ export class GoExtractor extends ExtractorBase {
     }
   }
 
-  /** Обрабатывает параметры функции. */
+ /** Обрабатывает параметры функции. */
   protected processParameters(
     node: any,
     filePath: string,
@@ -1002,6 +1064,7 @@ export class GoExtractor extends ExtractorBase {
     while (child) {
       if (child.type === 'parameter_declaration') {
         const nameNode = child.childForFieldName('name');
+        const typeNode = child.childForFieldName('type');
         if (nameNode && nameNode.text !== '_') {
           let paramName = nameNode.text;
           // Несколько параметров одного типа
@@ -1019,6 +1082,20 @@ export class GoExtractor extends ExtractorBase {
               );
               nodes.push(paramNode);
               edges.push(this.createEdge(parentId, paramNode.id, EdgeKind.Contains));
+              // Ребро type_of
+              if (typeNode) {
+                const typeTypeNode = this.createNode(
+                  filePath,
+          NodeKind.Variable,
+                  typeNode.text,
+                  typeNode.startPosition.row + 1,
+                  typeNode.endPosition.row + 1,
+                  typeNode.startPosition.column,
+                  typeNode.endPosition.column
+                );
+                nodes.push(typeTypeNode);
+                edges.push(this.createEdge(paramNode.id, typeTypeNode.id, EdgeKind.TypeOf));
+              }
             }
             nameChild = nameChild.nextSibling;
           }

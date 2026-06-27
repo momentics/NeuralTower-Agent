@@ -78,7 +78,7 @@ interface IGitignorePatternResult {
  * Транслирует gitignore-паттерн в регулярное выражение.
  * Поддерживает *, **, ? и анкоринг.
  */
-function patternToRegex(pattern: string): IGitignorePatternResult {
+function patternToRegex(pattern: string): IGitignorePatternResult | null {
   let isNegation = false;
 
   if (pattern.startsWith('!')) {
@@ -147,9 +147,13 @@ function patternToRegex(pattern: string): IGitignorePatternResult {
     regexSource = '^' + regexSource + '(?:/.*)?$';
   }
 
-  const re = new RegExp(regexSource);
-
-  return { re, isNegation, dirOnly };
+  try {
+    const re = new RegExp(regexSource);
+    return { re, isNegation, dirOnly };
+  } catch {
+    console.warn(`[Gitignore] Неверный regex для паттерна: ${pattern}`);
+    return null;
+  }
 }
 
 /**
@@ -160,7 +164,16 @@ function patternToRegex(pattern: string): IGitignorePatternResult {
 export function matchGitignorePattern(filePath: string, pattern: string): boolean {
   const normalizedPath = filePath.replace(/\\/g, '/');
 
-  const { re, isNegation, dirOnly } = patternToRegex(pattern);
+  // Оборачиваем в try-catch: невалидные паттерны игнорируются
+  let result: IGitignorePatternResult | null;
+  try {
+    result = patternToRegex(pattern);
+  } catch {
+    console.warn(`[Gitignore] Ошибка обработки паттерна: ${pattern}`);
+    return false;
+  }
+  if (!result) return false;
+  const { re, isNegation, dirOnly } = result;
 
   if (dirOnly) {
     // Паттерн только для директорий — путь должен заканчиваться / или

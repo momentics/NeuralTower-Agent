@@ -551,11 +551,11 @@ export class ExtractionOrchestrator {
           processed++;
 
           // Создание записи файла
-          const fileRecord: IFileRecord = {
-            path: filePath,
-            contentHash: hashContent(content),
-            language,
-            size: stats.size,
+       const fileRecord: IFileRecord = {
+          path: filePath,
+          contentHash: hashContent(content),
+          language: language as Language,
+          size: stats.size,
             modifiedAt: stats.mtimeMs,
             indexedAt: Date.now(),
             nodeCount: result.nodes.length,
@@ -640,6 +640,15 @@ await this.storeExtractionResult(fileRecord, result);
     const changedFilePaths: string[] = [];
 
     onProgress?.({ phase: 'scanning', current: 0, total: 0, file: '', durationMs: 0 });
+
+    // Загрузка грамматик перед основным циклом извлечения
+    if (PARSER_WORKER_AVAILABLE) {
+      try {
+        await loadGrammarsWorker(['typescript', 'python']);
+      } catch {
+        // Игнорируем ошибки загрузки грамматик
+      }
+    }
 
     // Пытаемся использовать git для быстрого обнаружения изменений
     const gitChanges = getGitChangedFiles(this.rootDir);
@@ -900,6 +909,9 @@ await this.storeExtractionResult(fileRecord, result);
     this._detectedFrameworks = null;
     const frameworkNames = this.ensureDetectedFrameworks(filePaths);
 
+    // Уровень 2: сборка списка файлов, которые не удалось распарсить
+    const failedFiles: { filePath: string; content: string; language: string; stats: fs.Stats }[] = [];
+
     const total = filePaths.length;
     let processed = 0;
 
@@ -959,20 +971,33 @@ await this.storeExtractionResult(fileRecord, result);
           continue;
         }
 
-        // Извлечение AST через экстрактор
+        // Извлечение AST через экстрактор с 2-уровневым повтором
         let result: IExtractionResult;
         try {
           result = this.extractFile(filePath, content, language, frameworkNames);
         } catch (parseErr) {
-          processed++;
-          filesErrored++;
-          errors.push({
-            message: parseErr instanceof Error ? parseErr.message : String(parseErr),
-            filePath,
-            severity: 'error',
-            code: 'parse_error',
-          });
-          continue;
+          // Уровень 1: повтор с оригинальным содержимым
+          try {
+            result = this.extractFile(filePath, content, language, frameworkNames);
+          } catch (parseErr2) {
+            // Уровень 2: удаление комментариев и повтор
+            try {
+              const stripped = this.stripComments(content, language);
+              result = this.extractFile(filePath, stripped, language, frameworkNames);
+            } catch (parseErr3) {
+              // Сохраняем для повторной обработки с фолбэком
+              failedFiles.push({ filePath, content, language, stats });
+              processed++;
+              filesErrored++;
+              errors.push({
+                message: parseErr3 instanceof Error ? parseErr3.message : String(parseErr3),
+                filePath,
+                severity: 'error',
+                code: 'parse_error',
+              });
+              continue;
+            }
+          }
         }
 
         processed++;
@@ -1011,6 +1036,49 @@ await this.storeExtractionResult(fileRecord, result);
           filesErrored++;
         } else {
           filesSkipped++;
+        }
+      }
+    }
+
+    // Уровень 2: повторная обработка файлов, которые не удалось распарсить, с фолбэком
+    for (const { filePath, content, language, stats } of failedFiles) {
+      // Фолбэк: пробовать каждый доступный экстрактор
+      let fallbackResult: IExtractionResult | null = null;
+      for (const [lang, extractor] of EXTRACTOR_MAP) {
+        try {
+          fallbackResult = extractor.extract(content, filePath, frameworkNames);
+          if (fallbackResult.nodes.length > 0) {
+            break;
+          }
+        } catch {
+          // Пробуем следующий экстрактор
+        }
+      }
+
+      if (fallbackResult && fallbackResult.nodes.length > 0) {
+        const fileRecord: IFileRecord = {
+          path: filePath,
+          contentHash: hashContent(content),
+          language: language as Language,
+          size: stats.size,
+          modifiedAt: stats.mtimeMs,
+          indexedAt: Date.now(),
+          nodeCount: fallbackResult.nodes.length,
+          errors: fallbackResult.errors.length > 0 ? fallbackResult.errors : undefined,
+        };
+
+        await this.storeExtractionResult(fileRecord, fallbackResult);
+
+        filesErrored--;
+        filesIndexed++;
+        totalNodes += fallbackResult.nodes.length;
+        totalEdges += fallbackResult.edges.length;
+
+        if (fallbackResult.errors.length > 0) {
+          for (const err of fallbackResult.errors) {
+            if (!err.filePath) err.filePath = filePath;
+          }
+          errors.push(...fallbackResult.errors);
         }
       }
     }
@@ -1436,10 +1504,10 @@ await this.storeExtractionResult(fileRecord, result);
     try {
       const result = this.extractFile(filePath, content, language, frameworkNames);
 
-      const fileRecord: IFileRecord = {
-        path: filePath,
-        contentHash: hashContent(content),
-        language,
+       const fileRecord: IFileRecord = {
+          path: filePath,
+          contentHash: hashContent(content),
+          language: language as Language,
         size: stats.size,
         modifiedAt: stats.mtimeMs,
         indexedAt: Date.now(),

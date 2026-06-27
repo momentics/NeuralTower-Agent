@@ -49,12 +49,12 @@ describe("extraction pipeline", () => {
       expect(detectLanguage("src/file.ts")).toBe("typescript")
     })
 
-    it("detects TypeScript from .tsx extension", () => {
-      expect(detectLanguage("src/file.tsx")).toBe("typescript")
+    it("detects TSX from .tsx extension", () => {
+      expect(detectLanguage("src/file.tsx")).toBe("tsx")
     })
 
     it("detects JavaScript from .js extension", () => {
-      expect(detectLanguage("src/file.js")).toBe("typescript")
+      expect(detectLanguage("src/file.js")).toBe("javascript")
     })
 
     it("detects Python from .py extension", () => {

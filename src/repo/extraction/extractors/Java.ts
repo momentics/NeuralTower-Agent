@@ -33,6 +33,8 @@ export class JavaExtractor extends ExtractorBase {
     frameworkNames?: string[]
   ): IExtractionResult {
     this.isSpringBoot = frameworkNames?.includes('springboot') ?? false;
+    // Измеряем время извлечения
+    const start = Date.now();
     const nodes: INode[] = [];
     const edges: IEdge[] = [];
     const unresolvedRefs: IUnresolvedReference[] = [];
@@ -53,29 +55,30 @@ export class JavaExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+        // Измеряем время извлечения
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
 
       const root = tree.rootNode;
 
-      // Узел модуля
-      const moduleNode = this.createNode(
+      // Корневой узел — файл, а не модуль
+      const fileNode = this.createNode(
         filePath,
-        NodeKind.Module,
+        NodeKind.File,
         filePath,
         1,
         content.split('\n').length,
         0,
         0
       );
-      nodes.push(moduleNode);
+      nodes.push(fileNode);
 
       // Обработка объявлений верхнего уровня
       this.processJavaNodes(
         root,
         filePath,
         content,
-        moduleNode.id,
+        fileNode.id,
         nodes,
         edges,
         unresolvedRefs,
@@ -91,7 +94,8 @@ export class JavaExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+    // Измеряем время извлечения
+    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
   }
 
   /** Обрабатывает узлы AST для Java. */
@@ -272,6 +276,8 @@ export class JavaExtractor extends ExtractorBase {
     );
     nodes.push(importNode);
     edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Contains));
+    // Ребро Imports от файла к узлу импорта
+    edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Imports));
 
     unresolvedRefs.push(this.createUnresolvedRef(
       importNode.id,
@@ -574,6 +580,11 @@ export class JavaExtractor extends ExtractorBase {
     nodes.push(methodNode);
     edges.push(this.createEdge(parentId, methodNode.id, EdgeKind.Contains));
 
+    // Ребро Returns от метода к типу возвращаемого значения
+    if (returnType) {
+      edges.push(this.createEdge(methodNode.id, this.nodeId(filePath, NodeKind.Variable, returnType, methodNode.startLine), EdgeKind.Returns, { line: methodNode.startLine }));
+    }
+
     // Параметры типов
     const typeParams = node.childForFieldName('type_parameters');
     if (typeParams) {
@@ -669,10 +680,14 @@ export class JavaExtractor extends ExtractorBase {
           const isStatic = this.hasModifier(node, 'static');
           const isFinal = this.hasModifier(node, 'final');
           const docstring = this.extractDocstring(content, decl.startPosition.row + 1);
+          // Константа: final + UPPER_CASE
+          const isConstant = isFinal && /^[A-Z_][A-Z0-9_]*$/.test(name);
+          const fieldKind = isConstant ? NodeKind.Constant : NodeKind.Field;
 
-          const propNode = this.createNode(
+          // Поле класса — используем Field
+          const fieldNode = this.createNode(
             filePath,
-            NodeKind.Property,
+            fieldKind,
             name,
             decl.startPosition.row + 1,
             decl.endPosition.row + 1,
@@ -686,8 +701,8 @@ export class JavaExtractor extends ExtractorBase {
               visibility: this.extractVisibility(node),
             }
           );
-          nodes.push(propNode);
-          edges.push(this.createEdge(parentId, propNode.id, EdgeKind.Contains));
+          nodes.push(fieldNode);
+          edges.push(this.createEdge(parentId, fieldNode.id, EdgeKind.Contains));
         }
       }
       decl = decl.nextSibling;
@@ -980,6 +995,7 @@ export class JavaExtractor extends ExtractorBase {
         const nameNode = child.childForFieldName('name');
         if (nameNode) {
           const paramName = nameNode.text;
+          const typeNode = child.childForFieldName('type');
           const paramNode = this.createNode(
             filePath,
             NodeKind.Parameter,
@@ -991,6 +1007,10 @@ export class JavaExtractor extends ExtractorBase {
           );
           nodes.push(paramNode);
           edges.push(this.createEdge(parentId, paramNode.id, EdgeKind.Contains));
+          // Ребро TypeOf от параметра к типу
+          if (typeNode) {
+            edges.push(this.createEdge(paramNode.id, this.nodeId(filePath, NodeKind.Variable, typeNode.text, paramNode.startLine), EdgeKind.TypeOf, { line: paramNode.startLine }));
+          }
         }
       }
       child = child.nextSibling;

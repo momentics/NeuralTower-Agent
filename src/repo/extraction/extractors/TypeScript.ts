@@ -34,6 +34,8 @@ export class TypeScriptExtractor extends ExtractorBase {
     filePath: string,
     frameworkNames?: string[]
   ): IExtractionResult {
+    // Измеряем реальное время извлечения
+    const start = Date.now();
     this.isReact = frameworkNames?.includes('react') ?? false;
     this.isNextjs = frameworkNames?.includes('nextjs') ?? false;
     this.isExpress = frameworkNames?.includes('express') ?? false;
@@ -60,19 +62,19 @@ export class TypeScriptExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
 
       const root = tree.rootNode;
       if (root.type === 'lexical_declaration' || root.type === 'statement_block') {
         // Пустой или повреждённый файл
-        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
 
-      // Узел модуля
+      // Узел файла
       const moduleNode = this.createNode(
         filePath,
-        NodeKind.Module,
+        NodeKind.File,
         filePath,
         1,
         content.split('\n').length,
@@ -107,7 +109,7 @@ export class TypeScriptExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
   }
 
   /** Обрабатывает узлы AST для TypeScript. */
@@ -808,9 +810,10 @@ export class TypeScriptExtractor extends ExtractorBase {
     const decorators = this.extractDecorators(node, content);
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
 
+    // Создаём узел поля (Field, а не Property)
     const propNode = this.createNode(
       filePath,
-      NodeKind.Property,
+      NodeKind.Field,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -882,9 +885,13 @@ export class TypeScriptExtractor extends ExtractorBase {
               cchild = cchild.nextSibling;
             }
           } else {
+            // Константа: const с именем в UPPER_CASE
+            const isConst = node.type === 'lexical_declaration';
+            const isUpper = /^[A-Z][A-Z0-9_]*$/.test(name);
+            const varKind = isConst && isUpper ? NodeKind.Constant : NodeKind.Variable;
             const varNode = this.createNode(
               filePath,
-              NodeKind.Variable,
+              varKind,
               name,
               child.startPosition.row + 1,
               child.endPosition.row + 1,
@@ -1136,6 +1143,11 @@ export class TypeScriptExtractor extends ExtractorBase {
     );
     nodes.push(importNode);
     edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Contains));
+    // Создаём ребро Imports от файла к узлу импорта
+    edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Imports, {
+      line,
+      column,
+    }));
 
     unresolvedRefs.push(this.createUnresolvedRef(
       importNode.id,
@@ -1431,6 +1443,15 @@ export class TypeScriptExtractor extends ExtractorBase {
         line,
         column,
       }));
+      // Создаём узел неопределённой ссылки для вызова
+      unresolvedRefs.push(this.createUnresolvedRef(
+        parentId,
+        funcName,
+        EdgeKind.Calls,
+        line,
+        column,
+        filePath
+      ));
     }
   }
 

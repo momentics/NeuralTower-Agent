@@ -50,11 +50,8 @@ const FRAMEWORK_INDICATORS: FrameworkIndicator[] = [
   // Django: наличие manage.py и settings.py
   { pattern: (f) => f === 'manage.py' || f.endsWith('/settings.py') || f === 'settings.py', name: 'Django' },
 
-  // Flask: app.py с импортом Flask или requirements.txt с flask
-  { pattern: (f) => f === 'requirements.txt', name: 'Flask' },
-
-  // FastAPI: main.py с импортом FastAPI
-  { pattern: (f) => f === 'main.py', name: 'FastAPI' },
+  // Flask: детекция по содержимому файла (import flask)
+  // FastAPI: детекция по содержимому файла (import fastapi)
 
   // --- Java фреймворки ---
 
@@ -67,8 +64,7 @@ const FRAMEWORK_INDICATORS: FrameworkIndicator[] = [
 
   // --- Rust фреймворки ---
 
-  // Actix-web, Axum: Cargo.toml с соответствующей зависимостью
-  { pattern: (f) => f === 'Cargo.toml', name: 'Actix-web' },
+  // Actix-web, Axum: детекция по содержимому Cargo.toml
 
   // --- C# фреймворки ---
 
@@ -82,6 +78,12 @@ const CONTENT_INDICATORS: ContentIndicator[] = [
   { match: /"express"\s*:/, name: 'Express', filePattern: /^package\.json$/ },
   // Spring Boot: аннотация @SpringBootApplication или @RestController
   { match: /@(?:SpringBootApplication|RestController|SpringBootConfiguration)/, name: 'Spring Boot', filePattern: /\.java$/ },
+  // Flask: импорт flask в Python файле
+  { match: /(?:^|\s)import\s+flask(?:\s|$|\.|:)/i, name: 'Flask', filePattern: /\.py$/ },
+  // FastAPI: импорт fastapi в Python файле
+  { match: /(?:^|\s)import\s+fastapi(?:\s|$|\.|:)/i, name: 'FastAPI', filePattern: /\.py$/ },
+  // Actix-web: зависимость actix-web в Cargo.toml
+  { match: /actix-web/, name: 'Actix-web', filePattern: /^Cargo\.toml$/ },
 ];
 
 /**

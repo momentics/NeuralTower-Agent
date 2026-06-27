@@ -35,6 +35,8 @@ export class CppExtractor extends ExtractorBase {
     const edges: IEdge[] = [];
     const unresolvedRefs: IUnresolvedReference[] = [];
     const errors: IExtractionError[] = [];
+    // Измеряем время извлечения
+    const start = Date.now();
 
     try {
       const parser = require('tree-sitter');
@@ -50,9 +52,9 @@ export class CppExtractor extends ExtractorBase {
           nodes, edges, unresolvedRefs, errors
         );
         if (result) {
-       return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
-        }
-      } else {
+       return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
+         }
+       } else {
         // .c — только C, остальные — C++
         if (filePath.endsWith('.c')) {
           p.setLanguage(cGrammar.C);
@@ -69,15 +71,15 @@ export class CppExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-   return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
-      }
+   return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
+       }
 
       const root = tree.rootNode;
 
-      // Узел модуля
+     // Корневой узел — файл, а не модуль
       const moduleNode = this.createNode(
         filePath,
-        NodeKind.Module,
+        NodeKind.File,
         filePath,
         1,
         content.split('\n').length,
@@ -85,8 +87,6 @@ export class CppExtractor extends ExtractorBase {
         0
       );
       nodes.push(moduleNode);
-
-      // Обработка верхнего уровня
       this.processCppNodes(
         root,
         filePath,
@@ -107,7 +107,7 @@ export class CppExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
   }
 
   /** Двойной парсинг для .h файлов: C++ сначала, затем C. */
@@ -128,9 +128,10 @@ export class CppExtractor extends ExtractorBase {
 
     if (cppTree && !cppTree.rootNode.hasError) {
       const root = cppTree.rootNode;
+      // Корневой узел — файл
       const moduleNode = this.createNode(
         filePath,
-        NodeKind.Module,
+        NodeKind.File,
         filePath,
         1,
         content.split('\n').length,
@@ -157,9 +158,10 @@ export class CppExtractor extends ExtractorBase {
 
     if (cTree && !cTree.rootNode.hasError) {
       const root = cTree.rootNode;
+      // Корневой узел — файл
       const moduleNode = this.createNode(
         filePath,
-        NodeKind.Module,
+        NodeKind.File,
         filePath,
         1,
         content.split('\n').length,
@@ -517,6 +519,11 @@ export class CppExtractor extends ExtractorBase {
     nodes.push(funcNode);
     edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Contains));
 
+    if (funcNode.returnType) {
+      // Ребро Returns от функции к типу возвращаемого значения
+      edges.push(this.createEdge(funcNode.id, this.nodeId(filePath, NodeKind.Variable, funcNode.returnType, funcNode.startLine), EdgeKind.Returns, { line: funcNode.startLine }));
+    }
+
     // Параметры шаблона
     const templateParams = node.childForFieldName('type_parameters');
     if (templateParams) {
@@ -559,9 +566,10 @@ export class CppExtractor extends ExtractorBase {
     const isStatic = this.hasSpecifier(node, 'static');
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
 
+    // Поле структуры/класса — используем Field
     const propNode = this.createNode(
       filePath,
-      NodeKind.Property,
+      NodeKind.Field,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -600,10 +608,11 @@ export class CppExtractor extends ExtractorBase {
         if (nameNode) {
           const name = nameNode.text;
           const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}::${name}` : name;
-
+          const isConst = this.hasConstSpecifier(node);
+          // Константа: const или constexpr
           const varNode = this.createNode(
             filePath,
-            NodeKind.Variable,
+            isConst ? NodeKind.Constant : NodeKind.Variable,
             name,
             decl.startPosition.row + 1,
             decl.endPosition.row + 1,
@@ -647,10 +656,11 @@ export class CppExtractor extends ExtractorBase {
         if (nameNode) {
           const name = nameNode.text;
           const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}::${name}` : name;
-
+          const isConst = this.hasConstSpecifier(node);
+          // Константа: const или constexpr
           const varNode = this.createNode(
             filePath,
-            NodeKind.Variable,
+            isConst ? NodeKind.Constant : NodeKind.Variable,
             name,
             decl.startPosition.row + 1,
             decl.endPosition.row + 1,
@@ -838,6 +848,8 @@ export class CppExtractor extends ExtractorBase {
     );
     nodes.push(importNode);
     edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Contains));
+    // Ребро Imports от файла к узлу импорта
+    edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Imports, { line }));
 
     unresolvedRefs.push(this.createUnresolvedRef(
       importNode.id,
@@ -989,6 +1001,12 @@ export class CppExtractor extends ExtractorBase {
     );
     nodes.push(paramNode);
     edges.push(this.createEdge(parentId, paramNode.id, EdgeKind.Contains));
+
+    const paramType = node.childForFieldName('type');
+    if (paramType) {
+      // Ребро TypeOf от параметра к типу
+      edges.push(this.createEdge(paramNode.id, this.nodeId(filePath, NodeKind.Variable, paramType.text, paramNode.startLine), EdgeKind.TypeOf, { line: paramNode.startLine }));
+    }
   }
 
   /** Обрабатывает атрибут. */
@@ -1274,6 +1292,17 @@ export class CppExtractor extends ExtractorBase {
   }
 
   /** Проверяет наличие спецификатора (virtual, static, inline и т.д.). */
+  protected hasConstSpecifier(node: any): boolean {
+    let child = node.firstChild;
+    while (child) {
+      if (child.type === 'const' || child.type === 'constexpr') {
+        return true;
+      }
+      child = child.nextSibling;
+    }
+    return false;
+  }
+
   protected hasSpecifier(node: any, specifier: string): boolean {
     let child = node.firstChild;
     while (child) {

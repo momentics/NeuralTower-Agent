@@ -34,6 +34,8 @@ export class CSharpExtractor extends ExtractorBase {
     const edges: IEdge[] = [];
     const unresolvedRefs: IUnresolvedReference[] = [];
     const errors: IExtractionError[] = [];
+    // Измеряем время извлечения
+    const start = Date.now();
 
     try {
       const parser = require('tree-sitter');
@@ -50,18 +52,18 @@ export class CSharpExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
 
       const root = tree.rootNode;
       if (root.type === 'compilation_unit' && root.childCount === 0) {
-        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
 
-      // Узел модуля
+      // Корневой узел — файл, а не модуль
       const moduleNode = this.createNode(
         filePath,
-        NodeKind.Module,
+        NodeKind.File,
         filePath,
         1,
         content.split('\n').length,
@@ -91,7 +93,7 @@ export class CSharpExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
   }
 
   /** Обрабатывает узлы AST для C#. */
@@ -262,8 +264,8 @@ export class CSharpExtractor extends ExtractorBase {
           let item = base.firstChild;
           while (item) {
             const baseName = item.text;
-            // В C# интерфейсы по соглашению начинаются с 'I'
-            const isInterface = baseName.startsWith('I');
+            // Ребро Implements из списка интерфейсов AST, а не по эвристике
+            const isInterface = item.parent?.type === 'interface_list';
             const edgeKind = isInterface ? EdgeKind.Implements : EdgeKind.Extends;
             const targetKind = isInterface ? NodeKind.Interface : NodeKind.Class;
             edges.push(this.createEdge(classNode.id, this.nodeId(filePath, targetKind, baseName, 0), edgeKind, {
@@ -318,6 +320,7 @@ export class CSharpExtractor extends ExtractorBase {
     const decorators = this.extractAttributes(node, content);
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
     const signature = this.extractMethodSignature(node, content);
+    const returnType = this.extractReturnType(node);
 
     const funcNode = this.createNode(
       filePath,
@@ -333,11 +336,16 @@ export class CSharpExtractor extends ExtractorBase {
         signature,
         isStatic,
         decorators,
+        returnType,
         visibility: this.extractVisibility(node),
       }
     );
     nodes.push(funcNode);
     edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Contains));
+    if (funcNode.returnType) {
+      // Ребро Returns от метода к типу возвращаемого значения
+      edges.push(this.createEdge(funcNode.id, this.nodeId(filePath, NodeKind.Variable, funcNode.returnType, funcNode.startLine), EdgeKind.Returns, { line: funcNode.startLine }));
+    }
 
     // Параметры
     const params = node.childForFieldName('parameters');
@@ -405,6 +413,10 @@ export class CSharpExtractor extends ExtractorBase {
     );
     nodes.push(methodNode);
     edges.push(this.createEdge(parentId, methodNode.id, EdgeKind.Contains));
+    if (methodNode.returnType) {
+      // Ребро Returns от метода к типу возвращаемого значения
+      edges.push(this.createEdge(methodNode.id, this.nodeId(filePath, NodeKind.Variable, methodNode.returnType, methodNode.startLine), EdgeKind.Returns, { line: methodNode.startLine }));
+    }
 
     // Параметры типов
     const typeParams = node.childForFieldName('type_parameters');
@@ -449,10 +461,10 @@ export class CSharpExtractor extends ExtractorBase {
     const decorators = this.extractAttributes(node, content);
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
 
-    const propNode = this.createNode(
-      filePath,
-      NodeKind.Property,
-      name,
+const fieldNode = this.createNode(
+             filePath,
+             NodeKind.Property,
+             name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
       node.startPosition.column,
@@ -468,8 +480,8 @@ export class CSharpExtractor extends ExtractorBase {
         visibility: this.extractVisibility(node),
       }
     );
-    nodes.push(propNode);
-    edges.push(this.createEdge(parentId, propNode.id, EdgeKind.Contains));
+       nodes.push(fieldNode);
+           edges.push(this.createEdge(parentId, fieldNode.id, EdgeKind.Contains));
   }
 
   /** Обрабатывает объявление поля. */
@@ -492,6 +504,8 @@ export class CSharpExtractor extends ExtractorBase {
     const isStatic = this.hasModifier(node, 'static');
     const isConst = this.hasModifier(node, 'const');
     const isReadonly = this.hasModifier(node, 'readonly');
+    // Константа: const или readonly; иначе — поле класса (Field, а не Property)
+    const nodeKind = isConst || isReadonly ? NodeKind.Constant : NodeKind.Field;
 
     let decl = declarators.firstChild;
     while (decl) {
@@ -799,6 +813,8 @@ export class CSharpExtractor extends ExtractorBase {
     );
     nodes.push(importNode);
     edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Contains));
+    // Ребро Imports от файла к узлу импорта
+    edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Imports));
 
     unresolvedRefs.push(this.createUnresolvedRef(
       importNode.id,
@@ -1037,24 +1053,31 @@ export class CSharpExtractor extends ExtractorBase {
   ): void {
     let child = node.firstChild;
     while (child) {
-      if (child.type === 'parameter') {
-        const nameNode = child.childForFieldName('name');
-        if (nameNode) {
-          const paramName = nameNode.text;
-          const paramNode = this.createNode(
-            filePath,
-            NodeKind.Parameter,
-            paramName,
-            child.startPosition.row + 1,
-            child.endPosition.row + 1,
-            child.startPosition.column,
-            child.endPosition.column
-          );
-          nodes.push(paramNode);
-          edges.push(this.createEdge(parentId, paramNode.id, EdgeKind.Contains));
-        }
-      }
-      child = child.nextSibling;
+ if (child.type === 'parameter') {
+         const nameNode = child.childForFieldName('name');
+         if (nameNode) {
+           const paramName = nameNode.text;
+           const typeNode = child.childForFieldName('type');
+           const paramType = typeNode ? typeNode.text : undefined;
+           const paramNode = this.createNode(
+             filePath,
+             NodeKind.Parameter,
+             paramName,
+             child.startPosition.row + 1,
+             child.endPosition.row + 1,
+             child.startPosition.column,
+             child.endPosition.column,
+             paramType ? { type: paramType } : undefined
+           );
+           nodes.push(paramNode);
+           edges.push(this.createEdge(parentId, paramNode.id, EdgeKind.Contains));
+           if (paramType) {
+              // Ребро TypeOf от параметра к типу
+              edges.push(this.createEdge(paramNode.id, this.nodeId(filePath, NodeKind.Variable, paramType, child.startPosition.row + 1), EdgeKind.TypeOf, { line: child.startPosition.row + 1 }));
+            }
+          }
+       }
+       child = child.nextSibling;
     }
   }
 
@@ -1071,24 +1094,31 @@ export class CSharpExtractor extends ExtractorBase {
   ): void {
     let child = node.firstChild;
     while (child) {
-      if (child.type === 'type_parameter') {
-        const nameNode = child.childForFieldName('name');
-        if (nameNode) {
-          const tpName = nameNode.text;
-          const tpNode = this.createNode(
-            filePath,
-            NodeKind.Parameter,
-            tpName,
-            child.startPosition.row + 1,
-            child.endPosition.row + 1,
-            child.startPosition.column,
-            child.endPosition.column
-          );
-          nodes.push(tpNode);
-          edges.push(this.createEdge(parentId, tpNode.id, EdgeKind.Contains));
-        }
-      }
-      child = child.nextSibling;
+if (child.type === 'type_parameter') {
+         const nameNode = child.childForFieldName('name');
+         if (nameNode) {
+           const tpName = nameNode.text;
+           const typeNode = child.childForFieldName('type');
+           const tpType = typeNode ? typeNode.text : undefined;
+           const tpNode = this.createNode(
+             filePath,
+             NodeKind.Parameter,
+             tpName,
+             child.startPosition.row + 1,
+             child.endPosition.row + 1,
+             child.startPosition.column,
+             child.endPosition.column,
+             tpType ? { type: tpType } : undefined
+           );
+           nodes.push(tpNode);
+           edges.push(this.createEdge(parentId, tpNode.id, EdgeKind.Contains));
+           if (tpType) {
+              // Ребро TypeOf от параметра типа к типу
+              edges.push(this.createEdge(tpNode.id, this.nodeId(filePath, NodeKind.Variable, tpType, child.startPosition.row + 1), EdgeKind.TypeOf, { line: child.startPosition.row + 1 }));
+            }
+          }
+       }
+       child = child.nextSibling;
     }
   }
 

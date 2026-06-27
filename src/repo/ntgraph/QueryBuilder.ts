@@ -122,6 +122,7 @@ export class QueryBuilder {
     updateNode?: SqliteStatement;
     deleteNode?: SqliteStatement;
     deleteNodesByFile?: SqliteStatement;
+    deleteEdgesByFile?: SqliteStatement;
     getNodeById?: SqliteStatement;
     getNodesByFile?: SqliteStatement;
     getNodesByKind?: SqliteStatement;
@@ -317,8 +318,16 @@ export class QueryBuilder {
     this.stmts.deleteNode.run(id);
   }
 
-  /** Удаление всех узлов файла. */
+  /** Удаление всех узлов файла и связанных рёбер. */
   deleteNodesByFile(filePath: string): number {
+    // Сначала удаляем все рёбра, где источник или цель — один из удаляемых узлов
+    if (!this.stmts.deleteEdgesByFile) {
+      this.stmts.deleteEdgesByFile = this.db.prepare(
+        'DELETE FROM edges WHERE source IN (SELECT id FROM nodes WHERE file_path = ?) OR target IN (SELECT id FROM nodes WHERE file_path = ?)'
+      );
+    }
+    this.stmts.deleteEdgesByFile.run(filePath, filePath);
+
     if (!this.stmts.deleteNodesByFile) {
       this.stmts.deleteNodesByFile = this.db.prepare('DELETE FROM nodes WHERE file_path = ?');
     }

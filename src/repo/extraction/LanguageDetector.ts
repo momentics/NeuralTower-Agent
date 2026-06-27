@@ -3,9 +3,9 @@ import { Language } from '../ntgraph/Types';
 // Карта соответствия расширений файлов языкам программирования
 export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
   '.ts': 'typescript',
-  '.tsx': 'typescript',
-  '.js': 'typescript',
-  '.jsx': 'typescript',
+  '.tsx': 'tsx',
+  '.js': 'javascript',
+  '.jsx': 'jsx',
   '.mjs': 'typescript',
   '.cjs': 'typescript',
   '.py': 'python',
@@ -32,7 +32,7 @@ export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
   '.scala': 'scala',
   '.sc': 'scala',
   '.lua': 'lua',
-  '.luau': 'lua',
+  '.luau': 'luau',
   '.m': 'objc',
   '.r': 'r',
   '.R': 'r',

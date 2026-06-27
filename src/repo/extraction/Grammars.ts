@@ -8,6 +8,8 @@ const GRAMMAR_MAP: Record<string, string> = {
   rust: 'tree-sitter-rust',
   java: 'tree-sitter-java',
   cpp: 'tree-sitter-cpp',
+  // Грамматика для языка C
+  c: 'tree-sitter-c',
   csharp: 'tree-sitter-c-sharp',
 };
 

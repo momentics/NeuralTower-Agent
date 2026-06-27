@@ -35,6 +35,8 @@ export class PythonExtractor extends ExtractorBase {
     const edges: IEdge[] = [];
     const unresolvedRefs: IUnresolvedReference[] = [];
     const errors: IExtractionError[] = [];
+    // Измеряем время извлечения
+    const start = Date.now();
 
     try {
       const parser = require('tree-sitter');
@@ -51,15 +53,15 @@ export class PythonExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
 
       const root = tree.rootNode;
 
-      // Узел модуля
+      // Корневой узел — файл, а не модуль
       const moduleNode = this.createNode(
         filePath,
-        NodeKind.Module,
+        NodeKind.File,
         filePath,
         1,
         content.split('\n').length,
@@ -92,7 +94,7 @@ export class PythonExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
   }
 
   /** Обрабатывает узлы AST для Python. */
@@ -342,10 +344,14 @@ export class PythonExtractor extends ExtractorBase {
           child.endPosition.column
         );
         nodes.push(decNode);
-        edges.push(this.createEdge(decNode.id, parentId, EdgeKind.Decorates, {
-          line,
-          column: child.startPosition.column,
-        }));
+        // Ребро Decorates от декоратора к декорируемой функции
+        if (methodName) {
+          const funcNodeId = this.nodeId(filePath, insideClass ? NodeKind.Method : NodeKind.Function, methodName, inner ? inner.startPosition.row + 1 : line);
+          edges.push(this.createEdge(decNode.id, funcNodeId, EdgeKind.Decorates, {
+            line,
+            column: child.startPosition.column,
+          }));
+        }
 
         // @override — неразрешённая ссылка на метод родительского класса
         if (decoratorText === 'override' && methodName) {
@@ -417,6 +423,12 @@ export class PythonExtractor extends ExtractorBase {
     nodes.push(funcNode);
     edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Contains));
 
+    // Ребро Returns от функции к типу возвращаемого значения
+    const returnTypeNode = node.childForFieldName('return_type');
+    if (returnTypeNode) {
+      edges.push(this.createEdge(funcNode.id, this.nodeId(filePath, NodeKind.Variable, returnTypeNode.text, funcNode.startLine), EdgeKind.Returns, { line: funcNode.startLine }));
+    }
+
     // Параметры
     const params = node.childForFieldName('parameters');
     if (params) {
@@ -479,7 +491,10 @@ export class PythonExtractor extends ExtractorBase {
       if (child.type === 'identifier') {
         const name = child.text;
         const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${name}` : name;
-        const kind = insideClass ? NodeKind.Field : NodeKind.Variable;
+        // Константа: переменная с именем в UPPER_CASE на уровне модуля
+        const kind = !insideClass && /^[A-Z][A-Z0-9_]*$/.test(name)
+          ? NodeKind.Constant
+          : (insideClass ? NodeKind.Field : NodeKind.Variable);
 
         // Django модельное поле — определение типа поля
         let fieldType: string | undefined;
@@ -558,6 +573,8 @@ export class PythonExtractor extends ExtractorBase {
     );
     nodes.push(importNode);
     edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Contains));
+    // Ребро Imports от файла к узлу импорта
+    edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Imports));
 
     unresolvedRefs.push(this.createUnresolvedRef(
       importNode.id,
@@ -597,6 +614,8 @@ export class PythonExtractor extends ExtractorBase {
     );
     nodes.push(importNode);
     edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Contains));
+    // Ребро Imports от файла к узлу импорта
+    edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Imports));
 
     unresolvedRefs.push(this.createUnresolvedRef(
       importNode.id,
@@ -927,6 +946,11 @@ protected processCall(
             );
             nodes.push(paramNode);
             edges.push(this.createEdge(parentId, paramNode.id, EdgeKind.Contains));
+            // Ребро TypeOf от параметра к типу
+            const typeNode = child.childForFieldName('type');
+            if (typeNode) {
+              edges.push(this.createEdge(paramNode.id, this.nodeId(filePath, NodeKind.Variable, typeNode.text, paramNode.startLine), EdgeKind.TypeOf, { line: paramNode.startLine }));
+            }
           }
         }
       }

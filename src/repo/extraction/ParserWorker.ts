@@ -35,13 +35,14 @@ async function parseInProcess(
   language: string,
   content: string,
   filePath: string,
+  frameworkNames: string[],
   languages: string[],
 ): Promise<IExtractionResult> {
   const { loadGrammarsForLanguages } = await import('./Grammars');
   await loadGrammarsForLanguages(languages);
 
   const { extractFromSource } = await import('./tree-sitter');
-  return extractFromSource(filePath, content, language);
+  return extractFromSource(filePath, content, language, frameworkNames);
 }
 
 class ParserWorkerManager {
@@ -219,10 +220,43 @@ class ParserWorkerManager {
   }
 
   private retryParse(id: number, req: PendingParse): void {
-    // Повторная отправка запроса на парсинг в восстановленный воркер.
+    // Генерируем новый ID запроса, так как старый устарел после отклонения.
+    const newId = this.nextRequestId++;
+
+    // Вычисляем таймаут для повторного запроса.
+    const timeout = calcTimeout(req.content);
+
+    // Устанавливаем таймаут для нового запроса.
+    const timeoutId = setTimeout(() => {
+      this.pendingParses.delete(newId);
+      req.reject(new Error('Таймаут парсинга: ' + timeout + 'ms'));
+      this.worker?.terminate().catch(() => {});
+    }, timeout);
+
+    // Создаём новый PendingParse с обновлённым таймаутом, но теми же resolve/reject.
+    const newPending: PendingParse = {
+      resolve: (value) => {
+        clearTimeout(timeoutId);
+        req.resolve(value);
+      },
+      reject: (reason) => {
+        clearTimeout(timeoutId);
+        req.reject(reason);
+      },
+      timeout: timeoutId,
+      filePath: req.filePath,
+      content: req.content,
+      frameworkNames: req.frameworkNames,
+      language: req.language,
+    };
+
+    // Добавляем новый запрос в карту ожидающих парсингов.
+    this.pendingParses.set(newId, newPending);
+
+    // Отправляем запрос на парсинг в восстановленный воркер.
     this.worker!.postMessage({
       type: 'parse',
-      id,
+      id: newId,
       filePath: req.filePath,
       content: req.content,
       frameworkNames: req.frameworkNames,
@@ -347,7 +381,7 @@ class ParserWorkerManager {
     }
 
     if (!this.workerThreadsAvailable) {
-      return parseInProcess(language, content, filePath, languages);
+      return parseInProcess(language, content, filePath, frameworkNames, languages);
     }
 
     if (this.languages.length === 0 || languages.some(l => !this.languages.includes(l))) {

@@ -25,11 +25,13 @@ export class RustExtractor extends ExtractorBase {
     return ['.rs'];
   }
 
-  public extract(
+public extract(
     content: string,
     filePath: string,
     _frameworkNames?: string[]
   ): IExtractionResult {
+    // Отслеживание времени извлечения
+    const start = Date.now();
     const nodes: INode[] = [];
     const edges: IEdge[] = [];
     const unresolvedRefs: IUnresolvedReference[] = [];
@@ -50,18 +52,18 @@ export class RustExtractor extends ExtractorBase {
           'error',
           'PARSE_FAILED'
         ));
-        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
 
       const root = tree.rootNode;
       if (root.type === 'ERROR') {
-        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
 
       // Узел модуля
       const moduleNode = this.createNode(
         filePath,
-        NodeKind.Module,
+        NodeKind.File,
         filePath,
         1,
         content.split('\n').length,
@@ -91,7 +93,7 @@ export class RustExtractor extends ExtractorBase {
       ));
     }
 
-    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
+    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
   }
 
   /** Обрабатывает узлы AST для Rust. */
@@ -375,6 +377,18 @@ export class RustExtractor extends ExtractorBase {
     nodes.push(funcNode);
     edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Contains));
 
+    // Ребро Returns от функции к типу возвращаемого значения
+    if (returnType) {
+      const retTypeName = this.extractReturnType(node);
+      if (retTypeName) {
+        edges.push(this.createEdge(funcNode.id, this.nodeId(filePath, NodeKind.Class, retTypeName, 0), EdgeKind.Returns, {
+          metadata: { referenceName: retTypeName },
+          line: node.startPosition.row + 1,
+          column: node.startPosition.column,
+        }));
+      }
+    }
+
     // Типовые параметры
     const typeParamsNode = node.childForFieldName('type_parameters');
     if (typeParamsNode) {
@@ -434,6 +448,18 @@ export class RustExtractor extends ExtractorBase {
     nodes.push(methodNode);
     edges.push(this.createEdge(parentId, methodNode.id, EdgeKind.Contains));
 
+    // Ребро Returns от метода к типу возвращаемого значения
+    if (returnType) {
+      const retTypeName = this.extractReturnType(node);
+      if (retTypeName) {
+        edges.push(this.createEdge(methodNode.id, this.nodeId(filePath, NodeKind.Class, retTypeName, 0), EdgeKind.Returns, {
+          metadata: { referenceName: retTypeName },
+          line: node.startPosition.row + 1,
+          column: node.startPosition.column,
+        }));
+      }
+    }
+
     // Типовые параметры
     const typeParamsNode = node.childForFieldName('type_parameters');
     if (typeParamsNode) {
@@ -490,16 +516,17 @@ export class RustExtractor extends ExtractorBase {
       filePath
     ));
 
-    // Если impl для trait, референс на trait
+    // Ребро Implements от типа к trait, который он реализует
     if (forType) {
       const traitName = forType.text;
-      edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Interface, traitName, 0), EdgeKind.Implements, {
+      const typeNodeId = this.nodeId(filePath, NodeKind.Class, typeName, 0);
+      edges.push(this.createEdge(typeNodeId, this.nodeId(filePath, NodeKind.Interface, traitName, 0), EdgeKind.Implements, {
         metadata: { referenceName: traitName },
         line: forType.startPosition.row + 1,
         column: forType.startPosition.column,
       }));
       unresolvedRefs.push(this.createUnresolvedRef(
-        parentId,
+        typeNodeId,
         traitName,
         EdgeKind.Implements,
         forType.startPosition.row + 1,
@@ -546,9 +573,10 @@ export class RustExtractor extends ExtractorBase {
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
     const fieldType = node.childForFieldName('type');
 
+    // Поле структуры — используем Field
     const propNode = this.createNode(
       filePath,
-      NodeKind.Property,
+      NodeKind.Field,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -837,6 +865,8 @@ export class RustExtractor extends ExtractorBase {
     );
     nodes.push(importNode);
     edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Contains));
+    // Ребро Imports от файла к узлу импорта
+    edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Imports));
 
     unresolvedRefs.push(this.createUnresolvedRef(
       importNode.id,
@@ -1140,11 +1170,16 @@ export class RustExtractor extends ExtractorBase {
     nodes.push(varNode);
     edges.push(this.createEdge(parentId, varNode.id, EdgeKind.Contains));
 
-    // Тип переменной
+    // Тип переменной — ребро TypeOf
     const varType = node.childForFieldName('type');
     if (varType) {
       const typeName = this.extractTypeName(varType.text);
       if (typeName) {
+        edges.push(this.createEdge(varNode.id, this.nodeId(filePath, NodeKind.Class, typeName, 0), EdgeKind.TypeOf, {
+          metadata: { referenceName: typeName },
+          line: varType.startPosition.row + 1,
+          column: varType.startPosition.column,
+        }));
         edges.push(this.createEdge(varNode.id, this.nodeId(filePath, NodeKind.Class, typeName, 0), EdgeKind.References, {
           metadata: { referenceName: typeName },
           line: varType.startPosition.row + 1,
@@ -1289,6 +1324,19 @@ export class RustExtractor extends ExtractorBase {
           );
           nodes.push(paramNode);
           edges.push(this.createEdge(parentId, paramNode.id, EdgeKind.Contains));
+
+          // Ребро TypeOf от параметра к его типу
+          const paramType = child.childForFieldName('type');
+          if (paramType) {
+            const typeName = this.extractTypeName(paramType.text);
+            if (typeName) {
+              edges.push(this.createEdge(paramNode.id, this.nodeId(filePath, NodeKind.Class, typeName, 0), EdgeKind.TypeOf, {
+                metadata: { referenceName: typeName },
+                line: paramType.startPosition.row + 1,
+                column: paramType.startPosition.column,
+              }));
+            }
+          }
         }
       } else if (child.type === 'self_parameter') {
         const paramName = child.text;
