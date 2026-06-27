@@ -177,3 +177,86 @@ export function matchGitignorePattern(filePath: string, pattern: string): boolea
 
   return true;
 }
+
+/**
+ * Класс для управления игнорированием файлов с поддержкой
+ * вложенных репозиториев и gitignore-паттернов.
+ */
+export class ScopeIgnore {
+  private readonly _baseDir: string;
+  private readonly _embeddedRepoRoots: string[];
+  private readonly _patterns: string[];
+
+  constructor(baseDir: string, embeddedRepoRoots: string[]) {
+    // Нормализуем разделители на POSIX-стиль
+    this._baseDir = baseDir.replace(/\\/g, '/').replace(/\/+$/, '');
+    this._embeddedRepoRoots = embeddedRepoRoots.map(r =>
+      r.replace(/\\/g, '/').replace(/\/+$/, '')
+    );
+    this._patterns = [];
+  }
+
+  /**
+   * Проверяет, следует ли игнорировать указанный файл.
+   * Пути сравниваются относительно baseDir.
+   * Файлы в вложенных репозиториях не игнорируются.
+   */
+  shouldIgnore(filePath: string): boolean {
+    // Нормализуем разделители
+    const norm = filePath.replace(/\\/g, '/').replace(/\/+$/, '');
+
+    // Файлы в вложенных репозиториях не игнорируются
+    for (const root of this._embeddedRepoRoots) {
+      if (norm === root || norm.startsWith(root + '/')) {
+        return false;
+      }
+    }
+
+    // Вычисляем относительный путь от baseDir
+    const relPath = this._relativePath(norm);
+    if (relPath === null) {
+      // Путь не находится под baseDir — не игнорируем
+      return false;
+    }
+
+    // Применяем паттерны последовательно (gitignore-логика:
+    // последний совпавший паттерн определяет результат)
+    let ignored = false;
+
+    for (const pattern of this._patterns) {
+      const isNegation = pattern.startsWith('!');
+      const result = matchGitignorePattern(relPath, pattern);
+
+      if (result) {
+        ignored = !isNegation;
+      }
+    }
+
+    return ignored;
+  }
+
+  /**
+   * Добавляет gitignore-паттерн. Поддерживаются обычные и
+   * отрицательные (!) паттерны. Паттерны применяются в порядке
+   * добавления, последний совпавший имеет приоритет.
+   */
+  addPattern(pattern: string): void {
+    this._patterns.push(pattern.replace(/\\/g, '/'));
+  }
+
+  /**
+   * Вычисляет относительный путь от baseDir.
+   * Возвращает null, если путь не находится под baseDir.
+   */
+  private _relativePath(absPath: string): string | null {
+    if (absPath === this._baseDir) {
+      return '';
+    }
+
+    if (absPath.startsWith(this._baseDir + '/')) {
+      return absPath.slice(this._baseDir.length + 1);
+    }
+
+    return null;
+  }
+}

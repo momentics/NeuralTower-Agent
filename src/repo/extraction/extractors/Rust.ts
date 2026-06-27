@@ -293,7 +293,7 @@ export class RustExtractor extends ExtractorBase {
 
     const structNode = this.createNode(
       filePath,
-      NodeKind.Class,
+      NodeKind.Struct,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -682,7 +682,7 @@ export class RustExtractor extends ExtractorBase {
 
     const traitNode = this.createNode(
       filePath,
-      NodeKind.Interface,
+      NodeKind.Trait,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -1441,6 +1441,14 @@ export class RustExtractor extends ExtractorBase {
           line,
           column,
         }));
+        unresolvedRefs.push(this.createUnresolvedRef(
+          parentId,
+          funcName,
+          EdgeKind.Calls,
+          line,
+          column,
+          filePath
+        ));
       }
     }
   }

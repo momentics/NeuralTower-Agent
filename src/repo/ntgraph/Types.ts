@@ -105,7 +105,7 @@ export interface IEdge {
   metadata?: Record<string, unknown>;
   line?: number;
   column?: number;
-  provenance?: string;
+  provenance?: 'tree-sitter' | 'scip' | 'heuristic';
 }
 
 /** Запись о файле в БД. */

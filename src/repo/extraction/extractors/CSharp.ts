@@ -253,7 +253,7 @@ export class CSharpExtractor extends ExtractorBase {
       this.processTypeParameters(typeParams, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors);
     }
 
-    // Наследование
+    // Наследование: разделяем классы (Extends) и интерфейсы (Implements)
     const baseList = node.childForFieldName('bases');
     if (baseList) {
       let base = baseList.firstChild;
@@ -262,7 +262,11 @@ export class CSharpExtractor extends ExtractorBase {
           let item = base.firstChild;
           while (item) {
             const baseName = item.text;
-            edges.push(this.createEdge(classNode.id, this.nodeId(filePath, NodeKind.Class, baseName, 0), EdgeKind.Extends, {
+            // В C# интерфейсы по соглашению начинаются с 'I'
+            const isInterface = baseName.startsWith('I');
+            const edgeKind = isInterface ? EdgeKind.Implements : EdgeKind.Extends;
+            const targetKind = isInterface ? NodeKind.Interface : NodeKind.Class;
+            edges.push(this.createEdge(classNode.id, this.nodeId(filePath, targetKind, baseName, 0), edgeKind, {
               metadata: { referenceName: baseName },
               line: item.startPosition.row + 1,
               column: item.startPosition.column,
@@ -270,7 +274,7 @@ export class CSharpExtractor extends ExtractorBase {
             unresolvedRefs.push(this.createUnresolvedRef(
               classNode.id,
               baseName,
-              EdgeKind.Extends,
+              edgeKind,
               item.startPosition.row + 1,
               item.startPosition.column,
               filePath

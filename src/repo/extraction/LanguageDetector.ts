@@ -109,7 +109,21 @@ export function isSourceFile(filePath: string): boolean {
     : '';
 
   // Проверяем, есть ли расширение в карте языков
-  return ext in EXTENSION_TO_LANGUAGE;
+  if (!(ext in EXTENSION_TO_LANGUAGE)) return false;
+
+  const lower = filePath.toLowerCase();
+
+  // Бинарные и минифицированные файлы
+  if (lower.includes('.min.js') || lower.includes('.min.css')) return false;
+  if (lower.endsWith('.bundle.js')) return false;
+
+  // Генерируемые директории
+  if (lower.includes('/__generated__/') || lower.includes('/generated/')) return false;
+
+  // Генерируемые файлы
+  if (lower.endsWith('.generated.ts') || lower.endsWith('.generated.js') || lower.endsWith('.generated.go')) return false;
+
+  return true;
 }
 
 /**

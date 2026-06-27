@@ -308,7 +308,7 @@ export class NtGraphDb {
     return this._qb.deleteEdgesByTarget(targetId);
   }
 
-  getOutgoingEdges(sourceId: string, kinds?: EdgeKind[], provenance?: string): IEdge[] {
+  getOutgoingEdges(sourceId: string, kinds?: EdgeKind[], provenance?: IEdge['provenance']): IEdge[] {
     return this._qb.getOutgoingEdges(sourceId, kinds, provenance);
   }
 

@@ -352,7 +352,7 @@ export class PythonExtractor extends ExtractorBase {
           unresolvedRefs.push(this.createUnresolvedRef(
             parentId,
             methodName,
-            'overrides',
+            EdgeKind.Overrides,
             line,
             child.startPosition.column,
             filePath

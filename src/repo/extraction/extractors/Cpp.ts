@@ -410,7 +410,7 @@ export class CppExtractor extends ExtractorBase {
 
     const structNode = this.createNode(
       filePath,
-      NodeKind.Class,
+      NodeKind.Struct,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -1124,7 +1124,7 @@ export class CppExtractor extends ExtractorBase {
     unresolvedRefs.push(this.createUnresolvedRef(
       genericNode.id,
       argText,
-      EdgeKind.Calls,
+      EdgeKind.References,
       line,
       node.startPosition.column,
       filePath
@@ -1262,6 +1262,14 @@ export class CppExtractor extends ExtractorBase {
         line,
         column,
       }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        parentId,
+        funcName,
+        EdgeKind.Calls,
+        line,
+        column,
+        filePath
+      ));
     }
   }
 

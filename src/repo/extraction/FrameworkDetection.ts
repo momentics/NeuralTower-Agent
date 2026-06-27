@@ -1,14 +1,20 @@
 /**
  * Детекция фреймворков по списку файлов.
  *
- * Анализирует имена и пути файлов для обнаружения фреймворков.
- * Работает синхронно, не читает содержимое файлов.
+ * Анализирует имена, пути файлов и содержимое для обнаружения фреймворков.
  */
 
 /** Индикатор фреймворка: паттерн и имя фреймворка. */
 interface FrameworkIndicator {
   pattern: (file: string) => boolean;
   name: string;
+}
+
+/** Индикатор по содержимому файла. */
+interface ContentIndicator {
+  match: RegExp;
+  name: string;
+  filePattern: RegExp;
 }
 
 /** Карта индикаторов фреймворков. */
@@ -70,24 +76,43 @@ const FRAMEWORK_INDICATORS: FrameworkIndicator[] = [
   { pattern: (f) => f.endsWith('.csproj'), name: 'ASP.NET Core' },
 ];
 
+/** Индикаторы по содержимому файлов. */
+const CONTENT_INDICATORS: ContentIndicator[] = [
+  // Express: зависимость в package.json
+  { match: /"express"\s*:/, name: 'Express', filePattern: /^package\.json$/ },
+  // Spring Boot: аннотация @SpringBootApplication или @RestController
+  { match: /@(?:SpringBootApplication|RestController|SpringBootConfiguration)/, name: 'Spring Boot', filePattern: /\.java$/ },
+];
+
 /**
  * Обнаружение фреймворков по списку файлов.
  *
  * Проверяет имена и пути файлов на наличие индикаторов фреймворков.
  * Работает синхронно, не выполняет I/O.
  */
-export function detectFrameworks(fileList: string[]): string[] {
+export function detectFrameworks(fileList: string[], fileContents?: Map<string, string>): string[] {
   const frameworks = new Set<string>();
 
   // Приводим все пути к нижнему регистру для сравнения
   const lowerFiles = fileList.map((f) => f.toLowerCase());
 
-  // Проверяем каждый индикатор
+  // Проверяем каждый индикатор по имени файла
   for (const { pattern, name } of FRAMEWORK_INDICATORS) {
     for (const file of lowerFiles) {
       if (pattern(file)) {
         frameworks.add(name);
         break;
+      }
+    }
+  }
+
+  // Проверяем индикаторы по содержимому файлов
+  if (fileContents) {
+    for (const [filePath, content] of fileContents) {
+      for (const { match, name, filePattern } of CONTENT_INDICATORS) {
+        if (filePattern.test(filePath) && match.test(content)) {
+          frameworks.add(name);
+        }
       }
     }
   }

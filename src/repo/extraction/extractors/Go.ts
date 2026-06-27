@@ -54,8 +54,13 @@ export class GoExtractor extends ExtractorBase {
       }
 
       const root = tree.rootNode;
-      if (!root || root.type === 'translation_unit') {
-        // Пустой файл
+      if (!root) {
+        errors.push(this.createError(
+          'Не удалось получить корневой узел',
+          filePath,
+          'error',
+          'PARSE_FAILED'
+        ));
         return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: 0 };
       }
 
@@ -538,7 +543,7 @@ export class GoExtractor extends ExtractorBase {
     }
   }
 
-  /** Обрабатывает перечисление через iota — извлекает Enum. */
+  /** Обрабатывает перечисление через iota — извлекает Enum и EnumMember. */
   protected processEnumType(
     typeSpecNode: any,
     name: string,
@@ -567,6 +572,36 @@ export class GoExtractor extends ExtractorBase {
     );
     nodes.push(enumNode);
     edges.push(this.createEdge(parentId, enumNode.id, EdgeKind.Contains));
+
+    // Извлечение членов перечисления из const_spec узлов
+    let child = typeSpecNode.firstChild;
+    while (child) {
+      if (child.type === 'const_spec') {
+        const namesNode = child.childForFieldName('name');
+        if (namesNode) {
+          let nameNode = namesNode.firstChild;
+          while (nameNode) {
+            const memberName = nameNode.text;
+            const memberNode = this.createNode(
+              filePath,
+              NodeKind.EnumMember,
+              memberName,
+              child.startPosition.row + 1,
+              child.endPosition.row + 1,
+              child.startPosition.column,
+              child.endPosition.column,
+              {
+                qualifiedName: `${qualifiedName}.${memberName}`,
+              }
+            );
+            nodes.push(memberNode);
+            edges.push(this.createEdge(enumNode.id, memberNode.id, EdgeKind.Contains));
+            nameNode = nameNode.nextSibling;
+          }
+        }
+      }
+      child = child.nextSibling;
+    }
   }
 
   /** Обрабатывает объявление функции — извлекает Function. */
@@ -811,7 +846,7 @@ export class GoExtractor extends ExtractorBase {
 
       const varNode = this.createNode(
         filePath,
-        NodeKind.Variable,
+        NodeKind.Constant,
         name,
         node.startPosition.row + 1,
         node.endPosition.row + 1,
@@ -906,6 +941,14 @@ export class GoExtractor extends ExtractorBase {
         line,
         column,
       }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        parentId,
+        funcName,
+        EdgeKind.Calls,
+        line,
+        column,
+        filePath
+      ));
     }
   }
 

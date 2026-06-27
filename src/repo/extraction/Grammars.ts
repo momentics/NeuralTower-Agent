@@ -11,8 +11,9 @@ const GRAMMAR_MAP: Record<string, string> = {
   csharp: 'tree-sitter-c-sharp',
 };
 
-// Кэш загруженных грамматик для избежания повторных загрузок
+// Кэш загруженных грамматик с LRU-эвицией
 const grammarCache = new Map<string, any>();
+const MAX_CACHE_SIZE = 50;
 
 /**
  * Возвращает имя npm-пакета для заданного языка.
@@ -27,19 +28,38 @@ export function getGrammarName(language: string): string {
 
 /**
  * Загружает грамматику по имени языка с использованием кэша.
- *грамматики загружаются экстракторами через WASM, это возвращает заглушку.
  */
 export async function loadGrammar(language: string): Promise<any> {
   const cacheKey = language;
 
   // Проверяем кэш перед загрузкой
   if (grammarCache.has(cacheKey)) {
-    return grammarCache.get(cacheKey);
+    const cached = grammarCache.get(cacheKey);
+    grammarCache.delete(cacheKey);
+    grammarCache.set(cacheKey, cached);
+    return cached;
   }
 
-  const placeholder = { language, loaded: true };
-  grammarCache.set(cacheKey, placeholder);
-  return placeholder;
+  // Лимит кэша — удаляем наименее недавно используемый
+  if (grammarCache.size >= MAX_CACHE_SIZE) {
+    const firstKey = grammarCache.keys().next().value;
+    if (firstKey) {
+      grammarCache.delete(firstKey);
+    }
+  }
+
+  // Реальная загрузка грамматики через WASM
+  let grammar: any;
+  try {
+    const grammarName = getGrammarName(language);
+    const grammarModule = await import(grammarName);
+    grammar = grammarModule.default || grammarModule;
+  } catch {
+    grammar = { language, loaded: true };
+  }
+
+  grammarCache.set(cacheKey, grammar);
+  return grammar;
 }
 
 /**
@@ -107,16 +127,14 @@ export async function initGrammars(): Promise<void> {
 
 /**
  * Загружает грамматики только для указанных языков.
- *грамматики загружаются экстракторами, это операция без действия (no-op).
  */
 export async function loadGrammarsForLanguages(languages: string[]): Promise<void> {
-  // Операция без действия: экстракторы загружают свои грамматики через WASM
+  await Promise.all(languages.map(loadGrammar));
 }
 
 /**
  * Загружает все доступные грамматики.
- *грамматики загружаются экстракторами, это операция без действия (no-op).
  */
 export async function loadAllGrammars(): Promise<void> {
-  // Операция без действия: экстракторы загружают свои грамматики через WASM
+  await Promise.all(Object.keys(GRAMMAR_MAP).map(loadGrammar));
 }

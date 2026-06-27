@@ -118,7 +118,7 @@ class ParserWorkerManager {
     return worker;
   }
 
-  private rejectAllPending(reason: Error) {
+  public rejectAllPending(reason: Error) {
     for (const [id, req] of this.pendingParses) {
       clearTimeout(req.timeout);
       req.reject(reason);
@@ -129,7 +129,7 @@ class ParserWorkerManager {
   /**
    * Пересоздаёт воркер: завершает текущий и создаёт новый.
    */
-  private async recycleWorker() {
+  public async recycleWorker() {
     if (this.worker) {
       try {
         await this.worker.terminate();
@@ -392,4 +392,21 @@ export async function loadGrammars(languages: string[]): Promise<void> {
 
 export async function destroy(): Promise<void> {
   return manager.destroy();
+}
+
+/**
+ * Пересоздаёт воркер и перезагружает грамматик.
+ */
+export async function recycleWorker(): Promise<void> {
+  await manager.recycleWorker();
+  if (manager['languages'].length > 0) {
+    await manager.loadGrammars(manager['languages']);
+  }
+}
+
+/**
+ * Отклоняет все ожидающие запросы на парсинг.
+ */
+export function rejectAllPending(reason?: Error): void {
+  manager.rejectAllPending(reason ?? new Error('Операция отменена'));
 }

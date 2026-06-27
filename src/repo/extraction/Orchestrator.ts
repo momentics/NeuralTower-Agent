@@ -44,7 +44,7 @@ import { discoverEmbeddedRepoRoots } from './EmbeddedRepos';
 import { IExtractor, ExtractorBase } from './ExtractorBase';
 import { TypeScriptExtractor } from './extractors/TypeScript';
 import { PythonExtractor } from './extractors/Python';
-import { parseFile as parseFileWorker, loadGrammars as loadGrammarsWorker, destroy as destroyWorker } from './ParserWorker';
+import { parseFile as parseFileWorker, loadGrammars as loadGrammarsWorker, destroy as destroyWorker, recycleWorker as recycleWorkerFn, rejectAllPending as rejectAllPendingFn } from './ParserWorker';
 
 /** Параметры индексации. */
 export interface IndexOptions {
@@ -391,6 +391,10 @@ export class ExtractionOrchestrator {
       const files = await scanDirectory(this.rootDir, { onProgress, signal });
 
       if (signal?.aborted) {
+        // Отменяем все ожидающие парсинги
+        if (PARSER_WORKER_AVAILABLE) {
+          rejectAllPendingFn();
+        }
         return this.abortResult(startTime, filesIndexed, filesSkipped, filesErrored, totalNodes, totalEdges, errors);
       }
 
@@ -424,6 +428,12 @@ export class ExtractionOrchestrator {
 
       // Обработка батчами для параллельного чтения файлов
       for (let i = 0; i < files.length; i += FILE_IO_BATCH_SIZE) {
+        // Отменяем все ожидающие парсинги при отмене
+        if (signal?.aborted) {
+          if (PARSER_WORKER_AVAILABLE) {
+            rejectAllPendingFn();
+          }
+        }
         checkAbort(signal);
 
         const batch = files.slice(i, i + FILE_IO_BATCH_SIZE);
@@ -497,7 +507,7 @@ export class ExtractionOrchestrator {
             continue;
           }
 
-          // Извлечение AST через экстрактор
+          // Извлечение AST через экстрактор с 2-уровневым повтором
           let result: IExtractionResult;
           try {
             if (PARSER_WORKER_AVAILABLE) {
@@ -506,15 +516,36 @@ export class ExtractionOrchestrator {
               result = this.extractFile(filePath, content, language, frameworkNames);
             }
           } catch (parseErr) {
-            processed++;
-            filesErrored++;
-            errors.push({
-              message: parseErr instanceof Error ? parseErr.message : String(parseErr),
-              filePath,
-              severity: 'error',
-              code: 'parse_error',
-            });
-            continue;
+            // Уровень 1: повтор с оригинальным содержимым
+            try {
+              if (PARSER_WORKER_AVAILABLE) {
+                // Пересоздаём воркер перед повторной попыткой
+                await recycleWorkerFn();
+                result = await parseFileWorker(filePath, content, frameworkNames ?? [], language, [language]);
+              } else {
+                result = this.extractFile(filePath, content, language, frameworkNames);
+              }
+            } catch (parseErr2) {
+              // Уровень 2: удаление комментариев и повтор
+              try {
+                const stripped = this.stripComments(content, language);
+                if (PARSER_WORKER_AVAILABLE) {
+                  result = await parseFileWorker(filePath, stripped, frameworkNames ?? [], language, [language]);
+                } else {
+                  result = this.extractFile(filePath, stripped, language, frameworkNames);
+                }
+              } catch (parseErr3) {
+                processed++;
+                filesErrored++;
+                errors.push({
+                  message: parseErr3 instanceof Error ? parseErr3.message : String(parseErr3),
+                  filePath,
+                  severity: 'error',
+                  code: 'parse_error',
+                });
+                continue;
+              }
+            }
           }
 
           processed++;
@@ -1176,7 +1207,45 @@ await this.storeExtractionResult(fileRecord, result);
   /**
    * Извлекает AST из файла через соответствующий экстрактор.
    */
-  private extractFile(
+  private stripComments(content: string, language: string): string {
+     const lines = content.split('\n');
+     if (language === 'typescript' || language === 'cpp' || language === 'csharp' || language === 'java') {
+       const result: string[] = [];
+       let inBlock = false;
+       for (const line of lines) {
+         let p = line;
+         if (inBlock) {
+           const ei = p.indexOf('*/');
+           if (ei !== -1) { p = p.slice(ei + 2); inBlock = false; }
+           else { result.push(''); continue; }
+         }
+         const si = p.indexOf('//');
+         if (si !== -1) p = p.slice(0, si);
+         const bs = p.indexOf('/*');
+         if (bs !== -1) {
+           const be = p.indexOf('*/', bs + 2);
+           if (be !== -1) p = p.slice(0, bs) + p.slice(be + 2);
+           else { p = p.slice(0, bs); inBlock = true; }
+         }
+         result.push(p);
+       }
+       return result.join('\n');
+     }
+     if (language === 'python' || language === 'go' || language === 'rust') {
+       const result: string[] = [];
+       for (const line of lines) {
+         const t = line.trim();
+         if (t.startsWith('#') || t.startsWith('//')) { result.push(''); continue; }
+         const ci = line.indexOf('#');
+         if (ci !== -1) result.push(line.slice(0, ci));
+         else result.push(line);
+       }
+       return result.join('\n');
+     }
+     return content;
+   }
+
+   private extractFile(
     filePath: string,
     content: string,
     language: string,

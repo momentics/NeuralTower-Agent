@@ -669,7 +669,7 @@ export class QueryBuilder {
   }
 
   /** Исходящие рёбра узла. */
-  getOutgoingEdges(sourceId: string, kinds?: EdgeKind[], provenance?: string): IEdge[] {
+  getOutgoingEdges(sourceId: string, kinds?: EdgeKind[], provenance?: IEdge['provenance']): IEdge[] {
     if ((kinds && kinds.length > 0) || provenance) {
       let sql = 'SELECT * FROM edges WHERE source = ?';
       const params: (string | number)[] = [sourceId];
