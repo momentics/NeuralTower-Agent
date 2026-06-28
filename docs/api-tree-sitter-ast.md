@@ -72,10 +72,10 @@
 | Поле | Тип | Описание |
 |---|---|---|
 | `nodes` | `INode[]` | Извлеченные узлы |
-| `edges` | `IEdge[]` | Извлеченные рёбра |
+| `edges` | `IEdge[]` | Извлеченные ребра |
 | `unresolvedReferences` | `IUnresolvedReference[]` | Неразрешенные ссылки |
 | `errors` | `IExtractionError[]` | Ошибки извлечения |
-| `durationMs` | `number` | Время выполнения (в мс) |
+| `durationMs` | `number` | Время выполнения в мс |
 
 ### IExtractionError — Ошибка извлечения
 
@@ -116,9 +116,9 @@
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `nodeCount` / `edgeCount` / `fileCount` | `number` | Количество узлов, рёбер, файлов |
+| `nodeCount` / `edgeCount` / `fileCount` | `number` | Количество узлов, ребер, файлов |
 | `nodesByKind` | `Record<NodeKind, number>` | Узлы по видам |
-| `edgesByKind` | `Record<EdgeKind, number>` | Рёбра по видам |
+| `edgesByKind` | `Record<EdgeKind, number>` | Ребра по видам |
 | `filesByLanguage` | `Record<string, number>` | Файлы по языкам |
 | `dbSizeBytes` | `number` | Размер БД в байтах |
 | `lastUpdated` | `number` | Временная метка последнего обновления |
@@ -147,7 +147,7 @@
 
 ## Класс ExtractionOrchestrator
 
-Оркестратор индексации: сканирование, обнаружение фреймворков, парсинг через рабочий поток, хранение в SQLite, инкрементальная синхронизация.
+Оркестратор индексации: сканирование, обнаружение фреймворков, парсинг через Worker thread, хранение в SQLite, инкрементальная синхронизация.
 
 ### Конструктор
 
@@ -164,12 +164,12 @@ constructor(rootDir: string, db: NtGraphDb, scopeIgnore?: ScopeIgnore)
 | `indexAll(onProgress?, signal?, verbose?)` | `Promise<IIndexResult>` | Полная индексация: сканирование, обнаружение фреймворков, парсинг, хранение |
 | `indexFiles(filePaths)` | `Promise<IIndexResult>` | Индексация заданного списка файлов |
 | `indexFile(relativePath)` | `Promise<IExtractionResult>` | Индексация одного файла |
-| `indexFileWithContent(relativePath, content, stats)` | `Promise<IExtractionResult>` | Индексация с содержимым файла (для пакетного чтения) |
-| `sync(onProgress?)` | `Promise<ISyncResult>` | Инкрементальная синхронизация с кооперативной уступкой управления |
+| `indexFileWithContent(relativePath, content, stats)` | `Promise<IExtractionResult>` | Индексация с содержимым файла (для batch-чтения) |
+| `sync(onProgress?)` | `Promise<ISyncResult>` | Инкрементальная синхронизация с cooperative yield |
 | `getChangedFiles()` | `{added, modified, removed}` | Получение измененных файлов через `git status --porcelain` |
 | `extractFile(relativePath)` | `IFileRecord \| undefined` | Извлечение данных файла из БД |
 | `removeFile(relativePath)` | `void` | Удаление данных файла из БД (каскад FK) |
-| `storeExtractionResult(fileRecord, result)` | `void` | Хранение результатов: 10-шаговый алгоритм (хеш-проверка, снимок межфайловых рёбер, удаление, фильтрация, вставка узлов и рёбер, восстановление межфайловых рёбер, unresolved refs, вставка или обновление записи о файле) |
+| `storeExtractionResult(fileRecord, result)` | `void` | Хранение результатов: 10-шаговый алгоритм (hash-проверка, снимок cross-file ребер, удаление, фильтрация, вставка узлов и ребер, восстановление cross-file ребер, unresolved refs, upsert FileRecord) |
 | `hashContent(content)` | `string` | SHA256 хеширование содержимого |
 | `buildDetectionContext(files)` | `IResolutionContext` | Построение контекста для обнаружения фреймворков |
 | `ensureDetectedFrameworks(files?)` | `string[]` | Кешированное обнаружение фреймворков |
@@ -177,16 +177,16 @@ constructor(rootDir: string, db: NtGraphDb, scopeIgnore?: ScopeIgnore)
 
 ### Алгоритм storeExtractionResult()
 
-1. Проверка хеша содержимого — возврат без изменений при совпадении
-2. Снимок входящих межфайловых рёбер перед удалением
+1. Проверка content hash — возврат без изменений при совпадении
+2. Снимок cross-file incoming ребер перед удалением
 3. Удаление существующих данных файла (каскад FK)
 4. Фильтрация узлов по обязательным полям
 5. Вставка узлов (INSERT OR REPLACE)
-6. Фильтрация рёбер через `getExistingNodeIds()`
-7. Вставка рёбер (INSERT OR IGNORE)
-8. Восстановление входящих межфайловых рёбер по `(filePath, kind, name)`
-9. Пакетная вставка неразрешённых ссылок
-10. Вставка или обновление записи о файле
+6. Фильтрация ребер через `getExistingNodeIds()`
+7. Вставка ребер (INSERT OR IGNORE)
+8. Восстановление cross-file incoming ребер по `(filePath, kind, name)`
+9. Вставка unresolved references batch-ом
+10. Upsert FileRecord
 
 ---
 
@@ -196,7 +196,7 @@ constructor(rootDir: string, db: NtGraphDb, scopeIgnore?: ScopeIgnore)
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `extract(content, filePath, frameworkNames?)` | `IExtractionResult` | Извлечь узлы, рёбра и ссылки из содержимого файла |
+| `extract(content, filePath, frameworkNames?)` | `IExtractionResult` | Извлечь узлы, ребра и ссылки из содержимого файла |
 | `getLanguage()` | `Language` | Язык экстрактора |
 | `getSupportedExtensions()` | `string[]` | Поддерживаемые расширения файлов |
 
@@ -224,7 +224,7 @@ extractorFor(language: Language): IExtractor
 | `isFileLevelOnlyLanguage(lang)` | `boolean` | Язык без символьной структуры (yaml, properties, xml) |
 | `isGrammarLoaded(lang)` | `boolean` | Проверка загрузки грамматики |
 | `getSupportedLanguages()` | `string[]` | Список поддерживаемых языков |
-| `loadExtensionOverrides(rootDir)` | `void` | Загрузка пользовательских сопоставлений из `ntgraph.json` |
+| `loadExtensionOverrides(rootDir)` | `void` | Загрузка кастомных маппингов из `ntgraph.json` |
 | `getSupportedExtensions()` | `string[]` | Список поддерживаемых расширений файлов |
 
 ---
@@ -241,9 +241,9 @@ extractorFor(language: Language): IExtractor
 
 ---
 
-## Рабочий поток
+## Worker thread
 
-Рабочий поток для парсинга файлов с управлением жизненным циклом, таймаутом и восстановлением после сбоя.
+Worker thread для парсинга файлов с lifecycle management, timeout и crash recovery.
 
 ### Протокол сообщений
 
@@ -255,13 +255,13 @@ Worker -> Main:
 - `{ type: 'grammars-loaded' }` — подтверждение загрузки
 - `{ type: 'parse-result', id: number, result: IExtractionResult }` — результат парсинга
 
-### Методы управления рабочим потоком
+### Методы управления Worker
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `ensureWorker()` | `void` | Отложенный запуск рабочего потока с загрузкой грамматик |
-| `recycleWorker()` | `void` | Пересоздание рабочего потока (после `WORKER_RECYCLE_INTERVAL` файлов) |
-| `rejectAllPending(reason)` | `void` | Отклонение всех ожидающих запросов при сбое рабочего потока |
+| `ensureWorker()` | `void` | Ленивый спавн worker с загрузкой грамматик |
+| `recycleWorker()` | `void` | Пересоздание worker (после `WORKER_RECYCLE_INTERVAL` файлов) |
+| `rejectAllPending(reason)` | `void` | Отклонение всех ожидающих запросов при краше worker |
 
 ### Вспомогательные функции
 
@@ -270,28 +270,28 @@ Worker -> Main:
 | `stripComments(content)` | `string` | Удаление комментариев из кода (для повторного парсинга) |
 | `getParseTimeout(fileSize)` | `number` | Вычисление таймаута парсинга по размеру файла |
 
-### Жизненный цикл рабочего потока
+### Жизненный цикл Worker
 
 - `pendingParses: Map<number, {resolve, reject, timeout}>` — карта ожидающих запросов с таймерами
 - Таймаут масштабируется по размеру файла: `PARSE_TIMEOUT_MS + (fileSize / 10_000) * 10_000`
-- Пересоздание рабочего потока каждые 250 файлов (WASM линейная память не сжимается)
-- Восстановление после сбоя: `rejectAllPending()` -> `ensureWorker()` -> повторная попытка
-- Резервный парсинг в основном потоке при недоступности рабочих потоков
+- Пересоздание worker каждые 250 файлов (WASM линейная память не сжимается)
+- Восстановление после краша: `rejectAllPending()` -> `ensureWorker()` -> повторная попытка
+- In-process fallback: парсинг на основном потоке при недоступности worker threads
 
 ### Логика повторных попыток
 
-- **Уровень 1**: Повторный парсинг с чистым рабочим потоком (`recycleWorker()`)
+- **Уровень 1**: Повторный парсинг с чистым worker (`recycleWorker()`)
 - **Уровень 2**: Повторный парсинг с удаленными комментариями (`stripComments()`)
 
 ---
 
 ## Модуль валидации путей
 
-Защита от выхода за пределы директории и нормализация путей.
+Защита от path traversal и нормализация путей.
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `validatePathWithinRoot(rootDir, filePath, options?)` | `boolean` | Проверка вложенности пути внутри корня (лексическая + по абсолютному пути) |
+| `validatePathWithinRoot(rootDir, filePath, options?)` | `boolean` | Проверка вложенности пути внутри корня (лексическая + realpath) |
 | `normalizePath(filePath)` | `string` | Нормализация путей (разделители, `..` и т.д.) |
 
 ---
@@ -304,8 +304,8 @@ Worker -> Main:
 |---|---|---|
 | `discoverEmbeddedRepoRoots(rootDir)` | `string[]` | Рекурсивный поиск вложенных `.git` (глубина до 4, лимит 2000 директорий) |
 | `classifyGitDir(absDir)` | `'embedded' \| 'worktree' \| 'none'` | Классификация `.git` директории |
-| `findNestedGitRepos(absDir, relPrefix)` | `string[]` | Поиск в ширину вложенных git-репозиториев |
-| `findIgnoredEmbeddedRepos(repoDir)` | `string[]` | Поиск вложенных репозиториев в директориях, игнорируемых git |
+| `findNestedGitRepos(absDir, relPrefix)` | `string[]` | BFS-поиск вложенных git репозиториев |
+| `findIgnoredEmbeddedRepos(repoDir)` | `string[]` | Поиск вложенных репозиториев в gitignored директориях |
 
 ---
 
@@ -321,7 +321,7 @@ Worker -> Main:
 
 ## Класс ScopeIgnore
 
-Управление игнорированием файлов с поддержкой вложенных репозиториев и glob-шаблонов.
+Управление игнорированием файлов с поддержкой вложенных репозиториев и glob-паттернов.
 
 ### Конструктор
 
@@ -333,21 +333,21 @@ constructor(baseDir: string, embeddedRepoRoots: string[], extraPatterns?: string
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `shouldIgnore(filePath)` | `boolean` | Следует ли проигнорировать файл |
-| `addPattern(pattern)` | `void` | Добавить пользовательский шаблон игнорирования |
-| `addPatterns(patterns)` | `void` | Добавить несколько шаблонов игнорирования |
+| `shouldIgnore(filePath)` | `boolean` | Следует ли игнорировать файл |
+| `addPattern(pattern)` | `void` | Добавить пользовательский паттерн игнорирования |
+| `addPatterns(patterns)` | `void` | Добавить несколько паттернов игнорирования |
 
 ---
 
 ## Сканирование файлов
 
-Асинхронное перечисление файлов с кооперативной уступкой управления.
+Асинхронное перечисление файлов с cooperative yield.
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `scanDirectoryAsync(rootDir)` | `AsyncIterable<string>` | Асинхронное сканирование с кооперативной уступкой управления каждые 100 файлов |
-| `getGitVisibleFiles(rootDir)` | `string[]` | `git ls-files` с резервным обходом файловой системы |
-| `scanDirectoryWalk(rootDir)` | `string[]` | Рекурсивный обход с .gitignore для каждой директории и обнаружением циклических ссылок |
+| `scanDirectoryAsync(rootDir)` | `AsyncIterable<string>` | Асинхронное сканирование с cooperative yield каждые 100 файлов |
+| `getGitVisibleFiles(rootDir)` | `string[]` | `git ls-files` с fallback на filesystem walk |
+| `scanDirectoryWalk(rootDir)` | `string[]` | Рекурсивный обход с per-directory .gitignore и symlink cycle detection |
 
 ---
 
@@ -357,7 +357,7 @@ constructor(baseDir: string, embeddedRepoRoots: string[], extraPatterns?: string
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `readGitignorePatterns(giPath)` | `string[]` | Чтение шаблонов из .gitignore с обработкой не-UTF-8 и некорректных строк |
+| `readGitignorePatterns(giPath)` | `string[]` | Чтение паттернов из .gitignore с обработкой не-UTF-8 и некорректных строк |
 | `isValidUtf8(buf)` | `boolean` | Проверка UTF-8 для .gitignore файлов |
 
 ---
@@ -368,7 +368,7 @@ constructor(baseDir: string, embeddedRepoRoots: string[], extraPatterns?: string
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `extractFromSource(filePath, content, language, frameworkNames?)` | `IExtractionResult` | Парсинг файла через tree-sitter: AST-обход, извлечение узлов, рёбер и ссылок |
+| `extractFromSource(filePath, content, language, frameworkNames?)` | `IExtractionResult` | Парсинг файла через tree-sitter: AST-обход, извлечение узлов, ребер и ссылок |
 
 ---
 
@@ -378,16 +378,17 @@ ID узла: `sha256(filePath:kind:name:line)`. Гарантирует уник�
 
 ---
 
-## Извлечение рёбер
+## Извлечение ребер
 
-Рёбра извлекаются во время обхода AST:
+Ребра извлекаются во время обхода AST:
 
 | Вид | Описание |
 |---|---|
 | `contains` | Родитель содержит ребенка (file->class->method) |
-| `calls` | Вызовы функций/методов (по узлам вызова) |
-| `imports` | Импорты (по узлам импорта) |
-| `extends` | Наследование (по узлам объявления класса с extends) |
+| `calls` | Вызовы функций/методов (по узлам CallExpression) |
+| `imports` | Импорты (по узлам ImportDeclaration) |
+| `exports` | Экспорты символов |
+| `extends` | Наследование (по узлам ClassDeclaration с extends) |
 | `implements` | Реализация интерфейса |
 | `references` | Общие ссылки на символы |
 | `type_of` | Тип переменной/параметра |
@@ -403,15 +404,15 @@ ID узла: `sha256(filePath:kind:name:line)`. Гарантирует уник�
 | Константа | Значение | Описание |
 |---|---|---|
 | `FILE_IO_BATCH_SIZE` | `10` | Параллельное чтение файлов |
-| `SYNC_RECONCILE_YIELD_INTERVAL` | `1000` | Интервал кооперативной уступки управления при синхронизации |
-| `SCAN_YIELD_INTERVAL` | `100` | Интервал кооперативной уступки управления при сканировании |
+| `SYNC_RECONCILE_YIELD_INTERVAL` | `1000` | Интервал cooperative yield при синхронизации |
+| `SCAN_YIELD_INTERVAL` | `100` | Интервал cooperative yield при сканировании |
 | `PARSE_TIMEOUT_MS` | `10_000` | Базовый таймаут парсинга (10 секунд) |
-| `PARSE_TIMEOUT_PER_10KB` | `10_000` | Дополнительный таймаут на каждые 10 КБ |
-| `WORKER_RECYCLE_INTERVAL` | `250` | Интервал пересоздания рабочего потока |
+| `PARSE_TIMEOUT_PER_10KB` | `10_000` | Доп. таймаут на каждые 10 КБ |
+| `WORKER_RECYCLE_INTERVAL` | `250` | Интервал пересоздания worker-потока |
 | `MAX_FILE_SIZE` | `1048576` | Максимальный размер файла для индексации (1 МБ) |
 | `EMBEDDED_REPO_SEARCH_DEPTH` | `4` | Глубина поиска вложенных репозиториев |
 | `EMBEDDED_REPO_SEARCH_ENTRIES` | `2000` | Лимит директорий при поиске вложенных репозиториев |
 | `REPO_ROOTS_CACHE_TTL` | `300_000` | Время жизни кэша корней репозиториев (5 мин) |
 | `GO_MOD_CACHE_TTL` | `60_000` | Время жизни кэша Go-модулей (1 мин) |
 | `DEFAULT_IGNORE_DIRS` | `ReadonlySet<string>` | Директории по умолчанию для игнорирования (60+) |
-| `DEFAULT_IGNORE_PATTERNS` | `string[]` | Шаблоны игнорирования по умолчанию |
+| `DEFAULT_IGNORE_PATTERNS` | `string[]` | Паттерны игнорирования по умолчанию |
