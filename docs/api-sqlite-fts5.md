@@ -80,7 +80,7 @@
 |---|---|---|
 | `kinds` | `NodeKind[]?` | Фильтр по видам узлов |
 | `languages` | `string[]?` | Фильтр по языкам |
-| `includePatterns` / `excludePatterns` | `string[]?` | Паттерны включения/исключения |
+| `includePatterns` / `excludePatterns` | `string[]?` | Шаблоны включения/исключения |
 | `pathFilters` / `nameFilters` | `string[]?` | Фильтры пути и имени |
 | `limit` / `offset` | `number?` | Пагинация |
 | `caseSensitive` | `boolean?` | Учет регистра |
@@ -171,7 +171,7 @@
 | `edges` | `IEdge[]` | Извлеченные ребра |
 | `unresolvedReferences` | `IUnresolvedReference[]` | Неразрешенные ссылки |
 | `errors` | `IExtractionError[]` | Ошибки извлечения |
-| `durationMs` | `number` | Время выполнения в мс |
+| `durationMs` | `number` | Время выполнения (в мс) |
 
 ### IExtractionError — Ошибка извлечения
 
@@ -262,14 +262,14 @@ type TaskInput = string | { title: string; description: string }
 | `unresolved` | `IUnresolvedReference[]` | Неразрешённые ссылки |
 | `durationMs` | `number` | Время выполнения |
 
-### IReExport — Re-export из модуля
+### IReExport — Повторный экспорт из модуля
 
 | Поле | Тип | Описание |
 |---|---|---|
 | `sourcePath` / `sourceName` | `string` | Источник |
 | `language` | `Language` | Язык |
 
-### IAliasMap — Карта алиасов импортов
+### IAliasMap — Карта псевдонимов импортов
 
 ```
 type IAliasMap = { [alias: string]: string[] }
@@ -289,7 +289,7 @@ type IAliasMap = { [alias: string]: string[] }
 | `packages` | `Map<string, string>` | Пакеты по путям |
 | `workspaces` | `string[]` | Пути рабочих пространств |
 
-### IImportMapping — Маппинг импорта на файл
+### IImportMapping — Сопоставление импорта с файлом
 
 | Поле | Тип | Описание |
 |---|---|---|
@@ -297,14 +297,14 @@ type IAliasMap = { [alias: string]: string[] }
 | `targetPath` / `targetName` | `string` | Цель |
 | `language` | `Language` | Язык |
 
-### IFrameworkResolver — Резолвер фреймворков
+### IFrameworkResolver — Разрешатель фреймворков
 
 | Поле | Тип | Описание |
 |---|---|---|
 | `name` | `string` | Имя фреймворка |
 | `resolve(ref, context)` | `IResolvedRef \| null` | Разрешить ссылку |
 | `postExtract(context)` | `INode[]` | Пост-обработка |
-| `claimsReference?(name)` | `boolean?` | Заявляет ли право на имя |
+| `claimsReference?(name)` | `boolean?` | Принимает ли имя на свой счёт |
 
 ---
 
@@ -356,7 +356,7 @@ constructor(dbPath: string)
 | `getProjectRoot()` | `string` | Корень проекта |
 | `getProjectNameTokens()` | `string[]` | Токены имени проекта |
 | `clear()` | `void` | Очистка всей БД |
-| `clearCache()` | `void` | Очистка LRU-кэша |
+| `clearCache()` | `void` | Очистка LRU-кеша |
 | `getNodeAndEdgeCount()` | `{nodeCount, edgeCount}` | Количество узлов и ребер |
 
 ### Узлы
@@ -365,12 +365,12 @@ constructor(dbPath: string)
 |---|---|---|
 | `insertNode(node)` | `Promise<void>` | Вставка узла (с FileLock) |
 | `insertNodes(nodes)` | `void` | Пакетная вставка узлов в транзакции |
-| `insertNodesBatch(nodes)` | `Promise<void>` | Пакетная вставка с FileLock, Mutex, MemoryMonitor, чанки |
+| `insertNodesBatch(nodes)` | `Promise<void>` | Пакетная вставка с FileLock, Mutex, MemoryMonitor, блоки |
 | `updateNode(node)` | `Promise<void>` | Обновление узла (с FileLock) |
 | `deleteNode(id)` | `Promise<void>` | Удаление узла (с FileLock) |
 | `deleteNodesByFile(filePath)` | `number` | Удаление всех узлов файла, возвращает число удаленных |
 | `getNodeById(id)` | `INode \| null` | Поиск узла по ID |
-| `getNodesByIds(ids)` | `INode[]` | Пакетный поиск (чанки по 500) |
+| `getNodesByIds(ids)` | `INode[]` | Пакетный поиск (блоки по 500) |
 | `getNodesByFile(filePath)` | `INode[]` | Узлы файла |
 | `getNodesByKind(kind)` | `INode[]` | Узлы по виду |
 | `iterateNodesByKind(kind)` | `IterableIterator<INode>` | Ленивый итератор узлов вида |
@@ -392,7 +392,7 @@ constructor(dbPath: string)
 |---|---|---|
 | `insertEdge(edge)` | `Promise<void>` | Вставка ребра (с FileLock) |
 | `insertEdges(edges)` | `void` | Пакетная вставка в транзакции |
-| `insertEdgesBatch(edges)` | `Promise<void>` | Пакетная вставка с FileLock, Mutex, чанки |
+| `insertEdgesBatch(edges)` | `Promise<void>` | Пакетная вставка с FileLock, Mutex, блоки |
 | `getOutgoingEdges(source, kinds?, provenance?)` | `IEdge[]` | Исходящие ребра с фильтрами |
 | `getIncomingEdges(target, kinds?)` | `IEdge[]` | Входящие ребра с фильтром видов |
 | `deleteEdgesBySource(sourceId)` | `number` | Удаление по источнику |
@@ -415,9 +415,9 @@ constructor(dbPath: string)
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `search(query, options?)` | `ISearchResult[]` | Основной поиск через QueryBuilder.searchNodes (FTS5 → LIKE → Fuzzy) |
+| `search(query, options?)` | `ISearchResult[]` | Основной поиск через QueryBuilder.searchNodes (FTS5 → LIKE → размытый) |
 | `findNodesByExactName(names, options?)` | `ISearchResult[]` | Точный поиск по множеству имён |
-| `findNodesByNameSubstring(sub, options?)` | `INode[]` | Поиск по подстроке имени (опция excludePrefix) |
+| `findNodesByNameSubstring(sub, options?)` | `INode[]` | Поиск по подстроке имени (исключение префикса) |
 
 ### Неразрешенные ссылки
 
@@ -430,7 +430,7 @@ constructor(dbPath: string)
 | `getUnresolvedReferences()` | `IUnresolvedReference[]` | Все ссылки |
 | `getUnresolvedReferencesCount()` | `number` | Количество ссылок |
 | `getUnresolvedReferencesBatch(offset, limit)` | `IUnresolvedReference[]` | Пагинированный запрос |
-| `getUnresolvedReferencesByFiles(filePaths)` | `IUnresolvedReference[]` | По файлам (чанки по 500) |
+| `getUnresolvedReferencesByFiles(filePaths)` | `IUnresolvedReference[]` | По файлам (блоки по 500) |
 | `deleteResolvedReferences(fromNodeIds)` | `void` | Удаление по ID узлов |
 | `deleteSpecificResolvedReferences(refs)` | `number` | Удаление конкретных ссылок |
 | `clearUnresolvedReferences()` | `void` | Очистка всех ссылок |
@@ -440,7 +440,7 @@ constructor(dbPath: string)
 | Метод | Возврат | Описание |
 |---|---|---|
 | `getMetadata(key)` | `string \| null` | Значение по ключу |
-| `setMetadata(key, value)` | `void` | Установка или обновление (upsert) |
+| `setMetadata(key, value)` | `void` | Установка или обновление |
 | `getAllMetadata()` | `Map<string, string>` | Все метаданные |
 
 ### Свойства
@@ -453,20 +453,20 @@ constructor(dbPath: string)
 
 ## Класс QueryBuilder
 
-Построитель запросов с ленивой инициализацией prepared statements и LRU-кэшем узлов (1000 записей).
+Построитель запросов с ленивой инициализацией подготовленных запросов и LRU-кешом узлов (1000 записей).
 
 ### Узлы
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `insertNode(node)` | `void` | Вставка узла (upsert через INSERT OR REPLACE) |
+| `insertNode(node)` | `void` | Вставка узла (вставка или обновление через INSERT OR REPLACE) |
 | `insertNodes(nodes)` | `void` | Пакетная вставка узлов в транзакции |
 | `updateNode(node)` | `void` | Обновление узла |
 | `deleteNode(id)` | `void` | Удаление узла по ID |
 | `deleteNodesByFile(filePath)` | `number` | Удаление всех узлов файла, возвращает число удаленных |
 | `getNodeById(id)` | `INode \| null` | Поиск узла по ID |
-| `getNodesByIds(ids)` | `INode[]` | Пакетный поиск (чанки по 500) |
-| `getExistingNodeIds(ids)` | `Set<string>` | Существующие ID для валидации |
+| `getNodesByIds(ids)` | `INode[]` | Пакетный поиск (блоки по 500) |
+| `getExistingNodeIds(ids)` | `Set<string>` | Существующие идентификаторы для проверки |
 | `getNodesByFile(filePath)` | `INode[]` | Узлы файла |
 | `getNodesByKind(kind)` | `INode[]` | Узлы по виду |
 | `iterateNodesByKind(kind)` | `IterableIterator<INode>` | Ленивый итератор узлов вида, память O(1) |
@@ -504,12 +504,12 @@ constructor(dbPath: string)
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `searchNodes(query, options?)` | `ISearchResult[]` | Основной поиск: FTS5 → LIKE → Fuzzy (через FtsSearch) |
+| `searchNodes(query, options?)` | `ISearchResult[]` | Основной поиск: FTS5 → LIKE → размытый (через FtsSearch) |
 | `searchNodesFTS(query, options?)` | `ISearchResult[]` | FTS5-поиск напрямую (через FtsSearch) |
-| `searchNodesLike(query, options?)` | `ISearchResult[]` | LIKE-фоллбэк (через FtsSearch) |
-| `searchNodesFuzzy(query, options?)` | `ISearchResult[]` | Fuzzy-фоллбэк (через FtsSearch) |
-| `findNodesByExactName(names, options?)` | `ISearchResult[]` | Точный поиск по множеству имён с co-location boost |
-| `findNodesByNameSubstring(sub, options?)` | `INode[]` | Поиск по подстроке имени (опция excludePrefix) |
+| `searchNodesLike(query, options?)` | `ISearchResult[]` | LIKE-резервный поиск (через FtsSearch) |
+| `searchNodesFuzzy(query, options?)` | `ISearchResult[]` | Размытый резервный поиск (через FtsSearch) |
+| `findNodesByExactName(names, options?)` | `ISearchResult[]` | Точный поиск по множеству имён с бонусом за совпадение местоположения |
+| `findNodesByNameSubstring(sub, options?)` | `INode[]` | Поиск по подстроке имени (исключение префикса) |
 | `searchAllByFilters(options)` | `ISearchResult[]` | Поиск только по фильтрам без текста |
 
 ### Неразрешенные ссылки
@@ -523,7 +523,7 @@ constructor(dbPath: string)
 | `getUnresolvedReferences()` | `IUnresolvedReference[]` | Все ссылки |
 | `getUnresolvedReferencesCount()` | `number` | Количество ссылок |
 | `getUnresolvedReferencesBatch(offset, limit)` | `IUnresolvedReference[]` | Пагинированный запрос |
-| `getUnresolvedReferencesByFiles(filePaths)` | `IUnresolvedReference[]` | По файлам (чанки по 500) |
+| `getUnresolvedReferencesByFiles(filePaths)` | `IUnresolvedReference[]` | По файлам (блоки по 500) |
 | `deleteResolvedReferences(fromNodeIds)` | `void` | Удаление по ID узлов |
 | `deleteSpecificResolvedReferences(refs)` | `number` | Удаление конкретных ссылок |
 | `clearUnresolvedReferences()` | `void` | Очистка всех ссылок |
@@ -533,7 +533,7 @@ constructor(dbPath: string)
 | Метод | Возврат | Описание |
 |---|---|---|
 | `getMetadata(key)` | `string \| null` | Значение по ключу |
-| `setMetadata(key, value)` | `void` | Установка или обновление (upsert) |
+| `setMetadata(key, value)` | `void` | Установка или обновление |
 | `getAllMetadata()` | `Map<string, string>` | Все метаданные |
 
 ### Аналитика
@@ -554,8 +554,8 @@ constructor(dbPath: string)
 | Метод | Возврат | Описание |
 |---|---|---|
 | `clear()` | `void` | Очистка всей БД |
-| `clearCache()` | `void` | Очистка LRU-кэша |
-| `setProjectNameTokens(tokens)` | `void` | Токены имени проекта для подавления в поиске |
+| `clearCache()` | `void` | Очистка LRU-кеша |
+| `setProjectNameTokens(tokens)` | `void` | Токены имени проекта для исключения из поиска |
 | `getProjectNameTokens()` | `string[]` | Получить токены имени проекта |
 | `getFtsSearch()` | `FtsSearch` | Экземпляр FtsSearch |
 
@@ -563,16 +563,16 @@ constructor(dbPath: string)
 
 ## Класс FtsSearch
 
-Трёхуровневый FTS-поиск: FTS5 → LIKE → Fuzzy, BM25 с весами, over-fetch x5, rescoring, exact-match supplement, экранирование спецсимволов.
+Трёхуровневый FTS-поиск: FTS5 → LIKE → размытый, BM25 с весами, избыточная выборка x5, повторная оценка, дополнение точных совпадений, экранирование спецсимволов.
 
 ### Методы
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `search(query, options?)` | `ISearchResult[]` | Полный поиск с fallback (FTS5 → LIKE → Fuzzy) |
+| `search(query, options?)` | `ISearchResult[]` | Полный поиск с резервным вариантом (FTS5 → LIKE → размытый) |
 | `searchFTS(query, options)` | `ISearchResult[]` | FTS5-поиск с BM25, весовая схема: name=20, qualified_name=5, docstring=1, signature=2 |
-| `searchLike(query, options?)` | `ISearchResult[]` | LIKE-фоллбэк |
-| `searchFuzzy(query, options?)` | `ISearchResult[]` | Fuzzy-фоллбэк через bounded edit distance |
+| `searchLike(query, options?)` | `ISearchResult[]` | LIKE-резервный поиск |
+| `searchFuzzy(query, options?)` | `ISearchResult[]` | Размытый резервный поиск через ограниченное расстояние редактирования |
 | `buildFtsQuery(query)` | `string \| null` | Построение FTS5-запроса с экранированием спецсимволов |
 | `setProjectNameTokens(tokens)` | `void` | Токены имени проекта |
 
@@ -637,7 +637,7 @@ constructor(dbPath: string)
 2. `foreign_keys = ON` — должен быть установлен до WAL-режима (включает ON DELETE CASCADE)
 3. `journal_mode = WAL` — WAL-режим
 4. `synchronous = NORMAL` — баланс между безопасностью и производительностью
-5. `cache_size = -64000` — 64 МБ внутреннего кэша SQLite
+5. `cache_size = -64000` — 64 МБ внутреннего кеша SQLite
 6. `temp_store = MEMORY` — временные таблицы в памяти
 7. `mmap_size = 268435456` — 256 МБ для кеширования данных в памяти ОС
 
@@ -660,10 +660,10 @@ constructor(dbPath: string)
 
 | Метод / Свойство | Возврат | Описание |
 |---|---|---|
-| `prepare(sql)` | `SqliteStatement` | Создание prepared statement |
+| `prepare(sql)` | `SqliteStatement` | Создание подготовленного запроса |
 | `exec(sql)` | `void` | Выполнение SQL без результатов |
 | `pragma(str, options?)` | `any` | Выполнение PRAGMA |
-| `transaction(fn)` | `(...args) => T` | Обертка функции в транзакцию |
+| `transaction(fn)` | `(...args) => T` | Выполнение функции в транзакции |
 | `close()` | `void` | Закрытие БД |
 | `runMaintenance()` | `void` | PRAGMA optimize + wal_checkpoint(PASSIVE) |
 | `open` | `boolean` | Флаг открытости БД |
@@ -688,7 +688,7 @@ constructor(dbPath: string)
 | `normalizeNameToken(raw)` | `string` | Приведение к нижнему регистру, фильтрация символов |
 | `deriveProjectNameTokens(projectRoot)` | `Set<string>` | Токены из go.mod, package.json, имени директории |
 | `getStemVariants(term)` | `string[]` | Варианты основы: -ing, -tion, -ment, -ies, -es, -s, -ed, -er |
-| `extractSearchTerms(query, options?)` | `string[]` | Разделение camelCase, PascalCase, snake_case, dot.notation |
+| `extractSearchTerms(query, options?)` | `string[]` | Разделение camelCase, PascalCase, snake_case, точечная нотация |
 | `unquote(s)` | `string` | Удаление внешних кавычек |
 | `boundedEditDistance(a, b, maxDist)` | `number` | Расстояние Левенштейна с ранним выходом |
 
@@ -713,7 +713,7 @@ constructor(dbPath: string)
 |---|---|---|
 | `isTestFile(filePath)` | `boolean` | Проверка на тестовый файл |
 | `isGeneratedFile(filePath)` | `boolean` | Проверка на генерируемый файл |
-| `isDistinctiveIdentifier(token)` | `boolean` | Наличие подчеркивания, цифры или внутреннего заглавного символа |
+| `isDistinctiveIdentifier(token)` | `boolean` | Наличие подчёркивания, цифры или заглавной буквы внутри слова |
 | `isConfigLeafNode(node)` | `boolean` | Узел-константа YAML/properties |
 
 ### Безопасность путей
@@ -721,7 +721,7 @@ constructor(dbPath: string)
 | Функция | Возврат | Описание |
 |---|---|---|
 | `isWithinDir(child, parent)` | `boolean` | Проверка вложенности (нечувствительно к регистру на Windows) |
-| `validatePathWithinRoot(projectRoot, filePath)` | `boolean` | Проверка вложенности (лексическая + realpath) |
+| `validatePathWithinRoot(projectRoot, filePath)` | `boolean` | Проверка вложенности (лексическая + по абсолютному пути) |
 | `validateProjectPath(dirPath)` | `string \| null` | Отклонение системных директорий |
 
 ### Пути
@@ -743,30 +743,30 @@ constructor(dbPath: string)
 |---|---|
 | `Mutex` | Асинхронный мьютекс с очередью ожидания |
 | `FileLock` | Межпроцессная блокировка с отслеживанием PID и устареванием (2 минуты) |
-| `processInBatches(items, batchSize, processor, onBatchComplete?)` | Пакетная обработка с GC между батчами |
+| `processInBatches(items, batchSize, processor, onBatchComplete?)` | Пакетная обработка со сборкой мусора между партиями |
 | `readFileInChunks(filePath, chunkSize?)` | Генератор постраничного чтения файлов |
-| `debounce(fn, delay)` | Дебаунсинг функций |
-| `throttle(fn, interval)` | Троттлинг функций |
+| `debounce(fn, delay)` | Отложенный вызов функций |
+| `throttle(fn, interval)` | Ограничение частоты вызовов |
 
 ### Память
 
 | Класс / Функция | Описание |
 |---|---|
 | `estimateSize(obj)` | Приблизительная оценка размера объекта в памяти |
-| `MemoryMonitor` | Мониторинг памяти с callback при достижении порога |
+| `MemoryMonitor` | Мониторинг памяти с обратным вызовом при достижении порога |
 
 ---
 
 ## Класс ScopeIgnore
 
-Класс для управления игнорированием файлов с поддержкой вложенных репозиториев и glob-паттернов.
+Класс для управления игнорированием файлов с поддержкой вложенных репозиториев и glob-шаблонов.
 
 ### Методы
 
 | Метод | Возврат | Описание |
 |---|---|---|
 | `shouldIgnore(filePath)` | `boolean` | Следует ли игнорировать файл |
-| `addPattern(pattern)` | `void` | Добавить пользовательский паттерн игнорирования |
+| `addPattern(pattern)` | `void` | Добавить пользовательский шаблон игнорирования |
 
 ---
 
@@ -805,21 +805,21 @@ constructor(dbPath: string)
 | `TOP_ROUTE_MIN_CONCENTRATION` | `0.30` | Минимальная концентрация для getTopRouteFile |
 | `ROUTING_MANIFEST_DEFAULT_LIMIT` | `40` | Лимит для getRoutingManifest |
 | `FileLock_STALE_TIMEOUT_MS` | `120000` | Время устаревания блокировки (2 минуты) |
-| `SQLITE_PARAM_CHUNK_SIZE` | `500` | Размер чанка для пакетных запросов |
-| `LRU_CACHE_SIZE` | `1000` | Размер LRU-кэша узлов |
+| `SQLITE_PARAM_CHUNK_SIZE` | `500` | Размер блока для пакетных запросов |
+| `LRU_CACHE_SIZE` | `1000` | Размер LRU-кеша узлов |
 | `FILTER_ONLY_OVER_FETCH_MULTIPLIER` | `5` | Множитель перегрузки для запросов только по фильтрам |
-| `CONFIG_LEAF_LANGUAGES` | `Set('yaml', 'properties')` | Языки для leaf-конфигураций |
+| `CONFIG_LEAF_LANGUAGES` | `Set('yaml', 'properties')` | Языки для конечных конфигураций |
 | `SENSITIVE_PATHS` | `Set('/proc', '/sys', '/dev', 'C:\Windows', 'C:\Program Files', 'C:\ProgramData')` | Системные директории для блокировки |
-| `GENERATED_PATTERNS` | `RegExp[]` | 30+ паттернов для генерируемых файлов |
+| `GENERATED_PATTERNS` | `RegExp[]` | 30+ шаблонов для генерируемых файлов |
 | `MAX_FILE_SIZE` | `1048576` | Максимальный размер файла для индексации (1 МБ) |
-| `WORKER_RECYCLE_INTERVAL` | `250` | Интервал пересоздания worker-потока |
+| `WORKER_RECYCLE_INTERVAL` | `250` | Интервал пересоздания рабочего потока |
 | `PARSE_TIMEOUT_MS` | `10000` | Базовый таймаут парсинга (10 секунд) |
-| `PARSE_TIMEOUT_PER_10KB` | `10000` | Доп. таймаут на каждые 10 КБ |
-| `FILE_IO_BATCH_SIZE` | `10` | Размер батча для чтения файлов |
-| `SCAN_YIELD_INTERVAL` | `100` | Интервал cooperative yield при сканировании |
-| `SYNC_YIELD_INTERVAL` | `1000` | Интервал cooperative yield при синхронизации |
-| `SYNC_RECONCILE_YIELD_INTERVAL` | `1000` | Интервал уступки event loop при sync |
+| `PARSE_TIMEOUT_PER_10KB` | `10000` | Дополнительный таймаут на каждые 10 КБ |
+| `FILE_IO_BATCH_SIZE` | `10` | Размер партии для чтения файлов |
+| `SCAN_YIELD_INTERVAL` | `100` | Интервал кооперативной уступки управления при сканировании |
+| `SYNC_YIELD_INTERVAL` | `1000` | Интервал кооперативной уступки управления при синхронизации |
+| `SYNC_RECONCILE_YIELD_INTERVAL` | `1000` | Интервал уступки цикла событий при синхронизации |
 | `EMBEDDED_REPO_SEARCH_DEPTH` | `4` | Глубина поиска вложенных репозиториев |
 | `EMBEDDED_REPO_SEARCH_ENTRIES` | `2000` | Лимит директорий при поиске вложенных репозиториев |
 | `DEFAULT_IGNORE_DIRS` | `ReadonlySet<string>` | Директории по умолчанию для игнорирования |
-| `DEFAULT_IGNORE_PATTERNS` | `string[]` | Паттерны игнорирования по умолчанию |
+| `DEFAULT_IGNORE_PATTERNS` | `string[]` | Шаблоны игнорирования по умолчанию |
