@@ -105,7 +105,7 @@ export function isGrammarCached(language: string): boolean {
  * Проверяет, загружена ли грамматика для заданного языка.
  */
 export function isGrammarLoaded(language: string): boolean {
-  return grammarCache.get(language)?.loaded === true;
+  return grammarCache.has(language);
 }
 
 /**

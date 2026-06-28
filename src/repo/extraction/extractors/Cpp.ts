@@ -1334,15 +1334,18 @@ export class CppExtractor extends ExtractorBase {
       }
       child = child.nextSibling;
     }
-    // Для методов: искать visibility в parent (declaration)
+    // Для методов и полей: искать видимость среди предыдущих соседей в теле класса
     const parent = node.parent;
     if (parent) {
-      let pchild = parent.firstChild;
-      while (pchild) {
-        if (pchild.type === 'public' || pchild.type === 'private' || pchild.type === 'protected') {
-          return pchild.type as 'public' | 'private' | 'protected';
+      let cur = parent.firstChild;
+      while (cur) {
+        if (cur === node) {
+          break;
         }
-        pchild = pchild.nextSibling;
+        if (cur.type === 'public' || cur.type === 'private' || cur.type === 'protected') {
+          return cur.type as 'public' | 'private' | 'protected';
+        }
+        cur = cur.nextSibling;
       }
     }
     return undefined;
