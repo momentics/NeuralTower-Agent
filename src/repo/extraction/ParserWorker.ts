@@ -18,6 +18,7 @@ interface PendingParse {
   content: string;
   frameworkNames: string[];
   language: string;
+  rejected: boolean;
 }
 
 /**
@@ -73,16 +74,17 @@ class ParserWorkerManager {
 
     // Воркер завершился неожиданно.
     worker.on('exit', (code) => {
-      if (code !== 0 && this.pendingParses.size > 0) {
+      if (code !== 0) {
         const pending = Array.from(this.pendingParses.entries());
         this.rejectAllPending(new Error('Воркер завершился с кодом ' + code));
-        this.ensureWorker().then(() => {
-          this.loadGrammars(this.languages).then(() => {
+        this.ensureWorker()
+          .then(() => this.loadGrammars(this.languages))
+          .then(() => {
             for (const [id, req] of pending) {
               this.retryParse(id, req);
             }
-          });
-        });
+          })
+          .catch(() => {});
       }
     });
 
@@ -90,13 +92,14 @@ class ParserWorkerManager {
     worker.on('error', (err) => {
       const pending = Array.from(this.pendingParses.entries());
       this.rejectAllPending(err);
-      this.ensureWorker().then(() => {
-        this.loadGrammars(this.languages).then(() => {
+      this.ensureWorker()
+        .then(() => this.loadGrammars(this.languages))
+        .then(() => {
           for (const [id, req] of pending) {
             this.retryParse(id, req);
           }
-        });
-      });
+        })
+        .catch(() => {});
     });
 
     // Обработка ответов от воркера.
@@ -120,6 +123,13 @@ class ParserWorkerManager {
   }
 
   public rejectAllPending(reason: Error) {
+    for (const [id, req] of this.pendingParses) {
+      clearTimeout(req.timeout);
+      req.rejected = true;
+    }
+  }
+
+  private rejectAllPendingAbort(reason: Error) {
     for (const [id, req] of this.pendingParses) {
       clearTimeout(req.timeout);
       req.reject(reason);
@@ -154,6 +164,9 @@ class ParserWorkerManager {
   async loadGrammars(languages: string[]): Promise<void> {
     this.languages = languages;
     await this.ensureWorker();
+    if (!this.worker) {
+      throw new Error('Worker is null after ensureWorker');
+    }
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error('Таймаут загрузки грамматик'));
@@ -177,9 +190,14 @@ class ParserWorkerManager {
     content: string,
     frameworkNames: string[],
     language: string,
+    signal?: AbortSignal,
   ): Promise<IExtractionResult> {
     const timeout = calcTimeout(content);
     const requestId = this.nextRequestId++;
+
+    if (signal?.aborted) {
+      return Promise.reject(new DOMException('Operation aborted', 'AbortError'));
+    }
 
     return new Promise((resolve, reject) => {
       // Таймаут для запроса.
@@ -189,12 +207,21 @@ class ParserWorkerManager {
         this.worker?.terminate().catch(() => {});
       }, timeout);
 
+      // Abort listener для асинхронной отмены.
+      const onAbort = () => {
+        this.rejectAllPendingAbort(new DOMException('Operation aborted', 'AbortError'));
+        this.worker?.terminate().catch(() => {});
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+
       const pending: PendingParse = {
         resolve: (value) => {
+          signal?.removeEventListener('abort', onAbort);
           clearTimeout(timeoutId);
           resolve(value);
         },
         reject: (reason) => {
+          signal?.removeEventListener('abort', onAbort);
           clearTimeout(timeoutId);
           reject(reason);
         },
@@ -203,6 +230,7 @@ class ParserWorkerManager {
         content,
         frameworkNames,
         language,
+        rejected: false,
       };
 
       this.pendingParses.set(requestId, pending);
@@ -248,6 +276,7 @@ class ParserWorkerManager {
       content: req.content,
       frameworkNames: req.frameworkNames,
       language: req.language,
+      rejected: false,
     };
 
     // Добавляем новый запрос в карту ожидающих парсингов.
@@ -270,7 +299,12 @@ class ParserWorkerManager {
     frameworkNames: string[],
     language: string,
     level: number = 0,
+    signal?: AbortSignal,
   ): Promise<IExtractionResult> {
+    if (signal?.aborted) {
+      throw new DOMException('Operation aborted', 'AbortError');
+    }
+
     try {
       // Проверяем, нужно ли пересоздать воркер.
       if (this.parseCount > 0 && this.parseCount % WORKER_RECYCLE_INTERVAL === 0) {
@@ -282,20 +316,20 @@ class ParserWorkerManager {
 
       await this.ensureWorker();
 
-      return await this.sendParseRequest(filePath, content, frameworkNames, language);
+      return await this.sendParseRequest(filePath, content, frameworkNames, language, signal);
     } catch (err: any) {
       // Восстановление после сбоя воркера.
       if (level === 0) {
         // Уровень 1: пересоздание воркера и повторная попытка
         await this.recycleWorker();
         await this.loadGrammars(this.languages);
-        return this.parseWithRecovery(filePath, content, frameworkNames, language, 1);
+        return this.parseWithRecovery(filePath, content, frameworkNames, language, 1, signal);
       }
 
       if (level === 1) {
         // Уровень 2: удаление комментариев и повторная попытка
         const stripped = this.stripComments(content, language);
-        return this.parseWithRecovery(filePath, stripped, frameworkNames, language, 2);
+        return this.parseWithRecovery(filePath, stripped, frameworkNames, language, 2, signal);
       }
 
       throw err;
@@ -388,7 +422,7 @@ class ParserWorkerManager {
       await this.loadGrammars(languages);
     }
 
-    return this.parseWithRecovery(filePath, content, frameworkNames, language);
+    return this.parseWithRecovery(filePath, content, frameworkNames, language, 0, signal);
   }
 
   async destroy() {
@@ -403,7 +437,7 @@ class ParserWorkerManager {
       this.worker = null;
     }
 
-    this.rejectAllPending(new Error('ParserWorkerManager уничтожен'));
+    this.rejectAllPendingAbort(new Error('ParserWorkerManager уничтожен'));
   }
 }
 

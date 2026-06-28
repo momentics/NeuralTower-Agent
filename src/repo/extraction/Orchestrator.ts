@@ -34,6 +34,8 @@ import {
   SYNC_YIELD_INTERVAL,
   SYNC_RECONCILE_YIELD_INTERVAL,
   SCAN_YIELD_INTERVAL,
+  WORKER_RECYCLE_INTERVAL,
+  PARSE_TIMEOUT_MS,
   DEFAULT_IGNORE_DIRS,
   DEFAULT_IGNORE_PATTERNS,
 } from '../ntgraph/Types';
@@ -404,6 +406,7 @@ export class ExtractionOrchestrator {
       // Фаза 2: Парсинг и извлечение
       const total = files.length;
       let processed = 0;
+      let parseCount = 0;
 
       onProgress?.({ phase: 'parsing', current: 0, total, file: '', durationMs: 0 });
 
@@ -511,17 +514,24 @@ export class ExtractionOrchestrator {
           let result: IExtractionResult;
           try {
             if (PARSER_WORKER_AVAILABLE) {
-              result = await parseFileWorker(filePath, content, frameworkNames ?? [], language, [language]);
+              const timeout = PARSE_TIMEOUT_MS;
+              result = await Promise.race([
+                parseFileWorker(filePath, content, frameworkNames ?? [], language, [language]),
+                new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Таймаут парсинга (${timeout}ms)`)), timeout)),
+              ]);
             } else {
               result = this.extractFile(filePath, content, language, frameworkNames);
             }
           } catch (parseErr) {
-            // Уровень 1: повтор с оригинальным содержимым
+            // Уровень 1: recycleWorker + повтор с оригинальным содержимым
             try {
               if (PARSER_WORKER_AVAILABLE) {
-                // Пересоздаём воркер перед повторной попыткой
                 await recycleWorkerFn();
-                result = await parseFileWorker(filePath, content, frameworkNames ?? [], language, [language]);
+                const timeout = PARSE_TIMEOUT_MS;
+                result = await Promise.race([
+                  parseFileWorker(filePath, content, frameworkNames ?? [], language, [language]),
+                  new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Таймаут парсинга (${timeout}ms)`)), timeout)),
+                ]);
               } else {
                 result = this.extractFile(filePath, content, language, frameworkNames);
               }
@@ -530,7 +540,11 @@ export class ExtractionOrchestrator {
               try {
                 const stripped = this.stripComments(content, language);
                 if (PARSER_WORKER_AVAILABLE) {
-                  result = await parseFileWorker(filePath, stripped, frameworkNames ?? [], language, [language]);
+                  const timeout = PARSE_TIMEOUT_MS;
+                  result = await Promise.race([
+                    parseFileWorker(filePath, stripped, frameworkNames ?? [], language, [language]),
+                    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Таймаут парсинга (${timeout}ms)`)), timeout)),
+                  ]);
                 } else {
                   result = this.extractFile(filePath, stripped, language, frameworkNames);
                 }
@@ -548,10 +562,20 @@ export class ExtractionOrchestrator {
             }
           }
 
-          processed++;
+         processed++;
+
+          // Периодическая пересборка воркера
+          parseCount++;
+          if (parseCount % WORKER_RECYCLE_INTERVAL === 0 && PARSER_WORKER_AVAILABLE) {
+            try {
+              await recycleWorkerFn();
+            } catch {
+              // Игнорируем ошибки при пересборке воркера
+            }
+          }
 
           // Создание записи файла
-       const fileRecord: IFileRecord = {
+        const fileRecord: IFileRecord = {
           path: filePath,
           contentHash: hashContent(content),
           language: language as Language,
@@ -667,6 +691,10 @@ await this.storeExtractionResult(fileRecord, result);
           changedFilePaths.push(filePath);
         }
         filesChecked++;
+
+        if (filesChecked % SYNC_YIELD_INTERVAL === 0) {
+          await yieldToEventLoop();
+        }
       }
 
       // Изменённые и добавленные файлы — хеш-сравнение
@@ -679,6 +707,10 @@ await this.storeExtractionResult(fileRecord, result);
           content = await fsp.readFile(fullPath, 'utf-8');
         } catch {
           filesChecked++;
+
+          if (filesChecked % SYNC_YIELD_INTERVAL === 0) {
+            await yieldToEventLoop();
+          }
           continue;
         }
 
@@ -696,11 +728,10 @@ await this.storeExtractionResult(fileRecord, result);
         }
 
         filesChecked++;
-      }
 
-      // Кооперативная отдача
-      if (filesChecked % SYNC_YIELD_INTERVAL === 0) {
-        await yieldToEventLoop();
+        if (filesChecked % SYNC_YIELD_INTERVAL === 0) {
+          await yieldToEventLoop();
+        }
       }
     } else {
       // Фолбэк: полное сравнение файловой системы с БД
@@ -974,16 +1005,41 @@ await this.storeExtractionResult(fileRecord, result);
         // Извлечение AST через экстрактор с 2-уровневым повтором
         let result: IExtractionResult;
         try {
-          result = this.extractFile(filePath, content, language, frameworkNames);
-        } catch (parseErr) {
-          // Уровень 1: повтор с оригинальным содержимым
-          try {
+          if (PARSER_WORKER_AVAILABLE) {
+            const timeout = PARSE_TIMEOUT_MS;
+            result = await Promise.race([
+              parseFileWorker(filePath, content, frameworkNames ?? [], language, [language]),
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Таймаут парсинга (${timeout}ms)`)), timeout)),
+            ]);
+          } else {
             result = this.extractFile(filePath, content, language, frameworkNames);
+          }
+        } catch (parseErr) {
+          // Уровень 1: recycleWorker + повтор с оригинальным содержимым
+          try {
+            if (PARSER_WORKER_AVAILABLE) {
+              await recycleWorkerFn();
+              const timeout = PARSE_TIMEOUT_MS;
+              result = await Promise.race([
+                parseFileWorker(filePath, content, frameworkNames ?? [], language, [language]),
+                new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Таймаут парсинга (${timeout}ms)`)), timeout)),
+              ]);
+            } else {
+              result = this.extractFile(filePath, content, language, frameworkNames);
+            }
           } catch (parseErr2) {
             // Уровень 2: удаление комментариев и повтор
             try {
               const stripped = this.stripComments(content, language);
-              result = this.extractFile(filePath, stripped, language, frameworkNames);
+              if (PARSER_WORKER_AVAILABLE) {
+                const timeout = PARSE_TIMEOUT_MS;
+                result = await Promise.race([
+                  parseFileWorker(filePath, stripped, frameworkNames ?? [], language, [language]),
+                  new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Таймаут парсинга (${timeout}ms)`)), timeout)),
+                ]);
+              } else {
+                result = this.extractFile(filePath, stripped, language, frameworkNames);
+              }
             } catch (parseErr3) {
               // Сохраняем для повторной обработки с фолбэком
               failedFiles.push({ filePath, content, language, stats });
@@ -1523,20 +1579,7 @@ await this.storeExtractionResult(fileRecord, result);
     }
   }
 
- /**
-    * Обнаружение фреймворков в проекте.
-    */
-  private detectFrameworksInternal(): string[] {
-    if (this._detectedFrameworks) return this._detectedFrameworks;
 
-    try {
-      this._detectedFrameworks = detectFrameworks([]);
-    } catch {
-      this._detectedFrameworks = [];
-    }
-
-    return this._detectedFrameworks;
-  }
 
   /**
    * Выбирает лучшего кандидата для разрешения ссылки.

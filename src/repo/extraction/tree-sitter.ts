@@ -32,23 +32,10 @@ export function extractFromSource(
 ): IExtractionResult {
   ensureExtractors();
 
-  const extractor = EXTRACTOR_MAP.get(language);
+  let extractor = EXTRACTOR_MAP.get(language);
 
   if (!extractor) {
-    return {
-      nodes: [],
-      edges: [],
-      unresolvedReferences: [],
-      errors: [
-        {
-          message: `Экстрактор для языка ${language} не найден`,
-          filePath,
-          severity: 'warning',
-          code: 'parse_error',
-        },
-      ],
-      durationMs: 0,
-    };
+    extractor = EXTRACTOR_MAP.get('default') ?? new DefaultExtractor();
   }
 
   const start = Date.now();

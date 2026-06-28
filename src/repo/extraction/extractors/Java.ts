@@ -53,7 +53,7 @@ export class JavaExtractor extends ExtractorBase {
           'Не удалось разобрать файл',
           filePath,
           'error',
-          'PARSE_FAILED'
+          'parse_error'
         ));
         // Измеряем время извлечения
         return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
@@ -90,7 +90,7 @@ export class JavaExtractor extends ExtractorBase {
         `Ошибка tree-sitter: ${message}`,
         filePath,
         'error',
-        'TREE_SITTER_ERROR'
+        'parse_error'
       ));
     }
 
@@ -163,10 +163,6 @@ export class JavaExtractor extends ExtractorBase {
 
       case 'throw_statement':
         this.processThrowStatement(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
-        break;
-
-      case 'annotation':
-        this.processAnnotation(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
         break;
 
       case 'type_parameter':
@@ -310,6 +306,19 @@ export class JavaExtractor extends ExtractorBase {
     const isFinal = this.hasModifier(node, 'final');
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
 
+    // Извлечение аннотаций
+    const decorators: string[] = [];
+    {
+      let child = node.firstChild;
+      while (child) {
+        if (child.type === 'annotation') {
+          const decText = child.text.startsWith('@') ? child.text.slice(1) : child.text;
+          decorators.push(decText);
+        }
+        child = child.nextSibling;
+      }
+    }
+
     const classNode = this.createNode(
       filePath,
       NodeKind.Class,
@@ -324,10 +333,28 @@ export class JavaExtractor extends ExtractorBase {
         isAbstract,
         isFinal,
         visibility: this.extractVisibility(node),
+        decorators,
       }
     );
     nodes.push(classNode);
     edges.push(this.createEdge(parentId, classNode.id, EdgeKind.Contains));
+
+    // Ребра decorates от класса к типам аннотаций
+    for (const decText of decorators) {
+      edges.push(this.createEdge(classNode.id, this.nodeId(filePath, NodeKind.Class, decText, 0), EdgeKind.Decorates, {
+        metadata: { referenceName: decText },
+        line: classNode.startLine,
+        column: classNode.startColumn,
+      }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        classNode.id,
+        decText,
+        EdgeKind.Decorates,
+        classNode.startLine,
+        classNode.startColumn,
+        filePath
+      ));
+    }
 
     // Параметры типов
     const typeParams = node.childForFieldName('type_parameters');
@@ -412,6 +439,19 @@ export class JavaExtractor extends ExtractorBase {
     const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${name}` : name;
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
 
+    // Извлечение аннотаций
+    const decorators: string[] = [];
+    {
+      let child = node.firstChild;
+      while (child) {
+        if (child.type === 'annotation') {
+          const decText = child.text.startsWith('@') ? child.text.slice(1) : child.text;
+          decorators.push(decText);
+        }
+        child = child.nextSibling;
+      }
+    }
+
     const ifaceNode = this.createNode(
       filePath,
       NodeKind.Interface,
@@ -424,10 +464,28 @@ export class JavaExtractor extends ExtractorBase {
         qualifiedName,
         docstring,
         visibility: this.extractVisibility(node),
+        decorators,
       }
     );
     nodes.push(ifaceNode);
     edges.push(this.createEdge(parentId, ifaceNode.id, EdgeKind.Contains));
+
+    // Ребра decorates от интерфейса к типам аннотаций
+    for (const decText of decorators) {
+      edges.push(this.createEdge(ifaceNode.id, this.nodeId(filePath, NodeKind.Class, decText, 0), EdgeKind.Decorates, {
+        metadata: { referenceName: decText },
+        line: ifaceNode.startLine,
+        column: ifaceNode.startColumn,
+      }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        ifaceNode.id,
+        decText,
+        EdgeKind.Decorates,
+        ifaceNode.startLine,
+        ifaceNode.startColumn,
+        filePath
+      ));
+    }
 
     // Параметры типов
     const typeParams = node.childForFieldName('type_parameters');
@@ -488,6 +546,19 @@ export class JavaExtractor extends ExtractorBase {
     const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${name}` : name;
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
 
+    // Извлечение аннотаций
+    const decorators: string[] = [];
+    {
+      let child = node.firstChild;
+      while (child) {
+        if (child.type === 'annotation') {
+          const decText = child.text.startsWith('@') ? child.text.slice(1) : child.text;
+          decorators.push(decText);
+        }
+        child = child.nextSibling;
+      }
+    }
+
     const enumNode = this.createNode(
       filePath,
       NodeKind.Enum,
@@ -500,10 +571,28 @@ export class JavaExtractor extends ExtractorBase {
         qualifiedName,
         docstring,
         visibility: this.extractVisibility(node),
+        decorators,
       }
     );
     nodes.push(enumNode);
     edges.push(this.createEdge(parentId, enumNode.id, EdgeKind.Contains));
+
+    // Ребра decorates от перечисления к типам аннотаций
+    for (const decText of decorators) {
+      edges.push(this.createEdge(enumNode.id, this.nodeId(filePath, NodeKind.Class, decText, 0), EdgeKind.Decorates, {
+        metadata: { referenceName: decText },
+        line: enumNode.startLine,
+        column: enumNode.startColumn,
+      }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        enumNode.id,
+        decText,
+        EdgeKind.Decorates,
+        enumNode.startLine,
+        enumNode.startColumn,
+        filePath
+      ));
+    }
 
     // Обработка тела для констант перечисления
     const body = node.childForFieldName('body');
@@ -557,6 +646,23 @@ export class JavaExtractor extends ExtractorBase {
     const signature = this.extractMethodSignature(node, content);
     const returnType = this.extractReturnType(node);
 
+    // Извлечение аннотаций и проверка @Override
+    const decorators: string[] = [];
+    let hasOverride = false;
+    {
+      let child = node.firstChild;
+      while (child) {
+        if (child.type === 'annotation') {
+          const decText = child.text.startsWith('@') ? child.text.slice(1) : child.text;
+          decorators.push(decText);
+          if (decText === 'Override') {
+            hasOverride = true;
+          }
+        }
+        child = child.nextSibling;
+      }
+    }
+
     const methodNode = this.createNode(
       filePath,
       NodeKind.Method,
@@ -575,6 +681,7 @@ export class JavaExtractor extends ExtractorBase {
         isSynchronized,
         returnType,
         visibility: this.extractVisibility(node),
+        decorators,
       }
     );
     nodes.push(methodNode);
@@ -582,7 +689,24 @@ export class JavaExtractor extends ExtractorBase {
 
     // Ребро Returns от метода к типу возвращаемого значения
     if (returnType) {
-      edges.push(this.createEdge(methodNode.id, this.nodeId(filePath, NodeKind.Variable, returnType, methodNode.startLine), EdgeKind.Returns, { line: methodNode.startLine }));
+      edges.push(this.createEdge(methodNode.id, this.nodeId(filePath, NodeKind.Class, returnType, methodNode.startLine), EdgeKind.Returns, { line: methodNode.startLine }));
+    }
+
+    // Ребро overrides если есть @Override
+    if (hasOverride) {
+      edges.push(this.createEdge(methodNode.id, this.nodeId(filePath, NodeKind.Method, name, 0), EdgeKind.Overrides, {
+        metadata: { referenceName: name },
+        line: methodNode.startLine,
+        column: methodNode.startColumn,
+      }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        methodNode.id,
+        name,
+        EdgeKind.Overrides,
+        methodNode.startLine,
+        methodNode.startColumn,
+        filePath
+      ));
     }
 
     // Параметры типов
@@ -865,32 +989,16 @@ export class JavaExtractor extends ExtractorBase {
 
   /** Обрабатывает аннотацию (Decorator). */
   protected processAnnotation(
-    node: any,
-    filePath: string,
-    content: string,
-    parentId: string,
-    nodes: INode[],
-    edges: IEdge[],
-    unresolvedRefs: IUnresolvedReference[],
-    errors: IExtractionError[]
+    _node: any,
+    _filePath: string,
+    _content: string,
+    _parentId: string,
+    _nodes: INode[],
+    _edges: IEdge[],
+    _unresolvedRefs: IUnresolvedReference[],
+    _errors: IExtractionError[]
   ): void {
-    const line = node.startPosition.row + 1;
-    const decoratorText = node.text.startsWith('@') ? node.text.slice(1) : node.text;
-
-    const decNode = this.createNode(
-      filePath,
-      NodeKind.Function,
-      decoratorText,
-      line,
-      line,
-      node.startPosition.column,
-      node.endPosition.column
-    );
-    nodes.push(decNode);
-    edges.push(this.createEdge(decNode.id, parentId, EdgeKind.Decorates, {
-      line,
-      column: node.startPosition.column,
-    }));
+    // Аннотации обрабатываются в родительских обработчиках
   }
 
   /** Обрабатывает параметр типа (TypeParameter). */
@@ -1007,9 +1115,9 @@ export class JavaExtractor extends ExtractorBase {
           );
           nodes.push(paramNode);
           edges.push(this.createEdge(parentId, paramNode.id, EdgeKind.Contains));
-          // Ребро TypeOf от параметра к типу
-          if (typeNode) {
-            edges.push(this.createEdge(paramNode.id, this.nodeId(filePath, NodeKind.Variable, typeNode.text, paramNode.startLine), EdgeKind.TypeOf, { line: paramNode.startLine }));
+         // Ребро TypeOf от параметра к типу
+           if (typeNode) {
+            edges.push(this.createEdge(paramNode.id, this.nodeId(filePath, NodeKind.Class, typeNode.text, paramNode.startLine), EdgeKind.TypeOf, { line: paramNode.startLine }));
           }
         }
       }
@@ -1109,6 +1217,26 @@ export class JavaExtractor extends ExtractorBase {
     while (child) {
       if (child.type === 'method_invocation') {
         this.processMethodInvocation(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      } else if (child.type === 'object_creation_expression') {
+        const typeNameNode = child.childForFieldName('type');
+        if (typeNameNode) {
+          const typeName = typeNameNode.text;
+          const line = child.startPosition.row + 1;
+          const column = child.startPosition.column;
+          edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Class, typeName, 0), EdgeKind.Instantiates, {
+            metadata: { referenceName: typeName },
+            line,
+            column,
+          }));
+          unresolvedRefs.push(this.createUnresolvedRef(
+            parentId,
+            typeName,
+            EdgeKind.Instantiates,
+            line,
+            column,
+            filePath
+          ));
+        }
       } else if (child.type === 'try_statement') {
         this.processTryStatement(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       } else if (child.type === 'throw_statement') {

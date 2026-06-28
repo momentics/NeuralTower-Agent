@@ -2,7 +2,7 @@
  * Экстрактор для C/C++.
  *
  * Использует tree-sitter-c и tree-sitter-cpp для парсинга и извлечения узлов, рёбер и неразрешённых ссылок.
- * Для .h файлов используется двойной парсинг: сначала C++, затем C.
+ * Для .h файлов используется двойной парсинг: сначала C, затем C++.
  */
 
 import {
@@ -45,7 +45,7 @@ export class CppExtractor extends ExtractorBase {
 
       const p = new parser.Parser();
 
-      // Для .h файлов используется двойной парсинг: C++ сначала, затем C
+      // Для .h файлов используется двойной парсинг: C сначала, затем C++
       if (filePath.endsWith('.h')) {
         const result = this.extractWithDualGrammar(
           p, cppGrammar, cGrammar, filePath, content,
@@ -69,7 +69,7 @@ export class CppExtractor extends ExtractorBase {
           'Не удалось распарсить файл',
           filePath,
           'error',
-          'PARSE_FAILED'
+          'parse_error'
         ));
    return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
        }
@@ -103,14 +103,14 @@ export class CppExtractor extends ExtractorBase {
         `Ошибка tree-sitter: ${message}`,
         filePath,
         'error',
-        'TREE_SITTER_ERROR'
+        'parse_error'
       ));
     }
 
     return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
   }
 
-  /** Двойной парсинг для .h файлов: C++ сначала, затем C. */
+  /** Двойной парсинг для .h файлов: C сначала, затем C++. */
   protected extractWithDualGrammar(
     p: any,
     cppGrammar: any,
@@ -122,37 +122,7 @@ export class CppExtractor extends ExtractorBase {
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[]
   ): boolean {
-    // Пробуем C++ сначала
-    p.setLanguage(cppGrammar.CPP);
-    const cppTree = p.parse(content);
-
-    if (cppTree && !cppTree.rootNode.hasError) {
-      const root = cppTree.rootNode;
-      // Корневой узел — файл
-      const moduleNode = this.createNode(
-        filePath,
-        NodeKind.File,
-        filePath,
-        1,
-        content.split('\n').length,
-        0,
-        0
-      );
-      nodes.push(moduleNode);
-      this.processCppNodes(
-        root,
-        filePath,
-        content,
-        moduleNode.id,
-        nodes,
-        edges,
-        unresolvedRefs,
-        errors
-      );
-      return true;
-    }
-
-    // Откат на C
+    // Пробуем C сначала
     p.setLanguage(cGrammar.C);
     const cTree = p.parse(content);
 
@@ -182,11 +152,41 @@ export class CppExtractor extends ExtractorBase {
       return true;
     }
 
+    // Откат на C++
+    p.setLanguage(cppGrammar.CPP);
+    const cppTree = p.parse(content);
+
+    if (cppTree && !cppTree.rootNode.hasError) {
+      const root = cppTree.rootNode;
+      // Корневой узел — файл
+      const moduleNode = this.createNode(
+        filePath,
+        NodeKind.File,
+        filePath,
+        1,
+        content.split('\n').length,
+        0,
+        0
+      );
+      nodes.push(moduleNode);
+      this.processCppNodes(
+        root,
+        filePath,
+        content,
+        moduleNode.id,
+        nodes,
+        edges,
+        unresolvedRefs,
+        errors
+      );
+      return true;
+    }
+
     errors.push(this.createError(
-      'Не удалось распарсить файл ни как C++, ни как C',
+      'Не удалось распарсить файл ни как C, ни как C++',
       filePath,
       'error',
-      'DUAL_PARSE_FAILED'
+      'parse_error'
     ));
     return false;
   }
@@ -1306,10 +1306,21 @@ export class CppExtractor extends ExtractorBase {
   protected hasSpecifier(node: any, specifier: string): boolean {
     let child = node.firstChild;
     while (child) {
-      if (child.type === 'specifier' && child.text === specifier) {
+      if (child.type === specifier) {
         return true;
       }
       child = child.nextSibling;
+    }
+    // Для методов: искать specifier в parent (declaration)
+    const parent = node.parent;
+    if (parent) {
+      let pchild = parent.firstChild;
+      while (pchild) {
+        if (pchild.type === specifier) {
+          return true;
+        }
+        pchild = pchild.nextSibling;
+      }
     }
     return false;
   }
@@ -1318,13 +1329,21 @@ export class CppExtractor extends ExtractorBase {
   protected extractVisibility(node: any): 'public' | 'private' | 'protected' | 'internal' | undefined {
     let child = node.firstChild;
     while (child) {
-      if (child.type === 'specifier') {
-        const text = child.text;
-        if (text === 'public' || text === 'private' || text === 'protected') {
-          return text as 'public' | 'private' | 'protected';
-        }
+      if (child.type === 'public' || child.type === 'private' || child.type === 'protected') {
+        return child.type as 'public' | 'private' | 'protected';
       }
       child = child.nextSibling;
+    }
+    // Для методов: искать visibility в parent (declaration)
+    const parent = node.parent;
+    if (parent) {
+      let pchild = parent.firstChild;
+      while (pchild) {
+        if (pchild.type === 'public' || pchild.type === 'private' || pchild.type === 'protected') {
+          return pchild.type as 'public' | 'private' | 'protected';
+        }
+        pchild = pchild.nextSibling;
+      }
     }
     return undefined;
   }

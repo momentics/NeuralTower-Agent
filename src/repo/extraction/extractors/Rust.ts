@@ -50,7 +50,7 @@ public extract(
           'Не удалось распарсить файл',
           filePath,
           'error',
-          'PARSE_FAILED'
+          'parse_error'
         ));
         return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
@@ -89,7 +89,7 @@ public extract(
         `Ошибка tree-sitter: ${message}`,
         filePath,
         'error',
-        'TREE_SITTER_ERROR'
+        'parse_error'
       ));
     }
 
@@ -495,6 +495,25 @@ public extract(
     const isPub = this.isPublic(node);
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
 
+    const implNode = this.createNode(
+      filePath,
+      NodeKind.Class,
+      `impl ${typeName}`,
+      node.startPosition.row + 1,
+      node.endPosition.row + 1,
+      node.startPosition.column,
+      node.endPosition.column,
+      {
+        qualifiedName: `${qualifiedNamePrefix}${typeName}`,
+        docstring,
+        isImpl: true,
+        isTraitImpl,
+        visibility: isPub ? 'public' : undefined,
+      }
+    );
+    nodes.push(implNode);
+    edges.push(this.createEdge(parentId, implNode.id, EdgeKind.Contains));
+
     // Типовые параметры impl
     const typeParamsNode = node.childForFieldName('type_parameters');
     if (typeParamsNode) {
@@ -502,13 +521,13 @@ public extract(
     }
 
     // Референс на тип
-    edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Class, typeName, 0), EdgeKind.References, {
+    edges.push(this.createEdge(implNode.id, this.nodeId(filePath, NodeKind.Class, typeName, 0), EdgeKind.References, {
       metadata: { referenceName: typeName },
       line: selfType.startPosition.row + 1,
       column: selfType.startPosition.column,
     }));
     unresolvedRefs.push(this.createUnresolvedRef(
-      parentId,
+      implNode.id,
       typeName,
       EdgeKind.References,
       selfType.startPosition.row + 1,
@@ -519,14 +538,13 @@ public extract(
     // Ребро Implements от типа к trait, который он реализует
     if (forType) {
       const traitName = forType.text;
-      const typeNodeId = this.nodeId(filePath, NodeKind.Class, typeName, 0);
-      edges.push(this.createEdge(typeNodeId, this.nodeId(filePath, NodeKind.Interface, traitName, 0), EdgeKind.Implements, {
+      edges.push(this.createEdge(implNode.id, this.nodeId(filePath, NodeKind.Interface, traitName, 0), EdgeKind.Implements, {
         metadata: { referenceName: traitName },
         line: forType.startPosition.row + 1,
         column: forType.startPosition.column,
       }));
       unresolvedRefs.push(this.createUnresolvedRef(
-        typeNodeId,
+        implNode.id,
         traitName,
         EdgeKind.Implements,
         forType.startPosition.row + 1,
@@ -541,11 +559,11 @@ public extract(
       let child = body.firstChild;
       while (child) {
         if (child.type === 'function_item') {
-          this.processFunctionItem(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, `${qualifiedNamePrefix}${typeName}`);
+          this.processFunctionItem(child, filePath, content, implNode.id, nodes, edges, unresolvedRefs, errors, `${qualifiedNamePrefix}${typeName}`);
         } else if (child.type === 'associated_type') {
-          this.processAssociatedType(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
+          this.processAssociatedType(child, filePath, content, implNode.id, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
         } else if (child.type === 'associated_constant') {
-          this.processAssociatedConstant(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
+          this.processAssociatedConstant(child, filePath, content, implNode.id, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
         }
         child = child.nextSibling;
       }
@@ -1075,6 +1093,7 @@ public extract(
         );
         nodes.push(exportNode);
         edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+        edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Exports));
       }
     }
 
@@ -1107,7 +1126,7 @@ public extract(
 
     const modNode = this.createNode(
       filePath,
-      NodeKind.Namespace,
+      NodeKind.Module,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -1460,6 +1479,8 @@ public extract(
     const column = node.startPosition.column;
 
     let funcName: string | undefined;
+    let isScopedNew = false;
+    let scopedTypeName: string | undefined;
     if (funcNode.type === 'identifier') {
       funcName = funcNode.text;
     } else if (funcNode.type === 'field_expression') {
@@ -1467,11 +1488,37 @@ public extract(
       if (fieldName) {
         funcName = fieldName.text;
       }
+    } else if (funcNode.type === 'scoped_identifier') {
+      const nameNode = funcNode.childForFieldName('name');
+      if (nameNode) {
+        funcName = nameNode.text;
+        if (funcName === 'new') {
+          isScopedNew = true;
+          const namespaceNode = funcNode.childForFieldName('namespace');
+          if (namespaceNode) {
+            scopedTypeName = namespaceNode.text;
+          }
+        }
+      }
     }
 
     if (funcName) {
-      // Проверяем unwrap/expect как Throw
-      if (funcName === 'unwrap' || funcName === 'expect') {
+      // ::new() — ребро instantiates
+      if (isScopedNew && scopedTypeName) {
+        edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Class, scopedTypeName, 0), EdgeKind.Instantiates, {
+          metadata: { referenceName: scopedTypeName },
+          line,
+          column,
+        }));
+        unresolvedRefs.push(this.createUnresolvedRef(
+          parentId,
+          scopedTypeName,
+          EdgeKind.Instantiates,
+          line,
+          column,
+          filePath
+        ));
+      } else if (funcName === 'unwrap' || funcName === 'expect') {
         const throwNode = this.createNode(
           filePath,
           NodeKind.Function,

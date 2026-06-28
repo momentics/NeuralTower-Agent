@@ -60,7 +60,7 @@ export class TypeScriptExtractor extends ExtractorBase {
           'Не удалось разобрать файл',
           filePath,
           'error',
-          'PARSE_FAILED'
+          'parse_error'
         ));
         return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
@@ -105,7 +105,7 @@ export class TypeScriptExtractor extends ExtractorBase {
         `Ошибка tree-sitter: ${message}`,
         filePath,
         'error',
-        'TREE_SITTER_ERROR'
+         'parse_error'
       ));
     }
 
@@ -753,7 +753,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     }
 
     // Переопределение
-    if (decorators.includes('override')) {
+    if (decorators.includes('override') || this.hasModifier(node, 'override')) {
       const extendsEdge = edges.find(e => e.source === parentId && e.kind === EdgeKind.Extends);
       if (extendsEdge) {
         const superClassName = (extendsEdge.metadata?.referenceName as string) ?? '';
@@ -810,10 +810,13 @@ export class TypeScriptExtractor extends ExtractorBase {
     const decorators = this.extractDecorators(node, content);
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
 
-    // Создаём узел поля (Field, а не Property)
+    // Определяем NodeKind: Property для аксессоров/getter/setter, Field для обычных полей
+    const isAccessor = this.isAccessor(node);
+    const propKind = isAccessor ? NodeKind.Property : NodeKind.Field;
+
     const propNode = this.createNode(
       filePath,
-      NodeKind.Field,
+      propKind,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -1049,6 +1052,12 @@ export class TypeScriptExtractor extends ExtractorBase {
     if (typeParams) {
       this.processTypeParameters(typeParams, filePath, content, typeNode.id, nodes, edges, unresolvedRefs, errors);
     }
+
+    // Извлечение ссылок на типы из правой части
+    const value = node.childForFieldName('value');
+    if (value) {
+      this.extractTypeReferences(value, filePath, typeNode.id, edges, unresolvedRefs);
+    }
   }
 
   /** Обрабатывает объявление перечисления. */
@@ -1164,13 +1173,23 @@ export class TypeScriptExtractor extends ExtractorBase {
       if (child.type === 'import_clause') {
         let spec = child.firstChild;
         while (spec) {
-          if (spec.type === 'import_specifier') {
+          if (spec.type === 'import_default_clause') {
+            const nameNode = spec.childForFieldName('name');
+            if (nameNode) {
+              const defaultName = nameNode.text;
+              edges.push(this.createEdge(importNode.id, this.nodeId(filePath, NodeKind.Import, defaultName, line), EdgeKind.References, {
+                metadata: { importedName: defaultName, localName: defaultName },
+                line,
+                column,
+              }));
+            }
+          } else if (spec.type === 'import_specifier') {
             const nameNode = spec.childForFieldName('name');
             const aliasNode = spec.childForFieldName('alias');
             if (nameNode) {
               const importedName = nameNode.text;
               const localName = aliasNode ? aliasNode.text : importedName;
-              edges.push(this.createEdge(importNode.id, this.nodeId(filePath, NodeKind.Import, localName, line), EdgeKind.Exports, {
+              edges.push(this.createEdge(importNode.id, this.nodeId(filePath, NodeKind.Import, localName, line), EdgeKind.References, {
                 metadata: { importedName, localName },
                 line,
                 column,
@@ -1212,6 +1231,7 @@ export class TypeScriptExtractor extends ExtractorBase {
         );
         nodes.push(exportNode);
         edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+        edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Exports));
 
         unresolvedRefs.push(this.createUnresolvedRef(
           exportNode.id,
@@ -1239,6 +1259,7 @@ export class TypeScriptExtractor extends ExtractorBase {
         );
         nodes.push(exportNode);
         edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+        edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Exports));
 
         unresolvedRefs.push(this.createUnresolvedRef(
           exportNode.id,
@@ -1261,7 +1282,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     }
   }
 
-  /** Обрабатывает try/catch. */
+  /** Обрабатывает try/catch — не создаёт узлов, только рекурсия по детям. */
   protected processTryStatement(
     node: any,
     filePath: string,
@@ -1272,63 +1293,14 @@ export class TypeScriptExtractor extends ExtractorBase {
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[]
   ): void {
-    const line = node.startPosition.row + 1;
-
-    const tryNode = this.createNode(
-      filePath,
-      NodeKind.Function,
-      'try',
-      line,
-      node.endPosition.row + 1,
-      node.startPosition.column,
-      node.endPosition.column
-    );
-    nodes.push(tryNode);
-    edges.push(this.createEdge(parentId, tryNode.id, EdgeKind.Contains));
-
-    const catchClause = node.childForFieldName('handler');
-    if (catchClause) {
-      const catchNode = this.createNode(
-        filePath,
-        NodeKind.Function,
-        'catch',
-        catchClause.startPosition.row + 1,
-        catchClause.endPosition.row + 1,
-        catchClause.startPosition.column,
-        catchClause.endPosition.column
-      );
-      nodes.push(catchNode);
-      edges.push(this.createEdge(tryNode.id, catchNode.id, EdgeKind.References));
-
-      const catchParam = catchClause.childForFieldName('parameter');
-      if (catchParam) {
-        const paramName = catchParam.text;
-        const paramNode = this.createNode(
-          filePath,
-          NodeKind.Parameter,
-          paramName,
-          catchParam.startPosition.row + 1,
-          catchParam.endPosition.row + 1,
-          catchParam.startPosition.column,
-          catchParam.endPosition.column
-        );
-        nodes.push(paramNode);
-        edges.push(this.createEdge(catchNode.id, paramNode.id, EdgeKind.Contains));
-      }
-    }
-
-    // Обработка finally
-    const finallyClause = node.childForFieldName('finalizer');
-    if (finallyClause) {
-      let child = finallyClause.firstChild;
-      while (child) {
-        this.processTsNodes(child, filePath, content, tryNode.id, nodes, edges, unresolvedRefs, errors);
-        child = child.nextSibling;
-      }
+    let child = node.firstChild;
+    while (child) {
+      this.processTsNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      child = child.nextSibling;
     }
   }
 
-  /** Обрабатывает throw. */
+  /** Обрабатывает throw — не создаёт узлов. */
   protected processThrowStatement(
     node: any,
     filePath: string,
@@ -1339,28 +1311,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[]
   ): void {
-    const line = node.startPosition.row + 1;
-    const argumentNode = node.childForFieldName('argument');
-
-    const throwNode = this.createNode(
-      filePath,
-      NodeKind.Function,
-      'throw',
-      line,
-      line,
-      node.startPosition.column,
-      node.endPosition.column
-    );
-    nodes.push(throwNode);
-    edges.push(this.createEdge(parentId, throwNode.id, EdgeKind.Contains));
-
-    if (argumentNode) {
-      edges.push(this.createEdge(throwNode.id, parentId, EdgeKind.References, {
-        metadata: { expression: argumentNode.text },
-        line,
-        column: argumentNode.startPosition.column,
-      }));
-    }
+    // throw не является NodeKind из плана, не создаём узел
   }
 
   /** Обрабатывает namespace. */
@@ -1455,7 +1406,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     }
   }
 
-  /** Обрабатывает декоратор. */
+  /** Обрабатывает декоратор — не создаёт узлов, декораторы извлекаются через extractDecorators. */
   protected processDecorator(
     node: any,
     filePath: string,
@@ -1466,23 +1417,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[]
   ): void {
-    const line = node.startPosition.row + 1;
-    const decoratorText = node.text.slice(1); // Удаляем @
-
-    const decNode = this.createNode(
-      filePath,
-      NodeKind.Function,
-      decoratorText,
-      line,
-      line,
-      node.startPosition.column,
-      node.endPosition.column
-    );
-    nodes.push(decNode);
-    edges.push(this.createEdge(decNode.id, parentId, EdgeKind.Decorates, {
-      line,
-      column: node.startPosition.column,
-    }));
+    // Декораторы должны быть только в метаданных decorators: string[] узла, к которому они применены
   }
 
   /** Обрабатывает параметры функции. */
@@ -1588,10 +1523,6 @@ export class TypeScriptExtractor extends ExtractorBase {
         this.processCallExpression(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       } else if (child.type === 'NewExpression') {
         this.processNewExpression(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
-      } else if (child.type === 'throw_statement') {
-        this.processThrowStatement(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
-      } else if (child.type === 'try_statement') {
-        this.processTryStatement(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       } else if (child.type === 'return_statement') {
         const returnExpr = child.childForFieldName('value');
         if (returnExpr && returnExpr.type === 'NewExpression') {
@@ -1628,6 +1559,53 @@ export class TypeScriptExtractor extends ExtractorBase {
       }
       child = child.nextSibling;
     }
+  }
+
+  /** Извлекает ссылки на типы из AST-узла, обходя type_identifier. */
+  protected extractTypeReferences(
+    node: any,
+    filePath: string,
+    sourceId: string,
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[]
+  ): void {
+    if (!node) return;
+    if (node.type === 'type_identifier') {
+      const typeName = node.text;
+      const baseType = this.extractBaseType(typeName);
+      if (baseType && !this.isPrimitiveType(baseType)) {
+        edges.push(this.createEdge(sourceId, this.nodeId(filePath, NodeKind.Class, baseType, 0), EdgeKind.References, {
+          metadata: { referenceName: baseType },
+          line: node.startPosition.row + 1,
+          column: node.startPosition.column,
+        }));
+        unresolvedRefs.push(this.createUnresolvedRef(
+          sourceId,
+          baseType,
+          EdgeKind.References,
+          node.startPosition.row + 1,
+          node.startPosition.column,
+          filePath
+        ));
+      }
+    }
+    let child = node.firstChild;
+    while (child) {
+      this.extractTypeReferences(child, filePath, sourceId, edges, unresolvedRefs);
+      child = child.nextSibling;
+    }
+  }
+
+  /** Проверяет, является ли property_definition аксессором (getter/setter). */
+  protected isAccessor(node: any): boolean {
+    let child = node.firstChild;
+    while (child) {
+      if (child.type === 'property_identifier' && (child.text === 'get' || child.text === 'set')) {
+        return true;
+      }
+      child = child.nextSibling;
+    }
+    return false;
   }
 
   /** Проверяет наличие модификатора. */

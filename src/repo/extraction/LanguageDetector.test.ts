@@ -10,7 +10,7 @@ import {
   getSupportedLanguages,
   EXTENSION_TO_LANGUAGE,
 } from "./LanguageDetector"
-import { isGrammarCached } from "./Grammars"
+import { isGrammarCached, isGrammarLoaded, loadGrammar } from "./Grammars"
 
 
 
@@ -467,22 +467,31 @@ describe("loadExtensionOverrides", () => {
 // Тесты для грамматик — проверяем доступность WASM-грамматик через isGrammarCached
 
 describe("isGrammarLoaded", () => {
-  it("isGrammarCached returns true for typescript", () => {
-    expect(isGrammarCached("typescript")).toBe(true)
+  it("isGrammarCached returns false for unloaded language", () => {
+    expect(isGrammarCached("typescript")).toBe(false)
   })
 
-  it("isGrammarCached returns true for python", () => {
-    expect(isGrammarCached("python")).toBe(true)
+  it("isGrammarCached returns false for arbitrary language", () => {
+    expect(isGrammarCached("nonexistent")).toBe(false)
   })
 
-  it("isGrammarCached returns true for arbitrary language", () => {
-    expect(isGrammarCached("nonexistent")).toBe(true)
+  it("isGrammarCached returns true after successful load", async () => {
+    const result = await loadGrammar("typescript")
+    if (result) {
+      expect(isGrammarCached("typescript")).toBe(true)
+    } else {
+      expect(isGrammarCached("typescript")).toBe(false)
+    }
   })
 
-  it("isGrammarCached always returns true (grammars available via WASM)", () => {
-    expect(isGrammarCached("typescript")).toBe(true)
-    expect(isGrammarCached("ruby")).toBe(true)
-    expect(isGrammarCached("unknown")).toBe(true)
+  it("isGrammarLoaded returns false for unloaded language", () => {
+    expect(isGrammarLoaded("typescript")).toBe(false)
+  })
+
+  it("loadGrammar returns null for unsupported language", async () => {
+    const result = await loadGrammar("nonexistent")
+    expect(result).toBeNull()
+    expect(isGrammarCached("nonexistent")).toBe(false)
   })
 })
 

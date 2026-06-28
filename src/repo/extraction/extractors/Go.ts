@@ -50,18 +50,18 @@ export class GoExtractor extends ExtractorBase {
           'Не удалось разобрать файл',
           filePath,
           'error',
-          'PARSE_FAILED'
-        ));
-        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
-      }
+         'parse_error'
+         ));
+         return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
+       }
 
-      const root = tree.rootNode;
-      if (!root) {
-        errors.push(this.createError(
-          'Не удалось получить корневой узел',
-          filePath,
-          'error',
-          'PARSE_FAILED'
+       const root = tree.rootNode;
+       if (!root) {
+         errors.push(this.createError(
+           'Не удалось получить корневой узел',
+           filePath,
+           'error',
+           'parse_error'
         ));
         return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
@@ -89,13 +89,16 @@ export class GoExtractor extends ExtractorBase {
         unresolvedRefs,
         errors
       );
+
+      // Post-processing: implements edges
+      this.processImplementsEdges(filePath, nodes, edges, unresolvedRefs);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(
         `Ошибка tree-sitter: ${message}`,
         filePath,
         'error',
-        'TREE_SITTER_ERROR'
+        'parse_error'
       ));
     }
 
@@ -155,6 +158,10 @@ export class GoExtractor extends ExtractorBase {
 
       case 'defer_statement':
         this.processDeferStatement(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+        break;
+
+      case 'composite_literal':
+        this.processCompositeLiteral(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
         break;
 
       default:
@@ -427,6 +434,18 @@ export class GoExtractor extends ExtractorBase {
     );
     nodes.push(propNode);
     edges.push(this.createEdge(parentId, propNode.id, EdgeKind.Contains));
+
+    // UnresolvedReference for field type
+    if (typeNode) {
+      unresolvedRefs.push(this.createUnresolvedRef(
+        propNode.id,
+        typeNode.text,
+        'type_of',
+        typeNode.startPosition.row + 1,
+        typeNode.startPosition.column,
+        filePath
+      ));
+    }
   }
 
   /** Обрабатывает тип интерфейса — извлекает Interface. */
@@ -1011,6 +1030,23 @@ export class GoExtractor extends ExtractorBase {
         column,
         filePath
       ));
+
+      // Instantiates: function name starts with uppercase letter
+      if (funcNode.type === 'identifier' && /^[A-Z]/.test(funcName)) {
+        edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Class, funcName, 0), EdgeKind.Instantiates, {
+          metadata: { referenceName: funcName },
+          line,
+          column,
+        }));
+        unresolvedRefs.push(this.createUnresolvedRef(
+          parentId,
+          funcName,
+          EdgeKind.Instantiates,
+          line,
+          column,
+          filePath
+        ));
+      }
     }
   }
 
@@ -1259,5 +1295,122 @@ export class GoExtractor extends ExtractorBase {
   protected _extractContentFromNode(node: any): string {
     // node.text в tree-sitter содержит текст узла
     return node.text || '';
+  }
+
+  /** Post-processing: создаёт implements рёбра для структур, реализующих интерфейсы. */
+  protected processImplementsEdges(
+    filePath: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[]
+  ): void {
+    // Собираем интерфейсы и их методы
+    const interfaces = new Map<string, Set<string>>();
+    for (const node of nodes) {
+      if (node.kind === NodeKind.Interface) {
+        interfaces.set(node.name, new Set());
+      }
+    }
+
+    for (const edge of edges) {
+      if (edge.kind === EdgeKind.Contains) {
+        const targetNode = nodes.find(n => n.id === edge.target);
+        if (targetNode && targetNode.kind === NodeKind.Method) {
+          const parentNode = nodes.find(n => n.id === edge.source);
+          if (parentNode && parentNode.kind === NodeKind.Interface) {
+            const methods = interfaces.get(parentNode.name);
+            if (methods) {
+              methods.add(targetNode.name);
+            }
+          }
+        }
+      }
+    }
+
+    // Собираем методы структур по типу получателя
+    const structMethods = new Map<string, Set<string>>();
+    for (const node of nodes) {
+      if (node.kind === NodeKind.Method && node.metadata?.receiverType) {
+        const receiverType = node.metadata.receiverType as string;
+        const cleanType = receiverType.replace(/^\*/, '');
+        if (!structMethods.has(cleanType)) {
+          structMethods.set(cleanType, new Set());
+        }
+        structMethods.get(cleanType)!.add(node.name);
+      }
+    }
+
+    // Проверяем реализацию интерфейсов
+    for (const [structName, structMethodSet] of structMethods) {
+      for (const [ifaceName, ifaceMethods] of interfaces) {
+        let allMatch = true;
+        for (const methodName of ifaceMethods) {
+          if (!structMethodSet.has(methodName)) {
+            allMatch = false;
+            break;
+          }
+        }
+        if (allMatch && ifaceMethods.size > 0) {
+          const structNode = nodes.find(n => n.kind === NodeKind.Class && n.name === structName);
+          if (structNode) {
+            const ifaceNodeId = this.nodeId(filePath, NodeKind.Interface, ifaceName, 0);
+            edges.push(this.createEdge(structNode.id, ifaceNodeId, EdgeKind.Implements, {
+              metadata: { referenceName: ifaceName },
+            }));
+            unresolvedRefs.push(this.createUnresolvedRef(
+              structNode.id,
+              ifaceName,
+              EdgeKind.Implements,
+              -1,
+              0,
+              filePath
+            ));
+          }
+        }
+      }
+    }
+  }
+
+  /** Обрабатывает composite_literal (например, MyStruct{}) как instantiates. */
+  protected processCompositeLiteral(
+    node: any,
+    filePath: string,
+    content: string,
+    parentId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    errors: IExtractionError[]
+  ): void {
+    const typeNode = node.childForFieldName('type');
+    if (!typeNode) return;
+
+    let typeName: string | undefined;
+    if (typeNode.type === 'type_identifier') {
+      typeName = typeNode.text;
+    } else if (typeNode.type === 'selector_expression') {
+      const sel = typeNode.childForFieldName('selector');
+      if (sel) {
+        typeName = sel.text;
+      }
+    }
+
+    if (typeName) {
+      const line = node.startPosition.row + 1;
+      const column = node.startPosition.column;
+      edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Class, typeName, 0), EdgeKind.Instantiates, {
+        metadata: { referenceName: typeName },
+        line,
+        column,
+      }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        parentId,
+        typeName,
+        EdgeKind.Instantiates,
+        line,
+        column,
+        filePath
+      ));
+    }
   }
 }

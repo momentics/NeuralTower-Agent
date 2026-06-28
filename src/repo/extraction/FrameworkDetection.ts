@@ -74,6 +74,8 @@ const FRAMEWORK_INDICATORS: FrameworkIndicator[] = [
 
 /** Индикаторы по содержимому файлов. */
 const CONTENT_INDICATORS: ContentIndicator[] = [
+  // React: зависимость в package.json
+  { match: /"react"\s*:/, name: 'React', filePattern: /^package\.json$/ },
   // Express: зависимость в package.json
   { match: /"express"\s*:/, name: 'Express', filePattern: /^package\.json$/ },
   // Spring Boot: аннотация @SpringBootApplication или @RestController
@@ -84,6 +86,10 @@ const CONTENT_INDICATORS: ContentIndicator[] = [
   { match: /(?:^|\s)import\s+fastapi(?:\s|$|\.|:)/i, name: 'FastAPI', filePattern: /\.py$/ },
   // Actix-web: зависимость actix-web в Cargo.toml
   { match: /actix-web/, name: 'Actix-web', filePattern: /^Cargo\.toml$/ },
+  // Axum: зависимость axum в Cargo.toml
+  { match: /axum/, name: 'Axum', filePattern: /^Cargo\.toml$/ },
+  // Gin: зависимость gin-gonic/gin в go.mod
+  { match: /gin-gonic\/gin/, name: 'Gin', filePattern: /^go\.mod$/ },
 ];
 
 /**

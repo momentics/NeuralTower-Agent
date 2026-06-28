@@ -5,6 +5,7 @@
  * Абстрактный — конкретные экстракторы наследуются от него.
  */
 
+import { createHash } from 'crypto';
 import {
   INode,
   IEdge,
@@ -12,6 +13,8 @@ import {
   IExtractionResult,
   IExtractionError,
   NodeKind,
+  EdgeKind,
+  ReferenceKind,
   Language,
 } from '../ntgraph/Types';
 
@@ -39,9 +42,8 @@ export abstract class ExtractorBase implements IExtractor {
 
   /** Генерирует ID узла: sha256(filePath:kind:name:line). */
   protected nodeId(filePath: string, kind: NodeKind, name: string, line: number): string {
-    const crypto = require('crypto');
     const raw = `${filePath}:${kind}:${name}:${line}`;
-    return crypto.createHash('sha256').update(raw).digest('hex');
+    return createHash('sha256').update(raw).digest('hex');
   }
 
   /** Создаёт узел графа. */
@@ -109,7 +111,7 @@ export abstract class ExtractorBase implements IExtractor {
   protected createEdge(
     source: string,
     target: string,
-    kind: string,
+    kind: EdgeKind,
     opts: {
       metadata?: Record<string, unknown>;
       line?: number;
@@ -119,7 +121,7 @@ export abstract class ExtractorBase implements IExtractor {
     return {
       source,
       target,
-      kind: kind as IEdge['kind'],
+      kind,
       metadata: opts.metadata,
       line: opts.line,
       column: opts.column,
@@ -131,7 +133,7 @@ export abstract class ExtractorBase implements IExtractor {
   protected createUnresolvedRef(
     fromNodeId: string,
     referenceName: string,
-    referenceKind: string,
+    referenceKind: ReferenceKind,
     line: number,
     column: number,
     filePath?: string,
@@ -140,7 +142,7 @@ export abstract class ExtractorBase implements IExtractor {
     return {
       fromNodeId,
       referenceName,
-      referenceKind: referenceKind as IUnresolvedReference['referenceKind'],
+      referenceKind,
       line,
       column,
       filePath,
@@ -154,7 +156,7 @@ export abstract class ExtractorBase implements IExtractor {
     message: string,
     filePath: string,
     severity: 'error' | 'warning',
-    code: string,
+    code: 'read_error' | 'size_exceeded' | 'parse_error' | 'path_traversal',
     line?: number,
     column?: number
   ): IExtractionError {
@@ -162,7 +164,7 @@ export abstract class ExtractorBase implements IExtractor {
       message,
       filePath,
       severity,
-      code: code as IExtractionError['code'],
+      code,
       line,
       column,
     };

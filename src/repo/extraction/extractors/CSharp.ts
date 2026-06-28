@@ -50,7 +50,7 @@ export class CSharpExtractor extends ExtractorBase {
           'Не удалось разобрать файл',
           filePath,
           'error',
-          'PARSE_FAILED'
+          'parse_error'
         ));
         return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
@@ -89,7 +89,7 @@ export class CSharpExtractor extends ExtractorBase {
         `Ошибка tree-sitter: ${message}`,
         filePath,
         'error',
-        'TREE_SITTER_ERROR'
+         'parse_error'
       ));
     }
 
@@ -324,7 +324,7 @@ export class CSharpExtractor extends ExtractorBase {
 
     const funcNode = this.createNode(
       filePath,
-      NodeKind.Function,
+      NodeKind.Method,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -435,6 +435,25 @@ export class CSharpExtractor extends ExtractorBase {
     if (body) {
       this.processFunctionBody(body, filePath, content, methodNode.id, nodes, edges, unresolvedRefs, errors);
     }
+
+    // Overrides: если есть модификатор override, создаём ребро overrides
+    if (isOverride) {
+      const line = node.startPosition.row + 1;
+      const column = node.startPosition.column;
+      edges.push(this.createEdge(methodNode.id, this.nodeId(filePath, NodeKind.Method, name, 0), EdgeKind.Overrides, {
+        metadata: { referenceName: name },
+        line,
+        column,
+      }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        methodNode.id,
+        name,
+        EdgeKind.Overrides,
+        line,
+        column,
+        filePath
+      ));
+    }
   }
 
   /** Обрабатывает объявление свойства. */
@@ -516,9 +535,9 @@ const fieldNode = this.createNode(
           const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${name}` : name;
 
           const propNode = this.createNode(
-            filePath,
-            NodeKind.Property,
-            name,
+             filePath,
+             nodeKind,
+             name,
             decl.startPosition.row + 1,
             decl.endPosition.row + 1,
             decl.startPosition.column,
@@ -1206,6 +1225,27 @@ if (child.type === 'type_parameter') {
       } else if (child.type === 'local_declaration_statement') {
         // Локальные переменные обрабатываются как дочерние узлы
         this.processCsNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      } else if (child.type === 'creation_expression') {
+        // Извлекаем тип и создаём ребро instantiates
+        const typeNode = child.childForFieldName('type');
+        if (typeNode) {
+          const typeName = typeNode.text;
+          const line = child.startPosition.row + 1;
+          const column = child.startPosition.column;
+          edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Class, typeName, 0), EdgeKind.Instantiates, {
+            metadata: { referenceName: typeName },
+            line,
+            column,
+          }));
+          unresolvedRefs.push(this.createUnresolvedRef(
+            parentId,
+            typeName,
+            EdgeKind.Instantiates,
+            line,
+            column,
+            filePath
+          ));
+        }
       } else if (child.type === 'if_statement' || child.type === 'for_statement' || child.type === 'while_statement' || child.type === 'do_statement') {
         // Рекурсия по управляющим конструкциям
         let inner = child.firstChild;

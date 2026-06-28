@@ -1,4 +1,6 @@
 import { Language } from '../ntgraph/Types';
+import fs from 'fs';
+import path from 'path';
 
 // Карта соответствия расширений файлов языкам программирования
 export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
@@ -6,8 +8,8 @@ export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
   '.tsx': 'tsx',
   '.js': 'javascript',
   '.jsx': 'jsx',
-  '.mjs': 'typescript',
-  '.cjs': 'typescript',
+  '.mjs': 'javascript',
+  '.cjs': 'javascript',
   '.py': 'python',
   '.pyi': 'python',
   '.go': 'go',
@@ -152,8 +154,6 @@ export function isFileLevelOnlyLanguage(lang: string): boolean {
 export function loadExtensionOverrides(rootDir: string): void {
   // Читаем ntgraph.json для кастомных маппингов расширений на языки
   try {
-    const fs = require('fs');
-    const path = require('path');
     const configPath = path.join(rootDir, 'ntgraph.json');
 
     if (!fs.existsSync(configPath)) {

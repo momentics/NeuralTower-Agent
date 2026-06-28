@@ -51,7 +51,7 @@ export class PythonExtractor extends ExtractorBase {
           'Не удалось разобрать файл',
           filePath,
           'error',
-          'PARSE_FAILED'
+          'parse_error'
         ));
         return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
@@ -90,7 +90,7 @@ export class PythonExtractor extends ExtractorBase {
         `Ошибка tree-sitter: ${message}`,
         filePath,
         'error',
-        'TREE_SITTER_ERROR'
+        'parse_error'
       ));
     }
 
@@ -204,10 +204,11 @@ export class PythonExtractor extends ExtractorBase {
     const decorators = this.extractDecorators(node, content);
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
 
-    // Определение: Django view или обычный класс
+    // Определение: Django view, Enum или обычный класс
     const isDjangoView = isDjango && this.isDjangoViewBaseClass(node);
     const isDjangoModel = isDjango && this.isDjangoModelClass(node);
-    const kind = isDjangoView ? NodeKind.Component : NodeKind.Class;
+    const isEnum = this.isEnumClass(node);
+    const kind = isEnum ? NodeKind.Enum : (isDjangoView ? NodeKind.Component : NodeKind.Class);
 
     const classNode = this.createNode(
       filePath,
@@ -295,10 +296,49 @@ export class PythonExtractor extends ExtractorBase {
     // Обработка тела класса
     const body = node.childForFieldName('body');
     if (body) {
-      let child = body.firstChild;
-      while (child) {
-        this.processPyNodes(child, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName, true, isDjango);
-        child = child.nextSibling;
+      if (isEnum) {
+        // Для enum: извлекаем члены как EnumMember
+        let child = body.firstChild;
+        while (child) {
+          if (child.type === 'assignment') {
+            const lhs = child.childForFieldName('left');
+            if (lhs) {
+              let lhsChild = lhs.firstChild;
+              while (lhsChild) {
+                if (lhsChild.type === 'identifier') {
+                  const memberName = lhsChild.text;
+                  const qualifiedMemberName = `${qualifiedName}.${memberName}`;
+                  const memberNode = this.createNode(
+                    filePath,
+                    NodeKind.EnumMember,
+                    memberName,
+                    lhsChild.startPosition.row + 1,
+                    lhsChild.endPosition.row + 1,
+                    lhsChild.startPosition.column,
+                    lhsChild.endPosition.column,
+                    {
+                      qualifiedName: qualifiedMemberName,
+                    }
+                  );
+                  nodes.push(memberNode);
+                  edges.push(this.createEdge(classNode.id, memberNode.id, EdgeKind.Contains));
+                }
+                lhsChild = lhsChild.nextSibling;
+              }
+            }
+          } else if (child.type === 'function_definition') {
+            this.processFunctionDefinition(child, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName, true, isDjango);
+          } else if (child.type === 'decorated_definition') {
+            this.processDecoratedDefinition(child, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName, true, isDjango);
+          }
+          child = child.nextSibling;
+        }
+      } else {
+        let child = body.firstChild;
+        while (child) {
+          this.processPyNodes(child, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName, true, isDjango);
+          child = child.nextSibling;
+        }
       }
     }
   }
@@ -830,11 +870,21 @@ protected processCall(
     }
 
     if (funcName) {
-      edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Function, funcName, 0), EdgeKind.Calls, {
+      const isConstructor = /^[A-Z]/.test(funcName);
+      const edgeKind = isConstructor ? EdgeKind.Instantiates : EdgeKind.Calls;
+      edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Function, funcName, 0), edgeKind, {
         metadata: { referenceName: funcName },
         line,
         column,
       }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        parentId,
+        funcName,
+        edgeKind,
+        line,
+        column,
+        filePath
+      ));
     }
   }
 
@@ -1054,6 +1104,21 @@ protected processCall(
       const scText = sc.text;
       const baseName = this.extractBaseName(scText);
       if (viewBases.has(baseName)) return true;
+      sc = sc.nextSibling;
+    }
+    return false;
+  }
+
+  /** Проверяет, является ли класс Enum. */
+  protected isEnumClass(node: any): boolean {
+    const superclasses = node.childForFieldName('superclasses');
+    if (!superclasses) return false;
+
+    let sc = superclasses.firstChild;
+    while (sc) {
+      const scText = sc.text;
+      const baseName = this.extractBaseName(scText);
+      if (baseName === 'Enum') return true;
       sc = sc.nextSibling;
     }
     return false;

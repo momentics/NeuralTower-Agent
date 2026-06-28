@@ -57,7 +57,7 @@ export async function loadGrammar(language: string): Promise<any> {
     const grammarModule = await import(grammarName);
     grammar = grammarModule.default || grammarModule;
   } catch {
-    grammar = { language, loaded: true };
+    return null;
   }
 
   grammarCache.set(cacheKey, grammar);
@@ -98,14 +98,14 @@ const SUPPORTED_LANGUAGES = ['typescript', 'python', 'go', 'rust', 'java', 'cpp'
  *грамматики всегда доступны через WASM, поэтому это всегда возвращает true.
  */
 export function isGrammarCached(language: string): boolean {
-  return true;
+  return grammarCache.has(language);
 }
 
 /**
  * Проверяет, загружена ли грамматика для заданного языка.
  */
 export function isGrammarLoaded(language: string): boolean {
-  return true;
+  return grammarCache.get(language)?.loaded === true;
 }
 
 /**
