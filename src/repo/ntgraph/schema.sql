@@ -11,6 +11,10 @@ CREATE TABLE IF NOT EXISTS schema_versions (
     description TEXT
 );
 
+-- Начальная версия схемы
+INSERT INTO schema_versions (version, applied_at, description)
+VALUES (1, strftime('%s', 'now') * 1000, 'Initial schema');
+
 -- =============================================================================
 -- Основные таблицы
 -- =============================================================================
@@ -48,7 +52,7 @@ CREATE TABLE IF NOT EXISTS edges (
     kind TEXT NOT NULL,
     metadata TEXT,
     line INTEGER,
-       "column" INTEGER,
+    col INTEGER,
     provenance TEXT DEFAULT NULL,
     FOREIGN KEY (source) REFERENCES nodes(id) ON DELETE CASCADE,
     FOREIGN KEY (target) REFERENCES nodes(id) ON DELETE CASCADE
@@ -133,6 +137,10 @@ END;
 CREATE INDEX IF NOT EXISTS idx_edges_kind ON edges(kind);
 CREATE INDEX IF NOT EXISTS idx_edges_source_kind ON edges(source, kind);
 CREATE INDEX IF NOT EXISTS idx_edges_target_kind ON edges(target, kind);
+
+-- Уникальность рёбер: (source, target, kind, line, col) — предотвращает дубликаты
+CREATE UNIQUE INDEX IF NOT EXISTS idx_edges_identity
+  ON edges(source, target, kind, IFNULL(line, -1), IFNULL(col, -1));
 
 -- Индексы файлов
 CREATE INDEX IF NOT EXISTS idx_files_language ON files(language);

@@ -8,6 +8,7 @@
 import { SqliteDatabase } from './Adapter';
 import {
   NodeKind,
+  Language,
   INode,
   ISearchResult,
 } from './Types';
@@ -25,6 +26,111 @@ import {
   FUZZY_MAX_DIST_SHORT,
   FUZZY_MAX_DIST_DEFAULT,
 } from './Types';
+
+/** Разрешённые значения kind: (из NodeKind). */
+const KIND_VALUES: ReadonlySet<string> = new Set<string>(Object.values(NodeKind));
+
+/** Разрешённые значения lang:/language: (из Language). */
+const LANGUAGE_VALUES: ReadonlySet<string> = new Set<string>(Language.map(l => l.toLowerCase()));
+
+/**
+ * Результат парсинга запроса с полевыми фильтрами.
+ */
+interface ParsedQuery {
+  text: string;
+  kinds: NodeKind[];
+  languages: Language[];
+  pathFilters: string[];
+  nameFilters: string[];
+}
+
+/**
+ * Парсит сырой запрос вида `kind:function name:auth path:src/api authenticate`
+ * в структурированные фильтры + свободный текст для FTS.
+ */
+function parseQuery(raw: string): ParsedQuery {
+  const out: ParsedQuery = {
+    text: '',
+    kinds: [],
+    languages: [],
+    pathFilters: [],
+    nameFilters: [],
+  };
+
+  // Токенизация с учётом кавычек
+  const tokens: string[] = [];
+  let i = 0;
+  while (i < raw.length) {
+    while (i < raw.length && /\s/.test(raw[i]!)) i++;
+    if (i >= raw.length) break;
+    const start = i;
+    while (i < raw.length && !/\s/.test(raw[i]!)) {
+      if (raw[i] === '"') {
+        const end = raw.indexOf('"', i + 1);
+        if (end === -1) {
+          i = raw.length;
+          break;
+        }
+        i = end + 1;
+        continue;
+      }
+      i++;
+    }
+    tokens.push(raw.slice(start, i));
+  }
+
+  const textParts: string[] = [];
+  for (const tok of tokens) {
+    const colon = tok.indexOf(':');
+    if (colon <= 0 || colon === tok.length - 1) {
+      textParts.push(tok);
+      continue;
+    }
+    const key = tok.slice(0, colon).toLowerCase();
+    const valueRaw = unquote(tok.slice(colon + 1));
+    if (!valueRaw) {
+      textParts.push(tok);
+      continue;
+    }
+    switch (key) {
+      case 'kind': {
+        if (KIND_VALUES.has(valueRaw)) {
+          out.kinds.push(valueRaw as NodeKind);
+        } else {
+          textParts.push(tok);
+        }
+        break;
+      }
+      case 'lang':
+      case 'language': {
+        const lower = valueRaw.toLowerCase();
+        if (LANGUAGE_VALUES.has(lower)) {
+          out.languages.push(lower as Language);
+        } else {
+          textParts.push(tok);
+        }
+        break;
+      }
+      case 'path':
+        out.pathFilters.push(valueRaw);
+        break;
+      case 'name':
+        out.nameFilters.push(valueRaw);
+        break;
+      default:
+        textParts.push(tok);
+    }
+  }
+
+  out.text = textParts.join(' ').trim();
+  return out;
+}
+
+/** Удаляет внешние двойные кавычки. */
+function unquote(s: string): string {
+  if (s.length >= 2 && s.startsWith('"') && s.endsWith('"')) return s.slice(1, -1);
+  return s;
+}
 
 interface NodeRow {
   id: string;
@@ -81,49 +187,122 @@ export class FtsSearch {
    * Полный поиск с fallback.
    */
   search(query: string, options: IFtsSearchOptions = {}): ISearchResult[] {
-    const { kinds, languages, limit = 100, offset = 0, pathFilters, nameFilters } = options;
+    // Парсим поле-квалифицированные фильтры из запроса (kind:, lang:, path:, name:)
+    const parsed = parseQuery(query);
 
-    // Уровень 1: FTS5
-    let results = this.searchFTS(query, { kinds, languages, limit, offset });
+    // Объединяем фильтры из запроса и из options (options имеют приоритет)
+    const kinds = options.kinds ?? (parsed.kinds.length ? parsed.kinds : undefined);
+    const languages = options.languages ?? (parsed.languages.length ? parsed.languages : undefined);
+    const pathFilters = options.pathFilters ?? (parsed.pathFilters.length ? parsed.pathFilters : undefined);
+    const nameFilters = options.nameFilters ?? (parsed.nameFilters.length ? parsed.nameFilters : undefined);
+    const limit = options.limit ?? 100;
+    const offset = options.offset ?? 0;
 
-    // Уровень 2: LIKE
-    if (results.length === 0 && query.length >= 2) {
-      results = this.searchLike(query, { kinds, languages, limit, offset });
+    // Свободный текст для FTS (может быть пустым, если запрос состоит только из фильтров)
+    const searchText = parsed.text;
+
+    // Если есть текст для поиска — используем FTS с fallback
+    if (searchText) {
+      // Уровень 1: FTS5
+      let results = this.searchFTS(searchText, { kinds, languages, limit, offset });
+
+      // Уровень 2: LIKE
+      if (results.length === 0 && searchText.length >= 2) {
+        results = this.searchLike(searchText, { kinds, languages, limit, offset });
+      }
+
+      // Уровень 3: Fuzzy
+      if (results.length === 0 && searchText.length >= 3) {
+        results = this.searchFuzzy(searchText, { kinds, languages, limit });
+      }
+
+      // Точное дополнение по имени
+      if (results.length > 0 && searchText) {
+        results = this.supplementExactMatches(searchText, results, kinds, languages);
+      }
+
+      // Rescoring
+      if (results.length > 0) {
+        results = this.rescore(results, searchText);
+        results.sort((a, b) => b.score - a.score);
+
+        // Path filter
+        if (pathFilters && pathFilters.length > 0) {
+          const pfLower = pathFilters.map(f => f.toLowerCase());
+          results = results.filter(r => pfLower.some(f => r.node.filePath.toLowerCase().includes(f)));
+        }
+
+        // Name filter
+        if (nameFilters && nameFilters.length > 0) {
+          const nfLower = nameFilters.map(f => f.toLowerCase());
+          results = results.filter(r => nfLower.some(f => r.node.name.toLowerCase().includes(f)));
+        }
+
+        if (results.length > limit) {
+          results = results.slice(0, limit);
+        }
+      }
+
+      return results;
     }
 
-    // Уровень 3: Fuzzy
-    if (results.length === 0 && query.length >= 3) {
-      results = this.searchFuzzy(query, { kinds, languages, limit });
+    // Только фильтры без текста — используем searchAllByFilters из QueryBuilder
+    if (kinds || languages || pathFilters || nameFilters) {
+      return this.searchByFiltersOnly({ kinds, languages, pathFilters, nameFilters, limit });
     }
 
-    // Точное дополнение по имени
-    if (results.length > 0 && query) {
-      results = this.supplementExactMatches(query, results, kinds, languages);
+    return [];
+  }
+
+  /**
+   * Поиск только по фильтрам (без текстового поиска).
+   */
+  private searchByFiltersOnly(options: {
+    kinds?: NodeKind[];
+    languages?: string[];
+    pathFilters?: string[];
+    nameFilters?: string[];
+    limit?: number;
+  }): ISearchResult[] {
+    const { kinds, languages, pathFilters, nameFilters, limit = 100 } = options;
+    const fts = this;
+
+    let sql = 'SELECT * FROM nodes WHERE 1=1';
+    const params: (string | number)[] = [];
+
+    if (kinds && kinds.length > 0) {
+      sql += ` AND kind IN (${kinds.map(() => '?').join(',')})`;
+      params.push(...kinds);
     }
 
-    // Rescoring
-    if (results.length > 0) {
-      results = this.rescore(results, query);
-      results.sort((a, b) => b.score - a.score);
+    if (languages && languages.length > 0) {
+      sql += ` AND language IN (${languages.map(() => '?').join(',')})`;
+      params.push(...languages);
+    }
+
+    sql += ' LIMIT ?';
+    params.push(limit * 5);
+
+    try {
+      const rows = fts.db.prepare(sql).all(...params) as NodeRow[];
+      const results: ISearchResult[] = rows.map(row => ({ node: rowToNode(row), score: 0.5 }));
 
       // Path filter
       if (pathFilters && pathFilters.length > 0) {
         const pfLower = pathFilters.map(f => f.toLowerCase());
-        results = results.filter(r => pfLower.some(f => r.node.filePath.toLowerCase().includes(f)));
+        results.filter(r => pfLower.some(f => r.node.filePath.toLowerCase().includes(f)));
       }
 
       // Name filter
       if (nameFilters && nameFilters.length > 0) {
         const nfLower = nameFilters.map(f => f.toLowerCase());
-        results = results.filter(r => nfLower.some(f => r.node.name.toLowerCase().includes(f)));
+        results.filter(r => nfLower.some(f => r.node.name.toLowerCase().includes(f)));
       }
 
-      if (results.length > limit) {
-        results = results.slice(0, limit);
-      }
+      return results.slice(0, limit);
+    } catch {
+      return [];
     }
-
-    return results;
   }
 
   /**

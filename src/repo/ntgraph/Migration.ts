@@ -19,6 +19,18 @@ export interface Migration {
 }
 
 /**
+ * Возвращает текущую версию схемы из БД.
+ */
+export function getCurrentVersion(db: SqliteDatabase): number {
+  try {
+    const row = db.prepare('SELECT MAX(version) as version FROM schema_versions').get() as { version: number | null } | undefined;
+    return row?.version ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Записывает миграцию в таблицу schema_versions.
  */
 export function recordMigration(db: SqliteDatabase, version: number, description: string): void {
@@ -31,8 +43,7 @@ export function recordMigration(db: SqliteDatabase, version: number, description
  * Проверяет необходимость миграции.
  */
 export function needsMigration(db: SqliteDatabase): boolean {
-  const row = db.prepare('SELECT MAX(version) as max_version FROM schema_versions').get() as { max_version: number | null };
-  const current = row?.max_version ?? 0;
+  const current = getCurrentVersion(db);
   return current < CURRENT_SCHEMA_VERSION;
 }
 
@@ -40,8 +51,7 @@ export function needsMigration(db: SqliteDatabase): boolean {
  * Возвращает список ожидающих миграций.
  */
 export function getPendingMigrations(db: SqliteDatabase): Migration[] {
-  const row = db.prepare('SELECT MAX(version) as max_version FROM schema_versions').get() as { max_version: number | null };
-  const current = row?.max_version ?? 0;
+  const current = getCurrentVersion(db);
   return ALL_MIGRATIONS.filter(m => m.version > current);
 }
 
@@ -69,6 +79,19 @@ export function applyMigrations(db: SqliteDatabase): void {
   for (const migration of pending) {
     migration.up(db);
     recordMigration(db, migration.version, migration.description);
+  }
+}
+
+/**
+ * Применяет миграции начиная с указанной версии (совместимо с API референса).
+ */
+export function runMigrations(db: SqliteDatabase, fromVersion: number): void {
+  const pending = ALL_MIGRATIONS.filter(m => m.version > fromVersion).sort((a, b) => a.version - b.version);
+  for (const migration of pending) {
+    db.transaction(() => {
+      migration.up(db);
+      recordMigration(db, migration.version, migration.description);
+    })();
   }
 }
 
@@ -118,7 +141,7 @@ const migrationV1: Migration = {
         kind TEXT NOT NULL,
         metadata TEXT,
         line INTEGER,
-        "column" INTEGER,
+        col INTEGER,
         provenance TEXT DEFAULT NULL,
         FOREIGN KEY (source) REFERENCES nodes(id) ON DELETE CASCADE,
         FOREIGN KEY (target) REFERENCES nodes(id) ON DELETE CASCADE

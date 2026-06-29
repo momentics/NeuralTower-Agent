@@ -584,7 +584,7 @@ constructor(dbPath: string)
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `search(query, options?)` | `ISearchResult[]` | Полный поиск с резервным вариантом (FTS5 → LIKE → размытый) |
+| `search(query, options?)` | `ISearchResult[]` | Полный поиск с резервным вариантом (FTS5 → LIKE → размытый). Поддерживает поле-квалифицированные фильтры в запросе: `kind:`, `lang:`, `path:`, `name:` (например, `kind:function name:auth authenticate`). Фильтры из options имеют приоритет над извлечёнными из запроса. При отсутствии текста (только фильтры) выполняется поиск по фильтрам без FTS. |
 | `searchFTS(query, options)` | `ISearchResult[]` | FTS5-поиск с BM25, весовая схема: name=20, qualified_name=5, docstring=1, signature=2 |
 | `searchLike(query, options?)` | `ISearchResult[]` | LIKE-резервный поиск |
 | `searchFuzzy(query, options?)` | `ISearchResult[]` | Размытый резервный поиск через ограниченное расстояние редактирования |

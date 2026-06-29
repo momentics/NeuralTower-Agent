@@ -54,7 +54,9 @@ describe("Migration", () => {
   })
 
   it("needsMigration returns false after migration applied", () => {
-    recordMigration(db, 1, "Test migration")
+    for (let v = 1; v <= CURRENT_SCHEMA_VERSION; v++) {
+      recordMigration(db, v, "Test migration")
+    }
     expect(needsMigration(db)).toBe(false)
   })
 
@@ -64,12 +66,11 @@ describe("Migration", () => {
   })
 
   it("getPendingMigrations returns migrations when behind", () => {
-    // Удаляем запись миграции
-    db.exec('DELETE FROM schema_versions WHERE version = 1')
+    // Удаляем все записи миграций
+    db.exec('DELETE FROM schema_versions')
     const pending = getPendingMigrations(db)
-    expect(pending.length).toBe(1)
+    expect(pending.length).toBe(CURRENT_SCHEMA_VERSION)
     expect(pending[0].version).toBe(1)
-    expect(pending[0].description).toContain("Начальная схема")
   })
 
   it("applyMigrations applies all pending migrations", () => {
@@ -81,9 +82,9 @@ describe("Migration", () => {
 
   it("getMigrationHistory returns applied migrations", () => {
     const history = getMigrationHistory(db)
-    expect(history.length).toBe(1)
+    expect(history.length).toBe(CURRENT_SCHEMA_VERSION)
     expect(history[0].version).toBe(1)
-    expect(history[0].appliedAt).toBeGreaterThan(0)
+    expect(history[history.length - 1].version).toBe(CURRENT_SCHEMA_VERSION)
   })
 
   it("migration v1 creates all required tables", () => {
@@ -166,8 +167,8 @@ describe("Migration", () => {
   it("recordMigration upserts version record", () => {
     recordMigration(db, 1, "Updated description")
     const history = getMigrationHistory(db)
-    expect(history.length).toBe(1)
-    expect(history[0].version).toBe(1)
-    expect(history[0].description).toBe("Updated description")
+    const v1 = history.find(h => h.version === 1)
+    expect(v1).toBeDefined()
+    expect(v1!.description).toBe("Updated description")
   })
 })

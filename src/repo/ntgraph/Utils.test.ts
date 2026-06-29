@@ -83,7 +83,7 @@ describe("Utils", () => {
       kind: "calls",
       metadata: '{"foo":"bar"}',
       line: 10,
-      column: 5,
+      col: 5,
       provenance: "lsp",
     }
     const edge = rowToEdge(row)
@@ -389,16 +389,16 @@ describe("Utils", () => {
   })
 
   it("FileLock acquires and releases", async () => {
-    const lock = new FileLock("/tmp/ntgraph-test-lock")
+    const lock = new FileLock(`${os.tmpdir()}/ntgraph-test-lock`)
     const acquired = await lock.acquire()
     expect(acquired).toBe(true)
     lock.release()
   })
 
   it("FileLock prevents double acquire", async () => {
-    const lock = new FileLock("/tmp/ntgraph-test-lock2")
+    const lock = new FileLock(`${os.tmpdir()}/ntgraph-test-lock2`)
     await lock.acquire()
-    const lock2 = new FileLock("/tmp/ntgraph-test-lock2")
+    const lock2 = new FileLock(`${os.tmpdir()}/ntgraph-test-lock2`)
     const acquired = await lock2.acquire()
     expect(acquired).toBe(false)
     lock.release()
@@ -406,7 +406,7 @@ describe("Utils", () => {
 
   it("FileLock reclaims stale lock by old mtime", async () => {
     const fs = require("fs")
-    const lockPath = "/tmp/ntgraph-test-lock-stale"
+    const lockPath = `${os.tmpdir()}/ntgraph-test-lock-stale`
     const lockFile = `${lockPath}.lock`
     try {
       if (fs.existsSync(lockFile)) fs.unlinkSync(lockFile)

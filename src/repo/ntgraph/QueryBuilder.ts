@@ -75,7 +75,7 @@ interface EdgeRow {
   kind: string;
   metadata: string | null;
   line: number | null;
-  column: number | null;
+  col: number | null;
   provenance: string | null;
 }
 
@@ -622,8 +622,8 @@ export class QueryBuilder {
   insertEdge(edge: IEdge): void {
     if (!this.stmts.insertEdge) {
       this.stmts.insertEdge = this.db.prepare(`
-        INSERT OR IGNORE INTO edges (source, target, kind, metadata, line, "column", provenance)
-        VALUES (@source, @target, @kind, @metadata, @line, @column, @provenance)
+        INSERT OR IGNORE INTO edges (source, target, kind, metadata, line, col, provenance)
+        VALUES (@source, @target, @kind, @metadata, @line, @col, @provenance)
       `);
     }
 
@@ -633,7 +633,7 @@ export class QueryBuilder {
       kind: edge.kind,
       metadata: edge.metadata ? JSON.stringify(edge.metadata) : null,
       line: edge.line ?? null,
-      column: edge.column ?? null,
+      col: edge.column ?? null,
       provenance: edge.provenance ?? null,
     });
   }
