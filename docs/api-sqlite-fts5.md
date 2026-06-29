@@ -41,7 +41,14 @@
 | `kind` | `EdgeKind` | Вид связи |
 | `metadata` | `Record<string, unknown>?` | Произвольные метаданные |
 | `line` / `column` | `number?` | Позиция в коде |
-| `provenance` | `string?` | Источник ребра |
+| `provenance` | `'tree-sitter' \| 'scip' \| 'heuristic'?` | Источник ребра |
+
+### InitOptions — Параметры инициализации
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `projectRoot` | `string` | Корень проекта |
+| `dbPath` | `string?` | Путь к файлу БД |
 
 ### IFileRecord — Запись о файле
 
@@ -93,7 +100,7 @@
 | `nodesByKind` | `Record<NodeKind, number>` | Узлы по видам |
 | `edgesByKind` | `Record<EdgeKind, number>` | Ребра по видам |
 | `filesByLanguage` | `Record<string, number>` | Файлы по языкам |
-| `dbSizeBytes` | `number` | Размер БД (добавляется в NtGraphDb.getStats()) |
+| `dbSizeBytes` | `number` | Размер БД в байтах |
 | `lastUpdated` | `number` | Последнее обновление |
 
 ### IDominantFile — Доминирующий файл
@@ -122,11 +129,11 @@
 | `incomingRefs` / `outgoingRefs` | `IEdge[]` | Входящие и исходящие ссылки |
 | `types` / `imports` | `INode[]` / `IEdge[]` | Типы и импорты |
 
-### TraversalOptions — Параметры обхода
+### ITraversalOptions — Параметры обхода
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `maxDepth` | `number` | Максимальная глубина |
+| `maxDepth` | `number?` | Максимальная глубина |
 | `edgeKinds` / `nodeKinds` | `EdgeKind[]?` / `NodeKind[]?` | Фильтры |
 | `direction` | `'outgoing' \| 'incoming' \| 'both'?` | Направление |
 | `limit` | `number?` | Ограничение |
@@ -182,6 +189,14 @@
 | `line` / `column` | `number?` | Позиция |
 | `severity` | `'error' \| 'warning' \| 'info'` | Уровень |
 | `code` | `'read_error' \| 'size_exceeded' \| 'parse_error' \| 'path_traversal'` | Код ошибки |
+
+### Migration — Миграция схемы
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `version` | `number` | Номер версии |
+| `description` | `string` | Описание |
+| `up` | `(db: SqliteDatabase) => void` | Функция обновления |
 
 ### ISchemaVersion — Версия схемы
 
@@ -272,7 +287,7 @@ type TaskInput = string | { title: string; description: string }
 ### IAliasMap — Карта псевдонимов импортов
 
 ```
-type IAliasMap = { [alias: string]: string[] }
+interface IAliasMap { [alias: string]: string[] }
 ```
 
 ### IGoModule — Информация о Go-модуле
@@ -312,7 +327,7 @@ type IAliasMap = { [alias: string]: string[] }
 
 ### NodeKind
 
-22 значения: `file`, `class`, `function`, `method`, `property`, `field`, `interface`, `struct`, `enum`, `type_alias`, `constant`, `variable`, `namespace`, `module`, `route`, `trait`, `protocol`, `enum_member`, `parameter`, `import`, `export`, `component`.
+Frozen-объект с PascalCase ключами и lowercase значениями. 22 значения: `File: 'file'`, `Class: 'class'`, `Function: 'function'`, `Method: 'method'`, `Property: 'property'`, `Field: 'field'`, `Interface: 'interface'`, `Struct: 'struct'`, `Enum: 'enum'`, `TypeAlias: 'type_alias'`, `Constant: 'constant'`, `Variable: 'variable'`, `Namespace: 'namespace'`, `Module: 'module'`, `Route: 'route'`, `Trait: 'trait'`, `Protocol: 'protocol'`, `EnumMember: 'enum_member'`, `Parameter: 'parameter'`, `Import: 'import'`, `Export: 'export'`, `Component: 'component'`.
 
 ### EdgeKind
 
@@ -324,7 +339,7 @@ type IAliasMap = { [alias: string]: string[] }
 
 ### Language
 
-39 значений: `typescript`, `javascript`, `tsx`, `jsx`, `python`, `go`, `rust`, `java`, `c`, `cpp`, `csharp`, `razor`, `php`, `ruby`, `swift`, `kotlin`, `dart`, `svelte`, `vue`, `astro`, `liquid`, `pascal`, `scala`, `lua`, `luau`, `objc`, `r`, `yaml`, `twig`, `xml`, `properties`, `unknown`, `html`, `css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`.
+Frozen-массив. 41 значение: `typescript`, `javascript`, `tsx`, `jsx`, `python`, `go`, `rust`, `java`, `c`, `cpp`, `csharp`, `razor`, `php`, `ruby`, `swift`, `kotlin`, `dart`, `svelte`, `vue`, `astro`, `liquid`, `pascal`, `scala`, `lua`, `luau`, `objc`, `r`, `yaml`, `twig`, `xml`, `properties`, `unknown`, `html`, `css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`.
 
 ---
 
@@ -370,7 +385,7 @@ constructor(dbPath: string)
 | `deleteNode(id)` | `Promise<void>` | Удаление узла (с FileLock) |
 | `deleteNodesByFile(filePath)` | `number` | Удаление всех узлов файла, возвращает число удаленных |
 | `getNodeById(id)` | `INode \| null` | Поиск узла по ID |
-| `getNodesByIds(ids)` | `INode[]` | Пакетный поиск (блоки по 500) |
+| `getNodesByIds(ids: readonly string[])` | `INode[]` | Пакетный поиск (блоки по 500) |
 | `getNodesByFile(filePath)` | `INode[]` | Узлы файла |
 | `getNodesByKind(kind)` | `INode[]` | Узлы по виду |
 | `iterateNodesByKind(kind)` | `IterableIterator<INode>` | Ленивый итератор узлов вида |
@@ -505,7 +520,7 @@ constructor(dbPath: string)
 | Метод | Возврат | Описание |
 |---|---|---|
 | `searchNodes(query, options?)` | `ISearchResult[]` | Основной поиск: FTS5 → LIKE → размытый (через FtsSearch) |
-| `searchNodesFTS(query, options?)` | `ISearchResult[]` | FTS5-поиск напрямую (через FtsSearch) |
+| `searchNodesFTS(query, options?)` | `ISearchResult[]` | Полный каскадный поиск (FTS5 → LIKE → размытый, через FtsSearch.search) |
 | `searchNodesLike(query, options?)` | `ISearchResult[]` | LIKE-резервный поиск (через FtsSearch) |
 | `searchNodesFuzzy(query, options?)` | `ISearchResult[]` | Размытый резервный поиск (через FtsSearch) |
 | `findNodesByExactName(names, options?)` | `ISearchResult[]` | Точный поиск по множеству имён с бонусом за совпадение местоположения |

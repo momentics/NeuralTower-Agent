@@ -112,6 +112,35 @@
 | `errors` | `IExtractionError[]` | Ошибки |
 | `durationMs` | `number` | Время выполнения |
 
+### IResolutionResult — Результат разрешения ссылок
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `resolved` | `IResolvedRef[]` | Разрешённые ссылки |
+| `unresolved` | `IUnresolvedReference[]` | Неразрешённые ссылки |
+| `durationMs` | `number` | Время выполнения |
+
+### IResolvedRef — Разрешённая ссылка
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `original` | `IUnresolvedReference` | Исходная ссылка |
+| `targetNodeId` | `string` | ID целевого узла |
+| `confidence` | `number` | Уверенность |
+| `provenance` | `string` | Источник разрешения |
+
+### IndexOptions — Параметры индексации
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `onProgress` | `(progress: IIndexProgress) => void?` | Callback прогресса |
+| `signal` | `AbortSignal?` | Сигнал отмены |
+| `ignoreDirs` | `ReadonlySet<string>?` | Игнорируемые директории |
+| `ignorePatterns` | `string[]?` | Игнорируемые паттерны |
+| `maxFileSize` | `number?` | Максимальный размер файла |
+| `includeTests` | `boolean?` | Включать тесты |
+| `frameworkNames` | `string[]?` | Имена фреймворков |
+
 ### IGraphStats — Статистика графа
 
 | Поле | Тип | Описание |
@@ -129,7 +158,7 @@
 
 ### NodeKind
 
-22 значения: `file`, `class`, `function`, `method`, `property`, `field`, `interface`, `struct`, `enum`, `type_alias`, `constant`, `variable`, `namespace`, `module`, `route`, `trait`, `protocol`, `enum_member`, `parameter`, `import`, `export`, `component`.
+Замороженный объект (`Object.freeze`) с PascalCase ключами и строчными значениями (22 значения): `File: 'file'`, `Class: 'class'`, `Function: 'function'`, `Method: 'method'`, `Property: 'property'`, `Field: 'field'`, `Interface: 'interface'`, `Struct: 'struct'`, `Enum: 'enum'`, `TypeAlias: 'type_alias'`, `Constant: 'constant'`, `Variable: 'variable'`, `Namespace: 'namespace'`, `Module: 'module'`, `Route: 'route'`, `Trait: 'trait'`, `Protocol: 'protocol'`, `EnumMember: 'enum_member'`, `Parameter: 'parameter'`, `Import: 'import'`, `Export: 'export'`, `Component: 'component'`.
 
 ### EdgeKind
 
@@ -141,7 +170,7 @@
 
 ### Language
 
-39 значений: `typescript`, `javascript`, `tsx`, `jsx`, `python`, `go`, `rust`, `java`, `c`, `cpp`, `csharp`, `razor`, `php`, `ruby`, `swift`, `kotlin`, `dart`, `svelte`, `vue`, `astro`, `liquid`, `pascal`, `scala`, `lua`, `luau`, `objc`, `r`, `yaml`, `twig`, `xml`, `properties`, `unknown`, `html`, `css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`.
+Замороженный массив (`Object.freeze`) с 41 значением: `typescript`, `javascript`, `tsx`, `jsx`, `python`, `go`, `rust`, `java`, `c`, `cpp`, `csharp`, `razor`, `php`, `ruby`, `swift`, `kotlin`, `dart`, `svelte`, `vue`, `astro`, `liquid`, `pascal`, `scala`, `lua`, `luau`, `objc`, `r`, `yaml`, `twig`, `xml`, `properties`, `unknown`, `html`, `css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`.
 
 ---
 
@@ -152,10 +181,10 @@
 ### Конструктор
 
 ```
-constructor(rootDir: string, db: NtGraphDb, scopeIgnore?: ScopeIgnore)
+constructor(rootDir: string, db: NtGraphDb)
 ```
 
-Принимает корневую директорию проекта, экземпляр базы данных и опционально готовый ScopeIgnore.
+Принимает корневую директорию проекта и экземпляр базы данных.
 
 ### Методы
 
@@ -166,14 +195,15 @@ constructor(rootDir: string, db: NtGraphDb, scopeIgnore?: ScopeIgnore)
 | `indexFile(relativePath)` | `Promise<IExtractionResult>` | Индексация одного файла |
 | `indexFileWithContent(relativePath, content, stats)` | `Promise<IExtractionResult>` | Индексация с содержимым файла (для batch-чтения) |
 | `sync(onProgress?)` | `Promise<ISyncResult>` | Инкрементальная синхронизация с cooperative yield |
-| `getChangedFiles()` | `{added, modified, removed}` | Получение измененных файлов через `git status --porcelain` |
-| `extractFile(relativePath)` | `IFileRecord \| undefined` | Извлечение данных файла из БД |
-| `removeFile(relativePath)` | `void` | Удаление данных файла из БД (каскад FK) |
-| `storeExtractionResult(fileRecord, result)` | `void` | Хранение результатов: 10-шаговый алгоритм (hash-проверка, снимок cross-file ребер, удаление, фильтрация, вставка узлов и ребер, восстановление cross-file ребер, unresolved refs, upsert FileRecord) |
+| `getChangedFiles()` | `{added, modified, removed, error?: boolean}` | Получение измененных файлов через `git status --porcelain` |
+
+
+| `storeExtractionResult(fileRecord, result)` | `Promise<void>` | Хранение результатов: 10-шаговый алгоритм (hash-проверка, снимок cross-file ребер, удаление, фильтрация, вставка узлов и ребер, восстановление cross-file ребер, unresolved refs, upsert FileRecord) |
 | `hashContent(content)` | `string` | SHA256 хеширование содержимого |
 | `buildDetectionContext(files)` | `IResolutionContext` | Построение контекста для обнаружения фреймворков |
 | `ensureDetectedFrameworks(files?)` | `string[]` | Кешированное обнаружение фреймворков |
-| `getGraphStats()` | `Promise<IGraphStats>` | Получение статистики графа из БД |
+| `resolveReferences(onProgress?, signal?)` | `Promise<IResolutionResult>` | Разрешение неразрешённых ссылок: по имени, квалифицированному имени, виду узла |
+| `getStats()` | `Promise<IGraphStats>` | Получение статистики графа из БД |
 
 ### Алгоритм storeExtractionResult()
 
@@ -202,13 +232,9 @@ constructor(rootDir: string, db: NtGraphDb, scopeIgnore?: ScopeIgnore)
 
 ---
 
-## Функция extractorFor
+## Подбор экстрактора
 
-Подбор экстрактора для заданного языка. Возвращает `DefaultExtractor` для неподдерживаемых языков.
-
-```
-extractorFor(language: Language): IExtractor
-```
+Экстракторы выбираются из приватной карты `EXTRACTOR_MAP` (ленивая инициализация). Для неподдерживаемых языков возвращается `DefaultExtractor`. Публичный API — функция `extractFromSource` в модуле `tree-sitter`.
 
 ---
 
@@ -225,7 +251,7 @@ extractorFor(language: Language): IExtractor
 | `isGrammarLoaded(lang)` | `boolean` | Проверка загрузки грамматики |
 | `getSupportedLanguages()` | `string[]` | Список поддерживаемых языков |
 | `loadExtensionOverrides(rootDir)` | `void` | Загрузка кастомных маппингов из `ntgraph.json` |
-| `getSupportedExtensions()` | `string[]` | Список поддерживаемых расширений файлов |
+| `getSupportedExtensions(lang)` | `string[]` | Расширения для языка (только метод IExtractor, не модульный уровень) |
 
 ---
 
@@ -254,14 +280,17 @@ Main -> Worker:
 Worker -> Main:
 - `{ type: 'grammars-loaded' }` — подтверждение загрузки
 - `{ type: 'parse-result', id: number, result: IExtractionResult }` — результат парсинга
+- `{ type: 'error', id: number, message: string }` — ошибка при парсинге
 
 ### Методы управления Worker
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `ensureWorker()` | `void` | Ленивый спавн worker с загрузкой грамматик |
-| `recycleWorker()` | `void` | Пересоздание worker (после `WORKER_RECYCLE_INTERVAL` файлов) |
+| `ensureWorker()` | `Promise<void>` | Ленивый спавн worker |
+| `recycleWorker()` | `Promise<void>` | Пересоздание worker (после `WORKER_RECYCLE_INTERVAL` файлов) |
 | `rejectAllPending(reason)` | `void` | Отклонение всех ожидающих запросов при краше worker |
+| `loadGrammars(languages)` | `Promise<void>` | Загрузка грамматик для worker |
+| `destroy()` | `Promise<void>` | Уничтожение worker и отмена всех pending запросов |
 
 ### Вспомогательные функции
 
@@ -280,8 +309,9 @@ Worker -> Main:
 
 ### Логика повторных попыток
 
-- **Уровень 1**: Повторный парсинг с чистым worker (`recycleWorker()`)
-- **Уровень 2**: Повторный парсинг с удаленными комментариями (`stripComments()`)
+- **Уровень 0**: Первичный парсинг через worker
+- **Уровень 1**: Пересоздание worker (`recycleWorker()`) + повторный парсинг
+- **Уровень 2**: Удаление комментариев (`stripComments()`) + повторный парсинг
 
 ---
 
@@ -291,7 +321,7 @@ Worker -> Main:
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `validatePathWithinRoot(rootDir, filePath, options?)` | `boolean` | Проверка вложенности пути внутри корня (лексическая + realpath) |
+| `validatePathWithinRoot(rootDir, filePath, options?)` | `void` | Проверка вложенности пути внутри корня (лексическая + realpath); бросает ошибку `path_traversal` |
 | `normalizePath(filePath)` | `string` | Нормализация путей (разделители, `..` и т.д.) |
 
 ---
@@ -326,7 +356,7 @@ Worker -> Main:
 ### Конструктор
 
 ```
-constructor(baseDir: string, embeddedRepoRoots: string[], extraPatterns?: string[])
+constructor(baseDir: string, embeddedRepoRoots: string[])
 ```
 
 ### Методы
@@ -335,7 +365,6 @@ constructor(baseDir: string, embeddedRepoRoots: string[], extraPatterns?: string
 |---|---|---|
 | `shouldIgnore(filePath)` | `boolean` | Следует ли игнорировать файл |
 | `addPattern(pattern)` | `void` | Добавить пользовательский паттерн игнорирования |
-| `addPatterns(patterns)` | `void` | Добавить несколько паттернов игнорирования |
 
 ---
 
@@ -346,7 +375,7 @@ constructor(baseDir: string, embeddedRepoRoots: string[], extraPatterns?: string
 | Функция | Возврат | Описание |
 |---|---|---|
 | `scanDirectoryAsync(rootDir)` | `AsyncIterable<string>` | Асинхронное сканирование с cooperative yield каждые 100 файлов |
-| `getGitVisibleFiles(rootDir)` | `string[]` | `git ls-files` с fallback на filesystem walk |
+| `getGitVisibleFiles(rootDir)` | `Set<string> | null` | `git ls-files` (tracked + untracked); null если git недоступен |
 | `scanDirectoryWalk(rootDir)` | `string[]` | Рекурсивный обход с per-directory .gitignore и symlink cycle detection |
 
 ---
