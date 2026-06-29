@@ -66,8 +66,8 @@ export class GoExtractor extends ExtractorBase {
         return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
 
-      // Узел модуля
-      const moduleNode = this.createNode(
+      // Узел файла
+      const fileNode = this.createNode(
         filePath,
         NodeKind.File,
         filePath,
@@ -76,7 +76,20 @@ export class GoExtractor extends ExtractorBase {
         0,
         0
       );
+      nodes.push(fileNode);
+
+      // Узел модуля
+      const moduleNode = this.createNode(
+        filePath,
+        NodeKind.Module,
+        filePath,
+        1,
+        content.split('\n').length,
+        0,
+        0
+      );
       nodes.push(moduleNode);
+      edges.push(this.createEdge(fileNode.id, moduleNode.id, EdgeKind.Contains));
 
       // Обработка узлов верхнего уровня
       this.processGoNodes(
@@ -103,6 +116,33 @@ export class GoExtractor extends ExtractorBase {
     }
 
     return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
+  }
+
+  /** Создаёт Export узел для экспортируемого символа. */
+  protected addExportNode(
+    symbolNodeId: string,
+    name: string,
+    filePath: string,
+    parentId: string,
+    line: number,
+    column: number,
+    nodes: INode[],
+    edges: IEdge[]
+  ): void {
+    if (!/^[A-Z]/.test(name)) return;
+
+    const exportNode = this.createNode(
+      filePath,
+      NodeKind.Export,
+      name,
+      line,
+      line,
+      column,
+      column
+    );
+    nodes.push(exportNode);
+    edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+    edges.push(this.createEdge(symbolNodeId, exportNode.id, EdgeKind.Exports));
   }
 
   /** Обрабатывает узлы AST для Go. */
@@ -363,9 +403,9 @@ export class GoExtractor extends ExtractorBase {
     errors: IExtractionError[],
     docstring: string | undefined
   ): void {
-    const classNode = this.createNode(
+    const structNode = this.createNode(
       filePath,
-      NodeKind.Class,
+      NodeKind.Struct,
       name,
       typeSpecNode.startPosition.row + 1,
       typeSpecNode.endPosition.row + 1,
@@ -376,8 +416,9 @@ export class GoExtractor extends ExtractorBase {
         docstring,
       }
     );
-    nodes.push(classNode);
-    edges.push(this.createEdge(parentId, classNode.id, EdgeKind.Contains));
+    nodes.push(structNode);
+    edges.push(this.createEdge(parentId, structNode.id, EdgeKind.Contains));
+    this.addExportNode(structNode.id, name, filePath, parentId, typeSpecNode.startPosition.row + 1, typeSpecNode.startPosition.column, nodes, edges);
 
     // Поля структуры
     const structType = typeSpecNode.childForFieldName('type');
@@ -385,7 +426,7 @@ export class GoExtractor extends ExtractorBase {
       let field = structType.firstChild;
       while (field) {
         if (field.type === 'field_declaration') {
-          this.processStructField(field, filePath, content, classNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName);
+          this.processStructField(field, filePath, content, structNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName);
         }
         field = field.nextSibling;
       }
@@ -415,10 +456,29 @@ export class GoExtractor extends ExtractorBase {
     const isTag = node.childForFieldName('tag') !== null;
     const tagNode = node.childForFieldName('tag');
 
-    // Поле структуры — используем Field, а не Property
-    const propNode = this.createNode(
+    // Поле структуры — создаём Field и Property
+    const fieldNode = this.createNode(
       filePath,
       NodeKind.Field,
+      name,
+      node.startPosition.row + 1,
+      node.endPosition.row + 1,
+      node.startPosition.column,
+      node.endPosition.column,
+      {
+        qualifiedName,
+        docstring,
+        type: typeNode ? typeNode.text : undefined,
+        isTag,
+        tag: tagNode ? tagNode.text : undefined,
+      }
+    );
+    nodes.push(fieldNode);
+    edges.push(this.createEdge(parentId, fieldNode.id, EdgeKind.Contains));
+
+    const propNode = this.createNode(
+      filePath,
+      NodeKind.Property,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -440,7 +500,7 @@ export class GoExtractor extends ExtractorBase {
       unresolvedRefs.push(this.createUnresolvedRef(
         propNode.id,
         typeNode.text,
-        'type_of',
+        EdgeKind.TypeOf,
         typeNode.startPosition.row + 1,
         typeNode.startPosition.column,
         filePath
@@ -477,6 +537,7 @@ export class GoExtractor extends ExtractorBase {
     );
     nodes.push(ifaceNode);
     edges.push(this.createEdge(parentId, ifaceNode.id, EdgeKind.Contains));
+    this.addExportNode(ifaceNode.id, name, filePath, parentId, typeSpecNode.startPosition.row + 1, typeSpecNode.startPosition.column, nodes, edges);
 
     // Методы интерфейса
     const interfaceType = typeSpecNode.childForFieldName('type');
@@ -554,6 +615,7 @@ export class GoExtractor extends ExtractorBase {
     );
     nodes.push(aliasNode);
     edges.push(this.createEdge(parentId, aliasNode.id, EdgeKind.Contains));
+    this.addExportNode(aliasNode.id, name, filePath, parentId, typeSpecNode.startPosition.row + 1, typeSpecNode.startPosition.column, nodes, edges);
 
     if (underlyingType) {
       unresolvedRefs.push(this.createUnresolvedRef(
@@ -596,6 +658,7 @@ export class GoExtractor extends ExtractorBase {
     );
     nodes.push(enumNode);
     edges.push(this.createEdge(parentId, enumNode.id, EdgeKind.Contains));
+    this.addExportNode(enumNode.id, name, filePath, parentId, typeSpecNode.startPosition.row + 1, typeSpecNode.startPosition.column, nodes, edges);
 
     // Извлечение членов перечисления из const_spec узлов
     let child = typeSpecNode.firstChild;
@@ -666,6 +729,7 @@ export class GoExtractor extends ExtractorBase {
     );
     nodes.push(funcNode);
     edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Contains));
+    this.addExportNode(funcNode.id, name, filePath, parentId, node.startPosition.row + 1, node.startPosition.column, nodes, edges);
 
     // Параметры
     const params = node.childForFieldName('parameters');
@@ -754,6 +818,7 @@ export class GoExtractor extends ExtractorBase {
     );
     nodes.push(methodNode);
     edges.push(this.createEdge(parentId, methodNode.id, EdgeKind.Contains));
+    this.addExportNode(methodNode.id, name, filePath, parentId, node.startPosition.row + 1, node.startPosition.column, nodes, edges);
 
     // Параметры
     const params = node.childForFieldName('parameters');
@@ -847,6 +912,7 @@ export class GoExtractor extends ExtractorBase {
       );
       nodes.push(varNode);
       edges.push(this.createEdge(parentId, varNode.id, EdgeKind.Contains));
+      this.addExportNode(varNode.id, name, filePath, parentId, node.startPosition.row + 1, node.startPosition.column, nodes, edges);
       // Ребро type_of
       if (typeNode) {
         const typeTypeNode = this.createNode(
@@ -928,6 +994,7 @@ export class GoExtractor extends ExtractorBase {
       );
       nodes.push(constNode);
       edges.push(this.createEdge(parentId, constNode.id, EdgeKind.Contains));
+      this.addExportNode(constNode.id, name, filePath, parentId, node.startPosition.row + 1, node.startPosition.column, nodes, edges);
       // Ребро type_of
       if (typeNode) {
         const typeTypeNode = this.createNode(
@@ -1033,7 +1100,7 @@ export class GoExtractor extends ExtractorBase {
 
       // Instantiates: function name starts with uppercase letter
       if (funcNode.type === 'identifier' && /^[A-Z]/.test(funcName)) {
-        edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Class, funcName, 0), EdgeKind.Instantiates, {
+        edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Struct, funcName, 0), EdgeKind.Instantiates, {
           metadata: { referenceName: funcName },
           line,
           column,
@@ -1351,7 +1418,7 @@ export class GoExtractor extends ExtractorBase {
           }
         }
         if (allMatch && ifaceMethods.size > 0) {
-          const structNode = nodes.find(n => n.kind === NodeKind.Class && n.name === structName);
+          const structNode = nodes.find(n => n.kind === NodeKind.Struct && n.name === structName);
           if (structNode) {
             const ifaceNodeId = this.nodeId(filePath, NodeKind.Interface, ifaceName, 0);
             edges.push(this.createEdge(structNode.id, ifaceNodeId, EdgeKind.Implements, {
@@ -1398,7 +1465,7 @@ export class GoExtractor extends ExtractorBase {
     if (typeName) {
       const line = node.startPosition.row + 1;
       const column = node.startPosition.column;
-      edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Class, typeName, 0), EdgeKind.Instantiates, {
+      edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Struct, typeName, 0), EdgeKind.Instantiates, {
         metadata: { referenceName: typeName },
         line,
         column,

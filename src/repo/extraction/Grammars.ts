@@ -78,12 +78,15 @@ export async function getGrammarVariant(language: string, filePath: string): Pro
     return { language, variant, loaded: true };
   }
 
-  if (language === 'cpp') {
-    // Для заголовочных файлов .h используем грамматику C как фолбэк
-    if (ext === '.h') {
-      // Пытаемся загрузить грамматику C, если не найдена — возвращаем C++
-      return { language: 'c', variant: 'c', loaded: true };
-    }
+  if (ext === '.h' && (language === 'c' || language === 'cpp')) {
+    // Для .h файлов поддерживаем обе грамматики: C и C++
+    // Экстрактор сначала пробует C, затем откатывается на C++ при ошибках
+    return {
+      language,
+      variant: 'c',
+      fallbackVariant: 'cpp',
+      loaded: true,
+    };
   }
 
   // Для остальных языков возвращаем обычную грамматику

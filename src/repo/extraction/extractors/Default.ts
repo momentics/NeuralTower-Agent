@@ -4,6 +4,7 @@
  * Создаёт единственный узел файла без извлечения AST.
  */
 
+import { basename } from 'path';
 import {
   INode,
   IEdge,
@@ -29,7 +30,24 @@ export class DefaultExtractor extends ExtractorBase {
     filePath: string,
     _frameworkNames?: string[]
   ): IExtractionResult {
-    const durationMs = Date.now() - Date.now();
-    return { nodes: [], edges: [], unresolvedReferences: [], errors: [], durationMs };
+    const start = Date.now();
+    const fileBasename = basename(filePath);
+    const lines = content.split('\n');
+    const endLine = lines.length;
+    const endColumn = lines[endLine - 1]?.length ?? 0;
+
+    const fileNode = this.createNode(
+      filePath,
+      NodeKind.File,
+      fileBasename,
+      1,
+      endLine,
+      0,
+      endColumn,
+      { qualifiedName: filePath }
+    );
+
+    const durationMs = Date.now() - start;
+    return { nodes: [fileNode], edges: [], unresolvedReferences: [], errors: [], durationMs };
   }
 }

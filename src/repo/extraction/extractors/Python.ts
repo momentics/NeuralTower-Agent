@@ -58,8 +58,7 @@ export class PythonExtractor extends ExtractorBase {
 
       const root = tree.rootNode;
 
-      // Корневой узел — файл, а не модуль
-      const moduleNode = this.createNode(
+      const fileNode = this.createNode(
         filePath,
         NodeKind.File,
         filePath,
@@ -68,7 +67,19 @@ export class PythonExtractor extends ExtractorBase {
         0,
         0
       );
+      nodes.push(fileNode);
+
+      const moduleNode = this.createNode(
+        filePath,
+        NodeKind.Module,
+        filePath,
+        1,
+        content.split('\n').length,
+        0,
+        0
+      );
       nodes.push(moduleNode);
+      edges.push(this.createEdge(fileNode.id, moduleNode.id, EdgeKind.Contains));
 
       // Обработка узлов модуля
       this.processPyNodes(
@@ -130,6 +141,10 @@ export class PythonExtractor extends ExtractorBase {
         this.processDecoratedDefinition(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, insideClass, isDjango);
         break;
 
+      case 'type_alias':
+        this.processTypeAlias(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, insideClass, isDjango);
+        break;
+
       case 'assignment':
         this.processAssignment(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix, insideClass, isDjango);
         break;
@@ -176,10 +191,139 @@ export class PythonExtractor extends ExtractorBase {
     errors: IExtractionError[],
     isDjango: boolean = false
   ): void {
+    const moduleLevelSymbols = new Map<string, number>();
+    const allNames: string[] = [];
+    let allLine = 0;
+
     let child = node.firstChild;
     while (child) {
+      // Track module-level definitions
+      if (child.type === 'class_definition') {
+        const nameNode = child.childForFieldName('name');
+        if (nameNode) moduleLevelSymbols.set(nameNode.text, child.startPosition.row + 1);
+      } else if (child.type === 'function_definition') {
+        const nameNode = child.childForFieldName('name');
+        if (nameNode) moduleLevelSymbols.set(nameNode.text, child.startPosition.row + 1);
+      } else if (child.type === 'decorated_definition') {
+        const inner = child.childForFieldName('definition');
+        if (inner) {
+          const nameNode = inner.childForFieldName('name');
+          if (nameNode) moduleLevelSymbols.set(nameNode.text, child.startPosition.row + 1);
+        }
+      } else if (child.type === 'type_alias') {
+        const nameNode = child.childForFieldName('name');
+        if (nameNode) moduleLevelSymbols.set(nameNode.text, child.startPosition.row + 1);
+      } else if (child.type === 'assignment') {
+        const lhs = child.childForFieldName('left');
+        if (lhs) {
+          let lhsChild = lhs.firstChild;
+          while (lhsChild) {
+            if (lhsChild.type === 'identifier') {
+              const name = lhsChild.text;
+              if (name === '__all__') {
+                allLine = child.startPosition.row + 1;
+                const rhs = child.childForFieldName('right');
+                if (rhs && (rhs.type === 'list' || rhs.type === 'tuple')) {
+                  let elem = rhs.firstChild;
+                  while (elem) {
+                    if (elem.type === 'string') {
+                      const val = elem.text.replace(/['"]/g, '');
+                      allNames.push(val);
+                    }
+                    elem = elem.nextSibling;
+                  }
+                }
+              } else {
+                moduleLevelSymbols.set(name, child.startPosition.row + 1);
+              }
+            }
+            lhsChild = lhsChild.nextSibling;
+          }
+        }
+      }
+
       this.processPyNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, '', false, isDjango);
       child = child.nextSibling;
+    }
+
+    // Create Export nodes
+    const exportedNames = new Set<string>();
+
+    // First: symbols in __all__
+    for (const name of allNames) {
+      if (!exportedNames.has(name)) {
+        const exportNode = this.createNode(
+          filePath,
+          NodeKind.Export,
+          name,
+          allLine,
+          allLine,
+          0,
+          0
+        );
+        nodes.push(exportNode);
+        edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+        exportedNames.add(name);
+      }
+    }
+
+    // Second: public symbols at module level (not starting with _)
+    for (const [name, line] of moduleLevelSymbols) {
+      if (!name.startsWith('_') && !exportedNames.has(name)) {
+        const exportNode = this.createNode(
+          filePath,
+          NodeKind.Export,
+          name,
+          line,
+          line,
+          0,
+          0
+        );
+        nodes.push(exportNode);
+        edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+        exportedNames.add(name);
+      }
+    }
+  }
+
+  /** Обрабатывает type_alias (Python 3.12+ `type X = Y`). */
+  protected processTypeAlias(
+    node: any,
+    filePath: string,
+    content: string,
+    parentId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    errors: IExtractionError[],
+    qualifiedNamePrefix: string,
+    insideClass: boolean,
+    isDjango: boolean = false
+  ): void {
+    const nameNode = node.childForFieldName('name');
+    if (!nameNode) return;
+
+    const name = nameNode.text;
+    const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${name}` : name;
+    const valueNode = node.childForFieldName('value');
+
+    const typeAliasNode = this.createNode(
+      filePath,
+      NodeKind.TypeAlias,
+      name,
+      node.startPosition.row + 1,
+      node.endPosition.row + 1,
+      node.startPosition.column,
+      node.endPosition.column,
+      {
+        qualifiedName,
+      }
+    );
+    nodes.push(typeAliasNode);
+    edges.push(this.createEdge(parentId, typeAliasNode.id, EdgeKind.Contains));
+
+    if (valueNode) {
+      edges.push(this.createEdge(typeAliasNode.id, this.nodeId(filePath, NodeKind.Variable, valueNode.text, typeAliasNode.startLine), EdgeKind.TypeOf, { line: typeAliasNode.startLine }));
     }
   }
 
@@ -498,6 +642,102 @@ export class PythonExtractor extends ExtractorBase {
   ): void {
     const lhs = node.childForFieldName('left');
     if (!lhs) return;
+
+    // Check for TypeAlias annotation: TYPE: TypeAlias = ...
+    const typeAnnotation = node.childForFieldName('type');
+    let isTypeAliasAnnotation = false;
+    if (typeAnnotation) {
+      if (typeAnnotation.text === 'TypeAlias') {
+        isTypeAliasAnnotation = true;
+      } else if (typeAnnotation.type === 'attribute') {
+        const attr = typeAnnotation.childForFieldName('attribute');
+        if (attr && attr.text === 'TypeAlias') {
+          isTypeAliasAnnotation = true;
+        }
+      }
+    }
+    if (isTypeAliasAnnotation) {
+      let lhsChild = lhs.firstChild;
+      while (lhsChild) {
+        if (lhsChild.type === 'identifier') {
+          const name = lhsChild.text;
+          const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${name}` : name;
+          const valueNode = node.childForFieldName('right');
+
+          const typeAliasNode = this.createNode(
+            filePath,
+            NodeKind.TypeAlias,
+            name,
+            lhsChild.startPosition.row + 1,
+            node.endPosition.row + 1,
+            lhsChild.startPosition.column,
+            node.endPosition.column,
+            {
+              qualifiedName,
+            }
+          );
+          nodes.push(typeAliasNode);
+          edges.push(this.createEdge(parentId, typeAliasNode.id, EdgeKind.Contains));
+
+          if (valueNode) {
+            edges.push(this.createEdge(typeAliasNode.id, this.nodeId(filePath, NodeKind.Variable, valueNode.text, typeAliasNode.startLine), EdgeKind.TypeOf, { line: typeAliasNode.startLine }));
+          }
+        }
+        lhsChild = lhsChild.nextSibling;
+      }
+      return;
+    }
+
+    // Check for TypeAlias/Type subscript: TYPE = TypeAlias[...] or TYPE = Type[...]
+    const rhs = node.childForFieldName('right');
+    if (rhs && rhs.type === 'subscript') {
+      const base = rhs.childForFieldName('value');
+      let isTypeAliasSubscript = false;
+      if (base) {
+        if (base.text === 'TypeAlias' || base.text === 'Type') {
+          isTypeAliasSubscript = true;
+        } else if (base.type === 'attribute') {
+          const attr = base.childForFieldName('attribute');
+          if (attr && (attr.text === 'TypeAlias' || attr.text === 'Type')) {
+            isTypeAliasSubscript = true;
+          }
+        }
+      }
+      if (isTypeAliasSubscript) {
+        let lhsChild = lhs.firstChild;
+        while (lhsChild) {
+          if (lhsChild.type === 'identifier') {
+            const name = lhsChild.text;
+            const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${name}` : name;
+
+            const typeAliasNode = this.createNode(
+              filePath,
+              NodeKind.TypeAlias,
+              name,
+              lhsChild.startPosition.row + 1,
+              node.endPosition.row + 1,
+              lhsChild.startPosition.column,
+              node.endPosition.column,
+              {
+                qualifiedName,
+              }
+            );
+            nodes.push(typeAliasNode);
+            edges.push(this.createEdge(parentId, typeAliasNode.id, EdgeKind.Contains));
+
+            const argsNode = rhs.childForFieldName('indices');
+            if (argsNode) {
+              const arg = argsNode.firstChild;
+              if (arg) {
+                edges.push(this.createEdge(typeAliasNode.id, this.nodeId(filePath, NodeKind.Variable, arg.text, typeAliasNode.startLine), EdgeKind.TypeOf, { line: typeAliasNode.startLine }));
+              }
+            }
+          }
+          lhsChild = lhsChild.nextSibling;
+        }
+        return;
+      }
+    }
 
     // self.field = value — поле экземпляра
     if (lhs.type === 'attribute') {

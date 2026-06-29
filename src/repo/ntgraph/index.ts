@@ -515,7 +515,7 @@ export {
   ISearchResult, IGraphStats, IDominantFile, IExtractionResult,
   IExtractionError, ISubgraph, Context, CodeBlock, TaskInput,
   BuildContextOptions, TaskContext, FindRelevantContextOptions,
-  ParsedQuery, TraversalOptions, IIndexProgress, IIndexResult,
+  ParsedQuery, ITraversalOptions, IIndexProgress, IIndexResult,
   ISyncResult, IResolutionContext, IResolvedRef, IResolutionResult,
   IReExport, IAliasMap, IGoModule, IWorkspacePackages,
   IImportMapping, IFrameworkResolver, ISchemaVersion,

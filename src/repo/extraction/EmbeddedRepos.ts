@@ -48,8 +48,11 @@ async function scanDir(
   currentDir: string,
   depth: number,
   results: string[],
+  entriesScanned: { count: number },
 ): Promise<void> {
   if (depth > EMBEDDED_REPO_SEARCH_DEPTH) return;
+
+  if (entriesScanned.count > EMBEDDED_REPO_SEARCH_ENTRIES) return;
 
   try {
     const entries = await fsPromises.readdir(currentDir, { withFileTypes: true });
@@ -63,21 +66,21 @@ async function scanDir(
 
       if (DEFAULT_IGNORE_DIRS.has(name)) continue;
 
+      entriesScanned.count++;
+
       const fullPath = path.join(currentDir, name);
 
       if (await isRepo(fullPath)) {
         results.push(fullPath);
       }
 
-      dirs.push(fullPath);
-    }
-
-    if (dirs.length > EMBEDDED_REPO_SEARCH_ENTRIES) {
-      dirs.length = EMBEDDED_REPO_SEARCH_ENTRIES;
+      if (entriesScanned.count <= EMBEDDED_REPO_SEARCH_ENTRIES) {
+        dirs.push(fullPath);
+      }
     }
 
     for (const dir of dirs) {
-      await scanDir(dir, depth + 1, results);
+      await scanDir(dir, depth + 1, results, entriesScanned);
     }
   } catch {
     // Ошибка чтения директории — пропускаем.
@@ -88,7 +91,7 @@ async function scanDir(
  * Обнаруживает вложенные репозитории в проекте.
  *
  * Обход выполняется до EMBEDDED_REPO_SEARCH_DEPTH уровней,
- * не более EMBEDDED_REPO_SEARCH_ENTRIES записей на каждом уровне.
+ * не более EMBEDDED_REPO_SEARCH_ENTRIES записей всего.
  * Директории из DEFAULT_IGNORE_DIRS исключаются из обхода.
  *
  * @param projectRoot — корневая директория проекта
@@ -98,8 +101,9 @@ export async function discoverEmbeddedRepoRoots(
   projectRoot: string,
 ): Promise<string[]> {
   const results: string[] = [];
+  const entriesScanned = { count: 0 };
 
-  await scanDir(projectRoot, 0, results);
+  await scanDir(projectRoot, 0, results, entriesScanned);
 
   return results;
 }

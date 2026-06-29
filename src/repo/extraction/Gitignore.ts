@@ -4,6 +4,59 @@
  */
 
 import fs from 'fs';
+import { DEFAULT_IGNORE_DIRS, DEFAULT_IGNORE_PATTERNS } from '../ntgraph/Types';
+
+/**
+ * Простое сопоставление glob-паттерна с путём файла.
+ */
+function matchGlob(filePath: string, pattern: string): boolean {
+  const pSegs = pattern.split('/');
+  const fSegs = filePath.split('/');
+  return matchGlobSegs(pSegs, 0, fSegs, 0);
+}
+
+function matchGlobSegs(pSegs: string[], pi: number, fSegs: string[], fi: number): boolean {
+  if (pi === pSegs.length) return fi === fSegs.length;
+  if (fi > fSegs.length) return false;
+  const pSeg = pSegs[pi];
+  if (pSeg === '**') {
+    for (let skip = 0; skip <= fSegs.length - fi; skip++) {
+      if (matchGlobSegs(pSegs, pi + 1, fSegs, fi + skip)) return true;
+    }
+    return false;
+  }
+  if (fi === fSegs.length) return false;
+  if (segMatch(pSeg, fSegs[fi])) {
+    return matchGlobSegs(pSegs, pi + 1, fSegs, fi + 1);
+  }
+  return false;
+}
+
+function segMatch(pSeg: string, fSeg: string): boolean {
+  let pi = 0;
+  let fi = 0;
+  let starPi = -1;
+  let starFi = -1;
+  while (fi < fSeg.length) {
+    const pc = pSeg[pi];
+    if (pc === '*') {
+      starPi = pi + 1;
+      starFi = fi;
+      pi++;
+    } else if (pc === '?' || pc === fSeg[fi]) {
+      pi++;
+      fi++;
+    } else if (starPi !== -1) {
+      pi = starPi;
+      starFi++;
+      fi = starFi;
+    } else {
+      return false;
+    }
+  }
+  while (pi < pSeg.length && pSeg[pi] === '*') pi++;
+  return pi === pSeg.length;
+}
 
 /**
  * Проверяет, является ли буфер корректной UTF-8 последовательностью.
@@ -46,20 +99,28 @@ export function readGitignorePatterns(giPath: string): string[] {
     // Пропускаем комментарии
     if (line.startsWith('#')) continue;
 
+    let pattern: string;
+
     // Двойные !! — negation pattern (отмена игнорирования)
     if (line.startsWith('!!')) {
-      patterns.push('!' + line.slice(1));
-      continue;
+      pattern = '!' + line.slice(1);
     }
-
-    // Отрицательные паттерны — возвращаем как есть
-    if (line.startsWith('!')) {
-      patterns.push(line);
-      continue;
+    // Отрицательные паттерны
+    else if (line.startsWith('!')) {
+      pattern = line;
     }
-
     // Обычные паттерны
-    patterns.push(line);
+    else {
+      pattern = line;
+    }
+
+    // Validate pattern at read time — drop invalid regex
+    if (patternToRegex(pattern) === null) {
+      console.warn(`[Gitignore] Пропущен невалидный паттерн: ${pattern}`);
+      continue;
+    }
+
+    patterns.push(pattern);
   }
 
   return patterns;
@@ -198,7 +259,7 @@ export function matchGitignorePattern(filePath: string, pattern: string): boolea
 export class ScopeIgnore {
   private readonly _baseDir: string;
   private readonly _embeddedRepoRoots: string[];
-  private readonly _patterns: string[];
+  private readonly _customPatterns: Set<string>;
 
   constructor(baseDir: string, embeddedRepoRoots: string[]) {
     // Нормализуем разделители на POSIX-стиль
@@ -206,7 +267,7 @@ export class ScopeIgnore {
     this._embeddedRepoRoots = embeddedRepoRoots.map(r =>
       r.replace(/\\/g, '/').replace(/\/+$/, '')
     );
-    this._patterns = [];
+    this._customPatterns = new Set();
   }
 
   /**
@@ -225,6 +286,22 @@ export class ScopeIgnore {
       }
     }
 
+    // Проверяем компоненты пути на совпадение с игнорируемыми директориями
+    const parts = norm.split('/');
+    for (const part of parts) {
+      if (DEFAULT_IGNORE_DIRS.has(part)) return true;
+    }
+
+    // Проверяем паттерны по умолчанию
+    for (const pat of DEFAULT_IGNORE_PATTERNS) {
+      if (matchGlob(norm, pat)) return true;
+    }
+
+    // Проверяем пользовательские паттерны
+    for (const pat of this._customPatterns) {
+      if (matchGlob(norm, pat)) return true;
+    }
+
     // Вычисляем относительный путь от baseDir
     const relPath = this._relativePath(norm);
     if (relPath === null) {
@@ -232,16 +309,16 @@ export class ScopeIgnore {
       return false;
     }
 
-    // Применяем паттерны последовательно (gitignore-логика:
+    // Применяем gitignore-паттерны последовательно (gitignore-логика:
     // последний совпавший паттерн определяет результат)
     let ignored = false;
 
-    for (const pattern of this._patterns) {
-      const isNegation = pattern.startsWith('!');
+    for (const pattern of this._customPatterns) {
+      if (pattern.startsWith('!')) continue;
       const result = matchGitignorePattern(relPath, pattern);
 
       if (result) {
-        ignored = !isNegation;
+        ignored = true;
       }
     }
 
@@ -249,12 +326,10 @@ export class ScopeIgnore {
   }
 
   /**
-   * Добавляет gitignore-паттерн. Поддерживаются обычные и
-   * отрицательные (!) паттерны. Паттерны применяются в порядке
-   * добавления, последний совпавший имеет приоритет.
+   * Добавляет пользовательский паттерн игнорирования.
    */
   addPattern(pattern: string): void {
-    this._patterns.push(pattern.replace(/\\/g, '/'));
+    this._customPatterns.add(pattern.replace(/\\/g, '/'));
   }
 
   /**

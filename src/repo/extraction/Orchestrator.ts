@@ -44,6 +44,7 @@ import { shouldIndexFile, isBinaryFile, isTooLarge, resolveRelativePath } from '
 import { detectFrameworks } from './FrameworkDetection';
 import { discoverEmbeddedRepoRoots } from './EmbeddedRepos';
 import { IExtractor, ExtractorBase } from './ExtractorBase';
+import { CppExtractor } from './extractors/Cpp';
 import { TypeScriptExtractor } from './extractors/TypeScript';
 import { PythonExtractor } from './extractors/Python';
 import { parseFile as parseFileWorker, loadGrammars as loadGrammarsWorker, destroy as destroyWorker, recycleWorker as recycleWorkerFn, rejectAllPending as rejectAllPendingFn } from './ParserWorker';
@@ -104,6 +105,8 @@ function ensureExtractors(): void {
   if (EXTRACTOR_MAP.size === 0) {
     EXTRACTOR_MAP.set('typescript', new TypeScriptExtractor());
     EXTRACTOR_MAP.set('python', new PythonExtractor());
+    EXTRACTOR_MAP.set('cpp', new CppExtractor());
+    EXTRACTOR_MAP.set('c', new CppExtractor());
   }
 }
 
@@ -276,13 +279,14 @@ function getGitVisibleFiles(rootDir: string): Set<string> | null {
 
 /**
  * Получает изменённые файлы из git status.
- * Возвращает null, если git недоступен.
- */
+  * Возвращает пустые массивы, если git недоступен.
+  */
 function getGitChangedFiles(rootDir: string): {
   modified: string[];
   added: string[];
   removed: string[];
-} | null {
+  error?: boolean;
+} {
   try {
     const output = execFileSync(
       'git',
@@ -322,7 +326,7 @@ function getGitChangedFiles(rootDir: string): {
 
     return { modified, added, removed };
   } catch {
-    return null;
+    return { added: [], modified: [], removed: [], error: true };
   }
 }
 
@@ -349,7 +353,8 @@ export class ExtractionOrchestrator {
     modified: string[];
     added: string[];
     removed: string[];
-  } | null {
+    error?: boolean;
+  } {
     return getGitChangedFiles(this.rootDir);
   }
 
@@ -665,21 +670,30 @@ await this.storeExtractionResult(fileRecord, result);
 
     onProgress?.({ phase: 'scanning', current: 0, total: 0, file: '', durationMs: 0 });
 
-    // Загрузка грамматик перед основным циклом извлечения
-    if (PARSER_WORKER_AVAILABLE) {
-      try {
-        await loadGrammarsWorker(['typescript', 'python']);
-      } catch {
-        // Игнорируем ошибки загрузки грамматик
-      }
-    }
-
     // Пытаемся использовать git для быстрого обнаружения изменений
     const gitChanges = getGitChangedFiles(this.rootDir);
 
-    if (gitChanges) {
+    if (!gitChanges.error) {
       // Git-путь: быстрое обнаружение изменений
       const { modified, added, removed } = gitChanges;
+
+      // Собираем уникальный набор языков из файлов, которые будут обработаны
+      const neededLanguages = new Set<string>();
+      for (const filePath of [...modified, ...added]) {
+        const lang = detectLanguage(filePath);
+        if (lang !== 'unknown' && isLanguageSupported(lang)) {
+          neededLanguages.add(lang);
+        }
+      }
+
+      // Загрузка грамматик для необходимых языков
+      if (PARSER_WORKER_AVAILABLE && neededLanguages.size > 0) {
+        try {
+          await loadGrammarsWorker([...neededLanguages]);
+        } catch {
+          // Игнорируем ошибки загрузки грамматик
+        }
+      }
 
       // Удалённые файлы — удаляем из БД
       for (const filePath of removed) {
@@ -692,7 +706,7 @@ await this.storeExtractionResult(fileRecord, result);
         }
         filesChecked++;
 
-        if (filesChecked % SYNC_YIELD_INTERVAL === 0) {
+        if (filesChecked % SYNC_RECONCILE_YIELD_INTERVAL === 0) {
           await yieldToEventLoop();
         }
       }
@@ -708,7 +722,7 @@ await this.storeExtractionResult(fileRecord, result);
         } catch {
           filesChecked++;
 
-          if (filesChecked % SYNC_YIELD_INTERVAL === 0) {
+          if (filesChecked % SYNC_RECONCILE_YIELD_INTERVAL === 0) {
             await yieldToEventLoop();
           }
           continue;
@@ -729,7 +743,7 @@ await this.storeExtractionResult(fileRecord, result);
 
         filesChecked++;
 
-        if (filesChecked % SYNC_YIELD_INTERVAL === 0) {
+        if (filesChecked % SYNC_RECONCILE_YIELD_INTERVAL === 0) {
           await yieldToEventLoop();
         }
       }
@@ -737,6 +751,25 @@ await this.storeExtractionResult(fileRecord, result);
       // Фолбэк: полное сравнение файловой системы с БД
       const currentFiles = await scanDirectory(this.rootDir, { onProgress, signal });
       filesChecked = currentFiles.length;
+
+      // Собираем уникальный набор языков из файлов
+      const neededLanguages = new Set<string>();
+      for (const filePath of currentFiles) {
+        const lang = detectLanguage(filePath);
+        if (lang !== 'unknown' && isLanguageSupported(lang)) {
+          neededLanguages.add(lang);
+        }
+      }
+
+      // Загрузка грамматик для необходимых языков
+      if (PARSER_WORKER_AVAILABLE && neededLanguages.size > 0) {
+        try {
+          await loadGrammarsWorker([...neededLanguages]);
+        } catch {
+          // Игнорируем ошибки загрузки грамматик
+        }
+      }
+
       const currentSet = new Set(currentFiles);
 
       const trackedFiles = this.db.getAllFiles();

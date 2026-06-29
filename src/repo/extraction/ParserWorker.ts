@@ -125,8 +125,12 @@ class ParserWorkerManager {
   public rejectAllPending(reason: Error) {
     for (const [id, req] of this.pendingParses) {
       clearTimeout(req.timeout);
-      req.rejected = true;
+      if (!req.rejected) {
+        req.rejected = true;
+        req.reject(reason);
+      }
     }
+    this.pendingParses.clear();
   }
 
   private rejectAllPendingAbort(reason: Error) {

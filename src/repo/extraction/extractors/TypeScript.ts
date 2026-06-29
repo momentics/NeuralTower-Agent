@@ -72,7 +72,7 @@ export class TypeScriptExtractor extends ExtractorBase {
       }
 
       // Узел файла
-      const moduleNode = this.createNode(
+      const fileNode = this.createNode(
         filePath,
         NodeKind.File,
         filePath,
@@ -81,7 +81,23 @@ export class TypeScriptExtractor extends ExtractorBase {
         0,
         0
       );
+      nodes.push(fileNode);
+
+      // Узел модуля
+      const moduleName = filePath.replace(/.*[/\\]/, '').replace(/\.[^.]+$/, '');
+      const totalLines = content.split('\n').length;
+      const moduleNode = this.createNode(
+        filePath,
+        NodeKind.Module,
+        moduleName,
+        1,
+        totalLines,
+        0,
+        0,
+        { filePath }
+      );
       nodes.push(moduleNode);
+      edges.push(this.createEdge(fileNode.id, moduleNode.id, EdgeKind.Contains));
 
       // Обработка объявлений верхнего уровня
       this.processTsNodes(
@@ -221,6 +237,29 @@ export class TypeScriptExtractor extends ExtractorBase {
     }
   }
 
+  /** Объявления, которые могут быть декорированы. */
+  private static readonly DECORATABLE_DECLARATION_TYPES = new Set([
+    'class_declaration',
+    'class_expression',
+    'function_declaration',
+    'method_definition',
+    'property_definition',
+    'abstract_method_declaration',
+    'abstract_property_declaration',
+  ]);
+
+  /** Извлекает имя декоратора из AST-узла. */
+  protected extractDecoratorName(node: any): string | undefined {
+    const firstChild = node.firstChild;
+    if (!firstChild) return undefined;
+    if (firstChild.type === 'identifier') return firstChild.text;
+    if (firstChild.type === 'call_expression') {
+      const funcNode = firstChild.childForFieldName('function');
+      if (funcNode && funcNode.type === 'identifier') return funcNode.text;
+    }
+    return undefined;
+  }
+
   /** Обрабатывает программу. */
   protected processProgram(
     node: any,
@@ -236,9 +275,61 @@ export class TypeScriptExtractor extends ExtractorBase {
       this.processExpressRoutes(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
     }
 
+    const pendingDecorators: { name: string; line: number; column: number; endLine: number; endColumn: number }[] = [];
+
     let child = node.firstChild;
     while (child) {
-      this.processTsNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      if (child.type === 'decorator') {
+        const decoratorName = this.extractDecoratorName(child);
+        if (decoratorName) {
+          pendingDecorators.push({
+            name: decoratorName,
+            line: child.startPosition.row + 1,
+            column: child.startPosition.column,
+            endLine: child.endPosition.row + 1,
+            endColumn: child.endPosition.column,
+          });
+        }
+      } else if (TypeScriptExtractor.DECORATABLE_DECLARATION_TYPES.has(child.type)) {
+        const edgeCountBefore = edges.length;
+        const decoratorInfos = pendingDecorators.length > 0 ? [...pendingDecorators] : [];
+        pendingDecorators.length = 0;
+
+        this.processTsNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+
+        if (decoratorInfos.length > 0) {
+          const declNodeId = (() => {
+            for (let i = edgeCountBefore; i < edges.length; i++) {
+              if (edges[i].source === parentId && edges[i].kind === EdgeKind.Contains) {
+                return edges[i].target;
+              }
+            }
+            return undefined;
+          })();
+
+          if (declNodeId) {
+            for (const info of decoratorInfos) {
+              const decoratorNode = this.createNode(
+                filePath,
+                NodeKind.Variable,
+                `@${info.name}`,
+                info.line,
+                info.endLine,
+                info.column,
+                info.endColumn
+              );
+              nodes.push(decoratorNode);
+              edges.push(this.createEdge(decoratorNode.id, declNodeId, EdgeKind.Decorates, {
+                line: info.line,
+                column: info.column,
+              }));
+            }
+          }
+        }
+      } else {
+        pendingDecorators.length = 0;
+        this.processTsNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      }
       child = child.nextSibling;
     }
   }
@@ -1406,7 +1497,7 @@ export class TypeScriptExtractor extends ExtractorBase {
     }
   }
 
-  /** Обрабатывает декоратор — не создаёт узлов, декораторы извлекаются через extractDecorators. */
+  /** Обрабатывает декоратор — создаёт узел и ребро Decorates к декорируемому символу. */
   protected processDecorator(
     node: any,
     filePath: string,
@@ -1417,7 +1508,41 @@ export class TypeScriptExtractor extends ExtractorBase {
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[]
   ): void {
-    // Декораторы должны быть только в метаданных decorators: string[] узла, к которому они применены
+    const decoratorName = this.extractDecoratorName(node);
+    if (!decoratorName) return;
+
+    const decoratorNode = this.createNode(
+      filePath,
+      NodeKind.Variable,
+      `@${decoratorName}`,
+      node.startPosition.row + 1,
+      node.endPosition.row + 1,
+      node.startPosition.column,
+      node.endPosition.column
+    );
+    nodes.push(decoratorNode);
+    edges.push(this.createEdge(parentId, decoratorNode.id, EdgeKind.Contains));
+
+    // Ищем следующий узел — объявление, к которому применяется декоратор
+    let next = node.nextSibling;
+    while (next) {
+      if (TypeScriptExtractor.DECORATABLE_DECLARATION_TYPES.has(next.type)) {
+        const nameNode = next.childForFieldName('name');
+        if (nameNode) {
+          const declName = nameNode.text;
+          const declLine = next.startPosition.row + 1;
+          const declNode = nodes.find(n => n.name === declName && n.startLine === declLine && n.filePath === filePath);
+          if (declNode) {
+            edges.push(this.createEdge(decoratorNode.id, declNode.id, EdgeKind.Decorates, {
+              line: node.startPosition.row + 1,
+              column: node.startPosition.column,
+            }));
+          }
+        }
+        break;
+      }
+      next = next.nextSibling;
+    }
   }
 
   /** Обрабатывает параметры функции. */

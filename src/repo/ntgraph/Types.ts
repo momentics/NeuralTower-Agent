@@ -206,8 +206,8 @@ export interface ISubgraph {
 }
 
 /** Параметры обхода графа. */
-export interface TraversalOptions {
-  maxDepth: number;
+export interface ITraversalOptions {
+  maxDepth?: number;
   edgeKinds?: EdgeKind[];
   nodeKinds?: NodeKind[];
   direction?: 'outgoing' | 'incoming' | 'both';

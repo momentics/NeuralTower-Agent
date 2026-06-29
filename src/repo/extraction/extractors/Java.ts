@@ -61,7 +61,7 @@ export class JavaExtractor extends ExtractorBase {
 
       const root = tree.rootNode;
 
-      // Корневой узел — файл, а не модуль
+      // Корневой узел — файл
       const fileNode = this.createNode(
         filePath,
         NodeKind.File,
@@ -73,12 +73,57 @@ export class JavaExtractor extends ExtractorBase {
       );
       nodes.push(fileNode);
 
+      // Проверяем, является ли файл module-info.java
+      const isModuleInfo = filePath.endsWith('module-info.java');
+
+      let moduleNodeId: string;
+
+      if (isModuleInfo) {
+        // Для module-info.java извлекаем имя модуля из module_declaration
+        const modDecl = root.childForFieldName('name') || root.firstChild;
+        const modName = modDecl ? modDecl.text : 'unnamed';
+        const moduleNode = this.createNode(
+          filePath,
+          NodeKind.Module,
+          modName,
+          1,
+          content.split('\n').length,
+          0,
+          0,
+          {
+            qualifiedName: modName,
+          }
+        );
+        nodes.push(moduleNode);
+        edges.push(this.createEdge(fileNode.id, moduleNode.id, EdgeKind.Contains));
+        moduleNodeId = moduleNode.id;
+      } else {
+        // Для обычных Java-файлов создаём Module-узел с именем файла
+        const fileName = filePath.split('/').pop()?.split('\\').pop() || 'unnamed';
+        const modName = fileName.replace(/\.java$/, '');
+        const moduleNode = this.createNode(
+          filePath,
+          NodeKind.Module,
+          modName,
+          1,
+          content.split('\n').length,
+          0,
+          0,
+          {
+            qualifiedName: modName,
+          }
+        );
+        nodes.push(moduleNode);
+        edges.push(this.createEdge(fileNode.id, moduleNode.id, EdgeKind.Contains));
+        moduleNodeId = moduleNode.id;
+      }
+
       // Обработка объявлений верхнего уровня
       this.processJavaNodes(
         root,
         filePath,
         content,
-        fileNode.id,
+        moduleNodeId,
         nodes,
         edges,
         unresolvedRefs,
@@ -115,6 +160,10 @@ export class JavaExtractor extends ExtractorBase {
     switch (node.type) {
       case 'program':
         this.processProgram(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+        break;
+
+      case 'module_declaration':
+        this.processModuleDeclaration(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
         break;
 
       case 'package_declaration':
@@ -203,6 +252,139 @@ export class JavaExtractor extends ExtractorBase {
       this.processJavaNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       child = child.nextSibling;
     }
+  }
+
+  /** Обрабатывает объявление модуля (Java 9+ module-info.java). */
+  protected processModuleDeclaration(
+    node: any,
+    filePath: string,
+    content: string,
+    parentId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    errors: IExtractionError[]
+  ): void {
+    const nameNode = node.childForFieldName('name');
+    if (!nameNode) return;
+
+    const name = nameNode.text;
+    const moduleNode = this.createNode(
+      filePath,
+      NodeKind.Module,
+      name,
+      node.startPosition.row + 1,
+      node.endPosition.row + 1,
+      node.startPosition.column,
+      node.endPosition.column,
+      {
+        qualifiedName: name,
+      }
+    );
+    nodes.push(moduleNode);
+    edges.push(this.createEdge(parentId, moduleNode.id, EdgeKind.Contains));
+
+    // Обработка тела модуля (requires, exports, opens, uses, provides)
+    const body = node.childForFieldName('body');
+    if (body) {
+      let child = body.firstChild;
+      while (child) {
+        if (child.type === 'requires_statement') {
+          this.processRequiresStatement(child, filePath, content, moduleNode.id, nodes, edges, unresolvedRefs, errors);
+        } else if (child.type === 'exports_statement') {
+          this.processExportsStatement(child, filePath, content, moduleNode.id, nodes, edges, unresolvedRefs, errors);
+        } else {
+          this.processJavaNodes(child, filePath, content, moduleNode.id, nodes, edges, unresolvedRefs, errors);
+        }
+        child = child.nextSibling;
+      }
+    }
+  }
+
+  /** Обрабатывает requires_statement в module-info.java. */
+  protected processRequiresStatement(
+    node: any,
+    filePath: string,
+    _content: string,
+    parentId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    _errors: IExtractionError[]
+  ): void {
+    const nameNode = node.childForFieldName('name');
+    if (!nameNode) return;
+
+    const name = nameNode.text;
+    const line = node.startPosition.row + 1;
+    const column = node.startPosition.column;
+    const isTransitive = this.hasModifier(node, 'transitive');
+
+    const importNode = this.createNode(
+      filePath,
+      NodeKind.Import,
+      name,
+      line,
+      line,
+      column,
+      node.endPosition.column,
+      {
+        isTransitive,
+      }
+    );
+    nodes.push(importNode);
+    edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Contains));
+    edges.push(this.createEdge(parentId, importNode.id, EdgeKind.Imports));
+
+    unresolvedRefs.push(this.createUnresolvedRef(
+      importNode.id,
+      name,
+      EdgeKind.Imports,
+      line,
+      column,
+      filePath
+    ));
+  }
+
+  /** Обрабатывает exports_statement в module-info.java. */
+  protected processExportsStatement(
+    node: any,
+    filePath: string,
+    _content: string,
+    parentId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    _errors: IExtractionError[]
+  ): void {
+    const nameNode = node.childForFieldName('name');
+    if (!nameNode) return;
+
+    const name = nameNode.text;
+    const line = node.startPosition.row + 1;
+    const column = node.startPosition.column;
+
+    const exportNode = this.createNode(
+      filePath,
+      NodeKind.Export,
+      name,
+      line,
+      line,
+      column,
+      node.endPosition.column
+    );
+    nodes.push(exportNode);
+    edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+    edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Exports));
+
+    unresolvedRefs.push(this.createUnresolvedRef(
+      exportNode.id,
+      name,
+      EdgeKind.Exports,
+      line,
+      column,
+      filePath
+    ));
   }
 
   /** Обрабатывает объявление пакета (Namespace). */
@@ -339,6 +521,23 @@ export class JavaExtractor extends ExtractorBase {
     nodes.push(classNode);
     edges.push(this.createEdge(parentId, classNode.id, EdgeKind.Contains));
 
+    // Export node для публичных символов
+    const classVisibility = this.extractVisibility(node);
+    if (classVisibility === 'public') {
+      const exportNode = this.createNode(
+        filePath,
+        NodeKind.Export,
+        name,
+        classNode.startLine,
+        classNode.startLine,
+        classNode.startColumn,
+        classNode.endColumn
+      );
+      nodes.push(exportNode);
+      edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+      edges.push(this.createEdge(parentId, classNode.id, EdgeKind.Exports));
+    }
+
     // Ребра decorates от класса к типам аннотаций
     for (const decText of decorators) {
       edges.push(this.createEdge(classNode.id, this.nodeId(filePath, NodeKind.Class, decText, 0), EdgeKind.Decorates, {
@@ -470,6 +669,23 @@ export class JavaExtractor extends ExtractorBase {
     nodes.push(ifaceNode);
     edges.push(this.createEdge(parentId, ifaceNode.id, EdgeKind.Contains));
 
+    // Export node для публичных символов
+    const ifaceVisibility = this.extractVisibility(node);
+    if (ifaceVisibility === 'public') {
+      const exportNode = this.createNode(
+        filePath,
+        NodeKind.Export,
+        name,
+        ifaceNode.startLine,
+        ifaceNode.startLine,
+        ifaceNode.startColumn,
+        ifaceNode.endColumn
+      );
+      nodes.push(exportNode);
+      edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+      edges.push(this.createEdge(parentId, ifaceNode.id, EdgeKind.Exports));
+    }
+
     // Ребра decorates от интерфейса к типам аннотаций
     for (const decText of decorators) {
       edges.push(this.createEdge(ifaceNode.id, this.nodeId(filePath, NodeKind.Class, decText, 0), EdgeKind.Decorates, {
@@ -576,6 +792,23 @@ export class JavaExtractor extends ExtractorBase {
     );
     nodes.push(enumNode);
     edges.push(this.createEdge(parentId, enumNode.id, EdgeKind.Contains));
+
+    // Export node для публичных символов
+    const enumVisibility = this.extractVisibility(node);
+    if (enumVisibility === 'public') {
+      const exportNode = this.createNode(
+        filePath,
+        NodeKind.Export,
+        name,
+        enumNode.startLine,
+        enumNode.startLine,
+        enumNode.startColumn,
+        enumNode.endColumn
+      );
+      nodes.push(exportNode);
+      edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+      edges.push(this.createEdge(parentId, enumNode.id, EdgeKind.Exports));
+    }
 
     // Ребра decorates от перечисления к типам аннотаций
     for (const decText of decorators) {
@@ -687,6 +920,23 @@ export class JavaExtractor extends ExtractorBase {
     nodes.push(methodNode);
     edges.push(this.createEdge(parentId, methodNode.id, EdgeKind.Contains));
 
+    // Export node для публичных символов
+    const methodVisibility = this.extractVisibility(node);
+    if (methodVisibility === 'public') {
+      const exportNode = this.createNode(
+        filePath,
+        NodeKind.Export,
+        name,
+        methodNode.startLine,
+        methodNode.startLine,
+        methodNode.startColumn,
+        methodNode.endColumn
+      );
+      nodes.push(exportNode);
+      edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+      edges.push(this.createEdge(parentId, methodNode.id, EdgeKind.Exports));
+    }
+
     // Ребро Returns от метода к типу возвращаемого значения
     if (returnType) {
       edges.push(this.createEdge(methodNode.id, this.nodeId(filePath, NodeKind.Class, returnType, methodNode.startLine), EdgeKind.Returns, { line: methodNode.startLine }));
@@ -766,6 +1016,23 @@ export class JavaExtractor extends ExtractorBase {
     nodes.push(funcNode);
     edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Contains));
 
+    // Export node для публичных символов
+    const ctorVisibility = this.extractVisibility(node);
+    if (ctorVisibility === 'public') {
+      const exportNode = this.createNode(
+        filePath,
+        NodeKind.Export,
+        name,
+        funcNode.startLine,
+        funcNode.startLine,
+        funcNode.startColumn,
+        funcNode.endColumn
+      );
+      nodes.push(exportNode);
+      edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+      edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Exports));
+    }
+
     // Параметры
     const params = node.childForFieldName('parameters');
     if (params) {
@@ -827,6 +1094,23 @@ export class JavaExtractor extends ExtractorBase {
           );
           nodes.push(fieldNode);
           edges.push(this.createEdge(parentId, fieldNode.id, EdgeKind.Contains));
+
+          // Export node для публичных символов
+          const fieldVisibility = this.extractVisibility(node);
+          if (fieldVisibility === 'public') {
+            const exportNode = this.createNode(
+              filePath,
+              NodeKind.Export,
+              name,
+              fieldNode.startLine,
+              fieldNode.startLine,
+              fieldNode.startColumn,
+              fieldNode.endColumn
+            );
+            nodes.push(exportNode);
+            edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+            edges.push(this.createEdge(parentId, fieldNode.id, EdgeKind.Exports));
+          }
         }
       }
       decl = decl.nextSibling;

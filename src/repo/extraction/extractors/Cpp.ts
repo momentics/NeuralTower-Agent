@@ -18,6 +18,8 @@ import {
 import { ExtractorBase } from '../ExtractorBase';
 
 export class CppExtractor extends ExtractorBase {
+  private _moduleId = '';
+
   public getLanguage(): Language {
     return 'cpp';
   }
@@ -76,8 +78,8 @@ export class CppExtractor extends ExtractorBase {
 
       const root = tree.rootNode;
 
-     // Корневой узел — файл, а не модуль
-      const moduleNode = this.createNode(
+     // Корневой узел — файл
+      const fileNode = this.createNode(
         filePath,
         NodeKind.File,
         filePath,
@@ -86,7 +88,22 @@ export class CppExtractor extends ExtractorBase {
         0,
         0
       );
+      nodes.push(fileNode);
+
+      // Модульный узел для C/C++ файлов
+      const moduleNode = this.createNode(
+        filePath,
+        NodeKind.Module,
+        filePath,
+        1,
+        content.split('\n').length,
+        0,
+        0
+      );
       nodes.push(moduleNode);
+      edges.push(this.createEdge(fileNode.id, moduleNode.id, EdgeKind.Contains));
+
+      this._moduleId = moduleNode.id;
       this.processCppNodes(
         root,
         filePath,
@@ -110,7 +127,7 @@ export class CppExtractor extends ExtractorBase {
     return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
   }
 
-  /** Двойной парсинг для .h файлов: C сначала, затем C++. */
+  /** Двойной парсинг для .h файлов: C сначала, затем C++ при большом числе ошибок. */
   protected extractWithDualGrammar(
     p: any,
     cppGrammar: any,
@@ -126,40 +143,56 @@ export class CppExtractor extends ExtractorBase {
     p.setLanguage(cGrammar.C);
     const cTree = p.parse(content);
 
-    if (cTree && !cTree.rootNode.hasError) {
-      const root = cTree.rootNode;
-      // Корневой узел — файл
-      const moduleNode = this.createNode(
-        filePath,
-        NodeKind.File,
-        filePath,
-        1,
-        content.split('\n').length,
-        0,
-        0
-      );
-      nodes.push(moduleNode);
+    if (cTree) {
+      const cErrorCount = this.countParseErrors(cTree.rootNode);
+
+      if (cErrorCount < this.getErrorThreshold(content)) {
+        const root = cTree.rootNode;
+        const fileNode = this.createNode(
+          filePath,
+          NodeKind.File,
+          filePath,
+          1,
+          content.split('\n').length,
+          0,
+          0
+        );
+        nodes.push(fileNode);
+
+        const moduleNode = this.createNode(
+          filePath,
+          NodeKind.Module,
+          filePath,
+          1,
+          content.split('\n').length,
+          0,
+          0
+        );
+        nodes.push(moduleNode);
+     edges.push(this.createEdge(fileNode.id, moduleNode.id, EdgeKind.Contains));
+
+      this._moduleId = moduleNode.id;
       this.processCppNodes(
-        root,
-        filePath,
-        content,
-        moduleNode.id,
-        nodes,
-        edges,
-        unresolvedRefs,
-        errors
-      );
-      return true;
+          root,
+          filePath,
+          content,
+          moduleNode.id,
+          nodes,
+          edges,
+          unresolvedRefs,
+          errors
+        );
+        return true;
+      }
     }
 
-    // Откат на C++
+    // Откат на C++ — много ошибок в C парсинге или парсинг не удался
     p.setLanguage(cppGrammar.CPP);
     const cppTree = p.parse(content);
 
-    if (cppTree && !cppTree.rootNode.hasError) {
+    if (cppTree) {
       const root = cppTree.rootNode;
-      // Корневой узел — файл
-      const moduleNode = this.createNode(
+      const fileNode = this.createNode(
         filePath,
         NodeKind.File,
         filePath,
@@ -168,7 +201,21 @@ export class CppExtractor extends ExtractorBase {
         0,
         0
       );
+      nodes.push(fileNode);
+
+      const moduleNode = this.createNode(
+        filePath,
+        NodeKind.Module,
+        filePath,
+        1,
+        content.split('\n').length,
+        0,
+        0
+      );
       nodes.push(moduleNode);
+      edges.push(this.createEdge(fileNode.id, moduleNode.id, EdgeKind.Contains));
+
+      this._moduleId = moduleNode.id;
       this.processCppNodes(
         root,
         filePath,
@@ -189,6 +236,24 @@ export class CppExtractor extends ExtractorBase {
       'parse_error'
     ));
     return false;
+  }
+
+  /** Подсчитывает количество узлов ошибок в AST. */
+  protected countParseErrors(node: any): number {
+    let count = 0;
+    if (node.isError) count++;
+    let child = node.firstChild;
+    while (child) {
+      count += this.countParseErrors(child);
+      child = child.nextSibling;
+    }
+    return count;
+  }
+
+  /** Возвращает порог ошибок для отката на C++ (10% строк, минимум 3). */
+  protected getErrorThreshold(content: string): number {
+    const lineCount = content.split('\n').length;
+    return Math.max(3, Math.floor(lineCount * 0.1));
   }
 
   /** Обрабатывает узлы AST для C/C++. */
@@ -348,6 +413,26 @@ export class CppExtractor extends ExtractorBase {
     nodes.push(classNode);
     edges.push(this.createEdge(parentId, classNode.id, EdgeKind.Contains));
 
+    // Экспорт для классов верхнего уровня
+    if (parentId === this._moduleId) {
+      const exportNode = this.createNode(
+        filePath,
+        NodeKind.Export,
+        name,
+        node.startPosition.row + 1,
+        node.endPosition.row + 1,
+        node.startPosition.column,
+        node.endPosition.column
+      );
+      nodes.push(exportNode);
+      edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+      edges.push(this.createEdge(exportNode.id, classNode.id, EdgeKind.Contains));
+      edges.push(this.createEdge(parentId, classNode.id, EdgeKind.Exports, {
+        line: node.startPosition.row + 1,
+        column: node.startPosition.column,
+      }));
+    }
+
     // Параметры шаблона
     const templateParams = node.childForFieldName('type_parameters');
     if (templateParams) {
@@ -375,6 +460,16 @@ export class CppExtractor extends ExtractorBase {
             baseNameNode.startPosition.column,
             filePath
           ));
+
+          // Ребро Implements если базовый класс имеет чистые виртуальные методы
+          const baseClassNode = this.findClassInTree(node, baseName);
+          if (baseClassNode && this.hasPureVirtualMethods(baseClassNode)) {
+            edges.push(this.createEdge(classNode.id, this.nodeId(filePath, NodeKind.Class, baseName, 0), EdgeKind.Implements, {
+              metadata: { referenceName: baseName },
+              line: baseNameNode.startPosition.row + 1,
+              column: baseNameNode.startPosition.column,
+            }));
+          }
         }
         base = base.nextSibling;
       }
@@ -425,6 +520,26 @@ export class CppExtractor extends ExtractorBase {
     );
     nodes.push(structNode);
     edges.push(this.createEdge(parentId, structNode.id, EdgeKind.Contains));
+
+    // Экспорт для структур верхнего уровня
+    if (parentId === this._moduleId) {
+      const exportNode = this.createNode(
+        filePath,
+        NodeKind.Export,
+        name,
+        node.startPosition.row + 1,
+        node.endPosition.row + 1,
+        node.startPosition.column,
+        node.endPosition.column
+      );
+      nodes.push(exportNode);
+      edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+      edges.push(this.createEdge(exportNode.id, structNode.id, EdgeKind.Contains));
+      edges.push(this.createEdge(parentId, structNode.id, EdgeKind.Exports, {
+        line: node.startPosition.row + 1,
+        column: node.startPosition.column,
+      }));
+    }
 
     // Параметры шаблона
     const templateParams = node.childForFieldName('type_parameters');
@@ -492,6 +607,7 @@ export class CppExtractor extends ExtractorBase {
     const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}::${name}` : name;
     const isVirtual = this.hasSpecifier(node, 'virtual');
     const isStatic = this.hasSpecifier(node, 'static');
+    const isOverride = this.hasSpecifier(node, 'override');
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
     const signature = this.extractFunctionSignature(node, content);
     const returnType = this.extractReturnType(node);
@@ -519,6 +635,27 @@ export class CppExtractor extends ExtractorBase {
     nodes.push(funcNode);
     edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Contains));
 
+    // Экспорт для функций верхнего уровня или с extern "C"
+    const isExternC = this.hasExternC(node);
+    if (parentId === this._moduleId || isExternC) {
+      const exportNode = this.createNode(
+        filePath,
+        NodeKind.Export,
+        name,
+        node.startPosition.row + 1,
+        node.endPosition.row + 1,
+        node.startPosition.column,
+        node.endPosition.column
+      );
+      nodes.push(exportNode);
+      edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+      edges.push(this.createEdge(exportNode.id, funcNode.id, EdgeKind.Contains));
+      edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Exports, {
+        line: node.startPosition.row + 1,
+        column: node.startPosition.column,
+      }));
+    }
+
     if (funcNode.returnType) {
       // Ребро Returns от функции к типу возвращаемого значения
       edges.push(this.createEdge(funcNode.id, this.nodeId(filePath, NodeKind.Variable, funcNode.returnType, funcNode.startLine), EdgeKind.Returns, { line: funcNode.startLine }));
@@ -540,6 +677,23 @@ export class CppExtractor extends ExtractorBase {
     const body = node.childForFieldName('body');
     if (body) {
       this.processFunctionBody(body, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors);
+    }
+
+    // Ребро Overrides для методов с override
+    if (isOverride && insideClass) {
+      edges.push(this.createEdge(funcNode.id, this.nodeId(filePath, NodeKind.Method, name, 0), EdgeKind.Overrides, {
+        metadata: { referenceName: name, qualifiedName },
+        line: funcNode.startLine,
+        column: funcNode.startColumn,
+      }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        funcNode.id,
+        name,
+        EdgeKind.Overrides,
+        funcNode.startLine,
+        funcNode.startColumn,
+        filePath
+      ));
     }
   }
 
@@ -788,6 +942,26 @@ export class CppExtractor extends ExtractorBase {
     );
     nodes.push(enumNode);
     edges.push(this.createEdge(parentId, enumNode.id, EdgeKind.Contains));
+
+    // Экспорт для перечислений верхнего уровня
+    if (parentId === this._moduleId) {
+      const exportNode = this.createNode(
+        filePath,
+        NodeKind.Export,
+        name,
+        node.startPosition.row + 1,
+        node.endPosition.row + 1,
+        node.startPosition.column,
+        node.endPosition.column
+      );
+      nodes.push(exportNode);
+      edges.push(this.createEdge(parentId, exportNode.id, EdgeKind.Contains));
+      edges.push(this.createEdge(exportNode.id, enumNode.id, EdgeKind.Contains));
+      edges.push(this.createEdge(parentId, enumNode.id, EdgeKind.Exports, {
+        line: node.startPosition.row + 1,
+        column: node.startPosition.column,
+      }));
+    }
 
     // Члены перечисления
     const body = node.childForFieldName('body');
@@ -1217,6 +1391,8 @@ export class CppExtractor extends ExtractorBase {
     while (child) {
       if (child.type === 'call_expression') {
         this.processCallExpression(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+      } else if (child.type === 'new_expression') {
+        this.processNewExpression(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       } else if (child.type === 'throw_statement') {
         this.processThrowStatement(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       } else if (child.type === 'try_statement') {
@@ -1234,6 +1410,8 @@ export class CppExtractor extends ExtractorBase {
         while (expr) {
           if (expr.type === 'call_expression') {
             this.processCallExpression(expr, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
+          } else if (expr.type === 'new_expression') {
+            this.processNewExpression(expr, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
           }
           expr = expr.nextSibling;
         }
@@ -1284,6 +1462,55 @@ export class CppExtractor extends ExtractorBase {
         parentId,
         funcName,
         EdgeKind.Calls,
+        line,
+        column,
+        filePath
+      ));
+    }
+  }
+
+  /** Обрабатывает выражение new — создаёт ребро Instantiates. */
+  protected processNewExpression(
+    node: any,
+    filePath: string,
+    content: string,
+    parentId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    errors: IExtractionError[]
+  ): void {
+    const typeNode = node.childForFieldName('type');
+    if (!typeNode) return;
+
+    const line = node.startPosition.row + 1;
+    const column = node.startPosition.column;
+
+    let className: string | undefined;
+    if (typeNode.type === 'type_identifier') {
+      className = typeNode.text;
+    } else if (typeNode.type === 'scope_resolution') {
+      const name = typeNode.childForFieldName('name');
+      if (name) {
+        className = name.text;
+      }
+    } else if (typeNode.type === 'template_type') {
+      const name = typeNode.childForFieldName('name');
+      if (name) {
+        className = name.text;
+      }
+    }
+
+    if (className) {
+      edges.push(this.createEdge(parentId, this.nodeId(filePath, NodeKind.Class, className, 0), EdgeKind.Instantiates, {
+        metadata: { referenceName: className },
+        line,
+        column,
+      }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        parentId,
+        className,
+        EdgeKind.Instantiates,
         line,
         column,
         filePath
@@ -1484,6 +1711,80 @@ export class CppExtractor extends ExtractorBase {
         }
       }
       child = child.nextSibling;
+    }
+    return false;
+  }
+
+  /** Проверяет, есть ли чистые виртуальные методы (= 0). */
+  protected hasPureVirtualMethods(node: any): boolean {
+    const body = node.childForFieldName('body');
+    if (!body) return false;
+
+    let child = body.firstChild;
+    while (child) {
+      if (child.type === 'function_definition') {
+        if (this.hasSpecifier(child, 'virtual')) {
+          const declarator = child.childForFieldName('declarator');
+          if (declarator && declarator.type === 'function_declarator') {
+            // Проверяем, есть ли = 0 в declarator
+            let dchild = declarator.firstChild;
+            while (dchild) {
+              if (dchild.type === 'pure_virtual_specifier') {
+                return true;
+              }
+              dchild = dchild.nextSibling;
+            }
+          }
+        }
+      }
+      child = child.nextSibling;
+    }
+    return false;
+  }
+
+  /** Ищет определение класса в AST, начиная с корневого узла. */
+  protected findClassInTree(node: any, name: string): any | null {
+    // Находим корневой узел
+    let root = node;
+    while (root.parent) {
+      root = root.parent;
+    }
+
+    // Рекурсивный поиск
+    const search = (n: any): any | null => {
+      if (!n) return null;
+      if (n.type === 'class_specifier') {
+        const nameNode = n.childForFieldName('name');
+        if (nameNode && nameNode.text === name) {
+          return n;
+        }
+      }
+      let child = n.firstChild;
+      while (child) {
+        const found = search(child);
+        if (found) return found;
+        child = child.nextSibling;
+      }
+      return null;
+    };
+
+    return search(root);
+  }
+
+  /** Проверяет, есть ли extern "C" linkage у функции. */
+  protected hasExternC(node: any): boolean {
+    let cur = node;
+    while (cur) {
+      if (cur.type === 'extern_always_decl') {
+        let child = cur.firstChild;
+        while (child) {
+          if (child.type === 'string_literal' && child.text === '"C"') {
+            return true;
+          }
+          child = child.nextSibling;
+        }
+      }
+      cur = cur.parent;
     }
     return false;
   }

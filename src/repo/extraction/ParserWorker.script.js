@@ -51,14 +51,13 @@ async function getGrammarVariant(language, filePath) {
     }
   }
 
-  if (language === 'cpp') {
-    if (ext === '.h') {
-      try {
-        const cPkg = await import('tree-sitter-c');
-        return cPkg.default || cPkg;
-      } catch {
-        return loadGrammar('cpp');
-      }
+  if (ext === '.h' && (language === 'c' || language === 'cpp')) {
+    // Для .h файлов сначала пробуем C грамматику, затем C++
+    try {
+      const cPkg = await import('tree-sitter-c');
+      return cPkg.default || cPkg;
+    } catch {
+      return loadGrammar('cpp');
     }
   }
 

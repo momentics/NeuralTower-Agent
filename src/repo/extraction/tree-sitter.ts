@@ -19,6 +19,7 @@ function ensureExtractors(): void {
     EXTRACTOR_MAP.set('rust', new RustExtractor());
     EXTRACTOR_MAP.set('java', new JavaExtractor());
     EXTRACTOR_MAP.set('cpp', new CppExtractor());
+    EXTRACTOR_MAP.set('c', new CppExtractor());
     EXTRACTOR_MAP.set('csharp', new CSharpExtractor());
     EXTRACTOR_MAP.set('default', new DefaultExtractor());
   }

@@ -60,8 +60,8 @@ export class CSharpExtractor extends ExtractorBase {
         return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
 
-      // Корневой узел — файл, а не модуль
-      const moduleNode = this.createNode(
+      // Корневой узел — файл
+      const fileNode = this.createNode(
         filePath,
         NodeKind.File,
         filePath,
@@ -70,7 +70,20 @@ export class CSharpExtractor extends ExtractorBase {
         0,
         0
       );
+      nodes.push(fileNode);
+
+      // P1-12a: Module node for C# files
+      const moduleNode = this.createNode(
+        filePath,
+        NodeKind.Module,
+        filePath,
+        1,
+        content.split('\n').length,
+        0,
+        0
+      );
       nodes.push(moduleNode);
+      edges.push(this.createEdge(fileNode.id, moduleNode.id, EdgeKind.Contains));
 
       // Обработка верхнеуровневых объявлений
       this.processCsNodes(
@@ -83,6 +96,9 @@ export class CSharpExtractor extends ExtractorBase {
         unresolvedRefs,
         errors
       );
+
+      // P1-12c: Export processing for public symbols
+      this.processExports(nodes, edges, moduleNode.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(
@@ -169,6 +185,10 @@ export class CSharpExtractor extends ExtractorBase {
 
       case 'namespace_declaration':
         this.processNamespaceDeclaration(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
+        break;
+
+      case 'local_function_statement':
+        this.processLocalFunctionStatement(node, filePath, content, parentId, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
         break;
 
       case 'type_argument_list':
@@ -1019,6 +1039,59 @@ const fieldNode = this.createNode(
     }
   }
 
+  /** P1-12b: Обрабатывает локальную функцию верхнего уровня (C# 9+). */
+  protected processLocalFunctionStatement(
+    node: any,
+    filePath: string,
+    content: string,
+    parentId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    errors: IExtractionError[],
+    qualifiedNamePrefix: string
+  ): void {
+    const nameNode = node.childForFieldName('name');
+    if (!nameNode) return;
+
+    const name = nameNode.text;
+    const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}.${name}` : name;
+    const decorators = this.extractAttributes(node, content);
+    const docstring = this.extractDocstring(content, node.startPosition.row + 1);
+    const signature = this.extractMethodSignature(node, content);
+    const returnType = this.extractReturnType(node);
+
+    const funcNode = this.createNode(
+      filePath,
+      NodeKind.Function,
+      name,
+      node.startPosition.row + 1,
+      node.endPosition.row + 1,
+      node.startPosition.column,
+      node.endPosition.column,
+      {
+        qualifiedName,
+        docstring,
+        signature,
+        decorators,
+        returnType,
+        visibility: this.extractVisibility(node),
+      }
+    );
+    nodes.push(funcNode);
+    edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Contains));
+
+    const params = node.childForFieldName('parameters');
+    if (params) {
+      this.processParameters(params, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors);
+    }
+
+    const body = node.childForFieldName('body');
+    if (body) {
+      this.processFunctionBody(body, filePath, content, funcNode.id, nodes, edges, unresolvedRefs, errors);
+    }
+  }
+
   /** Обрабатывает список аргументов типов (генерики). */
   protected processTypeArgumentList(
     node: any,
@@ -1339,5 +1412,30 @@ if (child.type === 'type_parameter') {
       return retType.text;
     }
     return undefined;
+  }
+
+  /** P1-12c: Создаёт узлы Export для публичных символов. */
+  protected processExports(
+    nodes: INode[],
+    edges: IEdge[],
+    moduleNodeId: string
+  ): void {
+    for (const node of nodes) {
+      if (node.kind === NodeKind.Export) continue;
+      if (node.metadata?.visibility === 'public') {
+        const exportNode = this.createNode(
+          node.filePath,
+          NodeKind.Export,
+          node.name,
+          node.startLine,
+          node.endLine,
+          node.startColumn,
+          node.endColumn
+        );
+        nodes.push(exportNode);
+        edges.push(this.createEdge(moduleNodeId, exportNode.id, EdgeKind.Contains));
+        edges.push(this.createEdge(exportNode.id, node.id, EdgeKind.Exports));
+      }
+    }
   }
 }

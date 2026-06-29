@@ -342,7 +342,8 @@ public extract(
     edges: IEdge[],
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[],
-    qualifiedNamePrefix: string
+    qualifiedNamePrefix: string,
+    traitName: string | null = null
   ): void {
     const nameNode = node.childForFieldName('name');
     if (!nameNode) return;
@@ -376,6 +377,23 @@ public extract(
     );
     nodes.push(funcNode);
     edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Contains));
+
+    // Ребро Overrides: метод impl Trait для Type переопределяет метод trait
+    if (traitName) {
+      edges.push(this.createEdge(funcNode.id, this.nodeId(filePath, NodeKind.Method, name, 0), EdgeKind.Overrides, {
+        metadata: { referenceName: `${traitName}::${name}` },
+        line: funcNode.startLine,
+        column: funcNode.startColumn,
+      }));
+      unresolvedRefs.push(this.createUnresolvedRef(
+        funcNode.id,
+        `${traitName}::${name}`,
+        EdgeKind.Overrides,
+        funcNode.startLine,
+        funcNode.startColumn,
+        filePath
+      ));
+    }
 
     // Ребро Returns от функции к типу возвращаемого значения
     if (returnType) {
@@ -559,7 +577,8 @@ public extract(
       let child = body.firstChild;
       while (child) {
         if (child.type === 'function_item') {
-          this.processFunctionItem(child, filePath, content, implNode.id, nodes, edges, unresolvedRefs, errors, `${qualifiedNamePrefix}${typeName}`);
+          const traitName = forType ? forType.text : null;
+          this.processFunctionItem(child, filePath, content, implNode.id, nodes, edges, unresolvedRefs, errors, `${qualifiedNamePrefix}${typeName}`, traitName);
         } else if (child.type === 'associated_type') {
           this.processAssociatedType(child, filePath, content, implNode.id, nodes, edges, unresolvedRefs, errors, qualifiedNamePrefix);
         } else if (child.type === 'associated_constant') {
@@ -897,6 +916,92 @@ public extract(
 
     // Обработка импортированных спецификаторов
     this.processUseTree(useTree, filePath, content, importNode.id, nodes, edges, unresolvedRefs, errors, line, column);
+
+    // Группированные use (например, use std::collections::{HashMap, HashSet}) — namespace
+    this.processUseGroupNamespace(useTree, filePath, content, importNode.id, nodes, edges, unresolvedRefs, errors, line, column);
+  }
+
+  /** Создаёт Namespace узел для группированных use. */
+  protected processUseGroupNamespace(
+    node: any,
+    filePath: string,
+    content: string,
+    importNodeId: string,
+    nodes: INode[],
+    edges: IEdge[],
+    unresolvedRefs: IUnresolvedReference[],
+    errors: IExtractionError[],
+    line: number,
+    column: number
+  ): void {
+    if (node.type !== 'use_tree') return;
+
+    // Ищем scoped_identifier (базовый путь) и use_tree_list (группа)
+    let scopedId: any = null;
+    let useTreeList: any = null;
+    let child = node.firstChild;
+    while (child) {
+      if (child.type === 'scoped_identifier') {
+        scopedId = child;
+      } else if (child.type === 'use_tree_list') {
+        useTreeList = child;
+      }
+      child = child.nextSibling;
+    }
+
+    if (!scopedId || !useTreeList) return;
+
+    const nsPath = scopedId.text;
+
+    const nsNode = this.createNode(
+      filePath,
+      NodeKind.Namespace,
+      nsPath,
+      line,
+      line,
+      column,
+      scopedId.endPosition.column
+    );
+    nodes.push(nsNode);
+    edges.push(this.createEdge(importNodeId, nsNode.id, EdgeKind.Contains));
+
+    unresolvedRefs.push(this.createUnresolvedRef(
+      nsNode.id,
+      nsPath,
+      EdgeKind.Imports,
+      line,
+      column,
+      filePath
+    ));
+
+    // Ребро References от namespace к каждому элементу группы
+    let item = useTreeList.firstChild;
+    while (item) {
+      if (item.type === 'use_tree') {
+        let inner = item.firstChild;
+        while (inner) {
+          if (inner.type === 'type_identifier' || inner.type === 'identifier') {
+            const itemName = inner.text;
+            edges.push(this.createEdge(nsNode.id, this.nodeId(filePath, NodeKind.Import, itemName, line), EdgeKind.References, {
+              metadata: { referenceName: itemName },
+              line,
+              column,
+            }));
+          } else if (inner.type === 'scoped_identifier') {
+            const nameNode = inner.childForFieldName('name');
+            if (nameNode) {
+              edges.push(this.createEdge(nsNode.id, this.nodeId(filePath, NodeKind.Import, nameNode.text, line), EdgeKind.References, {
+                metadata: { referenceName: nameNode.text },
+                line,
+                column,
+              }));
+            }
+          }
+          inner = inner.nextSibling;
+        }
+      }
+      item = item.nextSibling;
+    }
   }
 
   /** Обрабатывает дерево use. */
@@ -1124,9 +1229,9 @@ public extract(
     const isPub = this.isPublic(node);
     const docstring = this.extractDocstring(content, node.startPosition.row + 1);
 
-    const modNode = this.createNode(
+    const nsNode = this.createNode(
       filePath,
-      NodeKind.Module,
+      NodeKind.Namespace,
       name,
       node.startPosition.row + 1,
       node.endPosition.row + 1,
@@ -1139,15 +1244,15 @@ public extract(
         isExported: isPub,
       }
     );
-    nodes.push(modNode);
-    edges.push(this.createEdge(parentId, modNode.id, EdgeKind.Contains));
+    nodes.push(nsNode);
+    edges.push(this.createEdge(parentId, nsNode.id, EdgeKind.Contains));
 
     // Тело модуля
     const body = node.childForFieldName('body');
     if (body) {
       let child = body.firstChild;
       while (child) {
-        this.processRustNodes(child, filePath, content, modNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName);
+        this.processRustNodes(child, filePath, content, nsNode.id, nodes, edges, unresolvedRefs, errors, qualifiedName);
         child = child.nextSibling;
       }
     }
