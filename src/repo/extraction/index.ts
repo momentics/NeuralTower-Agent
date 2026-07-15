@@ -32,6 +32,7 @@ export { extractFromSource } from './tree-sitter';
 // Языки
 export {
   detectLanguage,
+  loadExtensionOverrides,
   EXTENSION_TO_LANGUAGE,
   isSourceFile,
   isLanguageSupported,
@@ -66,7 +67,7 @@ export { shouldIndexFile, isBinaryFile, isTooLarge, resolveRelativePath } from '
 // Вложенные репозитории
 // =============================================================================
 
-export { discoverEmbeddedRepoRoots } from './EmbeddedRepos';
+export { discoverEmbeddedRepoRoots, findIgnoredEmbeddedRepos, classifyGitDir } from './EmbeddedRepos';
 
 // =============================================================================
 // Детекция фреймворков

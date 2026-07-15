@@ -103,7 +103,7 @@ export function readGitignorePatterns(giPath: string): string[] {
 
     // Двойные !! — negation pattern (отмена игнорирования)
     if (line.startsWith('!!')) {
-      pattern = '!' + line.slice(1);
+      pattern = '!' + line.slice(2);
     }
     // Отрицательные паттерны
     else if (line.startsWith('!')) {

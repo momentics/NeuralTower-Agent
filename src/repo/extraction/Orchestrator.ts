@@ -26,6 +26,8 @@ import {
   IResolvedRef,
   IGraphStats,
   IResolutionContext,
+  IImportMapping,
+  IReExport,
   NodeKind,
   EdgeKind,
   Language,
@@ -39,10 +41,11 @@ import {
   DEFAULT_IGNORE_DIRS,
   DEFAULT_IGNORE_PATTERNS,
 } from '../ntgraph/Types';
-import { detectLanguage } from './LanguageDetector';
+import { detectLanguage, loadExtensionOverrides, isFileLevelOnlyLanguage } from './LanguageDetector';
 import { shouldIndexFile, isBinaryFile, isTooLarge, resolveRelativePath } from './PathValidation';
 import { detectFrameworks } from './FrameworkDetection';
-import { discoverEmbeddedRepoRoots } from './EmbeddedRepos';
+import { discoverEmbeddedRepoRoots, findIgnoredEmbeddedRepos } from './EmbeddedRepos';
+import { readGitignorePatterns, matchGitignorePattern } from './Gitignore';
 import { IExtractor, ExtractorBase } from './ExtractorBase';
 import { CppExtractor } from './extractors/Cpp';
 import { TypeScriptExtractor } from './extractors/TypeScript';
@@ -192,7 +195,52 @@ async function scanDirectory(
 }
 
 /**
+ * Обнаруживает вложенные репозитории, включая те, что находятся в gitignored директориях.
+ * Например, vendor/ в Go проектах содержит внешние зависимости с собственными .git.
+ */
+async function discoverAllEmbeddedRepoRoots(rootDir: string): Promise<string[]> {
+  const results = new Set<string>();
+
+  // Стандартный поиск вложенных репозиториев
+  const embedded = await discoverEmbeddedRepoRoots(rootDir);
+  for (const r of embedded) {
+    results.add(r);
+  }
+
+  // Поиск вложенных репозиториев в gitignored директориях
+  const ignored = findIgnoredEmbeddedRepos(rootDir);
+  for (const r of ignored) {
+    results.add(path.join(rootDir, r));
+  }
+
+  return [...results];
+}
+
+/**
+ * Проверяет, игнорируется ли путь gitignore-паттернами.
+ * Применяет паттерны последовательно: последний совпавший определяет результат.
+ * Негативные паттерны (!) отменяют игнорирование.
+ */
+function isIgnoredByGitignore(relativePath: string, patterns: string[]): boolean {
+  let ignored = false;
+  for (const pattern of patterns) {
+    const isNegation = pattern.startsWith('!');
+    if (isNegation) {
+      // Негативный паттерн отменяет игнорирование
+      const actualPattern = pattern.slice(1);
+      if (matchGitignorePattern(relativePath, actualPattern)) {
+        ignored = false;
+      }
+    } else if (matchGitignorePattern(relativePath, pattern)) {
+      ignored = true;
+    }
+  }
+  return ignored;
+}
+
+/**
  * Рекурсивный обход файловой системы для проектов без git.
+ * Поддерживает symlink cycle detection и per-directory .gitignore.
  */
 async function walkDirectory(
   rootDir: string,
@@ -203,12 +251,35 @@ async function walkDirectory(
   ignorePatterns: string[],
   onProgress?: (progress: IIndexProgress) => void,
   signal?: AbortSignal,
+  visitedDirs: Set<string> = new Set(),
+  accumulatedGitignorePatterns: string[] = [],
 ): Promise<void> {
+  // Symlink cycle detection — проверяем realpath
+  let realDir: string;
+  try {
+    realDir = await fsp.realpath(currentDir);
+  } catch {
+    return;
+  }
+
+  if (visitedDirs.has(realDir)) return;
+  visitedDirs.add(realDir);
+
   let entries: fs.Dirent[];
   try {
     entries = await fsp.readdir(currentDir, { withFileTypes: true });
   } catch {
     return;
+  }
+
+  // Читаем .gitignore в текущей директории и добавляем паттерны
+  const currentGitignorePatterns: string[] = [...accumulatedGitignorePatterns];
+  const gitignorePath = path.join(currentDir, '.gitignore');
+  try {
+    const patterns = readGitignorePatterns(gitignorePath);
+    currentGitignorePatterns.push(...patterns);
+  } catch {
+    // .gitignore не найден — пропускаем
   }
 
   for (const entry of entries) {
@@ -221,18 +292,13 @@ async function walkDirectory(
 
     if (entry.isDirectory()) {
       if (ignoreDirs.has(entry.name)) continue;
-      let skip = false;
-      for (const pattern of ignorePatterns) {
-        if (relativePath.includes(pattern)) {
-          skip = true;
-          break;
-        }
-      }
-      if (skip) continue;
-      await walkDirectory(rootDir, fullPath, files, countRef, ignoreDirs, ignorePatterns, onProgress, signal);
+      if (isIgnoredByGitignore(relativePath + '/', currentGitignorePatterns)) continue;
+      await walkDirectory(rootDir, fullPath, files, countRef, ignoreDirs, ignorePatterns, onProgress, signal, visitedDirs, currentGitignorePatterns);
     } else if (entry.isFile()) {
       if (!isSourceFile(relativePath)) continue;
       if (!shouldIndexFile(relativePath, ignoreDirs, ignorePatterns)) continue;
+
+      if (isIgnoredByGitignore(relativePath, currentGitignorePatterns)) continue;
 
       files.push(relativePath);
       countRef++;
@@ -392,6 +458,9 @@ export class ExtractionOrchestrator {
     this._detectedFrameworks = null;
 
     try {
+      // Загрузка кастомных маппингов расширений из ntgraph.json
+      loadExtensionOverrides(this.rootDir);
+
       // Фаза 1: Сканирование файлов
       onProgress?.({ phase: 'scanning', current: 0, total: 0, file: '', durationMs: 0 });
 
@@ -508,6 +577,47 @@ export class ExtractionOrchestrator {
 
           // Определение языка
           const language = detectLanguage(filePath, content);
+
+          // Языки только на уровне файла (yaml, properties, xml) — создаём file-узел
+          if (isFileLevelOnlyLanguage(language)) {
+            const fileBasename = path.basename(filePath);
+            const lines = content.split('\n');
+            const endLine = lines.length;
+            const endColumn = lines[endLine - 1]?.length ?? 0;
+
+            const fileNode: INode = {
+              id: crypto.createHash('sha256').update(`${filePath}:${NodeKind.File}:${fileBasename}:1`).digest('hex'),
+              kind: NodeKind.File,
+              name: fileBasename,
+              qualifiedName: filePath,
+              filePath,
+              language: language as Language,
+              startLine: 1,
+              endLine,
+              startColumn: 0,
+              endColumn,
+              updatedAt: Date.now(),
+            };
+
+            const fileRecord: IFileRecord = {
+              path: filePath,
+              contentHash: hashContent(content),
+              language: language as Language,
+              size: stats.size,
+              modifiedAt: stats.mtimeMs,
+              indexedAt: Date.now(),
+              nodeCount: 1,
+            };
+
+            await this.db.deleteFile(filePath);
+            this.db.insertNodes([fileNode]);
+            await this.db.upsertFile(fileRecord);
+
+            processed++;
+            filesIndexed++;
+            totalNodes++;
+            continue;
+          }
 
           if (!isLanguageSupported(language)) {
             processed++;
@@ -946,7 +1056,7 @@ await this.storeExtractionResult(fileRecord, result);
     return { resolved, unresolved, durationMs: 0 };
   }
 
-/**
+  /**
     * Статистика графа.
     *
     * Запрашивает данные из БД: количество узлов, рёбер, файлов,
@@ -954,6 +1064,251 @@ await this.storeExtractionResult(fileRecord, result);
     */
   async getStats(): Promise<IGraphStats> {
     return this.db.getStats();
+  }
+
+  /**
+   * Batch-разрешение неразрешённых ссылок с persist.
+   *
+   * Алгоритм:
+   * 1. Получаем неразрешённые ссылки пачками по batchSize
+   * 2. Разрешаем каждую ссылку через resolveOne
+   * 3. Создаём рёбра из разрешённых ссылок
+   * 4. Вставляем рёбра в БД
+   * 5. Удаляем разрешённые ссылки из unresolved_refs
+   * 6. Yield для event loop между пачками
+   * 7. После всех пачек удаляем неразрешимые ссылки
+   * 8. Вызываем synthesizeCallbackEdges
+   */
+  async resolveAndPersistBatched(
+    onProgress?: (resolved: number, total: number) => void,
+    batchSize: number = 5000,
+  ): Promise<IResolutionResult> {
+    const resolved: IResolvedRef[] = [];
+    const unresolved: IUnresolvedReference[] = [];
+    const startTime = Date.now();
+
+    let offset = 0;
+    let prevRemaining = Infinity;
+
+    while (true) {
+      const batch = this.db.getUnresolvedReferencesBatch(offset, batchSize);
+      if (batch.length === 0) break;
+
+      const batchResolved: IResolvedRef[] = [];
+      const batchUnresolved: IUnresolvedReference[] = [];
+
+      for (const ref of batch) {
+        const r = this.resolveOne(ref);
+        if (r) {
+          batchResolved.push(r);
+        } else {
+          batchUnresolved.push(ref);
+        }
+
+        onProgress?.(resolved.length + batchResolved.length, batch.length + offset);
+      }
+
+      // Создаём рёбра из разрешённых ссылок
+      const edges = this.createEdges(batchResolved);
+      if (edges.length > 0) {
+        this.db.insertEdges(edges);
+      }
+
+      // Удаляем разрешённые ссылки из unresolved_refs
+      if (batchResolved.length > 0) {
+        this.db.deleteSpecificResolvedReferences(
+          batchResolved.map(r => r.original),
+        );
+      }
+
+      resolved.push(...batchResolved);
+      unresolved.push(...batchUnresolved);
+
+      // Yield для event loop
+      await yieldToEventLoop();
+
+      offset += batchSize;
+
+      // Защита от бесконечного цикла
+      const remaining = this.db.getUnresolvedReferencesCount();
+      if (remaining >= prevRemaining) break;
+      prevRemaining = remaining;
+    }
+
+    // Вызываем synthesizeCallbackEdges
+    try {
+      this.synthesizeCallbackEdges();
+    } catch {
+      // Синтез добавочный — ошибки игнорируем
+    }
+
+    return {
+      resolved,
+      unresolved,
+      durationMs: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Разрешает одну неразрешённую ссылку.
+   */
+  private resolveOne(ref: IUnresolvedReference): IResolvedRef | null {
+    // Попытка разрешения по имени
+    const candidates = this.db.getNodesByName(ref.referenceName);
+    if (candidates.length > 0) {
+      const best = this.selectBestCandidate(candidates, ref);
+      if (best) {
+        return {
+          original: ref,
+          targetNodeId: best.id,
+          confidence: 0.9,
+          provenance: 'heuristic',
+        };
+      }
+    }
+
+    // Попытка разрешения по квалифицированному имени
+    const qualifiedCandidates = this.db.getNodesByQualifiedNameExact(ref.referenceName);
+    if (qualifiedCandidates.length > 0) {
+      return {
+        original: ref,
+        targetNodeId: qualifiedCandidates[0]!.id,
+        confidence: 0.95,
+        provenance: 'resolver',
+      };
+    }
+
+    // Попытка разрешения по нижнему регистру имени
+    const lowerCandidates = this.db.getNodesByLowerName(ref.referenceName.toLowerCase());
+    if (lowerCandidates.length > 0) {
+      return {
+        original: ref,
+        targetNodeId: lowerCandidates[0]!.id,
+        confidence: 0.85,
+        provenance: 'heuristic',
+      };
+    }
+
+    return null;
+  }
+
+  /**
+   * Создаёт рёбра из разрешённых ссылок.
+   */
+  private createEdges(resolved: IResolvedRef[]): IEdge[] {
+    const edges: IEdge[] = [];
+
+    for (const r of resolved) {
+      const edgeKind = this.resolveEdgeKind(r.original.referenceKind);
+      edges.push({
+        source: r.original.fromNodeId,
+        target: r.targetNodeId,
+        kind: edgeKind,
+        provenance: 'heuristic',
+      });
+    }
+
+    return edges;
+  }
+
+  /**
+   * Синтезирует callback-рёбра — ребра динамической диспетчеризации.
+   *
+   * Ищет паттерны динамической диспетчеризации:
+   * - callback-регистрация: addEventListener, on, subscribe, then, catch
+   * - event-emitter: emit, dispatch
+   * - React re-render: useEffect, useMemo, useCallback
+   * - Vue handler: @click, @input
+   */
+ private synthesizeCallbackEdges(): void {
+     const callbackPatterns = [
+       'addEventListener', 'on', 'subscribe', 'then', 'catch',
+       'emit', 'dispatch', 'useEffect', 'useMemo', 'useCallback',
+     ];
+
+     const edgesToInsert: IEdge[] = [];
+
+     for (const pattern of callbackPatterns) {
+       const nodes = this.db.getNodesByName(pattern);
+       for (const node of nodes) {
+         const calls = this.db.getOutgoingEdges(node.id, ['calls']);
+         for (const call of calls) {
+           const target = this.db.getNodeById(call.target);
+           if (!target) continue;
+
+           edgesToInsert.push({
+             source: node.id,
+             target: target.id,
+             kind: 'references',
+             metadata: { fnRef: true, dispatchType: pattern },
+             provenance: 'heuristic',
+           });
+         }
+       }
+     }
+
+     if (edgesToInsert.length > 0) {
+       this.db.insertEdges(edgesToInsert);
+     }
+   }
+
+  /**
+   * Получает маппинги импорта для файла.
+   *
+   * Возвращает массив IImportMapping, описывающих связи
+   * между импортированными именами и их целевыми файлами.
+   */
+  private getImportMappings(filePath: string): IImportMapping[] {
+    const importNodes = this.db.getNodesByKind(NodeKind.Import);
+    const mappings: IImportMapping[] = [];
+
+    for (const imp of importNodes) {
+      if (imp.filePath !== filePath) continue;
+
+      // Ищем исходящие imports-рёбра
+      const importEdges = this.db.getOutgoingEdges(imp.id, ['imports']);
+      for (const edge of importEdges) {
+        const target = this.db.getNodeById(edge.target);
+        if (target) {
+          mappings.push({
+            sourcePath: filePath,
+            sourceName: imp.name,
+            targetPath: target.filePath,
+            targetName: target.name,
+            language: imp.language,
+          });
+        }
+      }
+    }
+
+    return mappings;
+  }
+
+  /**
+   * Получает ре-экспорты для файла.
+   *
+   * Возвращает массив IReExport, описывающих символы,
+   * ре-экспортируемые из данного файла.
+   */
+  private getReExports(filePath: string): IReExport[] {
+    const exportNodes = this.db.getNodesByKind(NodeKind.Export);
+    const reExports: IReExport[] = [];
+
+    for (const exp of exportNodes) {
+      if (exp.filePath !== filePath) continue;
+
+      // Ищем исходящие exports-рёбра
+      const exportEdges = this.db.getOutgoingEdges(exp.id, ['exports']);
+      for (const edge of exportEdges) {
+        reExports.push({
+          sourcePath: filePath,
+          sourceName: exp.name,
+          language: exp.language,
+        });
+      }
+    }
+
+    return reExports;
   }
 
   /**
@@ -1295,17 +1650,17 @@ await this.storeExtractionResult(fileRecord, result);
     return result;
   }
 
-  /**
-    * Построение контекста разрешения для детекции фреймворков.
-    *
-    * Создаёт объект, реализующий IResolutionContext, на основе списка файлов.
-    */
+ /**
+     * Построение контекста разрешения для детекции фреймворков.
+     *
+     * Создаёт объект, реализующий IResolutionContext, на основе списка файлов.
+     */
   buildDetectionContext(files: string[]): IResolutionContext {
     return {
       getNodesByFile: (filePath: string) => this.db.getNodesByFile(filePath),
       getNodesByName: (name: string) => this.db.getNodesByName(name),
-      getImportMappings: (_filePath: string) => [],
-      getReExports: (_filePath: string) => [],
+      getImportMappings: (filePath: string) => this.getImportMappings(filePath),
+      getReExports: (filePath: string) => this.getReExports(filePath),
       getNodeById: (id: string) => this.db.getNodeById(id),
       getNodesByKind: (kind: NodeKind) => this.db.getNodesByKind(kind),
       getNodesByQualifiedName: (qualifiedName: string) => this.db.getNodesByQualifiedNameExact(qualifiedName),
@@ -1326,7 +1681,13 @@ await this.storeExtractionResult(fileRecord, result);
       },
       getIncomingEdges: (nodeId: string) => this.db.getIncomingEdges(nodeId),
       getOutgoingEdges: (nodeId: string) => this.db.getOutgoingEdges(nodeId),
-      getFileContent: (_filePath: string) => null,
+      getFileContent: (filePath: string): string | null => {
+        try {
+          return fs.readFileSync(path.join(this.rootDir, filePath), 'utf-8');
+        } catch {
+          return null;
+        }
+      },
       getFilePathFromNodeId: (nodeId: string) => {
         const node = this.db.getNodeById(nodeId);
         return node?.filePath ?? null;
@@ -1361,9 +1722,9 @@ await this.storeExtractionResult(fileRecord, result);
   // Внутренние методы
   // ===================================================================
 
-  /**
-   * Извлекает AST из файла через соответствующий экстрактор.
-   */
+ /**
+    * Извлекает AST из файла через соответствующий экстрактор.
+    */
   private stripComments(content: string, language: string): string {
      const lines = content.split('\n');
      if (language === 'typescript' || language === 'cpp' || language === 'csharp' || language === 'java') {
@@ -1388,7 +1749,70 @@ await this.storeExtractionResult(fileRecord, result);
        }
        return result.join('\n');
      }
-     if (language === 'python' || language === 'go' || language === 'rust') {
+     if (language === 'python') {
+       // Python: # комментарии удаляются, но # внутри тройных кавычек
+       // (строки и docstrings) сохраняются. Тройные кавычки пропускаются целиком.
+       const result: string[] = [];
+       let inTripleSingle = false;
+       let inTripleDouble = false;
+
+       for (const line of lines) {
+         // Если мы внутри тройных кавычек — пропускаем строку целиком
+         if (inTripleSingle || inTripleDouble) {
+           const quote = inTripleSingle ? "'''" : '"""';
+           const endIdx = line.indexOf(quote);
+           if (endIdx !== -1) {
+             // Закрывающая тройная кавычка найдена — обрабатываем остаток строки
+             const rest = line.slice(endIdx + 3);
+             const restResult = this.stripPythonLineComments(rest);
+             result.push(restResult);
+             if (inTripleSingle) inTripleSingle = false;
+             else inTripleDouble = false;
+           } else {
+             // Всё содержимое строки — часть тройной кавычки
+             result.push(line);
+           }
+           continue;
+         }
+
+         // Ищем первую тройную кавычку
+         const tripleSingleIdx = line.indexOf("'''");
+         const tripleDoubleIdx = line.indexOf('"""');
+
+         if (tripleSingleIdx !== -1 || tripleDoubleIdx !== -1) {
+           const firstIdx = Math.min(
+             tripleSingleIdx !== -1 ? tripleSingleIdx : Infinity,
+             tripleDoubleIdx !== -1 ? tripleDoubleIdx : Infinity,
+           );
+
+           const quote = firstIdx === tripleSingleIdx ? "'''" : '"""';
+           const closeIdx = line.indexOf(quote, firstIdx + 3);
+
+           if (closeIdx !== -1) {
+             // Открывается и закрывается на той же строке — пропускаем целиком
+             const before = line.slice(0, firstIdx);
+             const after = line.slice(closeIdx + 3);
+             const strippedBefore = this.stripPythonLineComments(before);
+             const strippedAfter = this.stripPythonLineComments(after);
+             result.push(strippedBefore + quote + line.slice(firstIdx + 3, closeIdx) + quote + strippedAfter);
+           } else {
+             // Открывается, но не закрывается — пропускаем до конца строки
+             const before = line.slice(0, firstIdx);
+             const strippedBefore = this.stripPythonLineComments(before);
+             result.push(strippedBefore + line.slice(firstIdx));
+             if (quote === "'''") inTripleSingle = true;
+             else inTripleDouble = true;
+           }
+         } else {
+           // Обычная строка — удаляем # комментарии
+           const stripped = this.stripPythonLineComments(line);
+           result.push(stripped);
+         }
+       }
+
+       return result.join('\n');
+     }
+     if (language === 'go' || language === 'rust') {
        const result: string[] = [];
        for (const line of lines) {
          const t = line.trim();
@@ -1400,6 +1824,13 @@ await this.storeExtractionResult(fileRecord, result);
        return result.join('\n');
      }
      return content;
+   }
+
+   /** Удаляет # комментарии из одной строки Python (вне тройных кавычек). */
+   private stripPythonLineComments(line: string): string {
+     const ci = line.indexOf('#');
+     if (ci !== -1) return line.slice(0, ci);
+     return line;
    }
 
    private extractFile(

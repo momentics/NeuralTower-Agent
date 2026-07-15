@@ -383,7 +383,64 @@ class ParserWorkerManager {
       return result.join('\n');
     }
 
-    if (language === 'python' || language === 'go' || language === 'rust') {
+    if (language === 'python') {
+      // Python: # комментарии удаляются, но # внутри тройных кавычек
+      // (строки и docstrings) сохраняются
+      const result: string[] = [];
+      let inTripleSingle = false;
+      let inTripleDouble = false;
+
+      for (const line of lines) {
+        if (inTripleSingle || inTripleDouble) {
+          const quote = inTripleSingle ? "'''" : '"""';
+          const endIdx = line.indexOf(quote);
+          if (endIdx !== -1) {
+            const rest = line.slice(endIdx + 3);
+            const stripped = this.stripPythonLineComments(rest);
+            result.push(stripped);
+            if (inTripleSingle) inTripleSingle = false;
+            else inTripleDouble = false;
+          } else {
+            result.push(line);
+          }
+          continue;
+        }
+
+        const tripleSingleIdx = line.indexOf("'''");
+        const tripleDoubleIdx = line.indexOf('"""');
+
+        if (tripleSingleIdx !== -1 || tripleDoubleIdx !== -1) {
+          const firstIdx = Math.min(
+            tripleSingleIdx !== -1 ? tripleSingleIdx : Infinity,
+            tripleDoubleIdx !== -1 ? tripleDoubleIdx : Infinity,
+          );
+
+          const quote = firstIdx === tripleSingleIdx ? "'''" : '"""';
+          const closeIdx = line.indexOf(quote, firstIdx + 3);
+
+          if (closeIdx !== -1) {
+            const before = line.slice(0, firstIdx);
+            const after = line.slice(closeIdx + 3);
+            const strippedBefore = this.stripPythonLineComments(before);
+            const strippedAfter = this.stripPythonLineComments(after);
+            result.push(strippedBefore + quote + line.slice(firstIdx + 3, closeIdx) + quote + strippedAfter);
+          } else {
+            const before = line.slice(0, firstIdx);
+            const strippedBefore = this.stripPythonLineComments(before);
+            result.push(strippedBefore + line.slice(firstIdx));
+            if (quote === "'''") inTripleSingle = true;
+            else inTripleDouble = true;
+          }
+        } else {
+          const stripped = this.stripPythonLineComments(line);
+          result.push(stripped);
+        }
+      }
+
+      return result.join('\n');
+    }
+
+    if (language === 'go' || language === 'rust') {
       const result: string[] = [];
 
       for (const line of lines) {
@@ -404,6 +461,13 @@ class ParserWorkerManager {
     }
 
     return content;
+  }
+
+  /** Удаляет # комментарии из одной строки Python (вне тройных кавычек). */
+  private stripPythonLineComments(line: string): string {
+    const ci = line.indexOf('#');
+    if (ci !== -1) return line.slice(0, ci);
+    return line;
   }
 
   async parseFile(
