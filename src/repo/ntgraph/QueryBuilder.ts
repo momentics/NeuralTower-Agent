@@ -28,6 +28,7 @@ import {
   safeJsonParse,
   isLowValueFile,
   parseQuery,
+  splitIdentifierSegments,
 } from './Utils';
 import {
   DOMINANT_FILE_EDGE_THRESHOLD,
@@ -39,6 +40,7 @@ import {
   FILTER_ONLY_OVER_FETCH_MULTIPLIER,
 } from './Types';
 import { FtsSearch } from './FtsSearch';
+import { LRUCache } from './LruCache';
 
 // =============================================================================
 // Типы строк БД
@@ -100,6 +102,8 @@ interface UnresolvedRefRow {
   candidates: string | null;
   file_path: string;
   language: string;
+  status: string;
+  name_tail: string;
 }
 
 // =============================================================================
@@ -113,8 +117,7 @@ export class QueryBuilder {
   private projectNameTokens: Set<string> = new Set();
 
   // LRU-кэш узлов (макс 1000 записей)
-  private nodeCache: Map<string, INode> = new Map();
-  private readonly maxCacheSize = LRU_CACHE_SIZE;
+  private nodeCache: LRUCache<string, INode>;
 
   // Prepared statements (ленивая инициализация)
   private stmts: {
@@ -152,6 +155,7 @@ export class QueryBuilder {
 
   constructor(db: SqliteDatabase) {
     this.db = db;
+    this.nodeCache = new LRUCache<string, INode>(LRU_CACHE_SIZE);
   }
 
   /** Устанавливает токены имени проекта для подавления в поиске. */
@@ -245,7 +249,32 @@ export class QueryBuilder {
       for (const node of nodes) {
         this.insertNode(node);
       }
+      this.insertNameSegmentVocab(nodes);
     })();
+  }
+
+  /** Вставка сегментов имён в словарь. */
+  private insertNameSegmentVocab(nodes: INode[]): void {
+    const stmt = this.db.prepare(
+      'INSERT OR IGNORE INTO name_segment_vocab (segment, name) VALUES (?, ?)'
+    );
+    for (const node of nodes) {
+      const segments = splitIdentifierSegments(node.name);
+      for (const segment of segments) {
+        stmt.run(segment, node.name);
+      }
+    }
+  }
+
+  /** Удаление сегментов имён для узлов файла. */
+  private deleteNameSegmentVocabByFile(filePath: string): void {
+    const nodes = this.getNodesByFile(filePath);
+    if (nodes.length === 0) return;
+    const names = new Set(nodes.map(n => n.name));
+    const stmt = this.db.prepare('DELETE FROM name_segment_vocab WHERE name = ?');
+    for (const name of names) {
+      stmt.run(name);
+    }
   }
 
   /** Обновление узла. */
@@ -320,6 +349,9 @@ export class QueryBuilder {
 
   /** Удаление всех узлов файла и связанных рёбер. */
   deleteNodesByFile(filePath: string): number {
+    // Сначала удаляем сегменты — ДО удаления узлов
+    this.deleteNameSegmentVocabByFile(filePath);
+
     // Сначала удаляем все рёбра, где источник или цель — один из удаляемых узлов
     if (!this.stmts.deleteEdgesByFile) {
       this.stmts.deleteEdgesByFile = this.db.prepare(
@@ -332,7 +364,8 @@ export class QueryBuilder {
       this.stmts.deleteNodesByFile = this.db.prepare('DELETE FROM nodes WHERE file_path = ?');
     }
     // Инвалидация кэша для узлов этого файла
-    for (const [id, node] of this.nodeCache) {
+    const cacheStore = (this.nodeCache as any).store as Map<string, INode>;
+    for (const [id, node] of cacheStore) {
       if (node.filePath === filePath) {
         this.nodeCache.delete(id);
       }
@@ -343,14 +376,9 @@ export class QueryBuilder {
 
   /** Получение узла по ID (с LRU-кэшем). */
   getNodeById(id: string): INode | null {
-    // Проверка кэша
-    if (this.nodeCache.has(id)) {
-      const cached = this.nodeCache.get(id)!;
-      // Touch: перемещаем в конец (LRU)
-      this.nodeCache.delete(id);
-      this.nodeCache.set(id, cached);
-      return cached;
-    }
+    // Проверка кэша (LRUCache.get автоматически обновляет порядок)
+    const cached = this.nodeCache.get(id);
+    if (cached !== undefined) return cached;
 
     if (!this.stmts.getNodeById) {
       this.stmts.getNodeById = this.db.prepare('SELECT * FROM nodes WHERE id = ?');
@@ -368,13 +396,11 @@ export class QueryBuilder {
     const out = new Map<string, INode>();
     if (ids.length === 0) return [];
 
-    // Кэш-хиты
+    // Кэш-хиты (LRUCache.get автоматически обновляет порядок)
     const misses: string[] = [];
     for (const id of ids) {
       const cached = this.nodeCache.get(id);
       if (cached !== undefined) {
-        this.nodeCache.delete(id);
-        this.nodeCache.set(id, cached);
         out.set(id, cached);
       } else {
         misses.push(id);
@@ -419,12 +445,6 @@ export class QueryBuilder {
 
   /** Добавление узла в кэш с вытеснением старейшего. */
   private cacheNode(node: INode): void {
-    if (this.nodeCache.size >= this.maxCacheSize) {
-      const firstKey = this.nodeCache.keys().next().value;
-      if (firstKey) {
-        this.nodeCache.delete(firstKey);
-      }
-    }
     this.nodeCache.set(node.id, node);
   }
 
@@ -1263,5 +1283,8 @@ function rowToUnresolvedRef(row: UnresolvedRefRow): IUnresolvedReference {
     candidates: row.candidates ? safeJsonParse(row.candidates, undefined) : undefined,
     filePath: row.file_path,
     language: row.language as Language,
+    status: row.status as 'pending' | 'failed' | undefined,
+    nameTail: row.name_tail || undefined,
+    rowId: row.id,
   };
 }

@@ -26,6 +26,8 @@ import {
   DATABASE_FILENAME,
   SQLITE_PARAM_CHUNK_SIZE,
 } from './Types';
+import { EXTRACTION_VERSION } from '../extraction/ExtractionVersion';
+import { WalCheckpointValve } from './WalValve';
 import {
   deriveProjectNameTokens,
   normalizePath,
@@ -63,6 +65,7 @@ export class NtGraphDb {
   private _dbPath: string;
   private _fileLock!: FileLock;
   private _mutex = new Mutex();
+  private _walValve: WalCheckpointValve | null = null;
 
   constructor(dbPath: string) {
     this._dbPath = dbPath;
@@ -111,6 +114,30 @@ export class NtGraphDb {
     this._db.runMaintenance();
   }
 
+  /** Включает WAL-клапан для массовой индексации. */
+  enableWalValve(verbose?: boolean): void {
+    this._walValve = new WalCheckpointValve(
+      this._db,
+      undefined,
+      undefined,
+      verbose ? (m: string) => console.log(`[WAL] ${m}`) : undefined
+    );
+    this._walValve.start();
+  }
+
+  /** Отключает WAL-клапан. */
+  disableWalValve(): void {
+    this._walValve?.stop();
+    this._walValve = null;
+  }
+
+  /** Принудительный чекпоинт WAL между фазами. */
+  async foldWalNow(): Promise<void> {
+    if (this._walValve) {
+      await this._walValve.foldNow();
+    }
+  }
+
   /** Применяет PRAGMA в строгом порядке. */
   private applyPragmas(): void {
     this._db.pragma('busy_timeout = 5000');
@@ -147,7 +174,7 @@ export class NtGraphDb {
 
   async insertNode(node: INode): Promise<void> {
     const acquired = await this._fileLock.acquire();
-    if (!acquired) throw new Error('Failed to acquire file lock');
+    if (!acquired) throw new Error('Не удалось захватить файловую блокировку');
     try {
       this._qb.insertNode(node);
     } finally {
@@ -162,7 +189,7 @@ export class NtGraphDb {
   /** Пакетная вставка узлов с FileLock, Mutex, MemoryMonitor и разбиением на чанки. */
   async insertNodesBatch(nodes: INode[]): Promise<void> {
     const acquired = await this._fileLock.acquire();
-    if (!acquired) throw new Error('Failed to acquire file lock');
+    if (!acquired) throw new Error('Не удалось захватить файловую блокировку');
     try {
       const monitor = new MemoryMonitor(512 * 1024 * 1024, () => {
         global.gc?.();
@@ -181,7 +208,7 @@ export class NtGraphDb {
 
   async updateNode(node: INode): Promise<void> {
     const acquired = await this._fileLock.acquire();
-    if (!acquired) throw new Error('Failed to acquire file lock');
+    if (!acquired) throw new Error('Не удалось захватить файловую блокировку');
     try {
       this._qb.updateNode(node);
     } finally {
@@ -191,7 +218,7 @@ export class NtGraphDb {
 
   async deleteNode(id: string): Promise<void> {
     const acquired = await this._fileLock.acquire();
-    if (!acquired) throw new Error('Failed to acquire file lock');
+    if (!acquired) throw new Error('Не удалось захватить файловую блокировку');
     try {
       this._qb.deleteNode(id);
     } finally {
@@ -273,7 +300,7 @@ export class NtGraphDb {
 
   async insertEdge(edge: IEdge): Promise<void> {
     const acquired = await this._fileLock.acquire();
-    if (!acquired) throw new Error('Failed to acquire file lock');
+    if (!acquired) throw new Error('Не удалось захватить файловую блокировку');
     try {
       this._qb.insertEdge(edge);
     } finally {
@@ -288,7 +315,7 @@ export class NtGraphDb {
   /** Пакетная вставка рёбер с FileLock, Mutex и разбиением на чанки. */
   async insertEdgesBatch(edges: IEdge[]): Promise<void> {
     const acquired = await this._fileLock.acquire();
-    if (!acquired) throw new Error('Failed to acquire file lock');
+    if (!acquired) throw new Error('Не удалось захватить файловую блокировку');
     try {
       await this._mutex.withLock(async () => {
         await processInBatches(edges, SQLITE_PARAM_CHUNK_SIZE, async (batch) => {
@@ -322,7 +349,7 @@ export class NtGraphDb {
 
   async upsertFile(file: IFileRecord): Promise<void> {
     const acquired = await this._fileLock.acquire();
-    if (!acquired) throw new Error('Failed to acquire file lock');
+    if (!acquired) throw new Error('Не удалось захватить файловую блокировку');
     try {
       this._qb.upsertFile(file);
     } finally {
@@ -332,7 +359,7 @@ export class NtGraphDb {
 
   async deleteFile(filePath: string): Promise<void> {
     const acquired = await this._fileLock.acquire();
-    if (!acquired) throw new Error('Failed to acquire file lock');
+    if (!acquired) throw new Error('Не удалось захватить файловую блокировку');
     try {
       await this._mutex.withLock(async () => {
         this._qb.deleteFile(filePath);
@@ -487,6 +514,12 @@ export class NtGraphDb {
   /** Текущая версия схемы. */
   getSchemaVersion(): number {
     return CURRENT_SCHEMA_VERSION;
+  }
+
+  /** Проверяет, требуется ли повторная индексация из-за изменения версии экстракции. */
+  needsReindex(): boolean {
+    const stored = this.getMetadata('extraction_version');
+    return stored !== String(EXTRACTION_VERSION);
   }
 
   /** История миграций. */

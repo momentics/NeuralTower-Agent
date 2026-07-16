@@ -12,12 +12,12 @@ import {
   IEdge,
   IFileRecord,
   ParsedQuery,
-  GENERATED_PATTERNS,
   CONFIG_LEAF_LANGUAGES,
   SENSITIVE_PATHS,
   DATABASE_FILENAME,
   FileLock_STALE_TIMEOUT_MS,
 } from './Types';
+import { isGeneratedFile as isGeneratedFileFromDetection } from '../extraction/GeneratedDetection';
 
 // =============================================================================
 // Конвертеры строк БД
@@ -548,12 +548,9 @@ export function isTestFile(filePath: string): boolean {
   return false;
 }
 
-/** 30+ regex-паттернов для генерируемых файлов. */
+/** Определение сгенерированных файлов (делегат в отдельный модуль). */
 export function isGeneratedFile(filePath: string): boolean {
-  for (const pattern of GENERATED_PATTERNS) {
-    if (pattern.test(filePath)) return true;
-  }
-  return false;
+  return isGeneratedFileFromDetection(filePath);
 }
 
 /** Проверяет наличие подчеркивания, цифры или внутреннего заглавного символа. */
@@ -660,6 +657,108 @@ export function getDatabasePath(projectRoot: string): string {
 /** Числовое ограничение. */
 export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
+}
+
+// =============================================================================
+// Сегменты идентификаторов
+// =============================================================================
+
+const MIN_SEGMENT_CHARS = 2;
+const MAX_SEGMENT_CHARS = 32;
+const MAX_SEGMENTS_PER_NAME = 12;
+
+/**
+ * Разбивает имя символа на нижнерегистровые сегменты-слова.
+ *
+ * Обрабатывает camelCase / PascalCase (внутренний lower→Upper),
+ * аббревиатуры ("HTMLParser" → html/parser), snake_case / kebab-case
+ * (небуквенные символы разделяют), и оставляет цифры приклеенными
+ * к слову ("base64Encode" → base64/encode).
+ */
+export function splitIdentifierSegments(name: string): string[] {
+  if (!name) return [];
+  const out = new Set<string>();
+  for (const run of name.match(/[\p{L}\p{N}]+/gu) ?? []) {
+    const parts = run.split(/(?<=[\p{Ll}\p{N}])(?=\p{Lu})|(?<=\p{Lu})(?=\p{Lu}\p{Ll})/u);
+    for (const part of parts) {
+      if (out.size >= MAX_SEGMENTS_PER_NAME) return [...out];
+      const seg = part.toLowerCase();
+      if (seg.length < MIN_SEGMENT_CHARS || seg.length > MAX_SEGMENT_CHARS) continue;
+      if (/^\p{N}+$/u.test(seg)) continue;
+      out.add(seg);
+    }
+  }
+  return [...out];
+}
+
+/**
+ * Нормализует слово прозы для поиска сегментов: нижний регистр + удаление диакритики.
+ */
+export function normalizeProseWord(word: string): string {
+  return word.normalize('NFD').replace(/\p{M}+/gu, '').toLowerCase();
+}
+
+const MAX_PROSE_CANDIDATES = 16;
+const MIN_PROSE_CHARS = 4;
+const MAX_PROSE_CHARS = 24;
+
+const ENGLISH_PROSE_STOPWORDS = new Set([
+  'about', 'above', 'actually', 'after', 'again', 'against', 'almost', 'along', 'also', 'always',
+  'another', 'anything', 'around', 'away', 'back', 'because', 'been', 'before', 'behind', 'being',
+  'below', 'best', 'better', 'between', 'both', 'cannot', 'come', 'could', 'does', 'doing', 'done',
+  'down', 'each', 'either', 'else', 'even', 'ever', 'every', 'everything', 'fine', 'first', 'from',
+  'getting', 'give', 'goes', 'going', 'gone', 'good', 'great', 'have', 'having', 'help', 'here',
+  'inside', 'instead', 'into', 'just', 'keep', 'know', 'last', 'least', 'less', 'like', 'likely',
+  'little', 'look', 'looking', 'made', 'make', 'making', 'many', 'maybe', 'mind', 'more', 'most',
+  'much', 'must', 'need', 'needs', 'never', 'next', 'nice', 'none', 'nothing', 'okay', 'only',
+  'onto', 'other', 'otherwise', 'over', 'please', 'pretty', 'probably', 'quite', 'rather', 'really',
+  'right', 'same', 'seem', 'seems', 'should', 'show', 'since', 'some', 'someone', 'something',
+  'somewhere', 'soon', 'still', 'such', 'sure', 'take', 'than', 'thank', 'thanks', 'that', 'their',
+  'them', 'then', 'there', 'these', 'they', 'thing', 'things', 'think', 'this', 'those', 'though',
+  'tried', 'tries', 'trying', 'under', 'until', 'upon', 'very', 'want', 'wants', 'well', 'went',
+  'were', 'what', 'when', 'which', 'while', 'will', 'wish', 'with', 'within', 'without', 'would',
+  'wrong', 'your', 'yours',
+  'again', 'change', 'changes', 'check', 'class', 'classes', 'code', 'detail', 'details',
+  'directory', 'error', 'errors', 'example', 'examples', 'file', 'files', 'folder', 'function',
+  'functions', 'issue', 'issues', 'line', 'lines', 'method', 'methods', 'name', 'names', 'problem',
+  'problems', 'project', 'question', 'questions', 'rename', 'test', 'tests', 'type', 'types',
+  'update', 'value', 'values', 'warning', 'warnings', 'work', 'working', 'write', 'writing',
+]);
+
+/**
+ * Извлекает кандидаты из прозы для поиска в словаре сегментов.
+ */
+export function extractProseCandidates(prompt: string): string[] {
+  if (!prompt) return [];
+  const seen = new Set<string>();
+  for (const run of prompt.match(/[\p{L}\p{N}]+/gu) ?? []) {
+    if (seen.size >= MAX_PROSE_CANDIDATES) break;
+    if (run.length > MAX_PROSE_CHARS) continue;
+    const w = normalizeProseWord(run);
+    if (w.length < MIN_PROSE_CHARS || w.length > MAX_PROSE_CHARS) continue;
+    if (/^\p{N}+$/u.test(w)) continue;
+    if (ENGLISH_PROSE_STOPWORDS.has(w)) continue;
+    seen.add(w);
+  }
+  return [...seen];
+}
+
+/**
+ * Варианты поиска для слова прозы: само слово + фолдинг множественного числа.
+ */
+export function segmentLookupVariants(word: string): string[] {
+  const variants = [word];
+  const canStrip2 = word.length >= MIN_PROSE_CHARS + 2;
+  const canStrip1 = word.length >= MIN_PROSE_CHARS + 1;
+  if (/(?:x|sh|ss|zz)es$/.test(word)) {
+    if (canStrip2) variants.push(word.slice(0, -2));
+  } else if (/(?:ch|s|z|o)es$/.test(word)) {
+    if (canStrip2) variants.push(word.slice(0, -2));
+    if (canStrip1) variants.push(word.slice(0, -1));
+  } else if (word.endsWith('s') && !word.endsWith('ss')) {
+    if (canStrip1) variants.push(word.slice(0, -1));
+  }
+  return variants;
 }
 
 // =============================================================================

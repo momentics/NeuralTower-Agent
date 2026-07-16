@@ -218,9 +218,10 @@ describe("Utils", () => {
   })
 
   it("isGeneratedFile detects generated patterns", () => {
-    expect(isGeneratedFile("src/generated/code.ts")).toBe(true)
     expect(isGeneratedFile("src/foo.pb.ts")).toBe(true)
-    expect(isGeneratedFile("src/.next/app.js")).toBe(true)
+    expect(isGeneratedFile("src/foo.gen.ts")).toBe(true)
+    expect(isGeneratedFile("src/foo.pb.go")).toBe(true)
+    expect(isGeneratedFile("src/foo_mock.go")).toBe(true)
     expect(isGeneratedFile("src/main.ts")).toBe(false)
   })
 

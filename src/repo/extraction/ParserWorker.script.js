@@ -83,7 +83,7 @@ async function loadGrammars(languages) {
  */
 async function parseFile(language, content, filePath, frameworkNames) {
   const { extractFromSource } = await import(
-    path.join(__dirname, '..', 'tree-sitter.js')
+    path.join(__dirname, 'tree-sitter.js')
   );
   // Сериализуем дерево для передачи в основной поток.
   return extractFromSource(filePath, content, language, frameworkNames);
@@ -110,9 +110,9 @@ if (parentPort) {
       }
     } catch (err) {
       parentPort.postMessage({
-        type: 'error',
+        type: 'parse-error',
         id: msg.id,
-        message: err.message || String(err),
+        error: err.message || String(err),
       });
     }
   });

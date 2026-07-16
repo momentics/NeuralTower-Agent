@@ -9,7 +9,7 @@ import { SqliteDatabase } from './Adapter';
 import { ISchemaVersion } from './Types';
 
 /** Текущая версия схемы. */
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 8;
 
 /** Интерфейс миграции. */
 export interface Migration {
@@ -244,7 +244,44 @@ const migrationV1: Migration = {
   },
 };
 
+/** v7: добавлена таблица name_segment_vocab для поиска символов по словам из их имён. */
+const migrationV7: Migration = {
+  version: 7,
+  description: 'Добавлена таблица name_segment_vocab для поиска символов по словам из их имён',
+  up: (db: SqliteDatabase) => {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS name_segment_vocab (
+        segment TEXT NOT NULL,
+        name TEXT NOT NULL,
+        PRIMARY KEY (segment, name)
+      ) WITHOUT ROWID;
+    `);
+  },
+};
+
+/** v8: добавлены status и name_tail в unresolved_refs для отслеживания статуса разрешения. */
+const migrationV8: Migration = {
+  version: 8,
+  description: 'Добавлены status и name_tail в unresolved_refs для отслеживания статуса разрешения',
+  up: (db: SqliteDatabase) => {
+    const cols = db.prepare('PRAGMA table_info(unresolved_refs)').all() as Array<{ name: string }>;
+    const hasColumn = (name: string) => cols.some((c) => c.name === name);
+    if (!hasColumn('status')) {
+      db.exec("ALTER TABLE unresolved_refs ADD COLUMN status TEXT NOT NULL DEFAULT 'pending'");
+    }
+    if (!hasColumn('name_tail')) {
+      db.exec("ALTER TABLE unresolved_refs ADD COLUMN name_tail TEXT NOT NULL DEFAULT ''");
+    }
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_unresolved_status ON unresolved_refs(status);
+      CREATE INDEX IF NOT EXISTS idx_unresolved_failed_tail ON unresolved_refs(name_tail) WHERE status = 'failed';
+    `);
+  },
+};
+
 /** Все миграции в порядке версий. */
 const ALL_MIGRATIONS: Migration[] = [
   migrationV1,
+  migrationV7,
+  migrationV8,
 ];

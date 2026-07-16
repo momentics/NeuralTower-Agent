@@ -81,6 +81,8 @@ CREATE TABLE IF NOT EXISTS unresolved_refs (
     candidates TEXT,
     file_path TEXT NOT NULL DEFAULT '',
     language TEXT NOT NULL DEFAULT 'unknown',
+    status TEXT NOT NULL DEFAULT 'pending',
+    name_tail TEXT NOT NULL DEFAULT '',
     FOREIGN KEY (from_node_id) REFERENCES nodes(id) ON DELETE CASCADE
 );
 
@@ -133,6 +135,13 @@ CREATE TRIGGER IF NOT EXISTS nodes_au AFTER UPDATE ON nodes BEGIN
     VALUES (NEW.rowid, NEW.id, NEW.name, NEW.qualified_name, NEW.docstring, NEW.signature);
 END;
 
+-- Словарь сегментов имён для поиска символов по словам из их имён
+CREATE TABLE IF NOT EXISTS name_segment_vocab (
+    segment TEXT NOT NULL,
+    name TEXT NOT NULL,
+    PRIMARY KEY (segment, name)
+) WITHOUT ROWID;
+
 -- Индексы рёбер
 CREATE INDEX IF NOT EXISTS idx_edges_kind ON edges(kind);
 CREATE INDEX IF NOT EXISTS idx_edges_source_kind ON edges(source, kind);
@@ -151,4 +160,6 @@ CREATE INDEX IF NOT EXISTS idx_unresolved_from_node ON unresolved_refs(from_node
 CREATE INDEX IF NOT EXISTS idx_unresolved_name ON unresolved_refs(reference_name);
 CREATE INDEX IF NOT EXISTS idx_unresolved_file_path ON unresolved_refs(file_path);
 CREATE INDEX IF NOT EXISTS idx_unresolved_from_name ON unresolved_refs(from_node_id, reference_name);
+CREATE INDEX IF NOT EXISTS idx_unresolved_status ON unresolved_refs(status);
+CREATE INDEX IF NOT EXISTS idx_unresolved_failed_tail ON unresolved_refs(name_tail) WHERE status = 'failed';
 CREATE INDEX IF NOT EXISTS idx_edges_provenance ON edges(provenance);

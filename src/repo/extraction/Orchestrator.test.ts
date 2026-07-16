@@ -441,29 +441,54 @@ describe("resolveAndPersistBatched", () => {
 
 describe("synthesizeCallbackEdges", () => {
   it("creates callback edges for addEventListener", async () => {
-    const addEventListenerNode = {
-      id: "addEventNode",
+    const content = `function onMount() {
+  bus.on('ready', function onReady() { console.log('ok'); });
+}
+
+function triggerReady() {
+  bus.emit('ready');
+}
+`
+    const testFile = "callback-test.ts"
+    await fs.writeFile(path.join(tmpDir, testFile), content)
+
+    const onMountNode = {
+      id: "onMountNode",
       kind: "function" as const,
-      name: "addEventListener",
-      qualifiedName: "addEventListener",
-      filePath: "test.ts",
+      name: "onMount",
+      qualifiedName: "onMount",
+      filePath: testFile,
       language: "typescript" as const,
       startLine: 1,
-      endLine: 1,
+      endLine: 3,
       startColumn: 0,
       endColumn: 0,
       updatedAt: Date.now(),
     }
 
-    const callbackNode = {
-      id: "callbackNode",
+    const onReadyNode = {
+      id: "onReadyNode",
       kind: "function" as const,
-      name: "handleClick",
-      qualifiedName: "handleClick",
-      filePath: "test.ts",
+      name: "onReady",
+      qualifiedName: "onReady",
+      filePath: testFile,
+      language: "typescript" as const,
+      startLine: 2,
+      endLine: 2,
+      startColumn: 0,
+      endColumn: 0,
+      updatedAt: Date.now(),
+    }
+
+    const triggerReadyNode = {
+      id: "triggerReadyNode",
+      kind: "function" as const,
+      name: "triggerReady",
+      qualifiedName: "triggerReady",
+      filePath: testFile,
       language: "typescript" as const,
       startLine: 5,
-      endLine: 5,
+      endLine: 7,
       startColumn: 0,
       endColumn: 0,
       updatedAt: Date.now(),
@@ -473,17 +498,23 @@ describe("synthesizeCallbackEdges", () => {
     localDb.initialize()
     const localOrchestrator = new ExtractionOrchestrator(tmpDir, localDb)
 
-    localDb.insertNodes([addEventListenerNode, callbackNode])
-    localDb.insertEdges([{
-      source: "addEventNode",
-      target: "callbackNode",
-      kind: "calls",
-    }])
+    localDb.insertNodes([onMountNode, onReadyNode, triggerReadyNode])
+
+    await localDb.upsertFile({
+      path: testFile,
+      contentHash: "hash",
+      language: "typescript",
+      size: content.length,
+      modifiedAt: Date.now(),
+      indexedAt: Date.now(),
+      nodeCount: 3,
+    })
 
     ;(localOrchestrator as any).synthesizeCallbackEdges()
 
-    const refs = localDb.getOutgoingEdges("addEventNode", ["references"])
-    expect(refs.length).toBeGreaterThan(0)
+    const edges = localDb.getOutgoingEdges("triggerReadyNode", ["calls"])
+    expect(edges.length).toBeGreaterThan(0)
+    expect(edges[0]?.target).toBe("onReadyNode")
     localDb.close()
   })
 
@@ -537,8 +568,7 @@ describe("getImportMappings / getReExports", () => {
     const mappings = (orchestrator as any).getImportMappings("test.ts")
 
     expect(mappings.length).toBeGreaterThan(0)
-    expect(mappings[0].sourcePath).toBe("test.ts")
-    expect(mappings[0].targetPath).toBe("utils.ts")
+    expect(mappings[0].resolvedPath).toBe("utils.ts")
   })
 
   it("returns empty when no imports exist", () => {
@@ -572,8 +602,8 @@ describe("getImportMappings / getReExports", () => {
     const reExports = (orchestrator as any).getReExports("utils.ts")
 
     expect(reExports.length).toBeGreaterThan(0)
-    expect(reExports[0].sourcePath).toBe("utils.ts")
-    expect(reExports[0].sourceName).toBe("helper")
+    expect(reExports[0].kind).toBe("named")
+    expect(reExports[0].exportedName).toBe("helper")
   })
 
   it("returns empty when no exports exist", () => {

@@ -37,8 +37,8 @@ describe("Migration", () => {
     await fs.rm(tmpDir, { recursive: true, force: true })
   })
 
-  it("CURRENT_SCHEMA_VERSION is 1", () => {
-    expect(CURRENT_SCHEMA_VERSION).toBe(1)
+  it("CURRENT_SCHEMA_VERSION is 8", () => {
+    expect(CURRENT_SCHEMA_VERSION).toBe(8)
   })
 
   it("needsMigration returns true on empty database", () => {
@@ -69,8 +69,10 @@ describe("Migration", () => {
     // Удаляем все записи миграций
     db.exec('DELETE FROM schema_versions')
     const pending = getPendingMigrations(db)
-    expect(pending.length).toBe(CURRENT_SCHEMA_VERSION)
+    expect(pending.length).toBe(3) // v1, v7, v8
     expect(pending[0].version).toBe(1)
+    expect(pending[1].version).toBe(7)
+    expect(pending[2].version).toBe(8)
   })
 
   it("applyMigrations applies all pending migrations", () => {
@@ -82,9 +84,10 @@ describe("Migration", () => {
 
   it("getMigrationHistory returns applied migrations", () => {
     const history = getMigrationHistory(db)
-    expect(history.length).toBe(CURRENT_SCHEMA_VERSION)
+    expect(history.length).toBe(3) // v1, v7, v8
     expect(history[0].version).toBe(1)
-    expect(history[history.length - 1].version).toBe(CURRENT_SCHEMA_VERSION)
+    expect(history[1].version).toBe(7)
+    expect(history[2].version).toBe(8)
   })
 
   it("migration v1 creates all required tables", () => {
@@ -170,5 +173,76 @@ describe("Migration", () => {
     const v1 = history.find(h => h.version === 1)
     expect(v1).toBeDefined()
     expect(v1!.description).toBe("Updated description")
+  })
+
+  it("migration v7 creates name_segment_vocab table", () => {
+    const newDbPath = path.join(tmpDir, "v7-test.db")
+    const { db: freshDb } = createDatabase(newDbPath)
+
+    try {
+      freshDb.exec(`
+        CREATE TABLE IF NOT EXISTS schema_versions (
+          version INTEGER PRIMARY KEY,
+          applied_at INTEGER NOT NULL,
+          description TEXT NOT NULL
+        )
+      `)
+
+      // Применяем v1, затем v7
+      applyMigrations(freshDb)
+
+      const row = freshDb.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='name_segment_vocab'"
+      ).get() as { name: string } | null
+      expect(row).not.toBeNull()
+      expect(row?.name).toBe("name_segment_vocab")
+    } finally {
+      freshDb.close()
+    }
+  })
+
+  it("migration v8 adds status and name_tail columns to unresolved_refs", () => {
+    const newDbPath = path.join(tmpDir, "v8-test.db")
+    const { db: freshDb } = createDatabase(newDbPath)
+
+    try {
+      freshDb.exec(`
+        CREATE TABLE IF NOT EXISTS schema_versions (
+          version INTEGER PRIMARY KEY,
+          applied_at INTEGER NOT NULL,
+          description TEXT NOT NULL
+        )
+      `)
+
+      applyMigrations(freshDb)
+
+      const cols = freshDb.prepare('PRAGMA table_info(unresolved_refs)').all() as Array<{ name: string }>
+      const colNames = cols.map((c) => c.name)
+      expect(colNames).toContain('status')
+      expect(colNames).toContain('name_tail')
+    } finally {
+      freshDb.close()
+    }
+  })
+
+  it("migration v8 idempotent — повторное применение без ошибок", () => {
+    const newDbPath = path.join(tmpDir, "v8-idem-test.db")
+    const { db: freshDb } = createDatabase(newDbPath)
+
+    try {
+      freshDb.exec(`
+        CREATE TABLE IF NOT EXISTS schema_versions (
+          version INTEGER PRIMARY KEY,
+          applied_at INTEGER NOT NULL,
+          description TEXT NOT NULL
+        )
+      `)
+
+      applyMigrations(freshDb)
+      // Повторное применение — не должно выбросить ошибку
+      expect(() => applyMigrations(freshDb)).not.toThrow()
+    } finally {
+      freshDb.close()
+    }
   })
 })

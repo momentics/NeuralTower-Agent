@@ -27,6 +27,10 @@ export interface SqliteDatabase {
   readonly open: boolean;
   /** Лёгкое обслуживание после пакетных записей. */
   runMaintenance(): void;
+  /** Возвращает размер WAL-файла в байтах. */
+  getWalSizeBytes(): number;
+  /** Пассивный чекпоинт WAL. Возвращает null, если WAL не включён. */
+  checkpointWalPassive(): { busy: number; log: number; checkpointed: number } | null;
 }
 
 /** Тип активного бэкенда SQLite. */
@@ -38,8 +42,10 @@ export type SqliteBackend = 'node-sqlite';
  */
 class NodeSqliteAdapter implements SqliteDatabase {
   private _db: any;
+  private readonly _dbPath: string;
 
   constructor(dbPath: string) {
+    this._dbPath = dbPath;
     const { DatabaseSync } = require('node:sqlite');
     this._db = new DatabaseSync(dbPath);
   }
@@ -107,6 +113,31 @@ class NodeSqliteAdapter implements SqliteDatabase {
 
   close(): void {
     if (this._db.isOpen) this._db.close();
+  }
+
+  /** Возвращает размер WAL-файла в байтах. */
+  getWalSizeBytes(): number {
+    const walPath = this._dbPath + '-wal';
+    try {
+      const stats = require('fs').statSync(walPath);
+      return stats.size;
+    } catch {
+      return 0;
+    }
+  }
+
+  /** Пассивный чекпоинт WAL. Возвращает null, если WAL не включён. */
+  checkpointWalPassive(): { busy: number; log: number; checkpointed: number } | null {
+    try {
+      const rows = this._db.prepare('PRAGMA wal_checkpoint(PASSIVE)').all();
+      if (rows && rows.length > 0) {
+        const row = rows[0] as { checkpointed: number; log: number; busy: number };
+        return { busy: row.busy, log: row.log, checkpointed: row.checkpointed };
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   /** Лёгкое обслуживание после пакетных записей: PRAGMA optimize + wal_checkpoint(PASSIVE). Ошибки тихо проглатываются. */

@@ -19,6 +19,7 @@ import {
   scorePathRelevance,
   boundedEditDistance,
 } from './Utils';
+import { isGeneratedFile } from '../extraction/GeneratedDetection';
 import {
   FTS_OVER_FETCH_MULTIPLIER,
   FTS_LIMIT_MIN,
@@ -490,17 +491,23 @@ export class FtsSearch {
     return results;
   }
 
-  /**
-   * Rescoring с multi-signal бонусами.
-   */
+/**
+    * Rescoring с multi-signal бонусами.
+    */
   private rescoring(results: ISearchResult[], query: string): ISearchResult[] {
-    return results.map(r => ({
-      ...r,
-      score: r.score
+    return results.map(r => {
+      let s = r.score
         + kindBonus(r.node.kind)
         + scorePathRelevance(r.node.filePath, query, this.projectNameTokens)
-        + nameMatchBonus(query, r.node.name),
-    }));
+        + nameMatchBonus(query, r.node.name);
+
+      // Понижение ранга для сгенерированных файлов
+      if (isGeneratedFile(r.node.filePath)) {
+        s *= 0.1;
+      }
+
+      return { ...r, score: s };
+    });
   }
 
   /** Rescoring (алиас для публичного API). */

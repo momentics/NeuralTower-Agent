@@ -28,6 +28,9 @@ import {
   IResolutionContext,
   IImportMapping,
   IReExport,
+  IAliasMap,
+  IGoModule,
+  IWorkspacePackages,
   NodeKind,
   EdgeKind,
   Language,
@@ -36,11 +39,10 @@ import {
   SYNC_YIELD_INTERVAL,
   SYNC_RECONCILE_YIELD_INTERVAL,
   SCAN_YIELD_INTERVAL,
-  WORKER_RECYCLE_INTERVAL,
-  PARSE_TIMEOUT_MS,
   DEFAULT_IGNORE_DIRS,
   DEFAULT_IGNORE_PATTERNS,
 } from '../ntgraph/Types';
+import { EXTRACTION_VERSION } from './ExtractionVersion';
 import { detectLanguage, loadExtensionOverrides, isFileLevelOnlyLanguage } from './LanguageDetector';
 import { shouldIndexFile, isBinaryFile, isTooLarge, resolveRelativePath } from './PathValidation';
 import { detectFrameworks } from './FrameworkDetection';
@@ -50,7 +52,7 @@ import { IExtractor, ExtractorBase } from './ExtractorBase';
 import { CppExtractor } from './extractors/Cpp';
 import { TypeScriptExtractor } from './extractors/TypeScript';
 import { PythonExtractor } from './extractors/Python';
-import { parseFile as parseFileWorker, loadGrammars as loadGrammarsWorker, destroy as destroyWorker, recycleWorker as recycleWorkerFn, rejectAllPending as rejectAllPendingFn } from './ParserWorker';
+import { stripCommentsForRegex } from './StripComments';
 
 /** Параметры индексации. */
 export interface IndexOptions {
@@ -91,15 +93,6 @@ function extToLanguage(filePath: string): Language {
   return EXT_TO_LANGUAGE[ext] ?? 'unknown';
 }
 
-/** Флаг: доступны ли воркеры для парсинга. */
-let PARSER_WORKER_AVAILABLE = false;
-try {
-  require.resolve('worker_threads');
-  PARSER_WORKER_AVAILABLE = true;
-} catch {
-  // Воркеры недоступны
-}
-
 /** Карта язык → экстрактор. */
 const EXTRACTOR_MAP = new Map<string, IExtractor>();
 
@@ -116,6 +109,22 @@ function ensureExtractors(): void {
 /** Вычисляет SHA-256 хеш содержимого файла. */
 function hashContent(content: string): string {
   return crypto.createHash('sha256').update(content).digest('hex');
+}
+
+/**
+ * Кооперативная отдача управления с бюджетом.
+ * Yield только если прошло > budgetMs с последнего yield.
+ * Эффективнее для быстрых репозиториев.
+ */
+const DEFAULT_YIELD_BUDGET_MS = 250;
+
+function createYielder(budgetMs: number = DEFAULT_YIELD_BUDGET_MS): () => Promise<void> {
+  let last = Date.now();
+  return async function maybeYield(): Promise<void> {
+    if (Date.now() - last < budgetMs) return;
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    last = Date.now();
+  };
 }
 
 /**
@@ -467,10 +476,6 @@ export class ExtractionOrchestrator {
       const files = await scanDirectory(this.rootDir, { onProgress, signal });
 
       if (signal?.aborted) {
-        // Отменяем все ожидающие парсинги
-        if (PARSER_WORKER_AVAILABLE) {
-          rejectAllPendingFn();
-        }
         return this.abortResult(startTime, filesIndexed, filesSkipped, filesErrored, totalNodes, totalEdges, errors);
       }
 
@@ -487,30 +492,14 @@ export class ExtractionOrchestrator {
       // Инициализация экстракторов
       ensureExtractors();
 
-      // Загрузка грамматик для воркера
-      if (PARSER_WORKER_AVAILABLE) {
-        const languages = new Set<string>();
-        for (const fp of files) {
-          const lang = extToLanguage(fp);
-          if (lang !== 'unknown') languages.add(lang);
-        }
-        if (languages.size > 0) {
-          try {
-            await loadGrammarsWorker([...languages]);
-          } catch {
-            // Игнорируем ошибки загрузки грамматик
-          }
-        }
-      }
+      // Создание yielder с бюджетом
+      const yielder = createYielder();
+
+      // Включение WAL-клапана для массовой индексации
+      this.db.enableWalValve(verbose);
 
       // Обработка батчами для параллельного чтения файлов
       for (let i = 0; i < files.length; i += FILE_IO_BATCH_SIZE) {
-        // Отменяем все ожидающие парсинги при отмене
-        if (signal?.aborted) {
-          if (PARSER_WORKER_AVAILABLE) {
-            rejectAllPendingFn();
-          }
-        }
         checkAbort(signal);
 
         const batch = files.slice(i, i + FILE_IO_BATCH_SIZE);
@@ -625,69 +614,25 @@ export class ExtractionOrchestrator {
             continue;
           }
 
-          // Извлечение AST через экстрактор с 2-уровневым повтором
+          // Извлечение AST
           let result: IExtractionResult;
           try {
-            if (PARSER_WORKER_AVAILABLE) {
-              const timeout = PARSE_TIMEOUT_MS;
-              result = await Promise.race([
-                parseFileWorker(filePath, content, frameworkNames ?? [], language, [language]),
-                new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Таймаут парсинга (${timeout}ms)`)), timeout)),
-              ]);
-            } else {
-              result = this.extractFile(filePath, content, language, frameworkNames);
-            }
+            result = this.extractFile(filePath, content, language, frameworkNames);
           } catch (parseErr) {
-            // Уровень 1: recycleWorker + повтор с оригинальным содержимым
-            try {
-              if (PARSER_WORKER_AVAILABLE) {
-                await recycleWorkerFn();
-                const timeout = PARSE_TIMEOUT_MS;
-                result = await Promise.race([
-                  parseFileWorker(filePath, content, frameworkNames ?? [], language, [language]),
-                  new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Таймаут парсинга (${timeout}ms)`)), timeout)),
-                ]);
-              } else {
-                result = this.extractFile(filePath, content, language, frameworkNames);
-              }
-            } catch (parseErr2) {
-              // Уровень 2: удаление комментариев и повтор
-              try {
-                const stripped = this.stripComments(content, language);
-                if (PARSER_WORKER_AVAILABLE) {
-                  const timeout = PARSE_TIMEOUT_MS;
-                  result = await Promise.race([
-                    parseFileWorker(filePath, stripped, frameworkNames ?? [], language, [language]),
-                    new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Таймаут парсинга (${timeout}ms)`)), timeout)),
-                  ]);
-                } else {
-                  result = this.extractFile(filePath, stripped, language, frameworkNames);
-                }
-              } catch (parseErr3) {
-                processed++;
-                filesErrored++;
-                errors.push({
-                  message: parseErr3 instanceof Error ? parseErr3.message : String(parseErr3),
-                  filePath,
-                  severity: 'error',
-                  code: 'parse_error',
-                });
-                continue;
-              }
-            }
+            processed++;
+            filesErrored++;
+            errors.push({
+              message: parseErr instanceof Error ? parseErr.message : String(parseErr),
+              filePath,
+              severity: 'error',
+              code: 'parse_error',
+            });
+            continue;
           }
 
          processed++;
 
-          // Периодическая пересборка воркера
-          parseCount++;
-          if (parseCount % WORKER_RECYCLE_INTERVAL === 0 && PARSER_WORKER_AVAILABLE) {
-            try {
-              await recycleWorkerFn();
-            } catch {
-              // Игнорируем ошибки при пересборке воркера
-            }
-          }
+        
 
           // Создание записи файла
         const fileRecord: IFileRecord = {
@@ -731,7 +676,13 @@ await this.storeExtractionResult(fileRecord, result);
       onProgress?.({ phase: 'parsing', current: total, total, file: '', durationMs: 0 });
 
       // Отдача управления для флеша вывода
-      await yieldToEventLoop();
+      await yielder();
+
+      // Сохранение версии экстракции
+      this.db.setMetadata('extraction_version', String(EXTRACTION_VERSION));
+
+      // Фолдинг WAL между фазами
+      await this.db.foldWalNow();
 
       return {
         indexed: filesIndexed,
@@ -746,13 +697,7 @@ await this.storeExtractionResult(fileRecord, result);
       }
       throw err;
     } finally {
-      if (PARSER_WORKER_AVAILABLE) {
-        try {
-          await destroyWorker();
-        } catch {
-          // Игнорируем ошибки при уничтожении воркера
-        }
-      }
+      this.db.disableWalValve();
     }
   }
 
@@ -793,15 +738,6 @@ await this.storeExtractionResult(fileRecord, result);
         const lang = detectLanguage(filePath);
         if (lang !== 'unknown' && isLanguageSupported(lang)) {
           neededLanguages.add(lang);
-        }
-      }
-
-      // Загрузка грамматик для необходимых языков
-      if (PARSER_WORKER_AVAILABLE && neededLanguages.size > 0) {
-        try {
-          await loadGrammarsWorker([...neededLanguages]);
-        } catch {
-          // Игнорируем ошибки загрузки грамматик
         }
       }
 
@@ -871,16 +807,7 @@ await this.storeExtractionResult(fileRecord, result);
         }
       }
 
-      // Загрузка грамматик для необходимых языков
-      if (PARSER_WORKER_AVAILABLE && neededLanguages.size > 0) {
-        try {
-          await loadGrammarsWorker([...neededLanguages]);
-        } catch {
-          // Игнорируем ошибки загрузки грамматик
-        }
-      }
-
-      const currentSet = new Set(currentFiles);
+       const currentSet = new Set(currentFiles);
 
       const trackedFiles = this.db.getAllFiles();
       const trackedMap = new Map<string, IFileRecord>();
@@ -1211,46 +1138,219 @@ await this.storeExtractionResult(fileRecord, result);
     return edges;
   }
 
-  /**
+ /**
    * Синтезирует callback-рёбра — ребра динамической диспетчеризации.
    *
-   * Ищет паттерны динамической диспетчеризации:
-   * - callback-регистрация: addEventListener, on, subscribe, then, catch
-   * - event-emitter: emit, dispatch
-   * - React re-render: useEffect, useMemo, useCallback
-   * - Vue handler: @click, @input
+   * Два канала:
+   * (1) Field-backed observer (фаза 1): registrar/dispatcher делят хранилище.
+   * (2) String-keyed EventEmitter (фаза 2): on('e', fn) ↔ emit('e').
    */
- private synthesizeCallbackEdges(): void {
-     const callbackPatterns = [
-       'addEventListener', 'on', 'subscribe', 'then', 'catch',
-       'emit', 'dispatch', 'useEffect', 'useMemo', 'useCallback',
-     ];
+  private synthesizeCallbackEdges(): void {
+    const ON_RE = /\.(?:on|once|addListener)\(\s*['"]([^'"]+)['"]\s*,\s*(?:function\s+(\w+)|(?:this\.)?(\w+))/g;
+    const EMIT_RE = /\.(?:emit|fire|dispatchEvent)\(\s*['"]([^'"]+)['"]/g;
+    const JSX_TAG_RE = /<([A-Z][A-Za-z0-9_]*)[\s/>]/g;
+    const VUE_HANDLER_RE = /(?:@|v-on:)([a-zA-Z][\w-]*)(?:\.[\w]+)*\s*=\s*"([^"]+)"/g;
 
-     const edgesToInsert: IEdge[] = [];
+    const REGISTRAR_NAME = /^(on[A-Z]\w*|subscribe|addListener|addEventListener|register|watch|listen|addCallback)$/;
+    const DISPATCHER_NAME = /(emit|trigger|notify|dispatch|fire|publish|flush)/i;
+    const EVENT_FANOUT_CAP = 6;
+    const MAX_CALLBACKS_PER_CHANNEL = 40;
 
-     for (const pattern of callbackPatterns) {
-       const nodes = this.db.getNodesByName(pattern);
-       for (const node of nodes) {
-         const calls = this.db.getOutgoingEdges(node.id, ['calls']);
-         for (const call of calls) {
-           const target = this.db.getNodeById(call.target);
-           if (!target) continue;
+    const edgesToInsert: IEdge[] = [];
 
-           edgesToInsert.push({
-             source: node.id,
-             target: target.id,
-             kind: 'references',
-             metadata: { fnRef: true, dispatchType: pattern },
-             provenance: 'heuristic',
-           });
-         }
-       }
-     }
+    // ---------- Фаза 2: String-keyed EventEmitter ----------
+    const emitsByEvent = new Map<string, Set<string>>();
+    const handlersByEvent = new Map<string, Map<string, string>>();
 
-     if (edgesToInsert.length > 0) {
-       this.db.insertEdges(edgesToInsert);
-     }
-   }
+    const allFiles = this.db.getAllFiles();
+
+    for (const fileRec of allFiles) {
+      const filePath = fileRec.path;
+      const ext = path.extname(filePath).toLowerCase();
+      const langMap: Record<string, string> = {
+        '.ts': 'typescript', '.tsx': 'typescript',
+        '.js': 'javascript', '.jsx': 'javascript',
+        '.mjs': 'javascript', '.cjs': 'javascript',
+        '.py': 'python',
+      };
+      const lang = langMap[ext];
+      if (!lang) continue;
+
+      const content = this.getFileLines(filePath);
+      if (!content) continue;
+      const fullContent = content.join('\n');
+
+      const hasEmit = fullContent.includes('.emit(') || fullContent.includes('.fire(') || fullContent.includes('.dispatchEvent(');
+      const hasOn = fullContent.includes('.on(') || fullContent.includes('.once(') || fullContent.includes('.addListener(');
+      if (!hasEmit && !hasOn) continue;
+
+      const stripped = stripCommentsForRegex(fullContent, lang as any);
+      const nodesInFile = this.db.getNodesByKind('method').concat(this.db.getNodesByKind('function')).filter(n => n.filePath === filePath);
+
+      const lineOf = (idx: number): number => {
+        return stripped.slice(0, idx).split('\n').length;
+      };
+
+      if (hasEmit) {
+        EMIT_RE.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = EMIT_RE.exec(stripped))) {
+          const eventName = m[1];
+          const line = lineOf(m.index);
+          const enclosing = this.enclosingFn(nodesInFile, line);
+          if (!enclosing) continue;
+          const set = emitsByEvent.get(eventName) ?? new Set();
+          set.add(enclosing.id);
+          emitsByEvent.set(eventName, set);
+        }
+      }
+
+      if (hasOn) {
+        ON_RE.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = ON_RE.exec(stripped))) {
+          const eventName = m[1];
+          const handlerName = m[2] || m[3];
+          if (!handlerName) continue;
+          const handler = this.db.getNodesByName(handlerName).find(n => n.kind === 'function' || n.kind === 'method');
+          if (!handler) continue;
+          const line = lineOf(m.index);
+          const map = handlersByEvent.get(eventName) ?? new Map();
+          map.set(handler.id, `${filePath}:${line}`);
+          handlersByEvent.set(eventName, map);
+        }
+      }
+    }
+
+    const seen = new Set<string>();
+    for (const [event, dispatchers] of emitsByEvent) {
+      const handlers = handlersByEvent.get(event);
+      if (!handlers) continue;
+      if (dispatchers.size > EVENT_FANOUT_CAP || handlers.size > EVENT_FANOUT_CAP) continue;
+      for (const d of dispatchers) {
+        for (const [h, registeredAt] of handlers) {
+          if (d === h) continue;
+          const key = `${d}>${h}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          edgesToInsert.push({
+            source: d,
+            target: h,
+            kind: 'calls',
+            metadata: { synthesizedBy: 'event-emitter', event, registeredAt },
+            provenance: 'heuristic',
+          });
+        }
+      }
+    }
+
+    // ---------- Фаза 1: Field-backed observer ----------
+    const registrars: Array<{ node: INode; field: string }> = [];
+    const dispatchers: Array<{ node: INode; field: string }> = [];
+
+    const allMethods = this.db.getNodesByKind('method').concat(this.db.getNodesByKind('function'));
+
+    for (const m of allMethods) {
+      const isReg = REGISTRAR_NAME.test(m.name);
+      const isDisp = DISPATCHER_NAME.test(m.name);
+      if (!isReg && !isDisp) continue;
+
+      const lines = this.getFileLines(m.filePath);
+      if (!lines) continue;
+      const src = lines.slice(m.startLine - 1, m.endLine).join('\n');
+      if (!src) continue;
+
+      if (isReg) {
+        const field = this.registrarField(src);
+        if (field) registrars.push({ node: m, field });
+      }
+      if (isDisp) {
+        const field = this.dispatcherField(src);
+        if (field) dispatchers.push({ node: m, field });
+      }
+    }
+
+    let added = 0;
+    for (const reg of registrars) {
+      const chDispatchers = dispatchers.filter(d => d.node.filePath === reg.node.filePath && d.field === reg.field);
+      if (chDispatchers.length === 0) continue;
+
+      const argRe = new RegExp(`${reg.node.name}\\s*\\(\\s*(?:this\\.)?(\\w+)`);
+
+      for (const e of this.db.getIncomingEdges(reg.node.id, ['calls'])) {
+        if (added >= MAX_CALLBACKS_PER_CHANNEL) break;
+        if (!e.line) continue;
+
+        const caller = this.db.getNodeById(e.source);
+        if (!caller) continue;
+
+        const callerLines = this.getFileLines(caller.filePath);
+        if (!callerLines) continue;
+        const line = callerLines[e.line - 1];
+        const am = line?.match(argRe);
+        if (!am) continue;
+
+        const fn = this.db.getNodesByName(am[1]).find(n => n.kind === 'method' || n.kind === 'function');
+        if (!fn) continue;
+
+        for (const disp of chDispatchers) {
+          if (disp.node.id === fn.id) continue;
+          const key = `${disp.node.id}>${fn.id}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          edgesToInsert.push({
+            source: disp.node.id,
+            target: fn.id,
+            kind: 'calls',
+            line: disp.node.startLine,
+            metadata: {
+              synthesizedBy: 'callback',
+              via: reg.node.name,
+              field: reg.field,
+              registeredAt: `${caller.filePath}:${e.line}`,
+            },
+            provenance: 'heuristic',
+          });
+          added++;
+        }
+      }
+    }
+
+    // (JSX_TAG_RE и VUE_HANDLER_RE определены для будущего использования)
+
+    if (edgesToInsert.length > 0) {
+      this.db.insertEdges(edgesToInsert);
+    }
+  }
+
+  /** Извлекает поле-хранилище из registrar-метода. */
+  private registrarField(src: string): string | null {
+    const m = src.match(/this\.(\w+)\.(?:add|push|set)\(/);
+    return m ? m[1] : null;
+  }
+
+  /** Извлекает поле-хранилище из dispatcher-метода. */
+  private dispatcherField(src: string): string | null {
+    const forOf = src.match(/\bof\s+(?:Array\.from\(\s*)?this\.(\w+)/);
+    if (forOf && /\b\w+\s*\(/.test(src)) return forOf[1];
+    const forEach = src.match(/this\.(\w+)\.forEach\(/);
+    if (forEach) return forEach[1];
+    return null;
+  }
+
+  /** Внутренняя функция/метод, содержащая указанную строку. */
+  private enclosingFn(nodesInFile: INode[], line: number): INode | null {
+    const FN_KINDS = new Set(['method', 'function', 'component']);
+    let best: INode | null = null;
+    for (const n of nodesInFile) {
+      if (!FN_KINDS.has(n.kind)) continue;
+      const end = n.endLine ?? n.startLine;
+      if (n.startLine <= line && end >= line) {
+        if (!best || n.startLine >= best.startLine) best = n;
+      }
+    }
+    return best;
+  }
 
   /**
    * Получает маппинги импорта для файла.
@@ -1271,11 +1371,12 @@ await this.storeExtractionResult(fileRecord, result);
         const target = this.db.getNodeById(edge.target);
         if (target) {
           mappings.push({
-            sourcePath: filePath,
-            sourceName: imp.name,
-            targetPath: target.filePath,
-            targetName: target.name,
-            language: imp.language,
+            localName: imp.name,
+            exportedName: target.name,
+            source: target.filePath,
+            isDefault: false,
+            isNamespace: false,
+            resolvedPath: target.filePath,
           });
         }
       }
@@ -1300,15 +1401,134 @@ await this.storeExtractionResult(fileRecord, result);
       // Ищем исходящие exports-рёбра
       const exportEdges = this.db.getOutgoingEdges(exp.id, ['exports']);
       for (const edge of exportEdges) {
-        reExports.push({
-          sourcePath: filePath,
-          sourceName: exp.name,
-          language: exp.language,
-        });
+        const target = this.db.getNodeById(edge.target);
+        if (target) {
+          reExports.push({
+            kind: 'named',
+            exportedName: exp.name,
+            originalName: target.name,
+            source: target.filePath,
+          });
+        } else {
+          reExports.push({
+            kind: 'named',
+            exportedName: exp.name,
+            originalName: exp.name,
+            source: filePath,
+          });
+        }
       }
     }
 
     return reExports;
+  }
+
+  /** Ленивый итератор по узлам вида. */
+  public iterateNodesByKind(kind: NodeKind): IterableIterator<INode> {
+    return this.db.iterateNodesByKind(kind);
+  }
+
+  /** Строки файла. */
+  public getFileLines(filePath: string): string[] | null {
+    try {
+      const content = fs.readFileSync(path.join(this.rootDir, filePath), 'utf-8');
+      return content.split('\n');
+    } catch {
+      return null;
+    }
+  }
+
+  /** Поиск методов по имени типа и имени метода. */
+  public getMethodMatches(typeName: string, methodName: string, _language: Language): INode[] {
+    const methods = this.db.getNodesByKind('method');
+    const qualifiedName = `${typeName}.${methodName}`;
+    return methods.filter(m => m.qualifiedName === qualifiedName || m.name === methodName);
+  }
+
+  /** Супертипы по имени типа. */
+  public getSupertypesByName(typeName: string, _language: Language): string[] {
+    const nodes = this.db.getNodesByName(typeName);
+    const supertypes: string[] = [];
+    for (const node of nodes) {
+      const edges = this.db.getOutgoingEdges(node.id, ['extends', 'implements']);
+      for (const edge of edges) {
+        const target = this.db.getNodeById(edge.target);
+        if (target) supertypes.push(target.name);
+      }
+    }
+    return supertypes;
+  }
+
+  /** Карта алиасов проекта. */
+  public getProjectAliases(): IAliasMap | null {
+    try {
+      const tsconfigPath = path.join(this.rootDir, 'tsconfig.json');
+      if (!fs.existsSync(tsconfigPath)) return null;
+      const raw = fs.readFileSync(tsconfigPath, 'utf-8');
+      const config = JSON.parse(raw);
+      const paths = config?.compilerOptions?.paths;
+      if (!paths) return null;
+      const aliases: IAliasMap = {};
+      for (const [alias, targets] of Object.entries(paths)) {
+        aliases[alias] = Array.isArray(targets) ? targets : [targets];
+      }
+      return aliases;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Go-модуль. */
+  public getGoModule(): IGoModule | null {
+    try {
+      const goModPath = path.join(this.rootDir, 'go.mod');
+      if (!fs.existsSync(goModPath)) return null;
+      const content = fs.readFileSync(goModPath, 'utf-8');
+      const stripped = content.replace(/\/\/[^\n]*/g, '');
+      const match = stripped.match(/^\s*module\s+(\S+)\s*$/m);
+      if (!match) return null;
+      const modulePath = match[1]!.replace(/^["']|["']$/g, '');
+      return { modulePath, goVersion: '', dependencies: new Map() };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Пакеты workspace. */
+  public getWorkspacePackages(): IWorkspacePackages | null {
+    try {
+      const pkgPath = path.join(this.rootDir, 'package.json');
+      if (!fs.existsSync(pkgPath)) return null;
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+      const ws = pkg?.workspaces;
+      if (!ws) return null;
+      const patterns = Array.isArray(ws) ? ws : ws.packages ?? [];
+      if (!Array.isArray(patterns) || patterns.length === 0) return null;
+      const packages = new Map<string, string>();
+      const workspaces: string[] = [];
+      for (const p of patterns) {
+        workspaces.push(p);
+      }
+      return { packages, workspaces };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Список директорий. */
+  public listDirectories(relativePath: string): string[] {
+    try {
+      const fullPath = path.join(this.rootDir, relativePath);
+      const entries = fs.readdirSync(fullPath, { withFileTypes: true });
+      return entries.filter(e => e.isDirectory()).map(e => e.name);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Директории include для C++. */
+  public getCppIncludeDirs(): string[] {
+    return [];
   }
 
   /**
@@ -1390,58 +1610,22 @@ await this.storeExtractionResult(fileRecord, result);
           continue;
         }
 
-        // Извлечение AST через экстрактор с 2-уровневым повтором
+        // Извлечение AST через экстрактор
         let result: IExtractionResult;
         try {
-          if (PARSER_WORKER_AVAILABLE) {
-            const timeout = PARSE_TIMEOUT_MS;
-            result = await Promise.race([
-              parseFileWorker(filePath, content, frameworkNames ?? [], language, [language]),
-              new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Таймаут парсинга (${timeout}ms)`)), timeout)),
-            ]);
-          } else {
-            result = this.extractFile(filePath, content, language, frameworkNames);
-          }
-        } catch (parseErr) {
-          // Уровень 1: recycleWorker + повтор с оригинальным содержимым
-          try {
-            if (PARSER_WORKER_AVAILABLE) {
-              await recycleWorkerFn();
-              const timeout = PARSE_TIMEOUT_MS;
-              result = await Promise.race([
-                parseFileWorker(filePath, content, frameworkNames ?? [], language, [language]),
-                new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Таймаут парсинга (${timeout}ms)`)), timeout)),
-              ]);
-            } else {
-              result = this.extractFile(filePath, content, language, frameworkNames);
-            }
-          } catch (parseErr2) {
-            // Уровень 2: удаление комментариев и повтор
-            try {
-              const stripped = this.stripComments(content, language);
-              if (PARSER_WORKER_AVAILABLE) {
-                const timeout = PARSE_TIMEOUT_MS;
-                result = await Promise.race([
-                  parseFileWorker(filePath, stripped, frameworkNames ?? [], language, [language]),
-                  new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`Таймаут парсинга (${timeout}ms)`)), timeout)),
-                ]);
-              } else {
-                result = this.extractFile(filePath, stripped, language, frameworkNames);
-              }
-            } catch (parseErr3) {
-              // Сохраняем для повторной обработки с фолбэком
-              failedFiles.push({ filePath, content, language, stats });
-              processed++;
-              filesErrored++;
-              errors.push({
-                message: parseErr3 instanceof Error ? parseErr3.message : String(parseErr3),
-                filePath,
-                severity: 'error',
-                code: 'parse_error',
-              });
-              continue;
-            }
-          }
+          result = this.extractFile(filePath, content, language, frameworkNames);
+        } catch (parseErr3) {
+          // Сохраняем для повторной обработки с фолбэком
+          failedFiles.push({ filePath, content, language, stats });
+          processed++;
+          filesErrored++;
+          errors.push({
+            message: parseErr3 instanceof Error ? parseErr3.message : String(parseErr3),
+            filePath,
+            severity: 'error',
+            code: 'parse_error',
+          });
+          continue;
         }
 
         processed++;

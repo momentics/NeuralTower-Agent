@@ -130,6 +130,9 @@ export interface IUnresolvedReference {
   filePath?: string;
   language?: Language;
   candidates?: string[];
+  status?: 'pending' | 'failed';
+  nameTail?: string;
+  rowId?: number;
 }
 
 /** Результат извлечения символов из файла. */
@@ -220,8 +223,8 @@ export interface Context {
   focal: INode;
   ancestors: INode[];
   children: INode[];
-  incomingRefs: IEdge[];
-  outgoingRefs: IEdge[];
+  incomingRefs: Array<{ node: INode; edge: IEdge }>;
+  outgoingRefs: Array<{ node: INode; edge: IEdge }>;
   types: INode[];
   imports: IEdge[];
 }
@@ -509,6 +512,15 @@ export interface IResolutionContext {
   getLanguageFromNodeId(nodeId: string): Language | null;
   getDetectedFrameworks(): string[];
   getAllFiles(): string[];
+  iterateNodesByKind?(kind: NodeKind): IterableIterator<INode>;
+  getFileLines?(filePath: string): string[] | null;
+  getMethodMatches?(typeName: string, methodName: string, language: Language): INode[];
+  getSupertypesByName?(typeName: string, language: Language): string[];
+  getProjectAliases?(): IAliasMap | null;
+  getGoModule?(): IGoModule | null;
+  getWorkspacePackages?(): IWorkspacePackages | null;
+  listDirectories?(relativePath: string): string[];
+  getCppIncludeDirs?(): string[];
 }
 
 /** Разрешённая ссылка. */
@@ -527,11 +539,9 @@ export interface IResolutionResult {
 }
 
 /** Re-export из модуля. */
-export interface IReExport {
-  sourcePath: string;
-  sourceName: string;
-  language: Language;
-}
+export type IReExport =
+  | { kind: 'named'; exportedName: string; originalName: string; source: string }
+  | { kind: 'wildcard'; source: string };
 
 /** Карта алиасов импортов (tsconfig paths и т.д.). */
 export interface IAliasMap {
@@ -553,11 +563,12 @@ export interface IWorkspacePackages {
 
 /** Маппинг импорта на файл. */
 export interface IImportMapping {
-  sourcePath: string;
-  sourceName: string;
-  targetPath: string;
-  targetName: string;
-  language: Language;
+  localName: string;
+  exportedName: string;
+  source: string;
+  isDefault: boolean;
+  isNamespace: boolean;
+  resolvedPath?: string;
 }
 
 /** Резолвер фреймворков. */
