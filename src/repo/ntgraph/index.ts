@@ -549,7 +549,7 @@ export {
   IExtractionError, ISubgraph, Context, CodeBlock, TaskInput,
   BuildContextOptions, TaskContext, FindRelevantContextOptions,
   ParsedQuery, ITraversalOptions, IIndexProgress, IIndexResult,
-  ISyncResult, IResolutionContext, IResolvedRef, IResolutionResult,
+  ISyncResult, IGraphQueryContext, IFileContext, IResolutionContext, IResolvedRef, IResolutionResult,
   IReExport, IAliasMap, IGoModule, IWorkspacePackages,
   IImportMapping, IFrameworkResolver, ISchemaVersion,
   // Types

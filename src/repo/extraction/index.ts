@@ -79,7 +79,7 @@ export { detectFrameworks } from './FrameworkDetection';
 // Оркестратор индексации
 // =============================================================================
 
-export { ExtractionOrchestrator, IndexOptions } from './Orchestrator';
+export { ExtractionOrchestrator, IndexOptions, IIndexAndResolveResult } from './Orchestrator';
 
 // =============================================================================
 // Gitignore
@@ -95,6 +95,8 @@ export type {
   IIndexProgress,
   IIndexResult,
   ISyncResult,
+  IGraphQueryContext,
+  IFileContext,
   IResolutionContext,
   IResolvedRef,
   IResolutionResult,

@@ -492,12 +492,8 @@ export interface ISyncResult {
   durationMs: number;
 }
 
-/** Контекст разрешения ссылок. */
-export interface IResolutionContext {
-  getNodesByFile(filePath: string): INode[];
-  getNodesByName(name: string): INode[];
-  getImportMappings(filePath: string): IImportMapping[];
-  getReExports(filePath: string): IReExport[];
+/** Контекст запросов к графу — узлы, рёбра, иерархия. */
+export interface IGraphQueryContext {
   getNodeById(id: string): INode | null;
   getNodesByKind(kind: NodeKind): INode[];
   getNodesByQualifiedName(qualifiedName: string): INode[];
@@ -507,6 +503,14 @@ export interface IResolutionContext {
   getAncestors(nodeId: string): INode[];
   getIncomingEdges(nodeId: string): IEdge[];
   getOutgoingEdges(nodeId: string): IEdge[];
+}
+
+/** Контекст файловых запросов — файлы, импорты, содержимое. */
+export interface IFileContext {
+  getNodesByFile(filePath: string): INode[];
+  getNodesByName(name: string): INode[];
+  getImportMappings(filePath: string): IImportMapping[];
+  getReExports(filePath: string): IReExport[];
   getFileContent(filePath: string): string | null;
   getFilePathFromNodeId(nodeId: string): string | null;
   getLanguageFromNodeId(nodeId: string): Language | null;
@@ -522,6 +526,9 @@ export interface IResolutionContext {
   listDirectories?(relativePath: string): string[];
   getCppIncludeDirs?(): string[];
 }
+
+/** Контекст разрешения ссылок — объединяет графовые и файловые запросы. */
+export interface IResolutionContext extends IGraphQueryContext, IFileContext {}
 
 /** Разрешённая ссылка. */
 export interface IResolvedRef {
@@ -575,7 +582,7 @@ export interface IImportMapping {
 export interface IFrameworkResolver {
   name: string;
   resolve(ref: IUnresolvedReference, context: IResolutionContext): IResolvedRef | null;
-  postExtract(context: IResolutionContext): INode[];
+  postExtract?(context: IResolutionContext): INode[];
   claimsReference?(name: string): boolean;
 }
 

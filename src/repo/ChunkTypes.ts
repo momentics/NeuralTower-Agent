@@ -123,4 +123,4 @@ export interface ISearchConfig {
 }
 
 /** Режим поиска по репозиторию. */
-export type SearchMode = "semantic" | "keyword" | "hybrid"
+export type SearchMode = "semantic" | "keyword" | "hybrid" | "graph" | "hybrid_graph"

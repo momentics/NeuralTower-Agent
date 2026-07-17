@@ -59,6 +59,10 @@ import { CSharpExtractor } from './extractors/CSharp';
 import { DefaultExtractor } from './extractors/Default';
 import { stripCommentsForRegex } from './StripComments';
 import { ParseWorkerPool, resolveParsePoolSize } from './ParserWorkerPool';
+import { QueryBuilder } from '../ntgraph/QueryBuilder';
+import { GraphTraverser } from '../ntgraph/Traversal';
+import { ContextBuilder } from '../context/Builder';
+import { ISubgraph, FindRelevantContextOptions } from '../ntgraph/Types';
 import os from 'os';
 
 /** Параметры индексации. */
@@ -70,6 +74,13 @@ export interface IndexOptions {
   maxFileSize?: number;
   includeTests?: boolean;
   frameworkNames?: string[];
+}
+
+/** Комбинированный результат индексации и разрешения ссылок. */
+export interface IIndexAndResolveResult {
+  indexing: IIndexResult;
+  resolution: IResolutionResult;
+  durationMs: number;
 }
 
 /** Карта расширение → язык. */
@@ -1125,6 +1136,46 @@ await this.storeExtractionResult(fileRecord, result);
       unresolved,
       durationMs: Date.now() - startTime,
     };
+  }
+
+  /**
+   * Индексация всех файлов с последующим разрешением ссылок.
+   *
+   * Выполняет indexAll(), затем resolveAndPersistBatched() и возвращает
+   * объединённый результат со статистикой обеих фаз.
+   */
+  async indexAndResolve(
+    options?: IndexOptions,
+  ): Promise<IIndexAndResolveResult> {
+    const startTime = Date.now();
+
+    // Фаза 1: индексация всех файлов
+    const indexing = await this.indexAll(options?.onProgress, options?.signal);
+
+    // Фаза 2: разрешение кросс-файловых ссылок
+    const resolution = await this.resolveAndPersistBatched();
+
+    return {
+      indexing,
+      resolution,
+      durationMs: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Построение контекста для AI-запроса.
+   *
+   * Создаёт QueryBuilder, GraphTraverser и ContextBuilder из БД, затем
+   * ищет релевантный контекст по запросу.
+   */
+  async buildContextForQuery(
+    query: string,
+    options?: FindRelevantContextOptions,
+  ): Promise<ISubgraph> {
+    const qb = this.db.queryBuilder;
+    const traverser = new GraphTraverser(qb);
+    const builder = new ContextBuilder(this.rootDir, qb, traverser);
+    return builder.findRelevantContext(query, options);
   }
 
   /**
