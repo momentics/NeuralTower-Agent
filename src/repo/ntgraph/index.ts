@@ -608,7 +608,7 @@ export {
   // Query parser
   parseQuery,
   // File classifiers
-  isTestFile, isGeneratedFile, isDistinctiveIdentifier, isConfigLeafNode,
+  isTestFile, isDistinctiveIdentifier, isConfigLeafNode,
   // Path safety
   isWithinDir, validatePathWithinRoot, validateProjectPath,
   // Paths
@@ -621,3 +621,4 @@ export {
   // Memory
   estimateSize, MemoryMonitor,
 } from './Utils';
+export { isGeneratedFile } from '../extraction/GeneratedDetection';

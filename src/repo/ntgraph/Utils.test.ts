@@ -25,7 +25,6 @@ import {
   scorePathRelevance,
   isLowValueFile,
   isTestFile,
-  isGeneratedFile,
   isDistinctiveIdentifier,
   isConfigLeafNode,
   parseQuery,
@@ -38,6 +37,7 @@ import {
   debounce,
   throttle,
 } from "./Utils"
+import { isGeneratedFile } from "../extraction/GeneratedDetection"
 
 describe("Utils", () => {
   // ---- Конвертеры ----

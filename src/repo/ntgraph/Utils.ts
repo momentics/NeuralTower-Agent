@@ -393,7 +393,7 @@ export function isLowValueFile(filePath: string): boolean {
     /(tests?|spec)\.cs$/.test(lp) ||
     /tests?\.swift$/.test(lp) ||
     /_test\.dart$/.test(lp) ||
-    isGeneratedFile(filePath)
+    isGeneratedFileFromDetection(filePath)
   );
 }
 
@@ -546,11 +546,6 @@ export function isTestFile(filePath: string): boolean {
   if (/(?:^|\/)(?:\.github|\.gitlab|\.circleci|\.travis|\.ci)\//.test(lp)) return true;
 
   return false;
-}
-
-/** Определение сгенерированных файлов (делегат в отдельный модуль). */
-export function isGeneratedFile(filePath: string): boolean {
-  return isGeneratedFileFromDetection(filePath);
 }
 
 /** Проверяет наличие подчеркивания, цифры или внутреннего заглавного символа. */
