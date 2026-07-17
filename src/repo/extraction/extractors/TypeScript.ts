@@ -125,6 +125,17 @@ export class TypeScriptExtractor extends ExtractorBase {
       ));
     }
 
+    // Сброс function-ref кандидатов в неразрешённые ссылки
+    const sameFileFunctionNames = new Set(nodes.filter(n => n.kind === 'function' || n.kind === 'method').map(n => n.name));
+    const importedNames = new Set(
+      edges.filter(e => e.kind === 'imports').map(e => {
+        const targetNode = nodes.find(n => n.id === e.target);
+        return targetNode ? targetNode.name : '';
+      }).filter(Boolean)
+    );
+    const fnRefUnresolved = this.flushFnRefCandidates(sameFileFunctionNames, importedNames);
+    unresolvedRefs.push(...fnRefUnresolved);
+
     return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
   }
 
@@ -1477,6 +1488,18 @@ export class TypeScriptExtractor extends ExtractorBase {
       if (prop) {
         funcName = prop.text;
       }
+
+      // Захват function-ref для this.methodName в аргументах
+      const obj = funcNode.childForFieldName('object');
+      if (obj && obj.text === 'this' && prop) {
+        this.fnRefCandidates.push({
+          name: prop.text,
+          line: node.startPosition.row + 1,
+          column: node.startPosition.column,
+          mode: 'args',
+          explicitRef: false,
+        });
+      }
     }
 
     if (funcName) {
@@ -1495,6 +1518,9 @@ export class TypeScriptExtractor extends ExtractorBase {
         filePath
       ));
     }
+
+    // Захват function-ref кандидатов из аргументов call expression
+    this.captureFnRefCandidates(node);
   }
 
   /** Обрабатывает декоратор — создаёт узел и ребро Decorates к декорируемому символу. */

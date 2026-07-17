@@ -56,7 +56,7 @@ export function resolveParsePoolSize(envVal: string | undefined, cpuCount: numbe
   if (envVal !== undefined && envVal !== '') {
     const n = Number(envVal);
     if (Number.isFinite(n) && n > 0) return Math.min(MAX_PARSE_POOL_SIZE, Math.max(1, Math.floor(n)));
-    if (n === 0) return 1;
+    if (n === 0) return 0;
   }
   return Math.min(DEFAULT_PARSE_POOL_CAP, Math.max(1, cpuCount - 1));
 }

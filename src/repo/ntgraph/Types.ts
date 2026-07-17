@@ -579,26 +579,6 @@ export interface IFrameworkResolver {
   claimsReference?(name: string): boolean;
 }
 
-/** Паттерны для генерируемых файлов. */
-export const GENERATED_PATTERNS: RegExp[] = [
-  /\/generated\//i, /\/gen\//i, /\/proto\//i, /\/__generated__/i,
-  /\.pb\.ts$/, /\.pb\.js$/, /\.pb\.go$/, /\.pb\.py$/,
-  /\.gen\.ts$/, /\.gen\.js$/, /\.gen\.go$/, /\.gen\.py$/,
-  /\/\.next\//i, /\/\.nuxt\//i, /\/dist\//i, /\/build\//i,
-  /\/node_modules\//i, /\/vendor\//i,
-  /-lock\.json$/, /package-lock\.json$/, /yarn\.lock$/, /pnpm-lock\.yaml$/,
-  /\/coverage\//i, /\/\.nyc_output\//i,
-  /\.d\.ts$/, /\.min\.js$/, /\.min\.css$/, /\.bundle\.js$/,
-  /\/\.svelte-kit\//i, /\/\.vite\//i, /\/\.angular\//i,
-  /\/\.parcel-cache\//i, /\/\.swc\//i,
-  /\/\.turbo\//i, /\/\.vercel\//i,
-  /\/\.cache\//i, /\/\.parcel-cache\//i,
-  /swagger\.json$/, /openapi\.json$/, /\.map$/,
-  /\/__snapshots__\//i, /\/\.jest\//i,
-  /\/\.cache\//i, /\/\.rollup\//i,
-  /\/\.eslintrc\//i, /\/\.prettierrc\//i
-];
-
 /** Максимальный размер файла для индексации (1 МБ). */
 export const MAX_FILE_SIZE = 1024 * 1024;
 

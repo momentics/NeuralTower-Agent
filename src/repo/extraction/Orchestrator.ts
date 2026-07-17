@@ -52,7 +52,14 @@ import { IExtractor, ExtractorBase } from './ExtractorBase';
 import { CppExtractor } from './extractors/Cpp';
 import { TypeScriptExtractor } from './extractors/TypeScript';
 import { PythonExtractor } from './extractors/Python';
+import { GoExtractor } from './extractors/Go';
+import { RustExtractor } from './extractors/Rust';
+import { JavaExtractor } from './extractors/Java';
+import { CSharpExtractor } from './extractors/CSharp';
+import { DefaultExtractor } from './extractors/Default';
 import { stripCommentsForRegex } from './StripComments';
+import { ParseWorkerPool, resolveParsePoolSize } from './ParserWorkerPool';
+import os from 'os';
 
 /** Параметры индексации. */
 export interface IndexOptions {
@@ -103,6 +110,11 @@ function ensureExtractors(): void {
     EXTRACTOR_MAP.set('python', new PythonExtractor());
     EXTRACTOR_MAP.set('cpp', new CppExtractor());
     EXTRACTOR_MAP.set('c', new CppExtractor());
+    EXTRACTOR_MAP.set('go', new GoExtractor());
+    EXTRACTOR_MAP.set('rust', new RustExtractor());
+    EXTRACTOR_MAP.set('java', new JavaExtractor());
+    EXTRACTOR_MAP.set('csharp', new CSharpExtractor());
+    EXTRACTOR_MAP.set('unknown', new DefaultExtractor());
   }
 }
 
@@ -125,14 +137,6 @@ function createYielder(budgetMs: number = DEFAULT_YIELD_BUDGET_MS): () => Promis
     await new Promise<void>((resolve) => setImmediate(resolve));
     last = Date.now();
   };
-}
-
-/**
- * Кооперативная отдача управления — позволяет циклу событий обработать
- * отложенные задачи (например, прогресс-бар) во время длительных циклов.
- */
-function yieldToEventLoop(): Promise<void> {
-  return new Promise<void>((resolve) => setImmediate(resolve));
 }
 
 /**
@@ -180,6 +184,7 @@ async function scanDirectory(
 
   // Пытаемся использовать git для быстрого обхода
   const gitFiles = getGitVisibleFiles(rootDir);
+  const yielder = createYielder();
   if (gitFiles) {
     for (const filePath of gitFiles) {
       checkAbort(signal);
@@ -192,7 +197,7 @@ async function scanDirectory(
 
       if (count % SCAN_YIELD_INTERVAL === 0) {
         onProgress?.({ phase: 'scanning', current: count, total: 0, file: filePath, durationMs: 0 });
-        await yieldToEventLoop();
+        await yielder();
       }
     }
     return files;
@@ -291,6 +296,7 @@ async function walkDirectory(
     // .gitignore не найден — пропускаем
   }
 
+  const yielder = createYielder();
   for (const entry of entries) {
     checkAbort(signal);
 
@@ -314,7 +320,7 @@ async function walkDirectory(
 
       if (countRef % SCAN_YIELD_INTERVAL === 0) {
         onProgress?.({ phase: 'scanning', current: countRef, total: 0, file: relativePath, durationMs: 0 });
-        await yieldToEventLoop();
+        await yielder();
       }
     }
   }
@@ -466,6 +472,10 @@ export class ExtractionOrchestrator {
     // Сброс кэша фреймворков при каждом запуске
     this._detectedFrameworks = null;
 
+    // Пул воркеров (объявлен до try для доступа из finally)
+    let parsePool: ParseWorkerPool | null = null;
+    let usePool = false;
+
     try {
       // Загрузка кастомных маппингов расширений из ntgraph.json
       loadExtensionOverrides(this.rootDir);
@@ -497,6 +507,33 @@ export class ExtractionOrchestrator {
 
       // Включение WAL-клапана для массовой индексации
       this.db.enableWalValve(verbose);
+
+      // Определяем доступные языки для загрузки грамматик
+      const neededLanguages = new Set<string>();
+      for (const filePath of files) {
+        const lang = detectLanguage(filePath);
+        if (lang !== 'unknown' && isLanguageSupported(lang) && !isFileLevelOnlyLanguage(lang)) {
+          neededLanguages.add(lang);
+        }
+      }
+
+      // Создаём пул воркеров для мульти-поточного парсинга
+      try {
+        require.resolve('worker_threads');
+        const poolSize = resolveParsePoolSize(process.env.CODEGRAPH_PARSE_WORKERS, os.cpus().length);
+        if (poolSize > 0) {
+          const workerScriptPath = require.resolve('./ParserWorker.script.js');
+          parsePool = new ParseWorkerPool({
+            languages: [...neededLanguages],
+            size: poolSize,
+            workerScriptPath,
+            log: verbose ? (msg: string) => console.log(`[pool] ${msg}`) : undefined,
+          });
+          usePool = true;
+        }
+      } catch {
+        // worker_threads не доступны — используем синхронный режим
+      }
 
       // Обработка батчами для параллельного чтения файлов
       for (let i = 0; i < files.length; i += FILE_IO_BATCH_SIZE) {
@@ -614,10 +651,19 @@ export class ExtractionOrchestrator {
             continue;
           }
 
-          // Извлечение AST
+          // Извлечение AST (через пул воркеров или синхронно)
           let result: IExtractionResult;
           try {
-            result = this.extractFile(filePath, content, language, frameworkNames);
+            if (usePool && parsePool) {
+              result = await parsePool.requestParse({
+                filePath,
+                content,
+                language: language as Language,
+                frameworkNames,
+              });
+            } else {
+              result = this.extractFile(filePath, content, language, frameworkNames);
+            }
           } catch (parseErr) {
             processed++;
             filesErrored++;
@@ -698,6 +744,9 @@ await this.storeExtractionResult(fileRecord, result);
       throw err;
     } finally {
       this.db.disableWalValve();
+      if (parsePool) {
+        await parsePool.destroy();
+      }
     }
   }
 
@@ -722,6 +771,7 @@ await this.storeExtractionResult(fileRecord, result);
     let filesRemoved = 0;
     let nodesUpdated = 0;
     const changedFilePaths: string[] = [];
+    const yielder = createYielder(1000);
 
     onProgress?.({ phase: 'scanning', current: 0, total: 0, file: '', durationMs: 0 });
 
@@ -753,7 +803,7 @@ await this.storeExtractionResult(fileRecord, result);
         filesChecked++;
 
         if (filesChecked % SYNC_RECONCILE_YIELD_INTERVAL === 0) {
-          await yieldToEventLoop();
+          await yielder();
         }
       }
 
@@ -769,7 +819,7 @@ await this.storeExtractionResult(fileRecord, result);
           filesChecked++;
 
           if (filesChecked % SYNC_RECONCILE_YIELD_INTERVAL === 0) {
-            await yieldToEventLoop();
+            await yielder();
           }
           continue;
         }
@@ -790,7 +840,7 @@ await this.storeExtractionResult(fileRecord, result);
         filesChecked++;
 
         if (filesChecked % SYNC_RECONCILE_YIELD_INTERVAL === 0) {
-          await yieldToEventLoop();
+          await yielder();
         }
       }
     } else {
@@ -827,7 +877,7 @@ await this.storeExtractionResult(fileRecord, result);
         }
 
         if (++reconcileChecks % SYNC_RECONCILE_YIELD_INTERVAL === 0) {
-          await yieldToEventLoop();
+          await yielder();
         }
       }
 
@@ -836,7 +886,7 @@ await this.storeExtractionResult(fileRecord, result);
         checkAbort(signal);
 
         if (++reconcileChecks % SYNC_RECONCILE_YIELD_INTERVAL === 0) {
-          await yieldToEventLoop();
+          await yielder();
         }
 
         const fullPath = path.join(this.rootDir, filePath);
@@ -1013,6 +1063,7 @@ await this.storeExtractionResult(fileRecord, result);
     const resolved: IResolvedRef[] = [];
     const unresolved: IUnresolvedReference[] = [];
     const startTime = Date.now();
+    const yielder = createYielder();
 
     let offset = 0;
     let prevRemaining = Infinity;
@@ -1052,7 +1103,7 @@ await this.storeExtractionResult(fileRecord, result);
       unresolved.push(...batchUnresolved);
 
       // Yield для event loop
-      await yieldToEventLoop();
+      await yielder();
 
       offset += batchSize;
 

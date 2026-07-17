@@ -17,6 +17,7 @@ import {
   ReferenceKind,
   Language,
 } from '../ntgraph/Types';
+import { FnRefCandidate, FN_REF_SPECS, captureFnRefCandidates } from './FunctionRef';
 
 /** Интерфейс экстрактора. */
 export interface IExtractor {
@@ -214,5 +215,54 @@ export abstract class ExtractorBase implements IExtractor {
   protected splitStringArray(str: string): string[] {
     if (!str) return [];
     return str.split(',').map(s => s.trim()).filter(Boolean);
+  }
+
+  /** Кандидаты function-ref для текущего файла. */
+  protected fnRefCandidates: FnRefCandidate[] = [];
+
+  /**
+   * Сбрасывает накопленные кандидаты function-ref в неразрешённые ссылки.
+   * Фильтрует по именам функций текущего файла и импортированным именам.
+   */
+  protected flushFnRefCandidates(
+    sameFileFunctionNames: Set<string>,
+    importedNames: Set<string>
+  ): IUnresolvedReference[] {
+    const refs: IUnresolvedReference[] = [];
+    const spec = FN_REF_SPECS[this.getLanguage()];
+    if (!spec) return refs;
+
+    for (const candidate of this.fnRefCandidates) {
+      // Gate: имя должно совпадать с функцией в том же файле или импортом
+      if (candidate.skipGate) {
+        // Пропуск gate для специальных случаев
+      } else if (!sameFileFunctionNames.has(candidate.name) && !importedNames.has(candidate.name)) {
+        continue;
+      }
+
+      refs.push(this.createUnresolvedRef(
+        this.currentNodeId ?? '',
+        candidate.name,
+        'function_ref',
+        candidate.line,
+        candidate.column
+      ));
+    }
+    this.fnRefCandidates = [];
+    return refs;
+  }
+
+  /** Текущий ID узла (для создания unresolved references). */
+  protected currentNodeId: string | undefined;
+
+  /**
+   * Захватывает function-ref кандидатов из контейнера AST.
+   */
+  protected captureFnRefCandidates(container: any): void {
+    const spec = FN_REF_SPECS[this.getLanguage()];
+    if (!spec) return;
+
+    const candidates = captureFnRefCandidates(container, { mode: 'args' }, spec);
+    this.fnRefCandidates.push(...candidates);
   }
 }

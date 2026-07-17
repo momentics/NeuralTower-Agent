@@ -1,5 +1,8 @@
 import { vi } from "vitest"
 
+// Отключаем пул воркеров в тестах — используем синхронный режим
+process.env.CODEGRAPH_PARSE_WORKERS = "0"
+
 // Заглушка для crypto.randomBytes при генерации HTML вебвью
 vi.mock("crypto", async (importOriginal) => {
   const actual = await importOriginal()
