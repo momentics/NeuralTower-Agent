@@ -42,7 +42,7 @@ describe("Formatter", () => {
       entryPoints: [node],
       codeBlocks: [],
       relatedFiles: ["src/main.ts"],
-      summary: "Found 1 node",
+      summary: "Найдено 1 узел",
       stats,
     }
   }

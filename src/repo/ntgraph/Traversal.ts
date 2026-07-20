@@ -307,12 +307,11 @@ export class GraphTraverser {
 
     const nodes = new Map<string, INode>();
     const edges: IEdge[] = [];
-    const visited = new Set<string>();
 
     nodes.set(focalNode.id, focalNode);
 
-    this.getTypeAncestors(nodeId, nodes, edges, visited);
-    this.getTypeDescendants(nodeId, nodes, edges, visited);
+    this.getTypeAncestors(nodeId, nodes, edges, new Set());
+    this.getTypeDescendants(nodeId, nodes, edges, new Set());
 
     return { nodes, edges, roots: [nodeId] };
   }

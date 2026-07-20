@@ -102,10 +102,11 @@ export class ContextBuilder {
     const symbols = extractSymbolsFromQuery(query);
 
     // Поиск точек входа
-    const entryPoints = await this.findEntryPoints(query, symbols, opts);
+    const { entryPoints, confidence } = await this.findEntryPoints(query, symbols, opts);
 
     // Расширение графа
     const subgraph = this.expandGraph(entryPoints, opts);
+    subgraph.confidence = confidence;
 
     // Извлечение блоков кода
     const codeBlocks = opts.includeCode
@@ -163,10 +164,12 @@ export class ContextBuilder {
     const symbols = extractSymbolsFromQuery(query);
 
     // Поиск точек входа
-    const entryPoints = await this.findEntryPoints(query, symbols, opts);
+    const { entryPoints, confidence } = await this.findEntryPoints(query, symbols, opts);
 
     // Расширение графа
-    return this.expandGraph(entryPoints, opts);
+    const subgraph = this.expandGraph(entryPoints, opts);
+    subgraph.confidence = confidence;
+    return subgraph;
   }
 
   /**
@@ -187,9 +190,10 @@ export class ContextBuilder {
     query: string,
     symbols: string[],
     opts: Required<IBuildContextOpts>
-  ): Promise<INode[]> {
+  ): Promise<{ entryPoints: INode[]; confidence: 'high' | 'low' }> {
     const results: ISearchResult[] = [];
     const seenIds = new Set<string>();
+    let bestStep = 0;
 
     // Шаг 1: Точное совпадение символов
     try {
@@ -202,6 +206,7 @@ export class ContextBuilder {
         if (!seenIds.has(r.node.id) && r.score >= opts.minScore) {
           results.push(r);
           seenIds.add(r.node.id);
+          bestStep = 1;
         }
       }
     } catch {
@@ -224,6 +229,7 @@ export class ContextBuilder {
               if (!seenIds.has(node.id)) {
                 results.push({ node, score: 0.6 });
                 seenIds.add(node.id);
+                bestStep = 2;
               }
             }
           } catch {
@@ -244,6 +250,7 @@ export class ContextBuilder {
           if (!seenIds.has(r.node.id) && r.score >= opts.minScore) {
             results.push(r);
             seenIds.add(r.node.id);
+            bestStep = 3;
           }
         }
       } catch {
@@ -251,7 +258,26 @@ export class ContextBuilder {
       }
     }
 
-    // Шаг 3: LIKE-фоллбэк для camelCase
+    // Шаг 3: Составной термин — multi-term boosting
+    if (symbols.length >= 2 && results.length > 0) {
+      const symbolLower = symbols.map(s => s.toLowerCase());
+      for (const r of results) {
+        const nameLower = r.node.name.toLowerCase();
+        const qNameLower = r.node.qualifiedName.toLowerCase();
+        let matchCount = 0;
+        for (const sym of symbolLower) {
+          if (nameLower.includes(sym) || qNameLower.includes(sym)) {
+            matchCount++;
+          }
+        }
+        if (matchCount >= 2) {
+          // Агрессивное масштабирование: умножаем балл на число совпавших терминов
+          r.score *= (1 + matchCount * 0.5);
+        }
+      }
+    }
+
+    // Шаг 4: LIKE-фоллбэк для camelCase
     if (results.length < opts.searchLimit) {
       for (const symbol of symbols) {
         try {
@@ -259,14 +285,36 @@ export class ContextBuilder {
             ...DEFAULT_FIND_OPTIONS,
             limit: Math.ceil(opts.searchLimit / symbols.length),
           });
-          for (const node of likeResults) {
-            if (!seenIds.has(node.id)) {
-              results.push({ node, score: 0.4 });
-              seenIds.add(node.id);
+         for (const node of likeResults) {
+              if (!seenIds.has(node.id)) {
+                results.push({ node, score: 0.4 });
+                seenIds.add(node.id);
+                bestStep = 4;
+              }
+            }
+        } catch {
+          // Продолжаем
+        }
+      }
+    }
+
+    // Шаг 5: Fuzzy-фоллбэк
+    if (results.length < opts.searchLimit) {
+      for (const symbol of symbols) {
+        try {
+          const fuzzyResults = this.queries.searchNodesFuzzy(symbol, {
+            kinds: opts.nodeKinds?.length ? opts.nodeKinds : undefined,
+            limit: Math.ceil(opts.searchLimit / symbols.length),
+          });
+          for (const r of fuzzyResults) {
+            if (!seenIds.has(r.node.id) && r.score >= opts.minScore) {
+              results.push(r);
+              seenIds.add(r.node.id);
+              bestStep = 5;
             }
           }
         } catch {
-          // Продолжаем
+          // Fuzzy не удался — продолжаем
         }
       }
     }
@@ -278,10 +326,10 @@ export class ContextBuilder {
     // Разрешение импортов на определения
     const resolved = this.resolveImportsToDefinitions(filtered);
 
-    // Определение уверенности
-    const hasHighConfidence = filtered.some((r) => r.score >= 0.7);
+    // Определение уверенности по шагу поиска
+    const confidence = bestStep <= 3 ? 'high' : 'low';
 
-    return resolved.map((r) => r.node);
+    return { entryPoints: resolved.map((r) => r.node), confidence };
   }
 
   // ===================================================================
@@ -504,7 +552,7 @@ export class ContextBuilder {
   }
 
   // ===================================================================
-  // Call paths
+  // Пути вызовов
   // ===================================================================
 
   /**
