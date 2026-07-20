@@ -70,12 +70,6 @@ export { shouldIndexFile, isBinaryFile, isTooLarge, resolveRelativePath } from '
 export { discoverEmbeddedRepoRoots, findIgnoredEmbeddedRepos, classifyGitDir } from './EmbeddedRepos';
 
 // =============================================================================
-// Детекция фреймворков
-// =============================================================================
-
-export { detectFrameworks } from './FrameworkDetection';
-
-// =============================================================================
 // Оркестратор индексации
 // =============================================================================
 

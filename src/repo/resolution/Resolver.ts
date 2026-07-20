@@ -49,7 +49,7 @@ import {
   CHAIN_SHAPE,
   SUPERTYPE_BEARING_KINDS,
 } from './Constants';
-import { detectFrameworks } from '../extraction/FrameworkDetection';
+import { detectFrameworks } from './Frameworks';
 import { loadProjectAliases } from '../extraction/PathAliases';
 import { loadGoModule } from '../extraction/GoModule';
 import { loadWorkspacePackages } from '../extraction/WorkspacePackages';

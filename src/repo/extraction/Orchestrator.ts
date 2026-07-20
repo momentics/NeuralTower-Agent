@@ -45,7 +45,7 @@ import {
 import { EXTRACTION_VERSION } from './ExtractionVersion';
 import { detectLanguage, loadExtensionOverrides, isFileLevelOnlyLanguage } from './LanguageDetector';
 import { shouldIndexFile, isBinaryFile, isTooLarge, resolveRelativePath } from './PathValidation';
-import { detectFrameworks } from './FrameworkDetection';
+import { detectFrameworks } from '../resolution/Frameworks';
 import { discoverEmbeddedRepoRoots, findIgnoredEmbeddedRepos } from './EmbeddedRepos';
 import { readGitignorePatterns, matchGitignorePattern } from './Gitignore';
 import { IExtractor, ExtractorBase } from './ExtractorBase';

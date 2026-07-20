@@ -8,3 +8,4 @@ export { matchReference, matchFunctionRef, matchDottedCallChain, matchScopedCall
 export { resolveViaImport, resolveJvmImport, extractImportMappings, extractReExports, loadCppIncludeDirs, isPhpIncludePathRef } from './ImportResolver';
 export { synthesizeCallbackEdges } from './CallbackSynthesizer';
 export { HIGH_VALUE_NODE_KINDS, SUPERTYPE_BEARING_KINDS, CONTAINER_NODE_KINDS, CHAIN_LANGUAGES, SCOPED_CHAIN_LANGUAGES, CHAIN_SHAPE, MAX_HOPS, DEFAULT_CACHE_LIMIT } from './Constants';
+export { detectFrameworks } from './Frameworks';
