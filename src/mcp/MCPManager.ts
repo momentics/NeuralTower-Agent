@@ -6,6 +6,8 @@ import { createDomainLogger } from "../core/Logger"
 import type { IMCPTransport } from "./MCPTransport"
 import { StdioMCPTransport, MCP_TRANSPORT_EVENTS } from "./MCPTransport"
 import { MCP_REQUEST_TIMEOUT_MS } from "../core/Config"
+import { MCPEngine } from "./ntgraph/Engine"
+import type { IMCPEngineOptions } from "./ntgraph/Engine"
 
 const log = createDomainLogger("MCP")
 
@@ -44,14 +46,16 @@ interface IMCPServer {
  */
 export interface IMCPManager {
  register(config: IMCPServerConfig): void
-  connect(): Promise<void>
+   connect(): Promise<void>
  discover(): Promise<IMCPTool[]>
-  callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<{ output: string; success: boolean }>
-  syncWithRegistry(registry: IToolRegistry): Promise<void>
+   callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<{ output: string; success: boolean }>
+   syncWithRegistry(registry: IToolRegistry): Promise<void>
+   initNtGraphEngine(opts?: IMCPEngineOptions): void
+   syncNtGraphWithRegistry(registry: IToolRegistry): Promise<void>
  listServers(): IMCPServerConfig[]
-  getReadyServers(): string[]
+   getReadyServers(): string[]
  getToolsByServer(): Array<{ server: string; tools: IMCPTool[] }>
-  disconnect(): Promise<void>
+   disconnect(): Promise<void>
 }
 
 /**
@@ -81,6 +85,7 @@ registerTransportFactory("stdio", (config) => new StdioMCPTransport(config))
 export class MCPManager implements IMCPManager {
   private servers: IMCPServer[] = []
   private toolAdapter = new MCPToolAdapter()
+  private _ntgraphEngine: MCPEngine | null = null
 
   register(config: IMCPServerConfig): void {
     this.servers.push({
@@ -196,6 +201,9 @@ export class MCPManager implements IMCPManager {
     toolName: string,
     args: Record<string, unknown>,
   ): Promise<{ output: string; success: boolean }> {
+    if (serverName === "ntgraph") {
+      return this.callNtGraphTool(toolName, args)
+    }
     const server = this.servers.find((s) => s.config.name === serverName)
     if (!server || !server.ready || !server.transport) {
       return { output: `MCP-сервер "${serverName}" недоступен`, success: false }
@@ -232,6 +240,24 @@ export class MCPManager implements IMCPManager {
     }
   }
 
+  /** Инициализировать встроенный движок ntgraph. */
+  initNtGraphEngine(opts?: IMCPEngineOptions): void {
+    this._ntgraphEngine = new MCPEngine(opts)
+  }
+
+  /** Зарегистрировать инструменты ntgraph в реестре. */
+  async syncNtGraphWithRegistry(registry: IToolRegistry): Promise<void> {
+    if (!this._ntgraphEngine) {
+      log.error("Движок ntgraph не инициализирован")
+      return
+    }
+    const toolHandler = this._ntgraphEngine.getToolHandler()
+    const toolDefs = toolHandler.getTools()
+    registry.registerMany(
+      this.toolAdapter.adaptNtGraphAll(toolDefs, this.callTool.bind(this)),
+    )
+  }
+
   listServers(): IMCPServerConfig[] {
     return this.servers.map((s) => s.config)
   }
@@ -263,9 +289,36 @@ export class MCPManager implements IMCPManager {
         server.pendingRequests = null
       }
     }
+    if (this._ntgraphEngine) {
+      this._ntgraphEngine.stop()
+      this._ntgraphEngine = null
+    }
   }
 
   // ── Приватные методы ────────────────────────────────────
+
+  /** Вызвать инструмент ntgraph через встроенный движок. */
+  private async callNtGraphTool(
+    toolName: string,
+    args: Record<string, unknown>,
+  ): Promise<{ output: string; success: boolean }> {
+    if (!this._ntgraphEngine) {
+      return { output: "Движок ntgraph не инициализирован", success: false }
+    }
+    try {
+      const toolHandler = this._ntgraphEngine.getToolHandler()
+      const result = await toolHandler.execute(toolName, args)
+      const texts = result.content
+        .filter((c) => c.type === "text")
+        .map((c) => c.text)
+      return { output: texts.join("\n"), success: !result.isError }
+    } catch (err: unknown) {
+      return {
+        output: `Вызов ntgraph-инструмента не выполнен: ${errorMessage(err)}`,
+        success: false,
+      }
+    }
+  }
 
   private sendJSONRPC<T>(
     server: IMCPServer,

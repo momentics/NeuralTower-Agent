@@ -67,7 +67,7 @@ export function resolveViaImport(
   }
 
   // Проверяем реэкспорт
-  const reExports = context.getReExports(ref.filePath);
+  const reExports = context.getReExports?.(ref.filePath) ?? [];
   for (const reExport of reExports) {
     if (reExport.kind === 'named' && reExport.exportedName === ref.referenceName) {
       const sourceNodes = context.getNodesByFile(reExport.source);

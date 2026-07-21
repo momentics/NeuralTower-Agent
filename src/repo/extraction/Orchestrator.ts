@@ -31,6 +31,8 @@ import {
   IAliasMap,
   IGoModule,
   IWorkspacePackages,
+  IFrameworkResolver,
+  IFrameworkExtractionResult,
   NodeKind,
   EdgeKind,
   Language,
@@ -45,7 +47,7 @@ import {
 import { EXTRACTION_VERSION } from './ExtractionVersion';
 import { detectLanguage, loadExtensionOverrides, isFileLevelOnlyLanguage } from './LanguageDetector';
 import { shouldIndexFile, isBinaryFile, isTooLarge, resolveRelativePath } from './PathValidation';
-import { detectFrameworks } from '../resolution/Frameworks';
+import { detectFrameworks, getAllFrameworkResolvers } from '../resolution/Frameworks';
 import { discoverEmbeddedRepoRoots, findIgnoredEmbeddedRepos } from './EmbeddedRepos';
 import { readGitignorePatterns, matchGitignorePattern } from './Gitignore';
 import { IExtractor, ExtractorBase } from './ExtractorBase';
@@ -432,6 +434,7 @@ export class ExtractionOrchestrator {
   private rootDir: string;
   private db: NtGraphDb;
   private _detectedFrameworks: string[] | null = null;
+  private _frameworkResolvers: IFrameworkResolver[] = [];
 
   constructor(rootDir: string, db: NtGraphDb) {
     this.rootDir = rootDir;
@@ -708,6 +711,16 @@ export class ExtractionOrchestrator {
 await this.storeExtractionResult(fileRecord, result);
           }
 
+          // Фреймворк-экстракция
+          const fwResult = this.extractFrameworkNodes(filePath, content);
+          if (fwResult.nodes.length > 0) {
+            this.db.insertNodes(fwResult.nodes);
+            totalNodes += fwResult.nodes.length;
+          }
+          if (fwResult.references.length > 0) {
+            this.db.insertUnresolvedRefsBatch(fwResult.references);
+          }
+
           // Сбор ошибок извлечения
           if (result.errors.length > 0) {
             for (const err of result.errors) {
@@ -740,6 +753,13 @@ await this.storeExtractionResult(fileRecord, result);
 
       // Фолдинг WAL между фазами
       await this.db.foldWalNow();
+
+      // Фреймворк postExtract
+      const postNodes = this.runFrameworkPostExtract();
+      if (postNodes.length > 0) {
+        this.db.insertNodes(postNodes);
+        totalNodes += postNodes.length;
+      }
 
       return {
         indexed: filesIndexed,
@@ -1987,21 +2007,110 @@ await this.storeExtractionResult(fileRecord, result);
     };
   }
 
-  /**
-    * Обеспечивает детекцию фреймворков с кэшированием результата.
-    *
-    * Кэш сбрасывается при каждом вызове indexAll.
-    */
-  ensureDetectedFrameworks(files?: string[]): string[] {
+ /**
+     * Обеспечивает детекцию фреймворков с кэшированием результата.
+     *
+     * Кэш сбрасывается при каждом вызове indexAll.
+     */
+   ensureDetectedFrameworks(files?: string[]): string[] {
     if (this._detectedFrameworks) return this._detectedFrameworks;
 
     try {
-      this._detectedFrameworks = detectFrameworks(files ?? []);
+      const allResolvers = getAllFrameworkResolvers();
+      const detectionContext = this.createDetectionContext(files ?? []);
+      this._frameworkResolvers = detectFrameworks(detectionContext);
+      this._detectedFrameworks = this._frameworkResolvers.map((r) => r.name);
     } catch {
+      this._frameworkResolvers = [];
       this._detectedFrameworks = [];
     }
 
     return this._detectedFrameworks;
+  }
+
+  /**
+   * Создание минимального контекста для обнаружения фреймворков.
+   * Используется до индексации, когда БД пуста.
+   */
+  private createDetectionContext(files: string[]): IResolutionContext {
+    const self = this;
+    return {
+      getNodeById: (id: string) => self.db.getNodeById(id),
+      getNodesByKind: (kind: NodeKind) => self.db.getNodesByKind(kind),
+      getNodesByQualifiedName: (q: string) => self.db.getNodesByQualifiedNameExact(q),
+      getNodesByLowerName: (l: string) => self.db.getNodesByLowerName(l),
+      getSupertypes: (id: string) => [],
+      getChildren: (id: string) => [],
+      getAncestors: (id: string) => [],
+      getIncomingEdges: (id: string) => self.db.getIncomingEdges(id),
+      getOutgoingEdges: (id: string) => self.db.getOutgoingEdges(id),
+      getNodesByFile: (fp: string) => self.db.getNodesByFile(fp),
+      getNodesByName: (name: string) => self.db.getNodesByName(name),
+      getImportMappings: () => [],
+      getReExports: () => [],
+      getFileContent: (fp: string) => {
+        try {
+          return fs.readFileSync(path.join(self.rootDir, fp), 'utf-8');
+        } catch {
+          return null;
+        }
+      },
+      getFilePathFromNodeId: () => null,
+      getLanguageFromNodeId: () => null,
+      getDetectedFrameworks: () => [],
+      getAllFiles: () => files,
+      getFileLines: (fp: string) => {
+        try {
+          return fs.readFileSync(path.join(self.rootDir, fp), 'utf-8').split('\n');
+        } catch {
+          return null;
+        }
+      },
+    };
+  }
+
+  /**
+   * Вызов extract() для каждого фреймворк-резолвера.
+   * Возвращает объединённые узлы и ссылки.
+   */
+  public extractFrameworkNodes(filePath: string, content: string): IFrameworkExtractionResult {
+    const nodes: INode[] = [];
+    const references: IUnresolvedReference[] = [];
+
+    for (const resolver of this._frameworkResolvers) {
+      try {
+        const result = resolver.extract?.(filePath, content);
+        if (result) {
+          nodes.push(...result.nodes);
+          references.push(...result.references);
+        }
+      } catch {
+        // Изоляция ошибок фреймворка
+      }
+    }
+
+    return { nodes, references };
+  }
+
+  /**
+   * Вызов postExtract() для каждого фреймворк-резолвера.
+   * Возвращает объединённые узлы.
+   */
+  public runFrameworkPostExtract(): INode[] {
+    const nodes: INode[] = [];
+
+    for (const resolver of this._frameworkResolvers) {
+      try {
+        const result = resolver.postExtract?.(this.db.queryBuilder as any);
+        if (result) {
+          nodes.push(...result);
+        }
+      } catch {
+        // Изоляция ошибок фреймворка
+      }
+    }
+
+    return nodes;
   }
 
   // ===================================================================

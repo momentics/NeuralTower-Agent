@@ -510,7 +510,7 @@ export interface IFileContext {
   getNodesByFile(filePath: string): INode[];
   getNodesByName(name: string): INode[];
   getImportMappings(filePath: string): IImportMapping[];
-  getReExports(filePath: string): IReExport[];
+  getReExports(filePath: string, language?: Language): IReExport[];
   getFileContent(filePath: string): string | null;
   getFilePathFromNodeId(nodeId: string): string | null;
   getLanguageFromNodeId(nodeId: string): Language | null;
@@ -580,10 +580,44 @@ export interface IImportMapping {
 
 /** Резолвер фреймворков. */
 export interface IFrameworkResolver {
+  /** Имя фреймворка */
   name: string;
+  /** Языки, к которым применим резолвер. Если не указан — все языки. */
+  languages?: Language[];
+  /** Определение применимости резолвера к проекту (вызывается один раз при старте) */
+  detect(context: IResolutionContext): boolean;
+  /** Разрешение ссылки с использованием фреймворк-специфичных паттернов */
   resolve(ref: IUnresolvedReference, context: IResolutionContext): IResolvedRef | null;
-  postExtract?(context: IResolutionContext): INode[];
+  /**
+   * Пропуск ссылки через pre-filter resolveOne, даже когда нет узла с таким именем.
+   * Необходимо для динамической диспетчеризации, где цель вызова — атрибут/дескриптор,
+   * а не объявленный символ (например, Django self._iterable_class(...), Laravel Controller@method).
+   * Возврат true позволяет ссылке достичь resolve() вместо отбрасывания.
+   */
   claimsReference?(name: string): boolean;
+  /**
+   * Экстракция фреймворк-специфичных узлов и ссылок из файла.
+   * Возвращает route-узлы, middleware-узлы и т.д., плюс неразрешённые ссылки,
+   * которые связывают эти узлы с обработчиками (view-классы, методы контроллеров).
+   */
+  extract?(filePath: string, content: string): IFrameworkExtractionResult;
+  /**
+   * Кросс-файловая финализация, вызывается один раз после завершения экстракции
+   * всех файлов (и снова при каждой инкрементальной синхронизации).
+   * Используется фреймворками, где финальное представление символа зависит от
+   * соседнего файла, который per-file extract() никогда не видел.
+   * Например, NestJS RouterModule.register([...]) устанавливает префиксы маршрутов
+   * для контроллеров, объявленных в другом месте.
+   */
+  postExtract?(context: IResolutionContext): INode[];
+}
+
+/** Результат фреймворк-экстракции. */
+export interface IFrameworkExtractionResult {
+  /** Фреймворк-специфичные узлы (например, маршруты) */
+  nodes: INode[];
+  /** Фреймворк-специфичные неразрешённые ссылки (например, маршрут → обработчик) */
+  references: IUnresolvedReference[];
 }
 
 /** Максимальный размер файла для индексации (1 МБ). */

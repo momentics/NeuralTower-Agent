@@ -7,6 +7,17 @@ export interface IMCPToolDefinition {
   schema: Record<string, unknown>
 }
 
+/** Определение инструмента ntgraph. */
+export interface INtGraphToolDefinition {
+  name: string
+  description: string
+  inputSchema: {
+    type: "object"
+    properties: Record<string, { type: string; description: string; default?: unknown; enum?: string[] }>
+    required?: string[]
+  }
+}
+
 export type CallToolFn = (
   serverName: string,
   toolName: string,
@@ -68,6 +79,57 @@ export class MCPToolAdapter {
     callToolFn: CallToolFn,
   ): ITool[] {
     return mcpTools.map((t) => this.adapt(t, serverName, callToolFn))
+  }
+
+  /** Адаптировать инструмент ntgraph к ITool. */
+  adaptNtGraphTool(
+    toolDef: INtGraphToolDefinition,
+    callToolFn: CallToolFn,
+  ): ITool {
+    const fullName = `ntgraph:${toolDef.name}`
+    return {
+      name: fullName,
+      description: toolDef.description,
+      category: "ntgraph",
+      schema: this.toNtGraphSchema(toolDef),
+      isSafe: true,
+      execute: async (args: Record<string, unknown>, _signal?: AbortSignal): Promise<IToolResult> => {
+        const start = Date.now()
+        const result = await callToolFn("ntgraph", toolDef.name, args)
+        return {
+          output: result.output,
+          success: result.success,
+          durationMs: Date.now() - start,
+        }
+      },
+    }
+  }
+
+  /** Адаптировать несколько инструментов ntgraph. */
+  adaptNtGraphAll(
+    toolDefs: INtGraphToolDefinition[],
+    callToolFn: CallToolFn,
+  ): ITool[] {
+    return toolDefs.map((t) => this.adaptNtGraphTool(t, callToolFn))
+  }
+
+  private toNtGraphSchema(tool: INtGraphToolDefinition): IToolSchema {
+    const params: Record<string, IToolParam> = {}
+    const props = tool.inputSchema.properties
+    for (const [k, p] of Object.entries(props)) {
+      params[k] = {
+        type: safeToolParamType(p.type),
+        description: p.description,
+        enum: p.enum,
+        default: p.default,
+      }
+    }
+    return {
+      name: `ntgraph:${tool.name}`,
+      description: tool.description,
+      parameters: params,
+      required: tool.inputSchema.required,
+    }
   }
 
   private toSchema(tool: IMCPToolDefinition, serverName: string): IToolSchema {

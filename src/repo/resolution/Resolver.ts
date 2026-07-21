@@ -8,6 +8,10 @@
  */
 
 import * as fs from 'fs';
+import {
+  NodeKind,
+  EdgeKind,
+} from '../ntgraph/Types';
 import type {
   IUnresolvedReference,
   IResolvedRef,
@@ -15,7 +19,6 @@ import type {
   IResolutionContext,
   INode,
   IEdge,
-  NodeKind,
   Language,
   IImportMapping,
   IReExport,
@@ -49,7 +52,7 @@ import {
   CHAIN_SHAPE,
   SUPERTYPE_BEARING_KINDS,
 } from './Constants';
-import { detectFrameworks } from './Frameworks';
+import { detectFrameworks, getApplicableFrameworks } from './Frameworks';
 import { loadProjectAliases } from '../extraction/PathAliases';
 import { loadGoModule } from '../extraction/GoModule';
 import { loadWorkspacePackages } from '../extraction/WorkspacePackages';
@@ -74,6 +77,7 @@ export class ReferenceResolver {
   private readonly lowerNameCache: LRUCache<string, INode[]>;
   private readonly qualifiedNameCache: LRUCache<string, INode[]>;
   private readonly razorUsingsCache: Map<string, string[]>;
+  private readonly fileLinesCache: Map<string, string[] | null>;
 
   // Предварительно загруженные данные
   private knownNames: Set<string> | null = null;
@@ -104,6 +108,7 @@ export class ReferenceResolver {
     this.lowerNameCache = new LRUCache(cacheLimit);
     this.qualifiedNameCache = new LRUCache(cacheLimit);
     this.razorUsingsCache = new Map();
+    this.fileLinesCache = new Map();
   }
 
   // ===================================================================
@@ -135,6 +140,7 @@ export class ReferenceResolver {
     this.lowerNameCache.clear();
     this.qualifiedNameCache.clear();
     this.razorUsingsCache.clear();
+    this.fileLinesCache.clear();
     this.knownNames = null;
     this.knownFiles = null;
     this.cachesWarmed = false;
@@ -192,7 +198,17 @@ export class ReferenceResolver {
     if (this.cachesWarmed && this.knownNames && !this.knownNames.has(ref.referenceName)) {
       // Проверяем, не является ли это импортом
       if (!this.matchesAnyImport(ref)) {
-        return null;
+        // Проверяем claimsReference у фреймворк-резолверов
+        let claimed = false;
+        for (const resolver of this.frameworkResolvers) {
+          if (resolver.claimsReference?.(ref.referenceName)) {
+            claimed = true;
+            break;
+          }
+        }
+        if (!claimed) {
+          return null;
+        }
       }
     }
 
@@ -487,8 +503,8 @@ export class ReferenceResolver {
   }
 
   private detectFrameworks(): void {
-    const files = this.queries.getAllFilePaths();
-    this.detectedFrameworks = detectFrameworks(files);
+    this.frameworkResolvers = detectFrameworks(this);
+    this.detectedFrameworks = this.frameworkResolvers.map((r) => r.name);
   }
 
   private resolveFramework(ref: IUnresolvedReference): IResolvedRef | null {
@@ -496,9 +512,10 @@ export class ReferenceResolver {
       this.detectFrameworks();
     }
 
-    if (!this.detectedFrameworks) return null;
+    if (!this.frameworkResolvers.length) return null;
 
-    for (const resolver of this.frameworkResolvers) {
+    const applicable = getApplicableFrameworks(this.frameworkResolvers, ref.language ?? 'unknown');
+    for (const resolver of applicable) {
       const result = resolver.resolve(ref, this);
       if (result) return result;
     }
@@ -815,7 +832,7 @@ export class ReferenceResolver {
     return mappings;
   }
 
-  getReExports(filePath: string): IReExport[] {
+  getReExports(filePath: string, _language?: Language): IReExport[] {
     const cached = this.reExportCache.get(filePath);
     if (cached) return cached;
 
@@ -831,6 +848,104 @@ export class ReferenceResolver {
     const reExports = extractReExports(content, language);
     this.reExportCache.set(filePath, reExports);
     return reExports;
+  }
+
+  /**
+   * Потоковая итерация узлов вида один за другим вместо материализации.
+   */
+  iterateNodesByKind(kind: NodeKind): IterableIterator<INode> {
+    const nodes = this.queries.getNodesByKind(kind);
+    return (function* () {
+      yield* nodes;
+    })();
+  }
+
+  /**
+   * readFile(filePath), разбитый на строки, LRU-cached на файл.
+   */
+  getFileLines(filePath: string): string[] | null {
+    const cached = this.fileLinesCache.get(filePath);
+    if (cached !== undefined) return cached;
+
+    const content = this.getFileContent(filePath);
+    if (!content) {
+      this.fileLinesCache.set(filePath, null);
+      return null;
+    }
+
+    const lines = content.split('\n');
+    this.fileLinesCache.set(filePath, lines);
+    return lines;
+  }
+
+  /**
+   * Узлы method-определений, соответствующих typeName::methodName в language.
+   */
+  getMethodMatches(typeName: string, methodName: string, language: Language): INode[] {
+    const allMethods = this.queries.getNodesByKind(NodeKind.Method);
+    return allMethods.filter(
+      (n) =>
+        n.language === language &&
+        (n.name === `${typeName}::${methodName}` || n.name === `${typeName}.${methodName}`)
+    );
+  }
+
+  /**
+   * Прямые супертипы типа с именем typeName (тот же язык): классы, которые он
+   * расширяет, и интерфейсы/протоколы/черты, которые он реализует.
+   */
+  getSupertypesByName(typeName: string, language: Language): string[] {
+    const nodes = this.queries.getNodesByQualifiedNameExact(typeName);
+    if (nodes.length === 0) return [];
+
+    const edges = this.queries.getOutgoingEdges(nodes[0]!.id, [EdgeKind.Extends, EdgeKind.Implements]);
+    const targets = new Map(
+      this.queries.getNodesByIds(edges.map((e) => e.target)).map((n) => [n.id, n])
+    );
+
+    return edges
+      .map((e) => targets.get(e.target))
+      .filter((n): n is INode => n !== undefined)
+      .map((n) => n.name);
+  }
+
+  /**
+   * Список непосредственных поддиректорий relativePath (относительно корня проекта).
+   */
+  listDirectories(relativePath: string): string[] {
+    const fullPath = this.projectRoot + '/' + relativePath;
+    try {
+      const entries = fs.readdirSync(fullPath, { withFileTypes: true });
+      return entries.filter((e) => e.isDirectory()).map((e) => e.name);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Директории поиска include для C/C++ (относительно корня проекта).
+   */
+  getCppIncludeDirs(): string[] {
+    const cmakePath = this.projectRoot + '/CMakeLists.txt';
+    const content = this.getFileContent(cmakePath);
+    if (!content) return [];
+
+    const dirs: string[] = [];
+    const regex = /include_directories\s*\(\s*([^)]+)\s*\)/g;
+    let match;
+
+    while ((match = regex.exec(content)) !== null) {
+      const args = match[1];
+      if (args.includes('SYSTEM')) continue;
+
+      const paths = args.split(/\s+/);
+      for (const p of paths) {
+        const trimmed = p.trim().replace(/^["']|["']$/g, '');
+        if (trimmed) dirs.push(trimmed);
+      }
+    }
+
+    return dirs;
   }
 
   // Ленивая загрузка
