@@ -88,9 +88,7 @@ export class ImpactAnalyzer {
       if (CONTAINER_NODE_KINDS.has(focalNode.kind)) {
         const containsEdges = this.qb.getOutgoingEdges(nodeId, ['contains']);
         if (containsEdges.length > 0) {
-          const children = new Map(
-            this.qb.getNodesByIds(containsEdges.map((e) => e.target)).map(n => [n.id, n])
-          );
+          const children = this.qb.getNodesByIds(containsEdges.map((e) => e.target));
           for (const edge of containsEdges) {
             const childNode = children.get(edge.target);
             if (childNode && !visited.has(childNode.id)) {
@@ -108,9 +106,7 @@ export class ImpactAnalyzer {
     const incomingEdges = this.qb.getIncomingEdges(nodeId).filter((e) => e.kind !== 'contains');
     if (incomingEdges.length === 0) return;
 
-    const sources = new Map(
-      this.qb.getNodesByIds(incomingEdges.map((e) => e.source)).map(n => [n.id, n])
-    );
+    const sources = this.qb.getNodesByIds(incomingEdges.map((e) => e.source));
 
     for (const edge of incomingEdges) {
       const sourceNode = sources.get(edge.source);

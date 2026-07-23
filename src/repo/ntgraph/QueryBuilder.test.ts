@@ -332,7 +332,10 @@ describe("QueryBuilder", () => {
   })
 
   it("gets stale files", () => {
-    const stale = db.getStaleFiles()
+    const currentHashes = new Map<string, string>([
+      ["src/models.ts", "different-hash"],
+    ])
+    const stale = db.getStaleFiles(currentHashes)
     expect(stale.length).toBeGreaterThanOrEqual(1)
   })
 
@@ -451,8 +454,8 @@ describe("QueryBuilder", () => {
   it("gets all metadata", () => {
     db.setMetadata("key2", "value3")
     const all = db.getAllMetadata()
-    expect(all.get("key1")).toBe("value2")
-    expect(all.get("key2")).toBe("value3")
+    expect(all["key1"]).toBe("value2")
+    expect(all["key2"]).toBe("value3")
   })
 
   // ---- Аналитика ----
@@ -512,7 +515,7 @@ describe("QueryBuilder", () => {
       ids.push(`lru-${i}`)
     }
     const result = db.getNodesByIds(ids)
-    expect(result.length).toBeGreaterThanOrEqual(0)
+    expect(result.size).toBeGreaterThanOrEqual(0)
   })
 
   // ---- Поиск ----

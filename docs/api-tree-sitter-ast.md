@@ -372,6 +372,39 @@ Worker -> Main:
 
 ---
 
+## Пул воркеров разрешения (ResolverPool)
+
+Пул worker-потоков для параллельного разрешения ссылок. Каждый воркер открывает
+БД только для чтения на собственном подключении и размещает полный ReferenceResolver.
+Основной поток разбивает батч на чанки, распределяет по пулу и принимает
+результаты последовательно в порядке чанков.
+
+### Создание
+
+| Метод | Возврат | Описание |
+|---|---|---|
+| `ResolverPool.tryCreate(dbPath, projectRoot)` | `ResolverPool \| null` | Создаёт пул при наличии ресурсов |
+| `ResolverPool.resolvePoolSize(opts)` | `number \| null` | Размер пула из CPU и памяти |
+| `ResolverPool.worthParallel(batchLength)` | `boolean` | Стоит ли распределять батч |
+| `minRefsForPool()` | `number` | Минимум ссылок для пула (150000) |
+
+### Методы
+
+| Метод | Возврат | Описание |
+|---|---|---|
+| `ready()` | `Promise<void>` | Ожидание готовности всех воркеров |
+| `resolveBatch(refs)` | `Promise<ChunkResult>` | Разрешение ссылок через пул |
+| `destroy()` | `Promise<void>` | Уничтожение всех воркеров |
+
+### ChunkResult
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `resolved` | `IResolvedRef[]` | Разрешённые ссылки |
+| `unresolved` | `IUnresolvedReference[]` | Неразрешённые ссылки |
+
+---
+
 ## Модуль валидации путей
 
 Защита от path traversal и нормализация путей.

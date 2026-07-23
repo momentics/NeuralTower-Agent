@@ -5,8 +5,6 @@
  * Batch-запросы — чанки по 500 (SQLITE_PARAM_CHUNK_SIZE).
  */
 
-import * as fs from 'fs';
-import * as crypto from 'crypto';
 import { SqliteDatabase, SqliteStatement } from './Adapter';
 import {
   NodeKind,
@@ -20,6 +18,8 @@ import {
   ISearchResult,
   IGraphStats,
   IDominantFile,
+  ITopRouteFile,
+  IRoutingManifest,
 } from './Types';
 import {
   rowToNode,
@@ -142,10 +142,12 @@ export class QueryBuilder {
     deleteUnresolvedByNode?: SqliteStatement;
     getUnresolvedByName?: SqliteStatement;
     getNodesByName?: SqliteStatement;
+    getNodesByNamePrefix?: SqliteStatement;
     getNodesByQualifiedNameExact?: SqliteStatement;
     getNodesByLowerName?: SqliteStatement;
     getUnresolvedCount?: SqliteStatement;
     getUnresolvedBatch?: SqliteStatement;
+    getUnresolvedBatchAfter?: SqliteStatement;
     getAllFilePaths?: SqliteStatement;
     getAllNodeNames?: SqliteStatement;
     getDominantFile?: SqliteStatement;
@@ -153,9 +155,49 @@ export class QueryBuilder {
     getRoutingManifest?: SqliteStatement;
   } = {};
 
+  /** Размеры батчей для многострочных INSERT — кэширует prepared statements по размеру. */
+  private static readonly BATCH_SIZES: readonly number[] = [128, 32, 8, 1];
+
+  /** Кэш prepared statements для многострочных INSERT (по ключу kind:size). */
+  private batchStmts: Map<string, SqliteStatement> = new Map();
+
+  /** Имена узлов, сегменты которых уже вставлены в словарь — ускорение write-path. */
+  private segmentedNames: Set<string> = new Set();
+  private static readonly MAX_SEGMENTED_NAMES = 65536;
+
   constructor(db: SqliteDatabase) {
     this.db = db;
     this.nodeCache = new LRUCache<string, INode>(LRU_CACHE_SIZE);
+  }
+
+  /**
+   * Выполняет N строк через многострочный INSERT вида head + (tuple,)*n,
+   * разбивая на фиксированные батчи. Сохраняет порядок строк.
+   */
+  private runBatched(kind: string, head: string, tuple: string, rows: unknown[][]): void {
+    if (rows.length === 0) return;
+    let i = 0;
+    for (const size of QueryBuilder.BATCH_SIZES) {
+      while (rows.length - i >= size) {
+        const key = `${kind}:${size}`;
+        let stmt = this.batchStmts.get(key);
+        if (!stmt) {
+          stmt = this.db.prepare(head + new Array(size).fill(tuple).join(','));
+          this.batchStmts.set(key, stmt);
+        }
+        if (size === 1) {
+          stmt.run(...rows[i]!);
+        } else {
+          const params: unknown[] = [];
+          for (let r = 0; r < size; r++) {
+            const row = rows[i + r]!;
+            for (let c = 0; c < row.length; c++) params.push(row[c]);
+          }
+          stmt.run(...params);
+        }
+        i += size;
+      }
+    }
   }
 
   /** Устанавливает токены имени проекта для подавления в поиске. */
@@ -178,6 +220,20 @@ export class QueryBuilder {
   }
 
   private _ftsSearch: FtsSearch | null = null;
+
+  /**
+   * Заменяет подключение к БД и сбрасывает prepared statements.
+   * Используется воркерами пула для переработки соединений: соединение
+   * закрывается и открывается заново на границе простоя пула, всё, что выше
+   * подключения (QueryBuilder, resolver, кэши) сохраняется, а состояние,
+   * зависящее от соединения (prepared statements), сбрасывается и
+   * переподготавливается лениво при следующем использовании.
+   */
+  rebind(db: SqliteDatabase): void {
+    this.db = db;
+    this.stmts = {};
+    this.batchStmts.clear();
+  }
 
   // ===================================================================
   // Узлы
@@ -243,14 +299,59 @@ export class QueryBuilder {
     });
   }
 
-  /** Вставка множества узлов в транзакции. */
+  /** Вставка множества узлов в транзакции (bulk через runBatched). */
   insertNodes(nodes: INode[]): void {
+    if (nodes.length === 0) return;
     this.db.transaction(() => {
+      const rows: unknown[][] = [];
       for (const node of nodes) {
-        this.insertNode(node);
+        // Валидация обязательных полей
+        if (!node.id || !node.kind || !node.name || !node.filePath || !node.language) {
+          console.error('[NtGraph] Пропущен узел с отсутствующими обязательными полями:', {
+            id: node.id,
+            kind: node.kind,
+            name: node.name,
+            filePath: node.filePath,
+            language: node.language,
+          });
+          continue;
+        }
+        // Удаление устаревшей записи из кэша
+        this.nodeCache.delete(node.id);
+        rows.push([
+          node.id,
+          node.kind,
+          node.name,
+          node.qualifiedName ?? node.name,
+          node.filePath,
+          node.language,
+          node.startLine ?? 0,
+          node.endLine ?? 0,
+          node.startColumn ?? 0,
+          node.endColumn ?? 0,
+          node.docstring ?? null,
+          node.signature ?? null,
+          node.visibility ?? null,
+          node.isExported ? 1 : 0,
+          node.isAsync ? 1 : 0,
+          node.isStatic ? 1 : 0,
+          node.isAbstract ? 1 : 0,
+          node.decorators ? JSON.stringify(node.decorators) : null,
+          node.typeParameters ? JSON.stringify(node.typeParameters) : null,
+          node.returnType ?? null,
+          node.updatedAt ?? Date.now(),
+        ]);
       }
+      const nodeCols = 'id, kind, name, qualified_name, file_path, language, start_line, end_line, start_column, end_column, docstring, signature, visibility, is_exported, is_async, is_static, is_abstract, decorators, type_parameters, return_type, updated_at';
+      const nodeTuple = `(${new Array(21).fill('?').join(',')})`;
+      this.runBatched('insertNode', `INSERT OR REPLACE INTO nodes (${nodeCols}) VALUES `, nodeTuple, rows);
       this.insertNameSegmentVocab(nodes);
     })();
+  }
+
+  /** Какие виды узлов вносят имя в словарь сегментов — file и import исключены. */
+  public isSegmentableKind(kind: NodeKind): boolean {
+    return kind !== 'file' && kind !== 'import';
   }
 
   /** Вставка сегментов имён в словарь. */
@@ -259,6 +360,12 @@ export class QueryBuilder {
       'INSERT OR IGNORE INTO name_segment_vocab (segment, name) VALUES (?, ?)'
     );
     for (const node of nodes) {
+      if (!this.isSegmentableKind(node.kind)) continue;
+      if (this.segmentedNames.has(node.name)) continue;
+      this.segmentedNames.add(node.name);
+      if (this.segmentedNames.size >= QueryBuilder.MAX_SEGMENTED_NAMES) {
+        this.segmentedNames.clear();
+      }
       const segments = splitIdentifierSegments(node.name);
       for (const segment of segments) {
         stmt.run(segment, node.name);
@@ -275,6 +382,97 @@ export class QueryBuilder {
     for (const name of names) {
       stmt.run(name);
     }
+  }
+
+  /** Очищает словарь сегментов имён. */
+  clearNameSegmentVocab(): void {
+    this.db.exec('DELETE FROM name_segment_vocab');
+  }
+
+  /** Проверяет, пуст ли словарь сегментов имён. */
+  isNameSegmentVocabEmpty(): boolean {
+    const row = this.db.prepare('SELECT 1 FROM name_segment_vocab LIMIT 1').get();
+    return row === undefined;
+  }
+
+  /** Страница отличных имён сегментируемых узлов для пакетной перестройки словаря. */
+  getDistinctNodeNames(limit: number, offset: number): string[] {
+    const rows = this.db
+      .prepare("SELECT DISTINCT name FROM nodes WHERE kind NOT IN ('file', 'import') ORDER BY name LIMIT ? OFFSET ?")
+      .all(limit, offset) as Array<{ name: string }>;
+    return rows.map((r) => r.name);
+  }
+
+  /** Вставка сегментов для пакета имён в одной транзакции (путь восстановления словаря). */
+  insertNameSegmentsBatch(names: string[]): void {
+    this.db.transaction(() => {
+      const rows: unknown[][] = [];
+      for (const name of names) {
+        for (const segment of splitIdentifierSegments(name)) {
+          rows.push([segment, name]);
+        }
+      }
+      this.runBatched(
+        'insertNameSegments',
+        'INSERT OR IGNORE INTO name_segment_vocab (segment, name) VALUES ',
+        '(?,?)',
+        rows
+      );
+    })();
+  }
+
+  /**
+   * Имена, чьи сегменты покрывают не менее `minWords` различных ключевых слов —
+   * проверка совместного вхождения для среднего уровня prompt hook.
+   * Словари (вариант → исходное слово) сворачиваются к слову внутри SQL:
+   * имя, совпадающее и с `service`, и с `services`, считается ОДНИМ словом.
+   */
+  getSegmentCoOccurrence(
+    variants: Array<{ segment: string; word: string }>,
+    minWords: number,
+    limit: number
+  ): Array<{ name: string; matches: number }> {
+    if (variants.length === 0) return [];
+    const placeholders = variants.map(() => '?').join(', ');
+    const whens = variants.map(() => 'WHEN ? THEN ?').join(' ');
+    const rows = this.db
+      .prepare(
+        `SELECT name, COUNT(DISTINCT CASE segment ${whens} END) AS matches
+         FROM name_segment_vocab
+         WHERE segment IN (${placeholders})
+         GROUP BY name
+         HAVING matches >= ?
+         ORDER BY matches DESC, length(name) ASC
+         LIMIT ?`
+      )
+      .all(
+        ...variants.flatMap((v) => [v.segment, v.word]),
+        ...variants.map((v) => v.segment),
+        minWords,
+        limit
+      ) as Array<{ name: string; matches: number }>;
+    return rows;
+  }
+
+  /** Сколько отличных имён содержит каждый сегмент — сигнал редкости. */
+  getSegmentNameCounts(segments: string[]): Map<string, number> {
+    if (segments.length === 0) return new Map();
+    const placeholders = segments.map(() => '?').join(', ');
+    const rows = this.db
+      .prepare(
+        `SELECT segment, COUNT(*) AS n FROM name_segment_vocab
+         WHERE segment IN (${placeholders}) GROUP BY segment`
+      )
+      .all(...segments) as Array<{ segment: string; n: number }>;
+    return new Map(rows.map((r) => [r.segment, r.n]));
+  }
+
+  /** Имена, содержащие заданный сегмент (уровень редкого одиночного слова). */
+  getNamesForSegment(segment: string, limit: number): string[] {
+    const rows = this.db
+      .prepare('SELECT name FROM name_segment_vocab WHERE segment = ? ORDER BY length(name) ASC LIMIT ?')
+      .all(segment, limit) as Array<{ name: string }>;
+    return rows.map((r) => r.name);
   }
 
   /** Обновление узла. */
@@ -390,11 +588,11 @@ export class QueryBuilder {
     this.cacheNode(node);
     return node;
   }
-
-  /** Пакетный поиск узлов по ID (устраняет паттерн N+1). */
-  getNodesByIds(ids: readonly string[]): INode[] {
+ /** Пакетный поиск узлов по ID (устраняет паттерн N+1). */
+  getNodesByIds(ids: readonly string[]): Map<string, INode> {
     const out = new Map<string, INode>();
-    if (ids.length === 0) return [];
+
+    if (ids.length === 0) return out;
 
     // Кэш-хиты (LRUCache.get автоматически обновляет порядок)
     const misses: string[] = [];
@@ -406,7 +604,7 @@ export class QueryBuilder {
         misses.push(id);
       }
     }
-    if (misses.length === 0) return Array.from(out.values());
+    if (misses.length === 0) return out;
 
     // Чанки по 500
     for (let i = 0; i < misses.length; i += SQLITE_PARAM_CHUNK_SIZE) {
@@ -421,7 +619,7 @@ export class QueryBuilder {
         this.cacheNode(node);
       }
     }
-    return Array.from(out.values());
+    return out;
   }
 
   /** Получение существующих ID узлов (для валидации рёбер). */
@@ -481,6 +679,16 @@ export class QueryBuilder {
     }
   }
 
+  /** Ленивый итератор по узлам с заданным языком и декоратором (O(1) память). */
+  *iterateNodesByLanguageWithDecorator(language: string, decorator: string): IterableIterator<INode> {
+    const stmt = this.db.prepare(
+      "SELECT * FROM nodes WHERE language = ? AND decorators LIKE '%' || ? || '%'"
+    );
+    for (const row of stmt.iterate(language, `"${decorator}"`)) {
+      yield rowToNode(row as NodeRow);
+    }
+  }
+
   /** Все узлы БД. */
   getAllNodes(): INode[] {
     const rows = this.db.prepare('SELECT * FROM nodes').all() as NodeRow[];
@@ -493,6 +701,20 @@ export class QueryBuilder {
       this.stmts.getNodesByName = this.db.prepare('SELECT * FROM nodes WHERE name = ?');
     }
     const rows = this.stmts.getNodesByName.all(name) as NodeRow[];
+    return rows.map(rowToNode);
+  }
+
+  /** Узлы по префиксу имени — range scan по idx_nodes_name. */
+  getNodesByNamePrefix(prefix: string, limit: number = 20): INode[] {
+    if (!this.stmts.getNodesByNamePrefix) {
+      this.stmts.getNodesByNamePrefix = this.db.prepare(
+        'SELECT * FROM nodes WHERE name >= ? AND name < ? ORDER BY name LIMIT ?'
+      );
+    }
+    const upper = prefix.charAt(prefix.length - 1) !== undefined
+      ? prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1)
+      : prefix + '0';
+    const rows = this.stmts.getNodesByNamePrefix.all(prefix, upper, limit) as NodeRow[];
     return rows.map(rowToNode);
   }
 
@@ -543,7 +765,7 @@ export class QueryBuilder {
   }
 
   /** Файл с наибольшей концентрацией route-узлов. */
-  getTopRouteFile(): INode | null {
+  getTopRouteFile(): ITopRouteFile | null {
     if (!this.stmts.getTopRouteFile) {
       this.stmts.getTopRouteFile = this.db.prepare(`
         SELECT file_path, COUNT(*) AS cnt
@@ -561,17 +783,47 @@ export class QueryBuilder {
     const top = filtered[0]!;
     if (totalRoutes < TOP_ROUTE_MIN_TOTAL || top.cnt < TOP_ROUTE_MIN_TOTAL) return null;
     if (top.cnt / totalRoutes < TOP_ROUTE_MIN_CONCENTRATION) return null;
-    const node = this.db.prepare('SELECT * FROM nodes WHERE kind = ? AND file_path = ? LIMIT 1')
-      .get('route', top.file_path) as NodeRow | undefined;
-    return node ? rowToNode(node) : null;
+    return { filePath: top.file_path, routeCount: top.cnt, totalRoutes };
   }
 
-  /** Манифест маршрутизации — все route-узлы. */
-  getRoutingManifest(limit: number = ROUTING_MANIFEST_DEFAULT_LIMIT): INode[] {
-    const rows = this.db
+  /** Манифест маршрутизации — route-узлы с обработчиками и статистикой. */
+  getRoutingManifest(limit: number = ROUTING_MANIFEST_DEFAULT_LIMIT): IRoutingManifest | null {
+    if (!this.stmts.getRoutingManifest) {
+      this.stmts.getRoutingManifest = this.db.prepare(`
+        SELECT
+          h.file_path AS handler_file,
+          COUNT(*) AS cnt
+        FROM nodes r
+        JOIN edges e ON e.source = r.id
+        JOIN nodes h ON e.target = h.id
+        WHERE r.kind = 'route'
+          AND e.kind IN ('references', 'calls')
+          AND h.kind IN ('function', 'method', 'class')
+        GROUP BY h.file_path
+      `);
+    }
+    const handlerRows = this.stmts.getRoutingManifest.all() as Array<{ handler_file: string; cnt: number }>;
+    const handlerFiltered = handlerRows.filter(r => !isLowValueFile(r.handler_file));
+    const totalRoutes = handlerFiltered.reduce((sum, r) => sum + r.cnt, 0);
+    if (totalRoutes < TOP_ROUTE_MIN_TOTAL) return null;
+    let topHandlerFile: string | null = null;
+    let topHandlerFileCount = 0;
+    for (const r of handlerFiltered) {
+      if (r.cnt > topHandlerFileCount) {
+        topHandlerFile = r.handler_file;
+        topHandlerFileCount = r.cnt;
+      }
+    }
+    const routeRows = this.db
       .prepare('SELECT * FROM nodes WHERE kind = ? ORDER BY file_path, start_line LIMIT ?')
       .all('route', limit) as NodeRow[];
-    return rows.filter(r => !isLowValueFile(r.file_path)).map(rowToNode);
+    const entries = routeRows.filter(r => !isLowValueFile(r.file_path)).map(rowToNode);
+    return {
+      entries,
+      topHandlerFile,
+      topHandlerFileCount,
+      totalRoutes,
+    };
   }
 
   /** Файлы, зависящие от данного. */
@@ -600,20 +852,23 @@ export class QueryBuilder {
     return rows.map((r) => r.fp);
   }
 
-  /** Входящие межфайловые рёбра с данными о цели. */
-  getCrossFileIncomingEdgesWithTarget(filePath: string): Array<{ edge: IEdge; targetKind: NodeKind; targetName: string }> {
-    const sql = `SELECT e.*, tgt.name AS target_name, tgt.kind AS target_kind
+  /** Входящие межфайловые рёбра с данными о цели и источнике. */
+  getCrossFileIncomingEdgesWithTarget(filePath: string): Array<{ edge: IEdge; targetKind: NodeKind; targetName: string; sourceFilePath: string; sourceLanguage: string }> {
+    const sql = `SELECT e.*, tgt.name AS target_name, tgt.kind AS target_kind,
+      src.file_path AS source_file_path, src.language AS source_language
       FROM edges e
       JOIN nodes tgt ON tgt.id = e.target
       JOIN nodes src ON src.id = e.source
       WHERE tgt.file_path = ?
         AND e.kind != 'contains'
         AND src.file_path != ?`;
-    const rows = this.db.prepare(sql).all(filePath, filePath) as Array<EdgeRow & { target_name: string; target_kind: NodeKind }>;
+    const rows = this.db.prepare(sql).all(filePath, filePath) as Array<EdgeRow & { target_name: string; target_kind: NodeKind; source_file_path: string; source_language: string }>;
     return rows.map(row => ({
       edge: rowToEdge(row),
       targetName: row.target_name,
       targetKind: row.target_kind,
+      sourceFilePath: row.source_file_path,
+      sourceLanguage: row.source_language,
     }));
   }
 
@@ -658,7 +913,7 @@ export class QueryBuilder {
     });
   }
 
-  /** Вставка множества рёбер в транзакции с проверкой узлов. */
+  /** Вставка множества рёбер в транзакции (bulk через runBatched). */
   insertEdges(edges: IEdge[]): void {
     if (edges.length === 0) return;
 
@@ -670,12 +925,25 @@ export class QueryBuilder {
       }
       const existingNodeIds = this.getExistingNodeIds([...endpointIds]);
 
+      const rows: unknown[][] = [];
       for (const edge of edges) {
         if (!existingNodeIds.has(edge.source) || !existingNodeIds.has(edge.target)) {
           continue;
         }
-        this.insertEdge(edge);
+        rows.push([
+          edge.source,
+          edge.target,
+          edge.kind,
+          edge.metadata ? JSON.stringify(edge.metadata) : null,
+          edge.line ?? null,
+          edge.column ?? null,
+          edge.provenance ?? null,
+        ]);
       }
+
+      const edgeCols = 'source, target, kind, metadata, line, col, provenance';
+      const edgeTuple = `(${new Array(7).fill('?').join(',')})`;
+      this.runBatched('insertEdge', `INSERT OR IGNORE INTO edges (${edgeCols}) VALUES `, edgeTuple, rows);
     })();
   }
 
@@ -809,24 +1077,15 @@ export class QueryBuilder {
     return row?.last ?? null;
   }
 
-  /** Устаревшие файлы — хеш изменился с момента индексации. Сравнивает с переданными хешами или с текущим состоянием файловой системы. */
-  getStaleFiles(currentHashes?: Map<string, string>): IFileRecord[] {
+  /** Устаревшие файлы — хеш изменился с момента индексации. Файлы, отсутствующие в карте, считаются удалёнными. */
+  getStaleFiles(currentHashes: Map<string, string>): IFileRecord[] {
     const files = this.getAllFiles();
     const stale: IFileRecord[] = [];
     for (const file of files) {
-      let currentHash: string | null = null;
-      if (currentHashes && currentHashes.has(file.path)) {
-        currentHash = currentHashes.get(file.path)!;
-      } else {
-        try {
-          const content = fs.readFileSync(file.path, 'utf-8');
-          currentHash = crypto.createHash('sha256').update(content).digest('hex');
-        } catch {
-          stale.push(file);
-          continue;
-        }
-      }
-      if (currentHash !== file.contentHash) {
+      const currentHash = currentHashes.get(file.path);
+      if (currentHash === undefined) {
+        stale.push(file);
+      } else if (currentHash !== file.contentHash) {
         stale.push(file);
       }
     }
@@ -840,6 +1099,12 @@ export class QueryBuilder {
     }
     const rows = this.stmts.getAllFilePaths.all() as Array<{ path: string }>;
     return rows.map((r) => r.path);
+  }
+
+  /** Отличные языки из таблицы файлов. */
+  getDistinctFileLanguages(): Set<string> {
+    const rows = this.db.prepare('SELECT DISTINCT language FROM files').all() as Array<{ language: string }>;
+    return new Set(rows.map((r) => r.language));
   }
 
   /** Все имена узлов (легковесный запрос). */
@@ -876,15 +1141,29 @@ export class QueryBuilder {
     });
   }
 
-  /** Пакетная вставка неразрешённых ссылок. */
+  /** Пакетная вставка неразрешённых ссылок (bulk через runBatched). */
   insertUnresolvedRefsBatch(refs: IUnresolvedReference[]): void {
     if (refs.length === 0) return;
-    const insert = this.db.transaction(() => {
-      for (const ref of refs) {
-        this.insertUnresolvedRef(ref);
-      }
-    });
-    insert();
+
+    const rows: unknown[][] = [];
+    for (const ref of refs) {
+      rows.push([
+        ref.fromNodeId,
+        ref.referenceName,
+        ref.referenceKind,
+        ref.line,
+        ref.column,
+        ref.candidates ? JSON.stringify(ref.candidates) : null,
+        ref.filePath ?? '',
+        ref.language ?? 'unknown',
+        ref.status ?? 'pending',
+        ref.nameTail ?? '',
+      ]);
+    }
+
+    const refCols = 'from_node_id, reference_name, reference_kind, line, col, candidates, file_path, language, status, name_tail';
+    const refTuple = `(${new Array(10).fill('?').join(',')})`;
+    this.runBatched('insertUnresolved', `INSERT INTO unresolved_refs (${refCols}) VALUES `, refTuple, rows);
   }
 
   /** Удаление неразрешённых ссылок узла. */
@@ -918,7 +1197,7 @@ export class QueryBuilder {
   getUnresolvedReferencesCount(): number {
     if (!this.stmts.getUnresolvedCount) {
       this.stmts.getUnresolvedCount = this.db.prepare(
-        'SELECT COUNT(*) as count FROM unresolved_refs'
+        "SELECT COUNT(*) as count FROM unresolved_refs WHERE status = 'pending'"
       );
     }
     const row = this.stmts.getUnresolvedCount.get() as { count: number };
@@ -929,10 +1208,21 @@ export class QueryBuilder {
   getUnresolvedReferencesBatch(offset: number, limit: number): IUnresolvedReference[] {
     if (!this.stmts.getUnresolvedBatch) {
       this.stmts.getUnresolvedBatch = this.db.prepare(
-        'SELECT * FROM unresolved_refs LIMIT ? OFFSET ?'
+        "SELECT * FROM unresolved_refs WHERE status = 'pending' ORDER BY rowid LIMIT ? OFFSET ?"
       );
     }
     const rows = this.stmts.getUnresolvedBatch.all(limit, offset) as UnresolvedRefRow[];
+    return rows.map(rowToUnresolvedRef);
+  }
+
+  /** Пагинированный запрос неразрешённых ссылок по keyset (rowid > afterRowId). */
+  getUnresolvedReferencesBatchAfter(afterRowId: number, limit: number): IUnresolvedReference[] {
+    if (!this.stmts.getUnresolvedBatchAfter) {
+      this.stmts.getUnresolvedBatchAfter = this.db.prepare(
+        'SELECT * FROM unresolved_refs WHERE rowid > ? ORDER BY rowid LIMIT ?'
+      );
+    }
+    const rows = this.stmts.getUnresolvedBatchAfter.all(afterRowId, limit) as UnresolvedRefRow[];
     return rows.map(rowToUnresolvedRef);
   }
 
@@ -945,7 +1235,7 @@ export class QueryBuilder {
       const chunk = filePaths.slice(i, i + SQLITE_PARAM_CHUNK_SIZE);
       const placeholders = chunk.map(() => '?').join(',');
       const chunkRows = this.db
-        .prepare(`SELECT * FROM unresolved_refs WHERE file_path IN (${placeholders})`)
+        .prepare(`SELECT * FROM unresolved_refs WHERE status = 'pending' AND file_path IN (${placeholders})`)
         .all(...chunk) as UnresolvedRefRow[];
       rows.push(...chunkRows);
     }
@@ -980,6 +1270,101 @@ export class QueryBuilder {
     });
     deleteMany(refs);
     return total;
+  }
+
+  /** Помечает неразрешённые ссылки как failed с установкой name_tail. */
+  markReferencesFailed(refs: IUnresolvedReference[]): number {
+    if (refs.length === 0) return 0;
+    const stmt = this.db.prepare(
+      "UPDATE unresolved_refs SET status = 'failed', name_tail = ? WHERE from_node_id = ? AND reference_name = ? AND reference_kind = ?"
+    );
+    let changed = 0;
+    const markMany = this.db.transaction((items: IUnresolvedReference[]) => {
+      for (const ref of items) {
+        changed += stmt.run(ref.nameTail ?? '', ref.fromNodeId, ref.referenceName, ref.referenceKind).changes;
+      }
+    });
+    markMany(refs);
+    return changed;
+  }
+
+  /** Помечает ссылки как failed по точным row id — чтобы не затрагивать соседние строки с тем же ключом. */
+  markReferencesFailedByRowIds(refs: Array<{ rowId: number; nameTail: string }>): number {
+    if (refs.length === 0) return 0;
+    const stmt = this.db.prepare(
+      "UPDATE unresolved_refs SET status = 'failed', name_tail = ? WHERE rowid = ?"
+    );
+    let changed = 0;
+    const markMany = this.db.transaction((items: typeof refs) => {
+      for (const ref of items) {
+        changed += stmt.run(ref.nameTail, ref.rowId).changes;
+      }
+    });
+    markMany(refs);
+    return changed;
+  }
+
+  /** Возвращает failed-ссылки, чей name_tail совпадает с заданными именами — кандидаты на перезапуск. Имена с более чем perNameCeiling записями пропускаются. */
+  getRetryableFailedReferences(names: string[], perNameCeiling: number = 500): IUnresolvedReference[] {
+    if (names.length === 0) return [];
+
+    // Проход 1: подсчёт по name_tail, с чанкингом
+    const retryNames: string[] = [];
+    for (let i = 0; i < names.length; i += SQLITE_PARAM_CHUNK_SIZE) {
+      const chunk = names.slice(i, i + SQLITE_PARAM_CHUNK_SIZE);
+      const placeholders = chunk.map(() => '?').join(',');
+      const counts = this.db
+        .prepare(
+          `SELECT name_tail, COUNT(*) as count FROM unresolved_refs WHERE status = 'failed' AND name_tail IN (${placeholders}) GROUP BY name_tail`
+        )
+        .all(...chunk) as Array<{ name_tail: string; count: number }>;
+      for (const row of counts) {
+        if (row.count <= perNameCeiling) retryNames.push(row.name_tail);
+      }
+    }
+    if (retryNames.length === 0) return [];
+
+    // Проход 2: загрузка оставшихся строк
+    const rows: UnresolvedRefRow[] = [];
+    for (let i = 0; i < retryNames.length; i += SQLITE_PARAM_CHUNK_SIZE) {
+      const chunk = retryNames.slice(i, i + SQLITE_PARAM_CHUNK_SIZE);
+      const placeholders = chunk.map(() => '?').join(',');
+      const chunkRows = this.db
+        .prepare(`SELECT * FROM unresolved_refs WHERE status = 'failed' AND name_tail IN (${placeholders})`)
+        .all(...chunk) as UnresolvedRefRow[];
+      rows.push(...chunkRows);
+    }
+
+    return rows.map(rowToUnresolvedRef);
+  }
+
+  /** Удаление неразрешённых ссылок по точным row id с чанкингом. */
+  deleteReferencesByRowIds(rowIds: number[]): number {
+    if (rowIds.length === 0) return 0;
+    let changed = 0;
+    this.db.transaction(() => {
+      for (let i = 0; i < rowIds.length; i += SQLITE_PARAM_CHUNK_SIZE) {
+        const chunk = rowIds.slice(i, i + SQLITE_PARAM_CHUNK_SIZE);
+        const placeholders = chunk.map(() => '?').join(',');
+        changed += this.db.prepare(`DELETE FROM unresolved_refs WHERE rowid IN (${placeholders})`).run(...chunk).changes;
+      }
+    })();
+    return changed;
+  }
+
+  /** Отличные имена узлов в заданных файлах. */
+  getNodeNamesByFiles(filePaths: string[]): string[] {
+    if (filePaths.length === 0) return [];
+    const names = new Set<string>();
+    for (let i = 0; i < filePaths.length; i += SQLITE_PARAM_CHUNK_SIZE) {
+      const chunk = filePaths.slice(i, i + SQLITE_PARAM_CHUNK_SIZE);
+      const placeholders = chunk.map(() => '?').join(',');
+      const rows = this.db
+        .prepare(`SELECT DISTINCT name FROM nodes WHERE file_path IN (${placeholders})`)
+        .all(...chunk) as Array<{ name: string }>;
+      for (const row of rows) names.add(row.name);
+    }
+    return [...names];
   }
 
   // ===================================================================
@@ -1188,11 +1573,11 @@ export class QueryBuilder {
   }
 
   /** Все метаданные. */
-  getAllMetadata(): Map<string, string> {
+  getAllMetadata(): Record<string, string> {
     const rows = this.db.prepare('SELECT key, value FROM project_metadata').all() as { key: string; value: string }[];
-    const result = new Map<string, string>();
+    const result: Record<string, string> = {};
     for (const row of rows) {
-      result.set(row.key, row.value);
+      result[row.key] = row.value;
     }
     return result;
   }
@@ -1257,6 +1642,16 @@ export class QueryBuilder {
   // Утилиты
   // ===================================================================
 
+  /** Хранение пакета файла: узлы, рёбра, ссылки, запись файла — одна транзакция. */
+  storeFileBundle(bundle: { nodes: INode[]; edges: IEdge[]; refs: IUnresolvedReference[]; file: IFileRecord }): void {
+    this.db.transaction(() => {
+      this.insertNodes(bundle.nodes);
+      this.insertEdges(bundle.edges);
+      this.insertUnresolvedRefsBatch(bundle.refs);
+      this.upsertFile(bundle.file);
+    })();
+  }
+
   /** Очистка всей БД. */
   clear(): void {
     this.nodeCache.clear();
@@ -1287,4 +1682,12 @@ function rowToUnresolvedRef(row: UnresolvedRefRow): IUnresolvedReference {
     nameTail: row.name_tail || undefined,
     rowId: row.id,
   };
+}
+
+/** Извлекает последний сегмент имени ссылки — после последней точки или двоеточия. */
+function referenceNameTail(name: string): string {
+  const lastDot = name.lastIndexOf('.');
+  const lastColon = name.lastIndexOf(':');
+  const sep = Math.max(lastDot, lastColon);
+  return sep >= 0 ? name.slice(sep + 1) : name;
 }

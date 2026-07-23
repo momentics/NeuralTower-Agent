@@ -24,41 +24,65 @@ export interface ParseTask {
 }
 
 interface ParseWorkerPoolOptions {
-  languages: string[];
+  languages: Language[];
   size: number;
-  workerScriptPath: string;
+  workerScriptPath?: string;
   recycleInterval?: number;
   parseTimeoutMs?: number;
-  createWorker?: (script: string, langs: string[]) => ParsePoolWorker;
+  createWorker?: () => ParsePoolWorker;
   log?: (msg: string) => void;
+  /**
+   * Предсчитанные байты WASM-грамматик по языкам, передаются каждому воркеру
+   * в сообщении load-grammars, чтобы при перезапуске загрузить грамматики из
+   * памяти вместо повторного чтения с диска.
+   */
+  grammarBuffers?: Record<string, Uint8Array>;
 }
 
 interface ParseJob {
+  id: number;
   task: ParseTask;
-  resolve: (result: IExtractionResult) => void;
-  reject: (err: Error) => void;
+  resolve: (r: IExtractionResult) => void;
+  reject: (e: Error) => void;
+  settled: boolean;
+  timer?: ReturnType<typeof setTimeout>;
+  /** Полный лимит для парсинга (базовый таймаут + масштабирование по размеру). */
+  budgetMs?: number;
+  /** Базовый таймер сработал без результата — принимаем поздний результат, убиваем по backstop. */
+  timerExpired?: boolean;
+  hardKillTimer?: ReturnType<typeof setTimeout>;
 }
 
 interface ParseWorkerMessage {
-  type: 'grammars-loaded' | 'parse-result' | 'parse-error';
+  type?: string;
   id?: number;
   result?: IExtractionResult;
-  error?: string;
+  /** Время парсинга на стороне воркера — его собственные часы, не зависящие от задержек основного потока. */
+  parseMs?: number;
 }
 
 const DEFAULT_PARSE_POOL_CAP = 8;
 const MAX_PARSE_POOL_SIZE = 16;
 const DEFAULT_RECYCLE_INTERVAL = 250;
 const DEFAULT_PARSE_TIMEOUT_MS = 10_000;
+/** Множитель для жёсткого убийства воркера после базового таймаута. */
+const HARD_KILL_MULTIPLIER = 3;
+/**
+ * Максимум воркеров, запускаемых одновременно. Холодный старт воркера тяжёлый
+ * (загрузка модуля + компиляция WASM-грамматик); одновременный запуск всего
+ * пула перегружает процессор.
+ */
+const MAX_CONCURRENT_SPAWN = 2;
 const CRASH_BUDGET = 100;
 
 export function resolveParsePoolSize(envVal: string | undefined, cpuCount: number): number {
   if (envVal !== undefined && envVal !== '') {
     const n = Number(envVal);
-    if (Number.isFinite(n) && n > 0) return Math.min(MAX_PARSE_POOL_SIZE, Math.max(1, Math.floor(n)));
-    if (n === 0) return 0;
+    if (Number.isFinite(n) && n >= 0) {
+      return Math.max(1, Math.min(Math.floor(n), MAX_PARSE_POOL_SIZE));
+    }
   }
-  return Math.min(DEFAULT_PARSE_POOL_CAP, Math.max(1, cpuCount - 1));
+  return Math.max(1, Math.min(cpuCount - 1, DEFAULT_PARSE_POOL_CAP));
 }
 
 export function resolveParseTimeoutMs(envVal: string | undefined): number {
@@ -70,234 +94,270 @@ export function resolveParseTimeoutMs(envVal: string | undefined): number {
 }
 
 export class ParseWorkerPool {
-  private readonly languages: string[];
-  private readonly size: number;
-  private readonly workerScriptPath: string;
+  private idle: ParsePoolWorker[] = [];
+  private queue: ParseJob[] = [];
+  private inflight = new Map<ParsePoolWorker, ParseJob>();
+  private workers = new Set<ParsePoolWorker>();
+  // Запущены, но ещё не сообщили 'grammars-loaded'.
+  private pending = new Set<ParsePoolWorker>();
+  private parseCounts = new Map<ParsePoolWorker, number>();
+  private nextId = 1;
+  private totalCrashes = 0;
+  private destroyed = false;
+
+  private readonly languages: Language[];
+  private readonly maxSize: number;
   private readonly recycleInterval: number;
   private readonly parseTimeoutMs: number;
-  private readonly createWorker: (script: string, langs: string[]) => ParsePoolWorker;
+  private readonly createWorker: () => ParsePoolWorker;
   private readonly log: (msg: string) => void;
-
-  private idleWorkers: ParsePoolWorker[] = [];
-  private busyWorkers = new Map<ParsePoolWorker, ParseJob>();
-  private queue: ParseJob[] = [];
-  private totalCrashes = 0;
-  private spawnCount = 0;
-  private destroyed = false;
-  private nextJobId = 0;
+  private readonly grammarBuffers?: Record<string, Uint8Array>;
 
   constructor(opts: ParseWorkerPoolOptions) {
     this.languages = opts.languages;
-    this.size = Math.min(MAX_PARSE_POOL_SIZE, Math.max(1, opts.size));
-    this.workerScriptPath = opts.workerScriptPath;
+    this.grammarBuffers = opts.grammarBuffers;
+    this.maxSize = Math.max(1, Math.min(opts.size, MAX_PARSE_POOL_SIZE));
     this.recycleInterval = opts.recycleInterval ?? DEFAULT_RECYCLE_INTERVAL;
     this.parseTimeoutMs = opts.parseTimeoutMs ?? DEFAULT_PARSE_TIMEOUT_MS;
-    this.createWorker = opts.createWorker ?? this.defaultCreateWorker;
     this.log = opts.log ?? (() => {});
+    if (opts.createWorker) {
+      this.createWorker = opts.createWorker;
+    } else if (opts.workerScriptPath) {
+      const scriptPath = opts.workerScriptPath;
+      this.createWorker = () => new Worker(scriptPath);
+    } else {
+      throw new Error('ParseWorkerPool требует workerScriptPath или createWorker');
+    }
+    this.spawnOne();
   }
 
-  private defaultCreateWorker(script: string, langs: string[]): ParsePoolWorker {
-    const w = new Worker(script, {
-      workerData: { languages: langs },
-      stdout: true,
-      stderr: true,
-    });
-    return {
-      postMessage: (msg: unknown) => w.postMessage(msg),
-      terminate: () => w.terminate(),
-      on: ((event: 'message' | 'error' | 'exit', cb: (m: unknown) => void) => {
-        if (event === 'message') w.on('message', cb);
-        else if (event === 'error') w.on('error', cb as (e: Error) => void);
-        else w.on('exit', cb as (code: number) => void);
-      }) as ParsePoolWorker['on'],
-    };
+  /**
+   * Запускает весь пул заранее. По умолчанию рост идёт по требованию, но
+   * массовая индексация ЗНАЕТ, что понадобятся все ядра — последовательный
+   * рост иначе съедает большую часть фазы парсинга.
+   */
+  prewarm(): void {
+    while (this.workers.size < this.maxSize) {
+      const before = this.workers.size;
+      this.spawnOne();
+      if (this.workers.size === before) break;
+    }
   }
 
-  get healthy(): boolean {
-    return this.totalCrashes < CRASH_BUDGET;
+  get size(): number {
+    return this.maxSize;
   }
 
   get liveWorkers(): number {
-    return this.idleWorkers.length + this.busyWorkers.size;
+    return this.workers.size;
   }
 
-  get sizeActual(): number {
-    return this.size;
+  /** Ложь, если исчерпан бюджет крашей или пул уничтожен. */
+  get healthy(): boolean {
+    return !this.destroyed && this.totalCrashes < CRASH_BUDGET;
   }
 
   /** Отправка задачи на парсинг. */
   requestParse(task: ParseTask): Promise<IExtractionResult> {
-    if (this.destroyed) {
-      return Promise.reject(new Error('Пул уничтожен'));
-    }
-
+    if (this.destroyed) return Promise.reject(new Error('Пул уничтожен'));
     return new Promise<IExtractionResult>((resolve, reject) => {
-      const job: ParseJob = { task, resolve, reject };
-      this.queue.push(job);
+      this.queue.push({ id: this.nextId++, task, resolve, reject, settled: false });
       this.drain();
     });
   }
 
   /** Создание одного воркера. */
   private spawnOne(): void {
-    if (this.spawnCount >= 2) return;
-    if (this.liveWorkers >= this.size) return;
-
-    this.spawnCount++;
-    const w = this.createWorker(this.workerScriptPath, this.languages);
-    let parseCount = 0;
-
-    w.on('message', (m: unknown) => {
-      const msg = m as ParseWorkerMessage;
-      if (msg.type === 'grammars-loaded') {
-        this.idleWorkers.push(w);
-        this.spawnCount = Math.max(0, this.spawnCount - 1);
-        this.drain();
-      } else if (msg.type === 'parse-result' || msg.type === 'parse-error' || msg.type === 'error') {
-        const job = this.busyWorkers.get(w);
-        if (job) {
-          this.busyWorkers.delete(w);
-          parseCount++;
-
-          if (msg.type === 'parse-result' && msg.result) {
-            job.resolve(msg.result);
-          } else {
-            const err = new Error((msg.error ?? (msg as any).message) ?? 'Ошибка парсинга в воркере');
-            job.reject(err);
-          }
-
-          if (parseCount >= this.recycleInterval) {
-            this.recycle(w);
-          } else {
-            this.idleWorkers.push(w);
-            this.drain();
-          }
-        }
-      }
-    });
-
-    w.on('error', (e: Error) => {
-      this.onWorkerGone(w, `Ошибка воркера: ${e.message}`);
-    });
-
-    w.on('exit', (code: number) => {
-      if (code !== 0) {
-        this.onWorkerGone(w, `Воркер завершился с кодом ${code}`);
-      }
-    });
-
-    w.postMessage({ type: 'load-grammars', languages: this.languages });
-  }
-
-  /** Обработка ухода воркера. */
-  private onWorkerGone(w: ParsePoolWorker, message: string): void {
-    const job = this.busyWorkers.get(w);
-    if (job) {
-      this.busyWorkers.delete(w);
-      job.reject(new Error(message));
-    }
-
-    const idleIdx = this.idleWorkers.indexOf(w);
-    if (idleIdx !== -1) this.idleWorkers.splice(idleIdx, 1);
-
-    this.totalCrashes++;
-    this.log(`Воркер потерян: ${message} (всего крашей: ${this.totalCrashes})`);
-
-    if (this.totalCrashes >= CRASH_BUDGET) {
-      this.log(`Бюджет крашей исчерпан (${CRASH_BUDGET}). Пул больше не возрождает воркеры.`);
+    if (this.destroyed || this.workers.size >= this.maxSize || !this.healthy) return;
+    let w: ParsePoolWorker;
+    try {
+      w = this.createWorker();
+    } catch {
+      this.totalCrashes++;
       return;
     }
+    this.workers.add(w);
+    this.pending.add(w);
+    this.parseCounts.set(w, 0);
 
-    this.spawnOne();
+    w.on('message', (m: unknown) => this.onMessage(w, (m ?? {}) as ParseWorkerMessage));
+
+    w.on('error', (e: Error) => this.onWorkerGone(w, `Ошибка воркера: ${e?.message ?? 'неизвестно'}`));
+
+    w.on('exit', (code: number) => {
+      if (code !== 0) this.onWorkerGone(w, `Воркер завершился с кодом ${code}`);
+    });
+
+    // Загрузка грамматик; воркер отвечает 'grammars-loaded', после чего становится idle.
+    // Предчитанные WASM-байты (если оркестратор предоставил их) делают это
+    // загрузкой из памяти вместо чтения с диска при каждом запуске.
+    w.postMessage({ type: 'load-grammars', languages: this.languages, grammarBuffers: this.grammarBuffers });
   }
 
-  /** Пересоздание воркера. */
-  private recycle(w: ParsePoolWorker): void {
-    try {
-      w.terminate();
-    } catch {
-      // Игнорируем
+  private onMessage(w: ParsePoolWorker, m: ParseWorkerMessage): void {
+    if (m.type === 'grammars-loaded') {
+      if (!this.workers.has(w)) return;
+      this.pending.delete(w);
+      this.idle.push(w);
+      this.drain();
+      return;
     }
-    this.spawnOne();
+    if (m.type === 'parse-result') {
+      const job = this.inflight.get(w);
+      if (!job || (m.id !== undefined && m.id !== job.id)) return;
+      this.inflight.delete(w);
+      if (job.timerExpired) {
+        const parseMs = typeof m.parseMs === 'number' ? Math.round(m.parseMs) : undefined;
+        const detail = parseMs === undefined
+          ? ''
+          : parseMs < (job.budgetMs ?? this.parseTimeoutMs)
+            ? ` (парсинг занял ${parseMs}ms в воркере — основной поток был заблокирован, а не парсинг)`
+            : ` (парсинг действительно занял ${parseMs}ms)`;
+        this.log(`Поздний результат парсинга принят: ${job.task.filePath}${detail}`);
+      }
+      if ((this.parseCounts.get(w) ?? 0) >= this.recycleInterval) {
+        this.recycle(w);
+      } else {
+        this.idle.push(w);
+      }
+      this.settle(job, m.result);
+      this.drain();
+    }
+  }
+
+  /** Воркер погиб (краш / OOM / ошибка запуска). Отклоняем парсинг и возрождаем. */
+  private onWorkerGone(w: ParsePoolWorker, message: string): void {
+    if (!this.workers.has(w)) return;
+    this.removeWorker(w);
+    this.totalCrashes++;
+    const job = this.inflight.get(w);
+    this.inflight.delete(w);
+    try { void w.terminate(); } catch { /* уже ушёл */ }
+    if (job) this.settle(job, undefined, new Error(message));
+    if (this.healthy) this.spawnOne();
+    this.drain();
+  }
+
+  /** Пересоздание воркера, достигшего порога переработки. Не краш — не учитывается в бюджете. */
+  private recycle(w: ParsePoolWorker): void {
+    this.log(`Пересоздание воркера после ${this.parseCounts.get(w)} парсингов (heap: ${Math.round(process.memoryUsage().rss / 1024 / 1024)}MB RSS)`);
+    this.removeWorker(w);
+    try { void w.terminate(); } catch { /* уже ушёл */ }
+    if (this.healthy && !this.destroyed) this.spawnOne();
+  }
+
+  private removeWorker(w: ParsePoolWorker): void {
+    this.workers.delete(w);
+    this.pending.delete(w);
+    this.parseCounts.delete(w);
+    this.idle = this.idle.filter((x) => x !== w);
   }
 
   /** Отправка задачи воркеру. */
   private dispatch(w: ParsePoolWorker, job: ParseJob): void {
-    const jobId = this.nextJobId++;
-    this.busyWorkers.set(w, job);
-
+    this.inflight.set(w, job);
+    this.parseCounts.set(w, (this.parseCounts.get(w) ?? 0) + 1);
+    // Масштабирование таймаута для крупных файлов: база + 10с на 100КБ.
     const timeoutMs = this.parseTimeoutMs + Math.floor(job.task.content.length / 100_000) * 10_000;
-
-    let settled = false;
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      const j = this.busyWorkers.get(w);
-      if (j === job) {
-        this.busyWorkers.delete(w);
-        job.reject(new Error(`Таймаут парсинга (${timeoutMs}ms)`));
-        this.recycle(w);
-      }
-    }, timeoutMs);
-
-    const safeResolve = (result: IExtractionResult) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      job.resolve(result);
-    };
-    const safeReject = (err: Error) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      job.reject(err);
-    };
-
+    job.budgetMs = timeoutMs;
+    job.timer = setTimeout(() => this.onTimeout(w, job, timeoutMs), timeoutMs);
+    job.timer.unref?.();
     w.postMessage({
       type: 'parse',
-      id: jobId,
+      id: job.id,
       filePath: job.task.filePath,
       content: job.task.content,
-      language: job.task.language,
       frameworkNames: job.task.frameworkNames,
+      language: job.task.language,
     });
+  }
 
-    // Замена колбэков задачи на безопасные версии для обработчика сообщений
-    job.resolve = safeResolve;
-    job.reject = safeReject;
+  /**
+   * Базовый таймер сработал без результата. НЕ убиваем и НЕ завершаем:
+   * срабатывание таймера не доказывает, что парсинг ещё идёт — после долгой
+   * синхронной работы основного потока Node обслуживает фазу таймеров до
+   * фазы опроса, так что уже доставленный parse-result всё ещё в очереди.
+   * Помечаем задачу поздней (onMessage примет результат) и включаем
+   * backstop для действительно зависших воркеров.
+   */
+  private onTimeout(w: ParsePoolWorker, job: ParseJob, ms: number): void {
+    if (job.settled || !this.workers.has(w)) return;
+    const graceMs = ms * (HARD_KILL_MULTIPLIER - 1);
+    this.log(`ТАЙМАУТ: ${job.task.filePath} превысил ${ms}мс без результата — ожидаем до ${graceMs}мс ещё для позднего результата перед убийством воркера`);
+    job.timerExpired = true;
+    job.hardKillTimer = setTimeout(() => this.onHardTimeout(w, job, ms * HARD_KILL_MULTIPLIER), graceMs);
+    job.hardKillTimer.unref?.();
+  }
+
+  /** Нет результата после полного окна жёсткого убийства — воркер действительно завис. */
+  private onHardTimeout(w: ParsePoolWorker, job: ParseJob, totalMs: number): void {
+    if (job.settled || !this.workers.has(w)) return;
+    this.log(`ТАЙМАУТ: ${job.task.filePath} не получил результат после ${totalMs}мс — убиваем воркер`);
+    this.removeWorker(w);
+    this.inflight.delete(w);
+    try { void w.terminate(); } catch { /* уже ушёл */ }
+    this.settle(job, undefined, new Error(`Парсинг превысил таймаут после ${totalMs}мс`));
+    if (this.healthy) this.spawnOne();
+    this.drain();
   }
 
   /** Распределение задач из очереди по idle воркерам. */
   private drain(): void {
-    while (this.queue.length > 0 && this.idleWorkers.length > 0) {
-      const job = this.queue.shift()!;
-      const w = this.idleWorkers.pop()!;
-      this.dispatch(w, job);
-    }
-
-    // Ленивый спавн
-    while (this.queue.length > 0 && this.liveWorkers < this.size) {
+    // Рост до maxSize, пока очередь превышает доступные воркеры — с ограничением
+    // на одновременный холодный старт.
+    while (
+      this.queue.length > this.idle.length + this.pending.size &&
+      this.workers.size < this.maxSize &&
+      this.pending.size < MAX_CONCURRENT_SPAWN &&
+      !this.destroyed &&
+      this.healthy
+    ) {
       this.spawnOne();
     }
+    // Диспетчеризация задач из очереди на idle воркеры.
+    while (this.idle.length && this.queue.length) {
+      let job: ParseJob | undefined;
+      while (this.queue.length && (job = this.queue.shift()) && job.settled) job = undefined;
+      if (!job || job.settled) break;
+      const w = this.idle.pop()!;
+      this.dispatch(w, job);
+    }
+    // Защита от зависания: если есть очередь, но некому выполнять (нет idle,
+    // нет запускающихся, нет живых), завершаем с ошибкой вместо вечного ожидания.
+    if (this.queue.length && this.idle.length === 0 && this.pending.size === 0 && this.workers.size === 0) {
+      const reason = this.destroyed ? 'пул парсинга уничтожен' : 'пул парсинга исчерпал бюджет крашей воркеров';
+      for (const job of this.queue.splice(0)) this.settle(job, undefined, new Error(reason));
+    }
+  }
+
+  private settle(job: ParseJob, result?: IExtractionResult, err?: Error): void {
+    if (job.settled) return;
+    job.settled = true;
+    if (job.timer) clearTimeout(job.timer);
+    if (job.hardKillTimer) clearTimeout(job.hardKillTimer);
+    if (err) job.reject(err);
+    else job.resolve(result!);
   }
 
   /** Пересоздание всех idle воркеров. */
   recycleAll(): void {
-    for (const w of this.idleWorkers) {
-      this.recycle(w);
-    }
+    for (const w of [...this.idle]) this.recycle(w);
   }
 
   /** Уничтожение всех воркеров. */
   async destroy(): Promise<void> {
+    if (this.destroyed) return;
     this.destroyed = true;
-    for (const w of this.idleWorkers) {
-      try { w.terminate(); } catch { /* ignore */ }
+    const ws = [...this.workers];
+    this.workers.clear();
+    this.pending.clear();
+    this.parseCounts.clear();
+    this.idle = [];
+    for (const job of [...this.inflight.values(), ...this.queue]) {
+      this.settle(job, undefined, new Error('пул парсинга уничтожен'));
     }
-    for (const w of this.busyWorkers.keys()) {
-      try { w.terminate(); } catch { /* ignore */ }
-    }
-    this.idleWorkers = [];
-    this.busyWorkers.clear();
+    this.inflight.clear();
+    this.queue = [];
+    await Promise.all(ws.map((w) => Promise.resolve(w.terminate()).catch(() => { /* уже ушёл */ })));
   }
 }

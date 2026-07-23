@@ -21,6 +21,8 @@ import {
   ISearchResult,
   IGraphStats,
   IDominantFile,
+  ITopRouteFile,
+  IRoutingManifest,
   NodeKind,
   EdgeKind,
   DATABASE_FILENAME,
@@ -234,7 +236,7 @@ export class NtGraphDb {
     return this._qb.getNodeById(id);
   }
 
-  getNodesByIds(ids: readonly string[]): INode[] {
+  getNodesByIds(ids: readonly string[]): Map<string, INode> {
     return this._qb.getNodesByIds(ids);
   }
 
@@ -248,6 +250,10 @@ export class NtGraphDb {
 
   *iterateNodesByKind(kind: NodeKind): IterableIterator<INode> {
     yield* this._qb.iterateNodesByKind(kind);
+  }
+
+  *iterateNodesByLanguageWithDecorator(language: string, decorator: string): IterableIterator<INode> {
+    yield* this._qb.iterateNodesByLanguageWithDecorator(language, decorator);
   }
 
   getAllNodes(): INode[] {
@@ -266,15 +272,19 @@ export class NtGraphDb {
     return this._qb.getNodesByLowerName(lowerName);
   }
 
+  getNodesByNamePrefix(prefix: string, limit?: number): INode[] {
+    return this._qb.getNodesByNamePrefix(prefix, limit);
+  }
+
   getDominantFile(): IDominantFile | null {
     return this._qb.getDominantFile();
   }
 
-  getTopRouteFile(): INode | null {
+  getTopRouteFile(): ITopRouteFile | null {
     return this._qb.getTopRouteFile();
   }
 
-  getRoutingManifest(limit?: number): INode[] {
+  getRoutingManifest(limit?: number): IRoutingManifest | null {
     return this._qb.getRoutingManifest(limit);
   }
 
@@ -286,7 +296,7 @@ export class NtGraphDb {
     return this._qb.getDependencyFilePaths(filePath);
   }
 
-  getCrossFileIncomingEdgesWithTarget(filePath: string): Array<{ edge: IEdge; targetKind: NodeKind; targetName: string }> {
+  getCrossFileIncomingEdgesWithTarget(filePath: string): Array<{ edge: IEdge; targetKind: NodeKind; targetName: string; sourceFilePath: string; sourceLanguage: string }> {
     return this._qb.getCrossFileIncomingEdgesWithTarget(filePath);
   }
 
@@ -381,7 +391,7 @@ export class NtGraphDb {
     return this._qb.getLastIndexedAt();
   }
 
-  getStaleFiles(currentHashes?: Map<string, string>): IFileRecord[] {
+  getStaleFiles(currentHashes: Map<string, string>): IFileRecord[] {
     return this._qb.getStaleFiles(currentHashes);
   }
 
@@ -391,6 +401,57 @@ export class NtGraphDb {
 
   getAllNodeNames(): string[] {
     return this._qb.getAllNodeNames();
+  }
+
+  getDistinctFileLanguages(): Set<string> {
+    return this._qb.getDistinctFileLanguages();
+  }
+
+  /** Хранение пакета файла: узлы, рёбра, ссылки, запись файла — одна транзакция. */
+  storeFileBundle(bundle: { nodes: INode[]; edges: IEdge[]; refs: IUnresolvedReference[]; file: IFileRecord }): void {
+    this._qb.storeFileBundle(bundle);
+  }
+
+  /** Очищает словарь сегментов имён. */
+  clearNameSegmentVocab(): void {
+    this._qb.clearNameSegmentVocab();
+  }
+
+  /** Проверяет, пуст ли словарь сегментов имён. */
+  isNameSegmentVocabEmpty(): boolean {
+    return this._qb.isNameSegmentVocabEmpty();
+  }
+
+  /** Страница отличных имён сегментируемых узлов для пакетной перестройки словаря. */
+  getDistinctNodeNames(limit: number, offset: number): string[] {
+    return this._qb.getDistinctNodeNames(limit, offset);
+  }
+
+  /** Вставка сегментов для пакета имён в одной транзакции. */
+  insertNameSegmentsBatch(names: string[]): void {
+    this._qb.insertNameSegmentsBatch(names);
+  }
+
+  /**
+   * Имена, чьи сегменты покрывают не менее `minWords` различных ключевых слов —
+   * проверка совместного вхождения.
+   */
+  getSegmentCoOccurrence(
+    variants: Array<{ segment: string; word: string }>,
+    minWords: number,
+    limit: number
+  ): Array<{ name: string; matches: number }> {
+    return this._qb.getSegmentCoOccurrence(variants, minWords, limit);
+  }
+
+  /** Сколько отличных имён содержит каждый сегмент. */
+  getSegmentNameCounts(segments: string[]): Map<string, number> {
+    return this._qb.getSegmentNameCounts(segments);
+  }
+
+  /** Имена, содержащие заданный сегмент. */
+  getNamesForSegment(segment: string, limit: number): string[] {
+    return this._qb.getNamesForSegment(segment, limit);
   }
 
   // ===================================================================
@@ -425,6 +486,11 @@ export class NtGraphDb {
     return this._qb.getUnresolvedReferencesBatch(offset, limit);
   }
 
+  /** Пагинированный запрос неразрешённых ссылок по keyset (rowid > afterRowId). */
+  getUnresolvedReferencesBatchAfter(afterRowId: number, limit: number): IUnresolvedReference[] {
+    return this._qb.getUnresolvedReferencesBatchAfter(afterRowId, limit);
+  }
+
   getUnresolvedReferencesByFiles(filePaths: string[]): IUnresolvedReference[] {
     return this._qb.getUnresolvedReferencesByFiles(filePaths);
   }
@@ -439,6 +505,26 @@ export class NtGraphDb {
 
   deleteSpecificResolvedReferences(refs: IUnresolvedReference[]): number {
     return this._qb.deleteSpecificResolvedReferences(refs);
+  }
+
+  markReferencesFailed(refs: IUnresolvedReference[]): number {
+    return this._qb.markReferencesFailed(refs);
+  }
+
+  markReferencesFailedByRowIds(refs: Array<{ rowId: number; nameTail: string }>): number {
+    return this._qb.markReferencesFailedByRowIds(refs);
+  }
+
+  getRetryableFailedReferences(names: string[], perNameCeiling?: number): IUnresolvedReference[] {
+    return this._qb.getRetryableFailedReferences(names, perNameCeiling);
+  }
+
+  deleteReferencesByRowIds(rowIds: number[]): number {
+    return this._qb.deleteReferencesByRowIds(rowIds);
+  }
+
+  getNodeNamesByFiles(filePaths: string[]): string[] {
+    return this._qb.getNodeNamesByFiles(filePaths);
   }
 
   // ===================================================================
@@ -477,7 +563,7 @@ export class NtGraphDb {
     this._qb.setMetadata(key, value);
   }
 
-  getAllMetadata(): Map<string, string> {
+  getAllMetadata(): Record<string, string> {
     return this._qb.getAllMetadata();
   }
 
@@ -545,7 +631,7 @@ export class NtGraphDb {
 export {
   // Interfaces
   INode, IEdge, IFileRecord, IUnresolvedReference, ISearchOptions,
-  ISearchResult, IGraphStats, IDominantFile, IExtractionResult,
+  ISearchResult, IGraphStats, IDominantFile, ITopRouteFile, IExtractionResult,
   IExtractionError, ISubgraph, Context, CodeBlock, TaskInput,
   BuildContextOptions, TaskContext, FindRelevantContextOptions,
   ParsedQuery, ITraversalOptions, IIndexProgress, IIndexResult,

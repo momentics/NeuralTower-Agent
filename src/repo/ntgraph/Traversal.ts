@@ -76,7 +76,7 @@ export class GraphTraverser {
         .map((e) => (e.source === node.id ? e.target : e.source))
         .filter((id) => !visited.has(id) && !enqueued.has(id));
       const neighborNodes = wantIds.length > 0
-        ? new Map(this.qb.getNodesByIds(wantIds).map(n => [n.id, n]))
+        ? this.qb.getNodesByIds(wantIds)
         : new Map<string, INode>();
 
       for (const adjEdge of adjacentEdges) {
@@ -150,7 +150,7 @@ export class GraphTraverser {
       .map((e) => (e.source === node.id ? e.target : e.source))
       .filter((id) => !visited.has(id));
     const neighborNodes = wantIds.length > 0
-      ? new Map(this.qb.getNodesByIds(wantIds).map(n => [n.id, n]))
+      ? this.qb.getNodesByIds(wantIds)
       : new Map<string, INode>();
 
     for (const edge of adjacentEdges) {
@@ -218,7 +218,7 @@ export class GraphTraverser {
     if (incomingEdges.length === 0) return;
 
     const sourceIds = incomingEdges.map((e) => e.source);
-    const callerNodes = new Map(this.qb.getNodesByIds(sourceIds).map(n => [n.id, n]));
+    const callerNodes = this.qb.getNodesByIds(sourceIds);
 
     for (const edge of incomingEdges) {
       const callerNode = callerNodes.get(edge.source);
@@ -256,7 +256,7 @@ export class GraphTraverser {
     if (outgoingEdges.length === 0) return;
 
     const targetIds = outgoingEdges.map((e) => e.target);
-    const calleeNodes = new Map(this.qb.getNodesByIds(targetIds).map(n => [n.id, n]));
+    const calleeNodes = this.qb.getNodesByIds(targetIds);
 
     for (const edge of outgoingEdges) {
       const calleeNode = calleeNodes.get(edge.target);
@@ -327,7 +327,7 @@ export class GraphTraverser {
 
     const outgoingEdges = this.qb.getOutgoingEdges(nodeId, ['extends', 'implements']);
     if (outgoingEdges.length === 0) return;
-    const parents = new Map(this.qb.getNodesByIds(outgoingEdges.map((e) => e.target)).map(n => [n.id, n]));
+    const parents = this.qb.getNodesByIds(outgoingEdges.map((e) => e.target));
 
     for (const edge of outgoingEdges) {
       const parentNode = parents.get(edge.target);
@@ -350,7 +350,7 @@ export class GraphTraverser {
 
     const incomingEdges = this.qb.getIncomingEdges(nodeId, ['extends', 'implements']);
     if (incomingEdges.length === 0) return;
-    const children = new Map(this.qb.getNodesByIds(incomingEdges.map((e) => e.source)).map(n => [n.id, n]));
+    const children = this.qb.getNodesByIds(incomingEdges.map((e) => e.source));
 
     for (const edge of incomingEdges) {
       const childNode = children.get(edge.source);
@@ -371,7 +371,7 @@ export class GraphTraverser {
     const incomingEdges = this.qb.getIncomingEdges(nodeId);
     if (incomingEdges.length === 0) return result;
 
-    const sources = new Map(this.qb.getNodesByIds(incomingEdges.map((e) => e.source)).map(n => [n.id, n]));
+    const sources = this.qb.getNodesByIds(incomingEdges.map((e) => e.source));
     for (const edge of incomingEdges) {
       const sourceNode = sources.get(edge.source);
       if (sourceNode) result.push({ node: sourceNode, edge });
@@ -418,7 +418,7 @@ export class GraphTraverser {
       if (containerKinds.has(focalNode.kind)) {
         const containsEdges = this.qb.getOutgoingEdges(nodeId, ['contains']);
         if (containsEdges.length > 0) {
-          const children = new Map(this.qb.getNodesByIds(containsEdges.map((e) => e.target)).map(n => [n.id, n]));
+          const children = this.qb.getNodesByIds(containsEdges.map((e) => e.target));
           for (const edge of containsEdges) {
             const childNode = children.get(edge.target);
             if (childNode && !visited.has(childNode.id)) {
@@ -433,7 +433,7 @@ export class GraphTraverser {
 
     const incomingEdges = this.qb.getIncomingEdges(nodeId).filter((e) => e.kind !== 'contains');
     if (incomingEdges.length === 0) return;
-    const sources = new Map(this.qb.getNodesByIds(incomingEdges.map((e) => e.source)).map(n => [n.id, n]));
+    const sources = this.qb.getNodesByIds(incomingEdges.map((e) => e.source));
 
     for (const edge of incomingEdges) {
       const sourceNode = sources.get(edge.source);
@@ -487,7 +487,7 @@ export class GraphTraverser {
         .map((e) => e.target)
         .filter((id) => !visited.has(id));
       const nextNodes = wantIds.length > 0
-        ? new Map(this.qb.getNodesByIds(wantIds).map(n => [n.id, n]))
+        ? this.qb.getNodesByIds(wantIds)
         : new Map<string, INode>();
 
       for (const edge of outgoingEdges) {
@@ -542,7 +542,7 @@ export class GraphTraverser {
     const containsEdges = this.qb.getOutgoingEdges(nodeId, ['contains']);
     if (containsEdges.length === 0) return [];
 
-    const childNodes = new Map(this.qb.getNodesByIds(containsEdges.map((e) => e.target)).map(n => [n.id, n]));
+    const childNodes = this.qb.getNodesByIds(containsEdges.map((e) => e.target));
     const children: INode[] = [];
     for (const edge of containsEdges) {
       const childNode = childNodes.get(edge.target);

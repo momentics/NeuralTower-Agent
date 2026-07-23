@@ -29,11 +29,15 @@ export class LRUCache<K, V> {
 
   /**
    * Получает значение по ключу. При попадании элемент перемещается в конец (свежий).
+   * Различает «отсутствует» и «хранимый undefined» через has().
    * @returns значение или undefined, если ключ отсутствует.
    */
   get(key: K): V | undefined {
-    if (!this.store.has(key)) return undefined;
-    const value = this.store.get(key)!;
+    const value = this.store.get(key);
+    if (value === undefined) {
+      // Различаем «отсутствует» и «хранимый undefined»
+      return this.store.has(key) ? value : undefined;
+    }
     this.store.delete(key);
     this.store.set(key, value);
     return value;

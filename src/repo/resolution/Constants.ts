@@ -23,7 +23,7 @@ export const CONTAINER_NODE_KINDS = new Set<NodeKind>([
 
 /** Языки для цепных вызовов статических фабрик / fluent. */
 export const CHAIN_LANGUAGES = new Set([
-  'java', 'kotlin', 'csharp', 'swift', 'rust', 'go', 'scala', 'dart', 'objc', 'pascal',
+  'java', 'kotlin', 'csharp', 'swift', 'rust', 'go', 'scala', 'dart', 'objc', 'pascal', 'cpp',
 ]);
 
 /** Языки для scoped-цепей (::). */
@@ -45,3 +45,18 @@ export const DEFAULT_FIND_OPTIONS: ISearchOptions = {
   limit: 3,
   caseSensitive: false,
 };
+
+/**
+ * Порог числа кандидатов с одинаковым именем, при превышении которого
+ * fuzzy-совпадение отключается — имя считается «вездесущим» (например,
+ * `init`/`update`/`render` в каждом виджете вложенной темы). Настраивается
+ * через переменную среды `CODEGRAPH_AMBIGUOUS_NAME_CEILING`.
+ */
+const DEFAULT_AMBIGUOUS_NAME_CEILING = 500;
+function resolveAmbiguousNameCeiling(): number {
+  const raw = process.env.CODEGRAPH_AMBIGUOUS_NAME_CEILING;
+  if (!raw) return DEFAULT_AMBIGUOUS_NAME_CEILING;
+  const parsed = Number.parseInt(raw, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_AMBIGUOUS_NAME_CEILING;
+}
+export const AMBIGUOUS_NAME_CEILING = resolveAmbiguousNameCeiling();

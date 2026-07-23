@@ -139,16 +139,23 @@ function hashContent(content: string): string {
 /**
  * Кооперативная отдача управления с бюджетом.
  * Yield только если прошло > budgetMs с последнего yield.
- * Эффективнее для быстрых репозиториев.
+ * Fast path возвращает undefined без await — экономит аллокацию промиса.
  */
 const DEFAULT_YIELD_BUDGET_MS = 250;
 
-function createYielder(budgetMs: number = DEFAULT_YIELD_BUDGET_MS): () => Promise<void> {
+/** Функция отдачи управления — возвращает undefined для быстрого пропуска. */
+export type MaybeYield = () => Promise<void> | undefined;
+
+export function createYielder(budgetMs: number = DEFAULT_YIELD_BUDGET_MS): MaybeYield {
   let last = Date.now();
-  return async function maybeYield(): Promise<void> {
-    if (Date.now() - last < budgetMs) return;
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    last = Date.now();
+  return function maybeYield(): Promise<void> | undefined {
+    if (Date.now() - last < budgetMs) return undefined;
+    return new Promise<void>((resolve) => {
+      setImmediate(() => {
+        last = Date.now();
+        resolve();
+      });
+    });
   };
 }
 
@@ -538,7 +545,7 @@ export class ExtractionOrchestrator {
         if (poolSize > 0) {
           const workerScriptPath = require.resolve('./ParserWorker.script.js');
           parsePool = new ParseWorkerPool({
-            languages: [...neededLanguages],
+            languages: [...neededLanguages] as Language[],
             size: poolSize,
             workerScriptPath,
             log: verbose ? (msg: string) => console.log(`[pool] ${msg}`) : undefined,

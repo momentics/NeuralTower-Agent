@@ -107,6 +107,23 @@
 | `edgeCount` | `number` | Количество ребер |
 | `nextEdgeCount` | `number` | Количество ребер следующего файла |
 
+### ITopRouteFile — Файл с наибольшей концентрацией route-узлов
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `filePath` | `string` | Путь к файлу |
+| `routeCount` | `number` | Количество route-узлов в файле |
+| `totalRoutes` | `number` | Общее количество route-узлов |
+
+### IRoutingManifest — Манифест маршрутизации
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `entries` | `INode[]` | Route-узлы |
+| `topHandlerFile` | `string \| null` | Файл с наибольшим числом обработчиков |
+| `topHandlerFileCount` | `number` | Число обработчиков в topHandlerFile |
+| `totalRoutes` | `number` | Общее количество маршрутов |
+
 ### ISubgraph — Подграф
 
 | Поле | Тип | Описание |
@@ -443,7 +460,7 @@ constructor(db: SqliteDatabase)
 | `deleteNode(id)` | `void` | Удаление узла по ID |
 | `deleteNodesByFile(filePath)` | `number` | Удаление всех узлов файла и связанных рёбер, возвращает число удалённых |
 | `getNodeById(id)` | `INode \| null` | Поиск узла по ID (с LRU-кэшем) |
-| `getNodesByIds(ids)` | `INode[]` | Пакетный поиск (чанки по 500, с кэш-хитами) |
+| `getNodesByIds(ids)` | `Map<string, INode>` | Пакетный поиск (чанки по 500, с кэш-хитами, порядок = порядок входного массива) |
 | `getExistingNodeIds(ids)` | `Set<string>` | Существующие идентификаторы для проверки |
 | `getNodesByFile(filePath)` | `INode[]` | Узлы файла |
 | `getNodesByKind(kind)` | `INode[]` | Узлы по виду |
@@ -452,6 +469,8 @@ constructor(db: SqliteDatabase)
 | `getNodesByName(name)` | `INode[]` | Точный поиск по имени |
 | `getNodesByQualifiedNameExact(qn)` | `INode[]` | Точный поиск по квалифицированному имени |
 | `getNodesByLowerName(lowerName)` | `INode[]` | Поиск по нижнему регистру имени |
+| `getNodesByNamePrefix(prefix, limit?)` | `INode[]` | Range scan по idx_nodes_name (по префиксу имени) |
+| `iterateNodesByLanguageWithDecorator(language, decorator)` | `IterableIterator<INode>` | Ленивый итератор узлов с языком и декоратором |
 
 ### Ребра
 
@@ -473,10 +492,24 @@ constructor(db: SqliteDatabase)
 | `deleteFile(filePath)` | `void` | Удаление файла и его узлов |
 | `getFileByPath(path)` | `IFileRecord \| null` | Поиск файла по пути |
 | `getAllFiles()` | `IFileRecord[]` | Все файлы |
-| `getStaleFiles(currentHashes?)` | `IFileRecord[]` | Устаревшие файлы (хеш изменился) |
+| `getStaleFiles(currentHashes)` | `IFileRecord[]` | Устаревшие файлы (хеш изменился, currentHashes обязателен) |
 | `getLastIndexedAt()` | `number \| null` | Последняя метка индексации |
 | `getAllFilePaths()` | `string[]` | Все пути файлов |
 | `getAllNodeNames()` | `string[]` | Все имена узлов |
+| `getDistinctFileLanguages()` | `Set<string>` | Отличные языки из таблицы файлов |
+
+### Словарь сегментов имён
+
+| Метод | Возврат | Описание |
+|---|---|---|
+| `isSegmentableKind(kind)` | `boolean` | Вид узла вносит имя в словарь (file и import исключены) |
+| `clearNameSegmentVocab()` | `void` | Очистка словаря сегментов имён |
+| `isNameSegmentVocabEmpty()` | `boolean` | Пуст ли словарь сегментов |
+| `getDistinctNodeNames(limit, offset)` | `string[]` | Страница отличных имён сегментируемых узлов |
+| `insertNameSegmentsBatch(names)` | `void` | Вставка сегментов пакета имён в транзакции |
+| `getSegmentCoOccurrence(variants, minWords, limit)` | `Array<{name, matches}>` | Имена, чьи сегменты покрывают не менее minWords слов |
+| `getSegmentNameCounts(segments)` | `Map<string, number>` | Число отличных имён для каждого сегмента |
+| `getNamesForSegment(segment, limit)` | `string[]` | Имена, содержащие заданный сегмент |
 
 ### Поиск
 
@@ -500,10 +533,16 @@ constructor(db: SqliteDatabase)
 | `getUnresolvedByName(name)` | `IUnresolvedReference[]` | Поиск по имени |
 | `getUnresolvedReferences()` | `IUnresolvedReference[]` | Все ссылки |
 | `getUnresolvedReferencesCount()` | `number` | Количество ссылок |
-| `getUnresolvedReferencesBatch(offset, limit)` | `IUnresolvedReference[]` | Пагинированный запрос |
-| `getUnresolvedReferencesByFiles(filePaths)` | `IUnresolvedReference[]` | По файлам (чанки по 500) |
+| `getUnresolvedReferencesBatch(offset, limit)` | `IUnresolvedReference[]` | Пагинированный запрос (только status='pending') |
+| `getUnresolvedReferencesBatchAfter(afterRowId, limit)` | `IUnresolvedReference[]` | Keyset-пагинация по rowid |
+| `getUnresolvedReferencesByFiles(filePaths)` | `IUnresolvedReference[]` | По файлам (чанки по 500, только pending) |
 | `deleteResolvedReferences(fromNodeIds)` | `void` | Удаление по ID узлов |
 | `deleteSpecificResolvedReferences(refs)` | `number` | Удаление конкретных ссылок |
+| `markReferencesFailed(refs)` | `number` | Пометить ссылки как failed с name_tail |
+| `markReferencesFailedByRowIds(refs)` | `number` | Пометить по точным row id |
+| `getRetryableFailedReferences(names, perNameCeiling?)` | `IUnresolvedReference[]` | Кандидаты на перезапуск |
+| `deleteReferencesByRowIds(rowIds)` | `number` | Удаление по точным row id |
+| `getNodeNamesByFiles(filePaths)` | `string[]` | Отличные имена узлов в заданных файлах |
 | `clearUnresolvedReferences()` | `void` | Очистка всех ссылок |
 
 ### Метаданные
@@ -512,15 +551,15 @@ constructor(db: SqliteDatabase)
 |---|---|---|
 | `getMetadata(key)` | `string \| null` | Значение по ключу |
 | `setMetadata(key, value)` | `void` | Установка или обновление (upsert) |
-| `getAllMetadata()` | `Map<string, string>` | Все метаданные |
+| `getAllMetadata()` | `Record<string, string>` | Все метаданные (объект, не Map) |
 
 ### Аналитика
 
 | Метод | Возврат | Описание |
 |---|---|---|
 | `getDominantFile()` | `IDominantFile \| null` | Файл с наибольшим числом внутренних рёбер (порог 20) |
-| `getTopRouteFile()` | `INode \| null` | Файл с наибольшей концентрацией route-узлов |
-| `getRoutingManifest(limit?)` | `INode[]` | Все route-узлы (лимит 40) |
+| `getTopRouteFile()` | `ITopRouteFile \| null` | Файл с наибольшей концентрацией route-узлов (структурированный результат) |
+| `getRoutingManifest(limit?)` | `IRoutingManifest \| null` | Манифест маршрутизации: route-узлы + статистика обработчиков |
 | `getDependentFilePaths(filePath)` | `string[]` | Файлы, зависящие от данного |
 | `getDependencyFilePaths(filePath)` | `string[]` | Файлы, от которых зависит данный |
 | `getCrossFileIncomingEdgesWithTarget(filePath)` | `Array<{edge, targetKind, targetName}>` | Входящие межфайловые рёбра |
@@ -533,6 +572,8 @@ constructor(db: SqliteDatabase)
 |---|---|---|
 | `clear()` | `void` | Очистка всей БД (unresolved_refs → edges → nodes → files) |
 | `clearCache()` | `void` | Очистка LRU-кэша |
+| `rebind(db: SqliteDatabase)` | `void` | Замена подключения, сброс prepared statements |
+| `storeFileBundle(bundle: {nodes, edges, refs, file})` | `void` | Хранение пакета файла в одной транзакции |
 | `setProjectNameTokens(tokens: Set<string>)` | `void` | Токены имени проекта для исключения из поиска |
 | `getProjectNameTokens()` | `string[]` | Получить токены имени проекта |
 | `getFtsSearch()` | `FtsSearch` | Экземпляр FtsSearch (ленивая инициализация) |
@@ -591,7 +632,7 @@ constructor(dbPath: string)
 | `insertEdges(edges)` | `void` | Пакетная вставка рёбер |
 | `deleteNodesByFile(filePath)` | `number` | Удаление узлов файла |
 | `getNodeById(id)` | `INode \| null` | Узел по ID |
-| `getNodesByIds(ids)` | `INode[]` | Пакетный поиск узлов |
+| `getNodesByIds(ids)` | `Map<string, INode>` | Пакетный поиск узлов (Map) |
 | `getNodesByFile(filePath)` | `INode[]` | Узлы файла |
 | `getNodesByKind(kind)` | `INode[]` | Узлы по виду |
 | `iterateNodesByKind(kind)` | `IterableIterator<INode>` | Ленивый итератор узлов вида |
@@ -610,8 +651,8 @@ constructor(dbPath: string)
 | `getAllFilePaths()` | `string[]` | Все пути файлов |
 | `getAllNodeNames()` | `string[]` | Все имена узлов |
 | `getDominantFile()` | `IDominantFile \| null` | Доминирующий файл |
-| `getTopRouteFile()` | `INode \| null` | Файл с наибольшей концентрацией route-узлов |
-| `getRoutingManifest(limit?)` | `INode[]` | Манифест маршрутизации |
+| `getTopRouteFile()` | `ITopRouteFile \| null` | Файл с наибольшей концентрацией route-узлов |
+| `getRoutingManifest(limit?)` | `IRoutingManifest \| null` | Манифест маршрутизации |
 | `getDependentFilePaths(filePath)` | `string[]` | Файлы, зависящие от данного |
 | `getDependencyFilePaths(filePath)` | `string[]` | Файлы, от которых зависит данный |
 | `getCrossFileIncomingEdgesWithTarget(filePath)` | `Array<{edge, targetKind, targetName}>` | Входящие межфайловые рёбра |
@@ -946,6 +987,38 @@ constructor(qb: QueryBuilder)
 |---|---|
 | `estimateSize(obj)` | Приблизительная оценка размера объекта в памяти |
 | `MemoryMonitor` | Мониторинг памяти с обратным вызовом при достижении порога |
+
+---
+
+## Сопоставление ссылок (NameMatcher)
+
+Стратегии разрешения ссылок по имени.
+
+### Функции
+
+| Функция | Возврат | Описание |
+|---|---|---|
+| `matchReference(ref, context)` | `IResolvedRef \| null` | Точное совпадение по имени (без import-узлов, с языковым фильтром, лексической достижимостью, порогом неоднозначности) |
+| `matchFunctionRef(ref, context)` | `IResolvedRef \| null` | Функциональные ссылки (callback-регистрации) |
+| `matchByQualifiedName(ref, context)` | `IResolvedRef \| null` | Разрешение по квалифицированному имени (Foo::bar) |
+| `matchDottedCallChain(ref, context)` | `IResolvedRef \| null` | Цепные вызовы через `.` (Foo().bar()) |
+| `matchScopedCallChain(ref, context)` | `IResolvedRef \| null` | Цепные вызовы через `::` (Rust: Foo::bar()) |
+| `matchByFilePath(ref, context)` | `IResolvedRef \| null` | Разрешение по пути файла (#include "X.h") |
+| `isLexicallyReachable(candidate, ref, context)` | `boolean` | Проверка лексической достижимости |
+| `sameLanguageFamily(a, b)` | `boolean` | Сравнивает языковые семейства |
+| `isKnownLanguageFamily(lang)` | `boolean` | Принадлежность к известному многоязыковому семейству |
+| `crossesKnownFamily(a, b)` | `boolean` | Пересечение двух разных известных семейств |
+| `preferCallSiteFile(nodes, callSiteFile)` | `INode[]` | Сортировка: сначала узлы из файла вызова |
+| `resolveMethodOnType(typeName, methodName, ...)` | `IResolvedRef \| null` | Разрешение метода по типу с supertype walk |
+| `inferLocalReceiverType(receiverName, ref, context)` | `string \| null` | Инференс типа получателя из локальных переменных |
+| `normalizeInferredTypeName(raw)` | `string \| null` | Нормализация выражения типа |
+
+### Константы
+
+| Константа | Описание |
+|---|---|
+| `AMBIGUOUS_NAME_CEILING` | Порог неоднозначности (500, настраивается через CODEGRAPH_AMBIGUOUS_NAME_CEILING) |
+| `LANGUAGE_FAMILIES` | Семейства: jvm (java/kotlin/scala), web (ts/js/tsx/jsx), c (c/cpp/objc), dotnet (csharp/razor) |
 
 ---
 

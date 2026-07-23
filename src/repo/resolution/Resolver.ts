@@ -33,6 +33,7 @@ import { isBuiltInSymbol } from './BuiltIns';
 import {
   matchReference,
   matchFunctionRef,
+  matchByQualifiedName,
   matchDottedCallChain,
   matchScopedCallChain,
   sameLanguageFamily,
@@ -234,7 +235,14 @@ export class ReferenceResolver {
       if (gated) return gated;
     }
 
-    // Стратегия 5: Сопоставление по имени
+    // Стратегия 5: Разрешение по квалифицированному имени
+    const qnameResult = matchByQualifiedName(ref, this);
+    if (qnameResult) {
+      const gated = this.gateLanguage(qnameResult, ref);
+      if (gated) return gated;
+    }
+
+    // Стратегия 5.1: Сопоставление по имени
     const nameResult = matchReference(ref, this);
     if (nameResult) {
       const gated = this.gateLanguage(nameResult, ref);
@@ -743,13 +751,13 @@ export class ReferenceResolver {
 
   getSupertypes(nodeId: string): INode[] {
     const edges = this.queries.getOutgoingEdges(nodeId, ['extends', 'implements']);
-    const targets = new Map(this.queries.getNodesByIds(edges.map((e) => e.target)).map(n => [n.id, n]));
+    const targets = this.queries.getNodesByIds(edges.map((e) => e.target));
     return edges.map((e) => targets.get(e.target)).filter((n): n is INode => n !== undefined);
   }
 
   getChildren(nodeId: string): INode[] {
     const edges = this.queries.getOutgoingEdges(nodeId, ['contains']);
-    const targets = new Map(this.queries.getNodesByIds(edges.map((e) => e.target)).map(n => [n.id, n]));
+    const targets = this.queries.getNodesByIds(edges.map((e) => e.target));
     return edges.map((e) => targets.get(e.target)).filter((n): n is INode => n !== undefined);
   }
 
@@ -854,10 +862,7 @@ export class ReferenceResolver {
    * Потоковая итерация узлов вида один за другим вместо материализации.
    */
   iterateNodesByKind(kind: NodeKind): IterableIterator<INode> {
-    const nodes = this.queries.getNodesByKind(kind);
-    return (function* () {
-      yield* nodes;
-    })();
+    return this.queries.iterateNodesByKind(kind);
   }
 
   /**
@@ -899,9 +904,7 @@ export class ReferenceResolver {
     if (nodes.length === 0) return [];
 
     const edges = this.queries.getOutgoingEdges(nodes[0]!.id, [EdgeKind.Extends, EdgeKind.Implements]);
-    const targets = new Map(
-      this.queries.getNodesByIds(edges.map((e) => e.target)).map((n) => [n.id, n])
-    );
+    const targets = this.queries.getNodesByIds(edges.map((e) => e.target));
 
     return edges
       .map((e) => targets.get(e.target))
