@@ -58,7 +58,16 @@ import { GoExtractor } from './extractors/Go';
 import { RustExtractor } from './extractors/Rust';
 import { JavaExtractor } from './extractors/Java';
 import { CSharpExtractor } from './extractors/CSharp';
+import { KotlinExtractor } from './extractors/Kotlin';
+import { RazorExtractor } from './extractors/Razor';
 import { DefaultExtractor } from './extractors/Default';
+import { SwiftExtractor } from './extractors/Swift';
+import { VueExtractor } from './extractors/Vue';
+import { AstroExtractor } from './extractors/Astro';
+import { SvelteExtractor } from './extractors/Svelte';
+import { LiquidExtractor } from './extractors/Liquid';
+import { PhpExtractor } from './extractors/Php';
+import { RubyExtractor } from './extractors/Ruby';
 import { stripCommentsForRegex } from './StripComments';
 import { ParseWorkerPool, resolveParsePoolSize } from './ParserWorkerPool';
 import { QueryBuilder } from '../ntgraph/QueryBuilder';
@@ -105,6 +114,14 @@ const EXT_TO_LANGUAGE: Record<string, Language> = {
   '.h': 'cpp',
   '.c': 'c',
   '.cs': 'csharp',
+ '.kt': 'kotlin',
+  '.kts': 'kotlin',
+  '.swift': 'swift',
+  '.vue': 'vue',
+  '.astro': 'astro',
+  '.svelte': 'svelte',
+  '.php': 'php',
+  '.rb': 'ruby',
 };
 
 /** Определяет язык по расширению файла. */
@@ -127,7 +144,15 @@ function ensureExtractors(): void {
     EXTRACTOR_MAP.set('rust', new RustExtractor());
     EXTRACTOR_MAP.set('java', new JavaExtractor());
     EXTRACTOR_MAP.set('csharp', new CSharpExtractor());
-    EXTRACTOR_MAP.set('unknown', new DefaultExtractor());
+    EXTRACTOR_MAP.set('razor', new RazorExtractor());
+    EXTRACTOR_MAP.set('swift', new SwiftExtractor());
+    EXTRACTOR_MAP.set('kotlin', new KotlinExtractor());
+     EXTRACTOR_MAP.set('vue', new VueExtractor());
+     EXTRACTOR_MAP.set('liquid', new LiquidExtractor());
+     EXTRACTOR_MAP.set('astro', new AstroExtractor());
+      EXTRACTOR_MAP.set('php', new PhpExtractor());
+      EXTRACTOR_MAP.set('ruby', new RubyExtractor());
+      EXTRACTOR_MAP.set('unknown', new DefaultExtractor());
   }
 }
 
@@ -186,6 +211,11 @@ function isSourceFile(filePath: string): boolean {
     '.go', '.rs', '.java',
     '.cpp', '.cc', '.cxx', '.hpp', '.h',
     '.c', '.cs',
+    '.kt', '.kts',
+    '.vue',
+    '.liquid',
+    '.php',
+    '.rb',
   ]);
   return supported.has(ext);
 }

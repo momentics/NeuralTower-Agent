@@ -236,6 +236,9 @@ export function synthesizeCallbackEdges(
 
     // Связь Go-методов с типами-получателями в разных файлах
     edges.push(...goCrossFileMethodContainsEdges(queries, context, onYield));
+
+    // Структурное определение реализации интерфейсов в Go
+    edges.push(...goImplementsEdges(queries, context, onYield));
   } catch {
     // Синтез добавочный — ошибки не критичны
   }

@@ -18,9 +18,15 @@ export { PythonExtractor } from './extractors/Python';
 export { GoExtractor } from './extractors/Go';
 export { RustExtractor } from './extractors/Rust';
 export { JavaExtractor } from './extractors/Java';
+export { KotlinExtractor } from './extractors/Kotlin';
 export { CppExtractor } from './extractors/Cpp';
 export { CSharpExtractor } from './extractors/CSharp';
+export { RazorExtractor } from './extractors/Razor';
+export { AstroExtractor } from './extractors/Astro';
 export { DefaultExtractor } from './extractors/Default';
+export { SvelteExtractor } from './extractors/Svelte';
+export { LiquidExtractor } from './extractors/Liquid';
+export { VueExtractor } from './extractors/Vue';
 
 // =============================================================================
 // Детекция языка и грамматики

@@ -1215,11 +1215,11 @@ export class QueryBuilder {
     return rows.map(rowToUnresolvedRef);
   }
 
-  /** Пагинированный запрос неразрешённых ссылок по keyset (rowid > afterRowId). */
+  /** Пагинированный запрос неразрешённых ссылок по keyset (rowid > afterRowId) с фильтром status='pending'. */
   getUnresolvedReferencesBatchAfter(afterRowId: number, limit: number): IUnresolvedReference[] {
     if (!this.stmts.getUnresolvedBatchAfter) {
       this.stmts.getUnresolvedBatchAfter = this.db.prepare(
-        'SELECT * FROM unresolved_refs WHERE rowid > ? ORDER BY rowid LIMIT ?'
+        "SELECT * FROM unresolved_refs WHERE status = 'pending' AND rowid > ? ORDER BY rowid LIMIT ?"
       );
     }
     const rows = this.stmts.getUnresolvedBatchAfter.all(afterRowId, limit) as UnresolvedRefRow[];

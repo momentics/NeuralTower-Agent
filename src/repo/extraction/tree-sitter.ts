@@ -7,7 +7,11 @@ import { RustExtractor } from './extractors/Rust';
 import { JavaExtractor } from './extractors/Java';
 import { CppExtractor } from './extractors/Cpp';
 import { CSharpExtractor } from './extractors/CSharp';
+import { RazorExtractor } from './extractors/Razor';
+import { KotlinExtractor } from './extractors/Kotlin';
+import { AstroExtractor } from './extractors/Astro';
 import { DefaultExtractor } from './extractors/Default';
+import { VueExtractor } from './extractors/Vue';
 
 const EXTRACTOR_MAP = new Map<string, IExtractor>();
 
@@ -21,6 +25,10 @@ function ensureExtractors(): void {
     EXTRACTOR_MAP.set('cpp', new CppExtractor());
     EXTRACTOR_MAP.set('c', new CppExtractor());
     EXTRACTOR_MAP.set('csharp', new CSharpExtractor());
+    EXTRACTOR_MAP.set('razor', new RazorExtractor());
+    EXTRACTOR_MAP.set('kotlin', new KotlinExtractor());
+    EXTRACTOR_MAP.set('astro', new AstroExtractor());
+    EXTRACTOR_MAP.set('vue', new VueExtractor());
     EXTRACTOR_MAP.set('default', new DefaultExtractor());
   }
 }
