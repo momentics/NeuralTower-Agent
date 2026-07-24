@@ -436,7 +436,7 @@ Frozen-массив. 41 значение: `typescript`, `javascript`, `tsx`, `js
 `go`, `rust`, `java`, `c`, `cpp`, `csharp`, `razor`, `php`, `ruby`, `swift`,
 `kotlin`, `dart`, `svelte`, `vue`, `astro`, `liquid`, `pascal`, `scala`, `lua`,
 `luau`, `objc`, `r`, `yaml`, `twig`, `xml`, `properties`, `unknown`, `html`,
-`css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`.
+`css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`, `cobol`.
 
 ---
 
@@ -492,7 +492,7 @@ constructor(db: SqliteDatabase)
 | `deleteFile(filePath)` | `void` | Удаление файла и его узлов |
 | `getFileByPath(path)` | `IFileRecord \| null` | Поиск файла по пути |
 | `getAllFiles()` | `IFileRecord[]` | Все файлы |
-| `getStaleFiles(currentHashes)` | `IFileRecord[]` | Устаревшие файлы (хеш изменился, currentHashes обязателен) |
+| `getStaleFiles(currentHashes)` | `IFileRecord[]` | Устаревшие файлы (хеш изменился, currentHashes обязателен, файлы не читаются из ФС) |
 | `getLastIndexedAt()` | `number \| null` | Последняя метка индексации |
 | `getAllFilePaths()` | `string[]` | Все пути файлов |
 | `getAllNodeNames()` | `string[]` | Все имена узлов |
@@ -562,7 +562,7 @@ constructor(db: SqliteDatabase)
 | `getRoutingManifest(limit?)` | `IRoutingManifest \| null` | Манифест маршрутизации: route-узлы + статистика обработчиков |
 | `getDependentFilePaths(filePath)` | `string[]` | Файлы, зависящие от данного |
 | `getDependencyFilePaths(filePath)` | `string[]` | Файлы, от которых зависит данный |
-| `getCrossFileIncomingEdgesWithTarget(filePath)` | `Array<{edge, targetKind, targetName}>` | Входящие межфайловые рёбра |
+| `getCrossFileIncomingEdgesWithTarget(filePath)` | `Array<{edge, targetKind, targetName, sourceFilePath, sourceLanguage}>` | Входящие межфайловые рёбра с данными об источнике |
 | `getNodeAndEdgeCount()` | `{nodeCount, edgeCount}` | Количество узлов и ребер |
 | `getStats()` | `IGraphStats` (без `dbSizeBytes`) | Статистика графа. `dbSizeBytes` добавляется в `NtGraphDb.getStats()` |
 
@@ -655,7 +655,7 @@ constructor(dbPath: string)
 | `getRoutingManifest(limit?)` | `IRoutingManifest \| null` | Манифест маршрутизации |
 | `getDependentFilePaths(filePath)` | `string[]` | Файлы, зависящие от данного |
 | `getDependencyFilePaths(filePath)` | `string[]` | Файлы, от которых зависит данный |
-| `getCrossFileIncomingEdgesWithTarget(filePath)` | `Array<{edge, targetKind, targetName}>` | Входящие межфайловые рёбра |
+| `getCrossFileIncomingEdgesWithTarget(filePath)` | `Array<{edge, targetKind, targetName, sourceFilePath, sourceLanguage}>` | Входящие межфайловые рёбра с данными об источнике |
 | `findEdgesBetweenNodes(nodeIds, kinds?)` | `IEdge[]` | Рёбра между узлами |
 | `insertUnresolvedRef(ref)` | `void` | Вставка неразрешённой ссылки |
 | `insertUnresolvedRefsBatch(refs)` | `void` | Пакетная вставка |
@@ -673,7 +673,7 @@ constructor(dbPath: string)
 | `findNodesByNameSubstring(sub, options?)` | `INode[]` | LIKE-поиск по подстроке |
 | `getMetadata(key)` | `string \| null` | Метаданные по ключу |
 | `setMetadata(key, value)` | `void` | Установка метаданных |
-| `getAllMetadata()` | `Map<string, string>` | Все метаданные |
+| `getAllMetadata()` | `Record<string, string>` | Все метаданные (объект, не Map) |
 | `getNodeAndEdgeCount()` | `{nodeCount, edgeCount}` | Количество узлов и ребер |
 | `clear()` | `void` | Очистка всей БД |
 | `clearCache()` | `void` | Очистка LRU-кэша |

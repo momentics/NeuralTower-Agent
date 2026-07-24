@@ -193,7 +193,7 @@
 `c`, `cpp`, `csharp`, `razor`, `php`, `ruby`, `swift`, `kotlin`, `dart`,
 `svelte`, `vue`, `astro`, `liquid`, `pascal`, `scala`, `lua`, `luau`,
 `objc`, `r`, `yaml`, `twig`, `xml`, `properties`, `unknown`, `html`,
-`css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`.
+`css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`, `cobol`.
 
 ---
 
@@ -337,12 +337,13 @@ constructor(opts: ParseWorkerPoolOptions)
 
 | Метод | Возврат | Описание |
 |---|---|---|
+| `prewarm()` | `void` | Предзапуск всего пула заранее |
 | `requestParse(task)` | `Promise<IExtractionResult>` | Отправка задачи на парсинг |
 | `recycleAll()` | `void` | Пересоздание всех idle воркеров |
 | `destroy()` | `Promise<void>` | Уничтожение всех воркеров |
 | `healthy` | `boolean` | Здоровье пула (крашей < 100) |
 | `liveWorkers` | `number` | Количество живых воркеров |
-| `sizeActual` | `number` | Реальный размер пула |
+| `size` | `number` | Размер пула |
 
 ### Протокол сообщений
 
@@ -357,7 +358,9 @@ Worker -> Main:
 
 ### Жизненный цикл
 
-- Таймаут масштабируется по размеру файла: `PARSE_TIMEOUT_MS + (content.length / 100_000) * 10_000`
+- Lazy growth: воркеры спавнятся по мере необходимости (throttling MAX_CONCURRENT_SPAWN = 2)
+- Двухфазный таймаут: базовый таймер → mark `timerExpired` → hard kill (×3 base) → убить воркер
+- Поздний результат: если результат пришёл до hard kill, принимается
 - Пересоздание воркера каждые 250 файлов (WASM линейная память не сжимается)
 - Восстановление после краша: `onWorkerGone()` -> `spawnOne()`
 - In-process fallback: парсинг на основном потоке при недоступности worker_threads
@@ -402,6 +405,53 @@ Worker -> Main:
 |---|---|---|
 | `resolved` | `IResolvedRef[]` | Разрешённые ссылки |
 | `unresolved` | `IUnresolvedReference[]` | Неразрешённые ссылки |
+
+---
+
+## StoreWriter
+
+Клиент на основном потоке для store-worker. Используется ТОЛЬКО на пути массовой
+индексации с чистой БД: bundle отправляются в порядке файлов, воркер применяет
+их в порядке поступления, поэтому назначение rowid идентично хранению на основном
+потоке. Аварийное отключение: CODEGRAPH_NO_STORE_WORKER=1.
+
+### Методы
+
+| Метод | Возврат | Описание |
+|---|---|---|
+| `ready()` | `Promise<void>` | Ожидание готовности воркера |
+| `send(bundle)` | `void` | Отправка bundle одного файла |
+| `waitBelow(limit)` | `Promise<void>` | Backpressure: разрешается, когда un-acked bundle меньше limit |
+| `drain()` | `Promise<void>` | Разрешается, когда все bundle применены |
+| `close()` | `Promise<void>` | Закрытие соединения воркера с БД |
+
+### StoreBundle
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `nodes` | `INode[]` | Узлы файла |
+| `edges` | `IEdge[]` | Рёбра файла |
+| `refs` | `IUnresolvedReference[]` | Ссылки файла |
+| `file` | `IFileRecord` | Запись файла |
+
+### finalizeStoreBundle
+
+Валидация/денормализация bundle перед storeFileBundle: узлы без обязательных
+полей отбрасываются, рёбра должны соединять вставленные узлы, ссылки
+денормализуются filePath/language.
+
+---
+
+## MemoryBudget
+
+Запас памяти для определения размера пула рабочих — cgroup-честный на Linux,
+reclaim-честный на macOS.
+
+| Функция | Возврат | Описание |
+|---|---|---|
+| `cgroupMemoryAvailable()` | `number \| null` | Доступный запас под лимитом памяти cgroup (v2 затем v1), null при отсутствии ограничений |
+| `darwinMemoryAvailable()` | `number \| null` | Reclaimable-inclusive доступная память на macOS через vm_stat |
+| `memoryBudgetBytes()` | `number` | Бюджет: меньший из свободной памяти и запаса cgroup |
 
 ---
 
@@ -450,11 +500,24 @@ Worker -> Main:
 Реализации в `src/repo/resolution/fw-resolvers/`:
 - `express.ts` — Express.js
 - `nestjs.ts` — NestJS
-- `react.ts` — React
+- `react.ts` — React/Next.js
 - `vue.ts` — Vue.js
-- `python.ts` — Python/Django
+- `python.ts` — Python/Django/Flask
 - `laravel.ts` — Laravel
 - `java.ts` — Java/Spring
+- `astro.ts` — Astro
+- `svelte.ts` — SvelteKit
+- `rust.ts` — Rust (Actix, Axum, Rocket)
+- `ruby.ts` — Ruby on Rails
+- `goframe.ts` — GoFrame
+- `drupal.ts` — Drupal
+- `fabric.ts` — Fabric.js (Canvas)
+- `go.ts` — Go (Gin, Echo, Chi, gorilla/mux)
+- `play.ts` — Play Framework (Java/Scala)
+- `swift.ts` — SwiftUI/UIKit
+- `terraform.ts` — Terraform
+
+Дополнительно: `SwiftObjcBridge.ts` — мост Swift ↔ Objective-C.
 
 ---
 
@@ -548,6 +611,29 @@ ID узла: `sha256(filePath:kind:name:line)`. Гарантирует уник�
 | `CaptureMode` | `'args' \| 'rhs' \| 'value' \| 'list' \| 'varinit'` |
 | `FN_REF_SPECS` | Карта правил захвата по языкам: c, cpp, objc, typescript, tsx, javascript, jsx, python, go, rust, java, kotlin, csharp, php, ruby, swift, scala, dart, lua, luau, pascal |
 | `captureFnRefCandidates(container, rule: CaptureRule, spec: FnRefSpec)` | Захват кандидатов из контейнера AST |
+
+---
+
+## CfnptrSynthesizer
+
+Синтез указателей на функции в C/C++. Связывает регистрации функций через
+таблицы инициализации и присваивания с диспетчеризацией `recv->field(...)`.
+Обрабатывает массивы указателей на функции без struct.
+
+| Функция | Возврат | Описание |
+|---|---|---|
+| `synthesizeCfnptrEdges(queries, context)` | `IEdge[]` | Основной вход — синтез рёбер диспетчеризации указателей на функции |
+
+---
+
+## GoframeSynthesizer
+
+Синтез рёбер GoFrame: route → controller-method. Ключ соединения — ТИП ЗАПРОСА
+в сигнатуре обработчика.
+
+| Функция | Возврат | Описание |
+|---|---|---|
+| `synthesizeGoframeEdges(queries, context, onYield?)` | `IEdge[]` | Синтез рёбер GoFrame |
 
 ---
 
