@@ -132,6 +132,23 @@
 | `confidence` | `number` | Уверенность |
 | `provenance` | `string` | Источник разрешения |
 
+### ChunkResult — Результат чанка разрешения
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `resolved` | `IResolvedRef[]` | Разрешённые ссылки |
+| `unresolved` | `IUnresolvedReference[]` | Неразрешённые ссылки |
+| `deferredChain` | `IUnresolvedReference[]` | Отложенные цепные вызовы |
+| `deferredThisMember` | `IUnresolvedReference[]` | Отложенные this-ссылки |
+| `byMethod` | `Record<string, number>` | Счётчик по методам разрешения |
+
+### SynthPassResult — Результат прохода синтеза
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `edges` | `IEdge[]` | Синтезированные рёбра |
+| `ms` | `number` | Время выполнения в мс |
+
 ### IndexOptions — Параметры индексации
 
 | Поле | Тип | Описание |
@@ -169,7 +186,7 @@
 
 ### NodeKind
 
-Замороженный объект (`Object.freeze`) с PascalCase ключами и строчными значениями (18 значений):
+Замороженный объект (`Object.freeze`) с PascalCase ключами и строчными значениями (22 значения):
 `File: 'file'`, `Class: 'class'`, `Function: 'function'`, `Method: 'method'`,
 `Property: 'property'`, `Field: 'field'`, `Interface: 'interface'`, `Struct: 'struct'`,
 `Enum: 'enum'`, `TypeAlias: 'type_alias'`, `Constant: 'constant'`, `Variable: 'variable'`,
@@ -179,7 +196,7 @@
 
 ### EdgeKind
 
-11 значений: `contains`, `calls`, `imports`, `extends`, `implements`,
+12 значений: `contains`, `calls`, `imports`, `extends`, `implements`,
 `references`, `type_of`, `returns`, `instantiates`, `overrides`, `decorates`, `exports`.
 
 ### ReferenceKind
@@ -188,12 +205,13 @@
 
 ### Language
 
-Замороженный массив (`Object.freeze`) с 41 значением:
+Замороженный массив (`Object.freeze`) с 43 значениями:
 `typescript`, `javascript`, `tsx`, `jsx`, `python`, `go`, `rust`, `java`,
 `c`, `cpp`, `csharp`, `razor`, `php`, `ruby`, `swift`, `kotlin`, `dart`,
 `svelte`, `vue`, `astro`, `liquid`, `pascal`, `scala`, `lua`, `luau`,
 `objc`, `r`, `yaml`, `twig`, `xml`, `properties`, `unknown`, `html`,
-`css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`, `cobol`.
+`css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`, `cobol`,
+`cfml`, `cfscript`, `arkts`.
 
 ---
 
@@ -278,13 +296,25 @@ constructor(rootDir: string, db: NtGraphDb)
 `extractFromSource` в модуле `tree-sitter`.
 
 Доступные экстракторы:
-- `TypeScriptExtractor` — TypeScript/JavaScript
-- `PythonExtractor` — Python
-- `GoExtractor` — Go
-- `RustExtractor` — Rust
-- `JavaExtractor` — Java
-- `CppExtractor` — C/C++
-- `CSharpExtractor` — C#
+- `TypeScriptExtractor` — TypeScript/JavaScript (.ts, .tsx, .js, .jsx)
+- `PythonExtractor` — Python (.py, .pyi)
+- `GoExtractor` — Go (.go)
+- `RustExtractor` — Rust (.rs)
+- `JavaExtractor` — Java (.java)
+- `CppExtractor` — C/C++ (.c, .cpp, .cc, .cxx, .h, .hpp, .hxx)
+- `CSharpExtractor` — C# (.cs)
+- `KotlinExtractor` — Kotlin (.kt, .kts)
+- `SwiftExtractor` — Swift (.swift)
+- `VueExtractor` — Vue (.vue)
+- `AstroExtractor` — Astro (.astro)
+- `SvelteExtractor` — Svelte (.svelte)
+- `LiquidExtractor` — Liquid (.liquid)
+- `RazorExtractor` — Razor (.razor, .cshtml)
+- `PhpExtractor` — PHP (.php)
+- `RubyExtractor` — Ruby (.rb)
+- `CfmlExtractor` — CFML (.cfm, .cfc)
+- `DfmExtractor` — DFM (.dfm)
+- `MybatisExtractor` — MyBatis XML mapper (.xml)
 - `DefaultExtractor` — fallback для неизвестных языков
 
 ---
@@ -297,7 +327,7 @@ constructor(rootDir: string, db: NtGraphDb)
 |---|---|---|
 | `detectLanguage(filePath, content?)` | `Language` | Определение языка по расширению файла и shebang |
 | `isSourceFile(filePath)` | `boolean` | Проверка на исходный файл (не бинарный, не генерируемый) |
-| `isLanguageSupported(lang)` | `boolean` | Проверка поддержки языка (typescript, python, go, rust, java, cpp, c, csharp) |
+| `isLanguageSupported(lang)` | `boolean` | Проверка поддержки языка |
 | `isFileLevelOnlyLanguage(lang)` | `boolean` | Язык без символьной структуры (yaml, properties, xml) |
 | `isGrammarLoaded(lang)` | `boolean` | Проверка загрузки грамматики |
 | `getSupportedLanguages()` | `string[]` | Список поддерживаемых языков |
@@ -396,15 +426,26 @@ Worker -> Main:
 | Метод | Возврат | Описание |
 |---|---|---|
 | `ready()` | `Promise<void>` | Ожидание готовности всех воркеров |
-| `resolveBatch(refs)` | `Promise<ChunkResult>` | Разрешение ссылок через пул |
+| `resolveBatch(refs)` | `Promise<ChunkResult>` | Разрешение ссылок через пул (агрегация deferredChain, deferredThisMember, byMethod) |
+| `runSynthPass(passName)` | `Promise<SynthPassResult>` | Запуск прохода синтеза на наименее занятом воркере |
+| `recycleWorkers()` | `Promise<void>` | Переработка всех воркеров: закрытие и reopening БД, rebind QueryBuilder |
 | `destroy()` | `Promise<void>` | Уничтожение всех воркеров |
 
-### ChunkResult
+### Протокол сообщений воркера
 
-| Поле | Тип | Описание |
-|---|---|---|
-| `resolved` | `IResolvedRef[]` | Разрешённые ссылки |
-| `unresolved` | `IUnresolvedReference[]` | Неразрешённые ссылки |
+Main -> Worker:
+- `{ type: 'open', dbPath, projectRoot }` — открытие БД
+- `{ type: 'resolve', id, refs }` — разрешение ссылок
+- `{ type: 'synth', id, pass }` — проход синтеза
+- `{ type: 'recycle', id }` — переработка соединения
+- `{ type: 'close' }` — закрытие
+
+Worker -> Main:
+- `{ type: 'ready' }` — готовность
+- `{ type: 'result', id, resolved, unresolved, deferredChain, deferredThisMember, byMethod }` — результат разрешения
+- `{ type: 'synth-result', id, edges, ms }` — результат синтеза
+- `{ type: 'recycled', id }` — подтверждение переработки
+- `{ type: 'error', id?, message }` — ошибка
 
 ---
 
@@ -480,6 +521,86 @@ reclaim-честный на macOS.
 | `classifyGitDir(absDir)` | `'embedded' \| 'worktree' \| 'none'` | Классификация `.git` директории |
 | `findNestedGitRepos(absDir, relPrefix)` | `string[]` | BFS-поиск вложенных git репозиториев |
 | `findIgnoredEmbeddedRepos(repoDir)` | `string[]` | Поиск вложенных репозиториев в gitignored директориях |
+
+---
+
+## Модуль разрешения ссылок (ReferenceResolver)
+
+Координатор всех стратегий разрешения ссылок. 3-проходное разрешение.
+
+### Стратегии разрешения (в порядке приоритета)
+
+| Стратегия | Функция | Описание |
+|---|---|---|
+| 0 | `matchByFilePath` | Совпадение по пути файла (#include "X.h") |
+| 1 | `resolveFramework` | Фреймворк-специфичное разрешение |
+| 2 | `resolveRazorUsing` | Razor/Blazor @using |
+| 3 | `resolveJvmImport` | JVM FQN импорт |
+| 4 | `resolveViaImport` | Разрешение через импорты |
+| 5 | `matchByQualifiedName` | Разрешение по квалифицированному имени |
+| 5.05 | `matchMethodCall` | Разрешение вызова метода (receiver.method()) |
+| 5.1 | `matchReference` | Сопоставление по имени (с findBestMatch scoring) |
+| 6 | `matchFunctionRef` | Функции как значения (callback-регистрации) |
+| 7 | `resolveThisMemberFnRef` | this.<member> разрешение |
+| 8 | `matchFuzzy` | Нечёткое совпадение (case-insensitive fallback) |
+
+### 3-проходное разрешение
+
+1. **Основной проход** — стандартное разрешение через все стратегии выше
+2. **Цепные вызовы** — `matchDottedCallChain`, `matchScopedCallChain`, `matchCppCallChain`
+3. **Отложенные this-ссылки** — BFS по супертипам
+
+---
+
+## Модуль сопоставления по имени (NameMatcher)
+
+### Языковые семейства
+
+`LANGUAGE_FAMILIES` определяет cross-family фильтрацию. Семейства:
+- **javascript**: typescript, javascript, tsx, jsx, arkts, svelte, vue, astro
+- **jvm**: java, kotlin, scala
+- **c**: c, cpp, objc
+- **dotnet**: csharp, razor
+- **lua**: lua, luau
+- **cfml**: cfml, cfscript
+- **Одиночные**: python, go, rust, php, ruby, swift, dart, pascal, r
+
+### Функции сопоставления
+
+| Функция | Описание |
+|---|---|
+| `matchByFilePath(ref, context)` | Разрешение по пути файла (#include "X.h", #import "Foo.h") |
+| `matchReference(ref, context)` | Сопоставление по имени с findBestMatch scoring для нескольких кандидатов |
+| `matchFuzzy(ref, context)` | Case-insensitive fallback через getNodesByLowerName |
+| `matchMethodCall(ref, context)` | Вызов метода: receiver.method() — 4 стратегии (inferable receiver, Go 2-hop, direct class, capitalized) |
+| `matchFunctionRef(ref, context)` | Функциональные ссылки (callback-регистрации) с same-file preference |
+| `matchDottedCallChain(ref, context)` | Цепные вызовы: Foo().bar() — factory chain + CONSTRUCTS_VIA_BARE_CALL |
+| `matchScopedCallChain(ref, context)` | Cепные вызовы Rust: Foo::bar() |
+| `matchCppCallChain(ref, context)` | Цепные вызовы C++: TypeName::method().method2() |
+| `matchByQualifiedName(ref, context)` | Квалифицированное имя: Foo::bar или Foo.bar |
+
+### Инференс типа получателя
+
+| Функция | Описание |
+|---|---|
+| `inferLocalReceiverType(receiverName, ref, context)` | Инференс из локальных переменных (scope boundary, PHP $this->prop, PATTERN_MEMO кэш) |
+| `inferCppReceiverType(receiverName, ref, context)` | C++ специфичный инференс (header scan, normalizeCppTypeName) |
+| `localReceiverTypePatternsCached(language, r)` | Кэшированный доступ к паттернам (PATTERN_MEMO, cap 8192) |
+
+### Поддерживаемые языки инференса
+
+typescript, javascript, tsx, jsx, arkts, python, java, kotlin, csharp, swift, rust, go, ruby, scala, dart, php, lua, luau, r, pascal, cfml, cfscript
+
+### Вспомогательные функции
+
+| Функция | Описание |
+|---|---|
+| `sameLanguageFamily(lang1, lang2)` | Сравнение языковых семейств |
+| `crossesKnownFamily(lang1, lang2)` | Проверка пересечения известных семейств |
+| `resolveMethodOnType(typeName, methodName, ref, context, ...)` | Разрешение метода по типу с supertype walk (BFS, глубина до 4) |
+| `preferCallSiteFile(nodes, callSiteFile)` | Сортировка: сначала узлы из файла вызова |
+| `isLexicallyReachable(candidate, ref, context)` | Проверка лексической достижимости |
+| `normalizeInferredTypeName(raw)` | Нормализация выражения типа к простому имени |
 
 ---
 
@@ -637,13 +758,23 @@ ID узла: `sha256(filePath:kind:name:line)`. Гарантирует уник�
 
 ---
 
+## CallbackSynthesizer
+
+Синтез callback-рёбер для фреймворков с динамической диспетчеризацией.
+
+| Функция | Возврат | Описание |
+|---|---|---|
+| `synthesizeCallbackEdges(queries, context)` | `IEdge[]` | Синтез callback-рёбер |
+
+---
+
 ## Модуль GeneratedDetection
 
 Определение сгенерированных файлов для понижения ранга в поиске.
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `isGeneratedFile(filePath)` | `boolean` | 19 шаблонов для генерируемых файлов (.pb.go, .generated.ts, .min.js и т.д.) |
+| `isGeneratedFile(filePath)` | `boolean` | Шаблоны для генерируемых файлов (.pb.go, .generated.ts, .min.js и т.д.) |
 
 ---
 
@@ -660,6 +791,11 @@ ID узла: `sha256(filePath:kind:name:line)`. Гарантирует уник�
 ## Модуль PathAliases
 
 Разрешение алиасов импортов (tsconfig paths и т.д.).
+
+| Функция | Возврат | Описание |
+|---|---|---|
+| `loadProjectAliases(projectRoot)` | `AliasMap \| null` | Загрузка алиасов |
+| `applyAliases(importPath, aliases, projectRoot)` | `string[]` | Применение алиасов к пути импорта |
 
 ---
 
@@ -692,17 +828,6 @@ ID узла: `sha256(filePath:kind:name:line)`. Гарантирует уник�
 
 ---
 
-## Модуль PathAliases
-
-Алиасы путей импорта из tsconfig.json / jsconfig.json.
-
-| Функция | Возврат | Описание |
-|---|---|---|
-| `loadProjectAliases(projectRoot)` | `AliasMap \| null` | Загрузка алиасов |
-| `applyAliases(importPath, aliases, projectRoot)` | `string[]` | Применение алиасов к пути импорта |
-
----
-
 ## Константы
 
 | Константа | Значение | Описание |
@@ -721,3 +846,27 @@ ID узла: `sha256(filePath:kind:name:line)`. Гарантирует уник�
 | `DEFAULT_IGNORE_PATTERNS` | `string[]` | Паттерны игнорирования по умолчанию |
 | `EXTRACTION_VERSION` | `number` | Версия схемы извлечения |
 | `DEFAULT_YIELD_BUDGET_MS` | `250` | Бюджет кооперативной уступки управления |
+| `SQLITE_PARAM_CHUNK_SIZE` | `500` | Размер чанка для batch-запросов SQLite |
+| `LRU_CACHE_SIZE` | `1000` | Размер LRU-кэша узлов |
+| `AMBIGUOUS_NAME_CEILING` | `500` | Порог неоднозначности имени (настраивается через `CODEGRAPH_AMBIGUOUS_NAME_CEILING`) |
+| `PATTERN_MEMO_CAP` | `8192` | Максимальный размер кэша паттернов инференса |
+| `MIN_SEGMENT_CHARS` | `2` | Минимальная длина сегмента имени |
+| `MAX_SEGMENT_CHARS` | `32` | Максимальная длина сегмента имени |
+| `MAX_SEGMENTS_PER_NAME` | `12` | Максимальное число сегментов на имя |
+| `MAX_PROSE_CANDIDATES` | `16` | Максимум кандидатов прозы |
+| `MIN_PROSE_CHARS` | `4` | Минимальная длина слова прозы |
+| `MAX_PROSE_CHARS` | `24` | Максимальная длина слова прозы |
+| `DOMINANT_FILE_EDGE_THRESHOLD` | `20` | Минимальное число рёбер для доминирующего файла |
+| `TOP_ROUTE_MIN_TOTAL` | `3` | Минимальное общее число маршрутов |
+| `TOP_ROUTE_MIN_CONCENTRATION` | `0.30` | Минимальная концентрация для getTopRouteFile |
+| `ROUTING_MANIFEST_DEFAULT_LIMIT` | `40` | Дефолтный лимит для getRoutingManifest |
+| `FTS_LIMIT_MIN` | `100` | Минимальный лимит выборки FTS |
+| `FTS_OVER_FETCH_MULTIPLIER` | `5` | FTS загружает в 5 раз больше для пост-пересчёта |
+| `FILTER_ONLY_OVER_FETCH_MULTIPLIER` | `5` | Запросы только по фильтрам загружают в 5 раз больше |
+| `EXACT_MATCH_SUPPLEMENT_LIMIT` | `20` | Лимит на термин для точного дополнения по имени |
+| `FUZZY_MAX_DIST_SHORT` | `1` | Макс. расстояние редактирования для запросов <= 4 символов |
+| `FUZZY_MAX_DIST_DEFAULT` | `2` | Макс. расстояние для запросов > 4 символов |
+| `MAX_HOPS` | `6` | Максимальное число шагов в цепочке вызовов |
+| `DEFAULT_CACHE_LIMIT` | `5_000` | Дефолтный лимит кэша |
+| `MIN_PARALLEL_BATCH` | `1000` | Минимальный размер батча для параллельного разрешения |
+| `CHUNK_SIZE` | `500` | Размер чанка для распределения |

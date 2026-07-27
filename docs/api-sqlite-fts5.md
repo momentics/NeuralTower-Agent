@@ -115,11 +115,21 @@
 | `routeCount` | `number` | Количество route-узлов в файле |
 | `totalRoutes` | `number` | Общее количество route-узлов |
 
+### IRoutingManifestEntry — Запись манифеста маршрутизации
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `url` | `string` | URL-маршрут |
+| `handler` | `string` | Имя обработчика |
+| `handlerFile` | `string` | Файл обработчика |
+| `handlerLine` | `number` | Строка обработчика |
+| `handlerKind` | `string` | Вид обработчика |
+
 ### IRoutingManifest — Манифест маршрутизации
 
 | Поле | Тип | Описание |
 |---|---|---|
-| `entries` | `INode[]` | Route-узлы |
+| `entries` | `IRoutingManifestEntry[]` | Записи маршрутов с обработчиками (JOIN route→handler) |
 | `topHandlerFile` | `string \| null` | Файл с наибольшим числом обработчиков |
 | `topHandlerFileCount` | `number` | Число обработчиков в topHandlerFile |
 | `totalRoutes` | `number` | Общее количество маршрутов |
@@ -298,6 +308,23 @@ type TaskInput = string | { title: string; description: string }
 | `unresolved` | `IUnresolvedReference[]` | Неразрешённые ссылки |
 | `durationMs` | `number` | Время выполнения |
 
+### ChunkResult — Результат чанка разрешения
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `resolved` | `IResolvedRef[]` | Разрешённые ссылки |
+| `unresolved` | `IUnresolvedReference[]` | Неразрешённые ссылки |
+| `deferredChain` | `IUnresolvedReference[]` | Отложенные цепные вызовы |
+| `deferredThisMember` | `IUnresolvedReference[]` | Отложенные this-ссылки |
+| `byMethod` | `Record<string, number>` | Счётчик по методам разрешения |
+
+### SynthPassResult — Результат прохода синтеза
+
+| Поле | Тип | Описание |
+|---|---|---|
+| `edges` | `IEdge[]` | Синтезированные рёбра |
+| `ms` | `number` | Время выполнения в мс |
+
 ### IReExport — Повторный экспорт из модуля
 
 Дискриминированный союз:
@@ -363,13 +390,6 @@ interface IAliasMap { [alias: string]: string[] }
 | `nodes` | `INode[]` | Фреймворк-узлы (маршруты и т.д.) |
 | `references` | `IUnresolvedReference[]` | Фреймворк-ссылки |
 
-### IFrameworkExtractionResult — Результат фреймворк-экстракции
-
-| Поле | Тип | Описание |
-|---|---|---|
-| `nodes` | `INode[]` | Фреймворк-узлы (маршруты и т.д.) |
-| `references` | `IUnresolvedReference[]` | Фреймворк-ссылки |
-
 ### IGraphQueryContext — Контекст графовых запросов
 
 | Метод | Возврат | Описание |
@@ -413,7 +433,7 @@ interface IAliasMap { [alias: string]: string[] }
 
 ### NodeKind
 
-Frozen-объект с PascalCase ключами и lowercase значениями. 18 значений:
+Frozen-объект с PascalCase ключами и lowercase значениями. 22 значения:
 `File: 'file'`, `Class: 'class'`, `Function: 'function'`, `Method: 'method'`,
 `Property: 'property'`, `Field: 'field'`, `Interface: 'interface'`, `Struct: 'struct'`,
 `Enum: 'enum'`, `TypeAlias: 'type_alias'`, `Constant: 'constant'`, `Variable: 'variable'`,
@@ -423,7 +443,7 @@ Frozen-объект с PascalCase ключами и lowercase значениям
 
 ### EdgeKind
 
-11 значений: `contains`, `calls`, `imports`, `extends`, `implements`,
+12 значений: `contains`, `calls`, `imports`, `extends`, `implements`,
 `references`, `type_of`, `returns`, `instantiates`, `overrides`, `decorates`, `exports`.
 
 ### ReferenceKind
@@ -432,11 +452,12 @@ Frozen-объект с PascalCase ключами и lowercase значениям
 
 ### Language
 
-Frozen-массив. 41 значение: `typescript`, `javascript`, `tsx`, `jsx`, `python`,
+Frozen-массив. 43 значения: `typescript`, `javascript`, `tsx`, `jsx`, `python`,
 `go`, `rust`, `java`, `c`, `cpp`, `csharp`, `razor`, `php`, `ruby`, `swift`,
 `kotlin`, `dart`, `svelte`, `vue`, `astro`, `liquid`, `pascal`, `scala`, `lua`,
 `luau`, `objc`, `r`, `yaml`, `twig`, `xml`, `properties`, `unknown`, `html`,
-`css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`, `cobol`.
+`css`, `sql`, `json`, `markdown`, `shell`, `dockerfile`, `toml`, `ini`, `cobol`,
+`cfml`, `cfscript`, `arkts`.
 
 ---
 
@@ -454,22 +475,23 @@ constructor(db: SqliteDatabase)
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `insertNode(node)` | `void` | Вставка узла (INSERT OR REPLACE — идемпотентный upsert) |
-| `insertNodes(nodes)` | `void` | Пакетная вставка узлов в транзакции + вставка сегментов имён |
-| `updateNode(node)` | `void` | Обновление узла |
+| `insertNode(node)` | `void` | Вставка узла (INSERT OR REPLACE — идемпотентный upsert) + сегменты имени |
+| `insertNodes(nodes)` | `void` | Пакетная вставка узлов в транзакции + сегменты имён через runBatched |
+| `updateNode(node)` | `void` | Обновление узла + сегменты имени |
 | `deleteNode(id)` | `void` | Удаление узла по ID |
 | `deleteNodesByFile(filePath)` | `number` | Удаление всех узлов файла и связанных рёбер, возвращает число удалённых |
 | `getNodeById(id)` | `INode \| null` | Поиск узла по ID (с LRU-кэшем) |
-| `getNodesByIds(ids)` | `Map<string, INode>` | Пакетный поиск (чанки по 500, с кэш-хитами, порядок = порядок входного массива) |
+| `getNodesByIds(ids)` | `Map<string, INode>` | Пакетный поиск (чанки по 500, с кэш-хитами) |
 | `getExistingNodeIds(ids)` | `Set<string>` | Существующие идентификаторы для проверки |
 | `getNodesByFile(filePath)` | `INode[]` | Узлы файла |
 | `getNodesByKind(kind)` | `INode[]` | Узлы по виду |
 | `iterateNodesByKind(kind)` | `IterableIterator<INode>` | Ленивый итератор узлов вида, память O(1) |
+| `iterateNodeNames()` | `IterableIterator<string>` | Ленивый итератор всех имён узлов |
 | `getAllNodes()` | `INode[]` | Все узлы |
 | `getNodesByName(name)` | `INode[]` | Точный поиск по имени |
 | `getNodesByQualifiedNameExact(qn)` | `INode[]` | Точный поиск по квалифицированному имени |
 | `getNodesByLowerName(lowerName)` | `INode[]` | Поиск по нижнему регистру имени |
-| `getNodesByNamePrefix(prefix, limit?)` | `INode[]` | Range scan по idx_nodes_name (по префиксу имени) |
+| `getNodesByNamePrefix(prefix, limit?)` | `INode[]` | Range scan по idx_nodes_name (upper bound: `\uffff`) |
 | `iterateNodesByLanguageWithDecorator(language, decorator)` | `IterableIterator<INode>` | Ленивый итератор узлов с языком и декоратором |
 
 ### Ребра
@@ -492,7 +514,7 @@ constructor(db: SqliteDatabase)
 | `deleteFile(filePath)` | `void` | Удаление файла и его узлов |
 | `getFileByPath(path)` | `IFileRecord \| null` | Поиск файла по пути |
 | `getAllFiles()` | `IFileRecord[]` | Все файлы |
-| `getStaleFiles(currentHashes)` | `IFileRecord[]` | Устаревшие файлы (хеш изменился, currentHashes обязателен, файлы не читаются из ФС) |
+| `getStaleFiles(currentHashes)` | `IFileRecord[]` | Устаревшие файлы (только файлы с изменённым хешем; файлы, отсутствующие в карте, не считаются) |
 | `getLastIndexedAt()` | `number \| null` | Последняя метка индексации |
 | `getAllFilePaths()` | `string[]` | Все пути файлов |
 | `getAllNodeNames()` | `string[]` | Все имена узлов |
@@ -503,7 +525,7 @@ constructor(db: SqliteDatabase)
 | Метод | Возврат | Описание |
 |---|---|---|
 | `isSegmentableKind(kind)` | `boolean` | Вид узла вносит имя в словарь (file и import исключены) |
-| `clearNameSegmentVocab()` | `void` | Очистка словаря сегментов имён |
+| `clearNameSegmentVocab()` | `void` | Очистка словаря сегментов имён + сброс кэша segmentedNames |
 | `isNameSegmentVocabEmpty()` | `boolean` | Пуст ли словарь сегментов |
 | `getDistinctNodeNames(limit, offset)` | `string[]` | Страница отличных имён сегментируемых узлов |
 | `insertNameSegmentsBatch(names)` | `void` | Вставка сегментов пакета имён в транзакции |
@@ -520,7 +542,7 @@ constructor(db: SqliteDatabase)
 | `searchNodesLike(query, options?)` | `ISearchResult[]` | LIKE-фоллбэк (через FtsSearch) |
 | `searchNodesFuzzy(query, options?)` | `ISearchResult[]` | Fuzzy-фоллбэк (через FtsSearch) |
 | `findNodesByExactName(names, options?)` | `ISearchResult[]` | Точный поиск по множеству имён с бонусом за совпадение местоположения |
-| `findNodesByNameSubstring(sub, options?)` | `INode[]` | LIKE-поиск по подстроке имени. Options: `excludePrefix?: boolean` — исключить точное совпадение префикса |
+| `findNodesByNameSubstring(sub, options?)` | `ISearchResult[]` | LIKE-поиск по подстроке имени. Options: `excludePrefix?: boolean` — исключить точное совпадение префикса. Возвращает `ISearchResult[]` со score=1.0 |
 | `searchAllByFilters(options)` | `ISearchResult[]` | Поиск только по фильтрам без текста. Принимает `{ kinds?: NodeKind[]; languages?: string[]; limit: number }` |
 
 ### Неразрешённые ссылки
@@ -536,7 +558,7 @@ constructor(db: SqliteDatabase)
 | `getUnresolvedReferencesBatch(offset, limit)` | `IUnresolvedReference[]` | Пагинированный запрос (только status='pending') |
 | `getUnresolvedReferencesBatchAfter(afterRowId, limit)` | `IUnresolvedReference[]` | Keyset-пагинация по rowid |
 | `getUnresolvedReferencesByFiles(filePaths)` | `IUnresolvedReference[]` | По файлам (чанки по 500, только pending) |
-| `deleteResolvedReferences(fromNodeIds)` | `void` | Удаление по ID узлов |
+| `deleteResolvedReferences(fromNodeIds)` | `void` | Удаление по ID узлов (чанки по 500) |
 | `deleteSpecificResolvedReferences(refs)` | `number` | Удаление конкретных ссылок |
 | `markReferencesFailed(refs)` | `number` | Пометить ссылки как failed с name_tail |
 | `markReferencesFailedByRowIds(refs)` | `number` | Пометить по точным row id |
@@ -559,12 +581,12 @@ constructor(db: SqliteDatabase)
 |---|---|---|
 | `getDominantFile()` | `IDominantFile \| null` | Файл с наибольшим числом внутренних рёбер (порог 20) |
 | `getTopRouteFile()` | `ITopRouteFile \| null` | Файл с наибольшей концентрацией route-узлов (структурированный результат) |
-| `getRoutingManifest(limit?)` | `IRoutingManifest \| null` | Манифест маршрутизации: route-узлы + статистика обработчиков |
+| `getRoutingManifest(limit?)` | `IRoutingManifest \| null` | Манифест маршрутизации: один JOIN-запрос route→handler, возвращает `IRoutingManifestEntry[]` |
 | `getDependentFilePaths(filePath)` | `string[]` | Файлы, зависящие от данного |
 | `getDependencyFilePaths(filePath)` | `string[]` | Файлы, от которых зависит данный |
 | `getCrossFileIncomingEdgesWithTarget(filePath)` | `Array<{edge, targetKind, targetName, sourceFilePath, sourceLanguage}>` | Входящие межфайловые рёбра с данными об источнике |
 | `getNodeAndEdgeCount()` | `{nodeCount, edgeCount}` | Количество узлов и ребер |
-| `getStats()` | `IGraphStats` (без `dbSizeBytes`) | Статистика графа. `dbSizeBytes` добавляется в `NtGraphDb.getStats()` |
+| `getStats()` | `IGraphStats` | Статистика графа, включает `dbSizeBytes: 0` (реальный размер вычисляется в `NtGraphDb.getStats()`) |
 
 ### Утилиты
 
@@ -601,7 +623,7 @@ constructor(dbPath: string)
 | `disableWalValve()` | `void` | Отключить WAL-клапан |
 | `foldWalNow()` | `Promise<void>` | Принудительный чекпоинт WAL между фазами |
 | `getSize()` | `number` | Размер БД в байтах |
-| `getStats()` | `IGraphStats & { dbSizeBytes: number }` | Статистика графа с размером БД |
+| `getStats()` | `IGraphStats & { dbSizeBytes: number }` | Статистика графа с реальным размером БД |
 | `queryBuilder` | `QueryBuilder` | Прямой доступ к QueryBuilder |
 | `getDatabase()` | `SqliteDatabase` | Прямой доступ к базе данных |
 | `getSchemaVersion()` | `number` | Текущая версия схемы |
@@ -670,13 +692,20 @@ constructor(dbPath: string)
 | `deleteSpecificResolvedReferences(refs)` | `number` | Удаление конкретных ссылок |
 | `search(query, options?)` | `ISearchResult[]` | Основной поиск |
 | `findNodesByExactName(names, options?)` | `ISearchResult[]` | Точный поиск по множеству имён |
-| `findNodesByNameSubstring(sub, options?)` | `INode[]` | LIKE-поиск по подстроке |
+| `findNodesByNameSubstring(sub, options?)` | `ISearchResult[]` | LIKE-поиск по подстроке, возвращает `ISearchResult[]` |
 | `getMetadata(key)` | `string \| null` | Метаданные по ключу |
 | `setMetadata(key, value)` | `void` | Установка метаданных |
 | `getAllMetadata()` | `Record<string, string>` | Все метаданные (объект, не Map) |
 | `getNodeAndEdgeCount()` | `{nodeCount, edgeCount}` | Количество узлов и ребер |
 | `clear()` | `void` | Очистка всей БД |
 | `clearCache()` | `void` | Очистка LRU-кэша |
+| `clearNameSegmentVocab()` | `void` | Очистка словаря сегментов имён |
+| `isNameSegmentVocabEmpty()` | `boolean` | Пуст ли словарь сегментов |
+| `getDistinctNodeNames(limit, offset)` | `string[]` | Страница отличных имён |
+| `insertNameSegmentsBatch(names)` | `void` | Вставка сегментов пакета имён |
+| `getSegmentCoOccurrence(variants, minWords, limit)` | `Array<{name, matches}>` | Совместное вхождение сегментов |
+| `getSegmentNameCounts(segments)` | `Map<string, number>` | Число имён для каждого сегмента |
+| `getNamesForSegment(segment, limit)` | `string[]` | Имена, содержащие сегмент |
 
 ---
 
@@ -909,13 +938,22 @@ constructor(qb: QueryBuilder)
 | `normalizeNameToken(raw)` | `string` | Приведение к нижнему регистру, фильтрация символов |
 | `deriveProjectNameTokens(projectRoot)` | `Set<string>` | Токены из go.mod, package.json, имени директории |
 | `getStemVariants(term)` | `string[]` | Варианты основы: -ing, -tion, -ment, -ies, -es, -s, -ed, -er |
-| `extractSearchTerms(query, options?)` | `string[]` | Разделение camelCase, PascalCase, snake_case, точечная нотация |
-| `unquote(s)` | `string` | Удаление внешних кавычек |
-| `boundedEditDistance(a, b, maxDist)` | `number` | Расстояние Левенштейна с ранним выходом |
-| `splitIdentifierSegments(name)` | `string[]` | Разбиение имени символа на сегменты-слова |
-| `normalizeProseWord(word)` | `string` | Нормализация слова прозы (нижний регистр + удаление диакритики) |
-| `extractProseCandidates(prompt)` | `string[]` | Кандидаты из прозы для поиска в словаре сегментов |
+| `extractSearchTerms(query)` | `string[]` | Разделение запроса на поисковые термины |
+| `unquote(s)` | `string` | Удаление окружающих кавычек |
+| `boundedEditDistance(a, b, maxDist)` | `number` | Расстояние Левенштейма с ранним выходом |
+| `splitIdentifierSegments(name)` | `string[]` | Разделение имени на сегменты (camelCase, snake_case и т.д.) |
+| `normalizeProseWord(word)` | `string` | Нормализация слова прозы для поиска сегментов |
+| `extractProseCandidates(prompt)` | `string[]` | Извлечение кандидатов из прозы |
 | `segmentLookupVariants(word)` | `string[]` | Варианты поиска для слова прозы |
+
+### Близость путей
+
+| Функция | Возврат | Описание |
+|---|---|---|
+| `pathProximityFromDirs(dir1, filePath2)` | `number` | Близость путей, первый путь уже разбит на сегменты |
+| `computePathProximity(pathA, pathB)` | `number` | Близость двух путей через pathProximityFromDirs |
+| `splitCamelCase(str)` | `string[]` | Разделение camelCase/PascalCase строки на слова |
+| `findBestMatch(ref, candidates, context)` | `INode \| null` | Поиск лучшего кандидата для неразрешённой ссылки (scoring) |
 
 ### Поиск
 
@@ -923,228 +961,83 @@ constructor(qb: QueryBuilder)
 |---|---|---|
 | `kindBonus(kind)` | `number` | Бонус по виду узла |
 | `nameMatchBonus(query, name)` | `number` | Бонус по совпадению имени |
-| `scorePathRelevance(path, query, projectNameTokens?)` | `number` | Релевантность пути |
-| `isLowValueFile(path)` | `boolean` | Определение тестовых и генерируемых файлов |
+| `scorePathRelevance(filePath, query, projectNameTokens?)` | `number` | Релевантность пути |
+| `isLowValueFile(filePath)` | `boolean` | Определение тестовых/сгенерированных файлов |
 
 ### Парсер запросов
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `parseQuery(raw)` | `ParsedQuery` | Разбор с префиксами kind:, lang:, path:, name: |
+| `parseQuery(raw)` | `ParsedQuery` | Полный парсер: токенизация, кавычки, `kind:`, `lang:`, `path:`, `name:` |
 
 ### Классификаторы файлов
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `isTestFile(filePath)` | `boolean` | Проверка на тестовый файл |
-| `isGeneratedFile(filePath)` | `boolean` | Проверка на генерируемый файл |
-| `isDistinctiveIdentifier(token)` | `boolean` | Наличие подчёркивания, цифры или заглавной буквы внутри слова |
-| `isConfigLeafNode(node)` | `boolean` | Узел-константа YAML/properties |
+| `isTestFile(filePath)` | `boolean` | Комплексное определение тестовых файлов |
+| `isDistinctiveIdentifier(token)` | `boolean` | Наличие подчеркивания, цифры или внутреннего заглавного символа |
+| `isConfigLeafNode(node)` | `boolean` | Узлы-константы YAML/properties |
 
 ### Безопасность путей
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `isWithinDir(child, parent)` | `boolean` | Проверка вложенности (нечувствительно к регистру на Windows) |
-| `validatePathWithinRoot(projectRoot, filePath)` | `boolean` | Проверка вложенности (лексическая + realpath), возвращает `true` если путь внутри корня |
-| `validateProjectPath(dirPath)` | `string \| null` | Отклонение системных директорий |
-
-### Классификаторы файлов
-
-| Функция | Возврат | Описание |
-|---|---|---|
-| `isBinaryFile(content: Buffer)` | `boolean` | Проверка на бинарный файл (нулевой байт или >30% непечатных) |
-| `isTooLarge(size)` | `boolean` | Превышает ли размер MAX_FILE_SIZE (1 МБ) |
-| `resolveRelativePath(filePath, projectRoot)` | `string` | Относительный путь от корня проекта |
+| `isWithinDir(child, parent)` | `boolean` | Нечувствительный к регистру на Windows |
+| `validatePathWithinRoot(projectRoot, filePath)` | `boolean` | Лексическая + realpath проверка вложенности |
+| `validateProjectPath(dirPath)` | `string \| null` | Отклоняет чувствительные системные директории |
 
 ### Пути
 
 | Функция | Возврат | Описание |
 |---|---|---|
 | `normalizePath(filePath)` | `string` | Нормализация с прямым слэшем |
-| `getDatabasePath(projectRoot)` | `string` | Путь к БД по умолчанию |
+| `getDatabasePath(projectRoot)` | `string` | Формирует путь к БД по умолчанию |
 
 ### Числовые
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `clamp(value, min, max)` | `number` | Численное ограничение |
+| `clamp(value, min, max)` | `number` | Числовое ограничение |
 
 ### Асинхронные утилиты
 
-| Класс / Функция | Описание |
+| Функция / Класс | Описание |
 |---|---|
+| `processInBatches(items, batchSize, processor, onBatchComplete?)` | Асинхронная пакетная обработка с GC между батчами |
 | `Mutex` | Асинхронный мьютекс с очередью ожидания |
-| `FileLock` | Межпроцессная блокировка с отслеживанием PID и устареванием (2 минуты) |
-| `processInBatches(items, batchSize, processor, onBatchComplete?)` | Пакетная обработка со сборкой мусора между партиями |
+| `FileLock` | Межпроцессная блокировка файлов |
 | `readFileInChunks(filePath, chunkSize?)` | Генератор постраничного чтения файлов |
-| `debounce(fn, delay)` | Отложенный вызов функций |
-| `throttle(fn, interval)` | Ограничение частоты вызовов |
+| `debounce(fn, delay)` | Дебаунсинг функций |
+| `throttle(fn, interval)` | Троттлинг функций |
 
 ### Память
 
-| Класс / Функция | Описание |
+| Функция / Класс | Описание |
 |---|---|
 | `estimateSize(obj)` | Приблизительная оценка размера объекта в памяти |
-| `MemoryMonitor` | Мониторинг памяти с обратным вызовом при достижении порога |
+| `MemoryMonitor` | Мониторинг использования памяти с callback при превышении порога |
 
 ---
 
-## Сопоставление ссылок (NameMatcher)
+## Класс ResolverPool
 
-Стратегии разрешения ссылок по имени.
+Пул worker-потоков для параллельного разрешения ссылок.
 
-### Функции
+### Статические методы
 
-| Функция | Возврат | Описание |
+| Метод | Возврат | Описание |
 |---|---|---|
-| `matchReference(ref, context)` | `IResolvedRef \| null` | Точное совпадение по имени (без import-узлов, с языковым фильтром, лексической достижимостью, порогом неоднозначности) |
-| `matchFunctionRef(ref, context)` | `IResolvedRef \| null` | Функциональные ссылки (callback-регистрации) |
-| `matchByQualifiedName(ref, context)` | `IResolvedRef \| null` | Разрешение по квалифицированному имени (Foo::bar) |
-| `matchDottedCallChain(ref, context)` | `IResolvedRef \| null` | Цепные вызовы через `.` (Foo().bar()) |
-| `matchScopedCallChain(ref, context)` | `IResolvedRef \| null` | Цепные вызовы через `::` (Rust: Foo::bar()) |
-| `matchByFilePath(ref, context)` | `IResolvedRef \| null` | Разрешение по пути файла (#include "X.h") |
-| `isLexicallyReachable(candidate, ref, context)` | `boolean` | Проверка лексической достижимости |
-| `sameLanguageFamily(a, b)` | `boolean` | Сравнивает языковые семейства |
-| `isKnownLanguageFamily(lang)` | `boolean` | Принадлежность к известному многоязыковому семейству |
-| `crossesKnownFamily(a, b)` | `boolean` | Пересечение двух разных известных семейств |
-| `preferCallSiteFile(nodes, callSiteFile)` | `INode[]` | Сортировка: сначала узлы из файла вызова |
-| `resolveMethodOnType(typeName, methodName, ...)` | `IResolvedRef \| null` | Разрешение метода по типу с supertype walk |
-| `inferLocalReceiverType(receiverName, ref, context)` | `string \| null` | Инференс типа получателя из локальных переменных |
-| `normalizeInferredTypeName(raw)` | `string \| null` | Нормализация выражения типа |
-
-### Константы
-
-| Константа | Описание |
-|---|---|
-| `AMBIGUOUS_NAME_CEILING` | Порог неоднозначности (500, настраивается через CODEGRAPH_AMBIGUOUS_NAME_CEILING) |
-| `LANGUAGE_FAMILIES` | Семейства: jvm (java/kotlin/scala), web (ts/js/tsx/jsx), c (c/cpp/objc), dotnet (csharp/razor) |
-
----
-
-## Класс ScopeIgnore
-
-Класс для управления игнорированием файлов с поддержкой вложенных репозиториев и glob-шаблонов.
-
-### Конструктор
-
-```
-constructor(baseDir: string, embeddedRepoRoots: string[])
-```
+| `tryCreate(dbPath, projectRoot)` | `ResolverPool \| null` | Создаёт пул при наличии ресурсов |
+| `resolvePoolSize(opts)` | `number \| null` | Размер пула из CPU и памяти |
+| `worthParallel(batchLength)` | `boolean` | Стоит ли распределять батч |
+| `minRefsForPool()` | `number` | Минимум ссылок для пула (150000) |
 
 ### Методы
 
 | Метод | Возврат | Описание |
 |---|---|---|
-| `shouldIgnore(filePath)` | `boolean` | Следует ли игнорировать файл |
-| `addPattern(pattern)` | `void` | Добавить пользовательский шаблон игнорирования |
-
----
-
-## Класс WalCheckpointValve
-
-Регулятор WAL-чекпоинтов — ограничивает рост журнала при массовой индексации. Предотвращает разрастание WAL-файла до нескольких ГБ.
-
-### Конструктор
-
-```
-constructor(db: SqliteDatabase, softMb?: number, intervalMs?: number, log?: (msg: string) => void)
-```
-
-`softMb` по умолчанию читается из `CODEGRAPH_WAL_VALVE_MB` или 256 МБ. `intervalMs` по умолчанию 2000 мс.
-
-### Методы
-
-| Метод | Возврат | Описание |
-|---|---|---|
-| `start()` | `void` | Запуск наблюдения за WAL (идемпотентно) |
-| `stop()` | `void` | Остановка наблюдения |
-| `check()` | `void` | Один опрос: пассивный чекпоинт при превышении мягкого порога |
-| `backpressure()` | `Promise<void> \| null` | Обратное давление записи при превышении жёсткого лимита |
-| `drain()` | `Promise<void>` | Ожидание завершения всех чекпоинтов и пауз |
-| `foldNow()` | `Promise<void>` | Принудительный бэкфилл WAL на границе фаз |
-
----
-
-## Класс LRUCache
-
-LRU-кэш с ограниченным размером. Использует Map для отслеживания порядка доступа.
-
-### Конструктор
-
-```
-constructor(max: number)
-```
-
-Бросает ошибку, если `max <= 0`.
-
-### Методы
-
-| Метод | Возврат | Описание |
-|---|---|---|
-| `get(key)` | `V \| undefined` | Получение значения (перемещает в конец) |
-| `set(key, value)` | `void` | Установка значения (эвиция старейшего при переполнении) |
-| `has(key)` | `boolean` | Проверка наличия |
-| `delete(key)` | `boolean` | Удаление элемента |
-| `clear()` | `void` | Очистка кэша |
-| `size` | `number` | Текущее количество элементов |
-
----
-
-## Миграции
-
-Инфраструктура инкрементальных миграций схемы. Текущая версия: 8.
-
-| Метод | Возврат | Описание |
-|---|---|---|
-| `needsMigration(db)` | `boolean` | Проверка необходимости миграции |
-| `getPendingMigrations(db)` | `Migration[]` | Список ожидающих миграций |
-| `getMigrationHistory(db)` | `ISchemaVersion[]` | История применённых миграций |
-| `recordMigration(db, version, description)` | `void` | Фиксация применённой миграции |
-| `applyMigrations(db)` | `void` | Применение всех ожидающих миграций |
-| `runMigrations(db, fromVersion)` | `void` | Применение миграций начиная с версии |
-| `getCurrentVersion(db)` | `number` | Текущая версия схемы из БД |
-
-### Версии
-
-| Версия | Изменения |
-|---|---|
-| v1 | Начальная схема: все таблицы, индексы, FTS5, триггеры |
-| v7 | Добавлена таблица name_segment_vocab для поиска символов по словам |
-| v8 | Добавлены status и name_tail в unresolved_refs для отслеживания статуса разрешения |
-
----
-
-## Константы
-
-| Константа | Значение | Описание |
-|---|---|---|
-| `DATABASE_FILENAME` | `'ntgraph.db'` | Имя файла БД |
-| `FTS_OVER_FETCH_MULTIPLIER` | `5` | Множитель перегрузки FTS для пост-пересчёта |
-| `FTS_LIMIT_MIN` | `100` | Минимальный лимит выборки FTS |
-| `FUZZY_MAX_DIST_SHORT` | `1` | Макс. расстояние для запросов до 4 символов |
-| `FUZZY_MAX_DIST_DEFAULT` | `2` | Макс. расстояние для запросов свыше 4 символов |
-| `EXACT_MATCH_SUPPLEMENT_LIMIT` | `20` | Лимит дополнения точных совпадений на термин |
-| `DOMINANT_FILE_EDGE_THRESHOLD` | `20` | Порог ребер для доминирующего файла |
-| `TOP_ROUTE_MIN_TOTAL` | `3` | Минимум маршрутов для getTopRouteFile |
-| `TOP_ROUTE_MIN_CONCENTRATION` | `0.30` | Минимальная концентрация для getTopRouteFile |
-| `ROUTING_MANIFEST_DEFAULT_LIMIT` | `40` | Лимит для getRoutingManifest |
-| `FileLock_STALE_TIMEOUT_MS` | `120000` | Время устаревания блокировки (2 минуты) |
-| `SQLITE_PARAM_CHUNK_SIZE` | `500` | Размер блока для пакетных запросов |
-| `LRU_CACHE_SIZE` | `1000` | Размер LRU-кэша узлов |
-| `FILTER_ONLY_OVER_FETCH_MULTIPLIER` | `5` | Множитель перегрузки для запросов только по фильтрам |
-| `CONFIG_LEAF_LANGUAGES` | `Set('yaml', 'properties')` | Языки для конечных конфигураций |
-| `SENSITIVE_PATHS` | `Set('/proc', '/sys', '/dev', 'C:\Windows', 'C:\Program Files', 'C:\ProgramData')` | Системные директории для блокировки |
-| `MAX_FILE_SIZE` | `1048576` | Максимальный размер файла для индексации (1 МБ) |
-| `WORKER_RECYCLE_INTERVAL` | `250` | Интервал пересоздания рабочего потока |
-| `PARSE_TIMEOUT_MS` | `10000` | Базовый таймаут парсинга (10 секунд) |
-| `PARSE_TIMEOUT_PER_10KB` | `10000` | Дополнительный таймаут на каждые 10 КБ |
-| `FILE_IO_BATCH_SIZE` | `10` | Размер партии для чтения файлов |
-| `SCAN_YIELD_INTERVAL` | `100` | Интервал кооперативной уступки управления при сканировании |
-| `SYNC_YIELD_INTERVAL` | `1000` | Интервал кооперативной уступки управления при синхронизации |
-| `SYNC_RECONCILE_YIELD_INTERVAL` | `1000` | Интервал уступки цикла событий при синхронизации |
-| `DEFAULT_YIELD_BUDGET_MS` | `250` | Бюджет кооперативной уступки управления |
-| `EMBEDDED_REPO_SEARCH_DEPTH` | `4` | Глубина поиска вложенных репозиториев |
-| `EMBEDDED_REPO_SEARCH_ENTRIES` | `2000` | Лимит директорий при поиске вложенных репозиториев |
-| `DEFAULT_IGNORE_DIRS` | `ReadonlySet<string>` | Директории по умолчанию для игнорирования (60+) |
-| `DEFAULT_IGNORE_PATTERNS` | `string[]` | Шаблоны игнорирования по умолчанию |
+| `ready()` | `Promise<void>` | Ожидание готовности всех воркеров |
+| `resolveBatch(refs)` | `Promise<ChunkResult>` | Разрешение ссылок через пул (с агрегацией deferredChain, deferredThisMember, byMethod) |
+| `runSynthPass(passName)` | `Promise<SynthPassResult>` | Запуск прохода синтеза на наименее занятом воркере |
+| `recycleWorkers()` | `Promise<void>` | Переработка всех воркеров: закрытие и reopening БД |
+| `destroy()` | `Promise<void>` | Уничтожение всех воркеров |
