@@ -36,6 +36,9 @@ import {
   matchByQualifiedName,
   matchDottedCallChain,
   matchScopedCallChain,
+  matchByFilePath,
+  matchFuzzy,
+  matchMethodCall,
   sameLanguageFamily,
   crossesKnownFamily,
 } from './NameMatcher';
@@ -213,6 +216,10 @@ export class ReferenceResolver {
       }
     }
 
+    // Стратегия 0: Совпадение по пути файла
+    const filePathResult = matchByFilePath(ref, this);
+    if (filePathResult) return filePathResult;
+
     // Стратегия 1: Фреймворк-специфичное разрешение
     const frameworkResult = this.resolveFramework(ref);
     if (frameworkResult) {
@@ -242,6 +249,10 @@ export class ReferenceResolver {
       if (gated) return gated;
     }
 
+    // Стратегия 5.05: Разрешение вызова метода
+    const methodCallResult = matchMethodCall(ref, this);
+    if (methodCallResult) return methodCallResult;
+
     // Стратегия 5.1: Сопоставление по имени
     const nameResult = matchReference(ref, this);
     if (nameResult) {
@@ -256,6 +267,10 @@ export class ReferenceResolver {
     // Стратегия 7: this.<member> разрешение
     const thisResult = this.resolveThisMemberFnRef(ref);
     if (thisResult) return thisResult;
+
+    // Стратегия 8: Нечёткое совпадение
+    const fuzzyResult = matchFuzzy(ref, this);
+    if (fuzzyResult) return fuzzyResult;
 
     // PHP include path защита
     if (isPhpIncludePathRef(ref)) {
@@ -407,7 +422,7 @@ export class ReferenceResolver {
     for (const ref of unresolved) {
       if (!CHAIN_LANGUAGES.has(ref.language ?? '')) continue;
 
-      // Dotted call chain
+      // Цепочка вызовов через точку
       if (CHAIN_SHAPE.test(ref.referenceName)) {
         const result = matchDottedCallChain(ref, this);
         if (result) {
@@ -419,7 +434,7 @@ export class ReferenceResolver {
         }
       }
 
-      // Scoped call chain (Rust)
+      // Ограниченная цепочка вызовов (Rust)
       if (SCOPED_CHAIN_LANGUAGES.has(ref.language ?? '')) {
         const result = matchScopedCallChain(ref, this);
         if (result) {

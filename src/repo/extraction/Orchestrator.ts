@@ -68,6 +68,9 @@ import { SvelteExtractor } from './extractors/Svelte';
 import { LiquidExtractor } from './extractors/Liquid';
 import { PhpExtractor } from './extractors/Php';
 import { RubyExtractor } from './extractors/Ruby';
+import { CfmlExtractor } from './extractors/Cfml';
+import { DfmExtractor } from './extractors/Dfm';
+import { MybatisExtractor } from './extractors/Mybatis';
 import { stripCommentsForRegex } from './StripComments';
 import { ParseWorkerPool, resolveParsePoolSize } from './ParserWorkerPool';
 import { QueryBuilder } from '../ntgraph/QueryBuilder';
@@ -122,6 +125,9 @@ const EXT_TO_LANGUAGE: Record<string, Language> = {
   '.svelte': 'svelte',
   '.php': 'php',
   '.rb': 'ruby',
+  '.cfm': 'cfml',
+  '.cfc': 'cfml',
+  '.dfm': 'pascal',
 };
 
 /** Определяет язык по расширению файла. */
@@ -150,9 +156,13 @@ function ensureExtractors(): void {
      EXTRACTOR_MAP.set('vue', new VueExtractor());
      EXTRACTOR_MAP.set('liquid', new LiquidExtractor());
      EXTRACTOR_MAP.set('astro', new AstroExtractor());
-      EXTRACTOR_MAP.set('php', new PhpExtractor());
-      EXTRACTOR_MAP.set('ruby', new RubyExtractor());
-      EXTRACTOR_MAP.set('unknown', new DefaultExtractor());
+       EXTRACTOR_MAP.set('php', new PhpExtractor());
+       EXTRACTOR_MAP.set('ruby', new RubyExtractor());
+       EXTRACTOR_MAP.set('cfml', new CfmlExtractor());
+       EXTRACTOR_MAP.set('cfscript', new CfmlExtractor());
+       EXTRACTOR_MAP.set('pascal', new DfmExtractor());
+       EXTRACTOR_MAP.set('xml', new MybatisExtractor());
+       EXTRACTOR_MAP.set('unknown', new DefaultExtractor());
   }
 }
 

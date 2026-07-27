@@ -152,7 +152,6 @@ export class QueryBuilder {
     getAllNodeNames?: SqliteStatement;
     getDominantFile?: SqliteStatement;
     getTopRouteFile?: SqliteStatement;
-    getRoutingManifest?: SqliteStatement;
   } = {};
 
   /** Размеры батчей для многострочных INSERT — кэширует prepared statements по размеру. */
@@ -297,6 +296,17 @@ export class QueryBuilder {
       returnType: node.returnType ?? null,
       updatedAt: node.updatedAt ?? Date.now(),
     });
+
+    if (this.isSegmentableKind(node.kind)) {
+      const rows: unknown[][] = [];
+      this.collectNameSegmentRows(node.name, rows);
+      this.runBatched(
+        'insertNameSegments',
+        'INSERT OR IGNORE INTO name_segment_vocab (segment, name) VALUES ',
+        '(?,?)',
+        rows
+      );
+    }
   }
 
   /** Вставка множества узлов в транзакции (bulk через runBatched). */
@@ -354,23 +364,27 @@ export class QueryBuilder {
     return kind !== 'file' && kind !== 'import';
   }
 
-  /** Вставка сегментов имён в словарь. */
+  /** Собирает строки сегментов имени для пакетной вставки. */
+  private collectNameSegmentRows(name: string, out: unknown[][]): void {
+    if (this.segmentedNames.has(name)) return;
+    if (this.segmentedNames.size >= QueryBuilder.MAX_SEGMENTED_NAMES) this.segmentedNames.clear();
+    this.segmentedNames.add(name);
+    for (const segment of splitIdentifierSegments(name)) out.push([segment, name]);
+  }
+
+  /** Вставка сегментов имён в словарь (bulk через runBatched). */
   private insertNameSegmentVocab(nodes: INode[]): void {
-    const stmt = this.db.prepare(
-      'INSERT OR IGNORE INTO name_segment_vocab (segment, name) VALUES (?, ?)'
-    );
+    const segmentRows: unknown[][] = [];
     for (const node of nodes) {
       if (!this.isSegmentableKind(node.kind)) continue;
-      if (this.segmentedNames.has(node.name)) continue;
-      this.segmentedNames.add(node.name);
-      if (this.segmentedNames.size >= QueryBuilder.MAX_SEGMENTED_NAMES) {
-        this.segmentedNames.clear();
-      }
-      const segments = splitIdentifierSegments(node.name);
-      for (const segment of segments) {
-        stmt.run(segment, node.name);
-      }
+      this.collectNameSegmentRows(node.name, segmentRows);
     }
+    this.runBatched(
+      'insertNameSegments',
+      'INSERT OR IGNORE INTO name_segment_vocab (segment, name) VALUES ',
+      '(?,?)',
+      segmentRows
+    );
   }
 
   /** Удаление сегментов имён для узлов файла. */
@@ -387,6 +401,7 @@ export class QueryBuilder {
   /** Очищает словарь сегментов имён. */
   clearNameSegmentVocab(): void {
     this.db.exec('DELETE FROM name_segment_vocab');
+    this.segmentedNames.clear();
   }
 
   /** Проверяет, пуст ли словарь сегментов имён. */
@@ -534,6 +549,17 @@ export class QueryBuilder {
       returnType: node.returnType ?? null,
       updatedAt: node.updatedAt ?? Date.now(),
     });
+
+    if (this.isSegmentableKind(node.kind)) {
+      const rows: unknown[][] = [];
+      this.collectNameSegmentRows(node.name, rows);
+      this.runBatched(
+        'insertNameSegments',
+        'INSERT OR IGNORE INTO name_segment_vocab (segment, name) VALUES ',
+        '(?,?)',
+        rows
+      );
+    }
   }
 
   /** Удаление узла по ID. */
@@ -711,10 +737,7 @@ export class QueryBuilder {
         'SELECT * FROM nodes WHERE name >= ? AND name < ? ORDER BY name LIMIT ?'
       );
     }
-    const upper = prefix.charAt(prefix.length - 1) !== undefined
-      ? prefix.slice(0, -1) + String.fromCharCode(prefix.charCodeAt(prefix.length - 1) + 1)
-      : prefix + '0';
-    const rows = this.stmts.getNodesByNamePrefix.all(prefix, upper, limit) as NodeRow[];
+    const rows = this.stmts.getNodesByNamePrefix.all(prefix, prefix + '\uffff', limit) as NodeRow[];
     return rows.map(rowToNode);
   }
 
@@ -788,41 +811,55 @@ export class QueryBuilder {
 
   /** Манифест маршрутизации — route-узлы с обработчиками и статистикой. */
   getRoutingManifest(limit: number = ROUTING_MANIFEST_DEFAULT_LIMIT): IRoutingManifest | null {
-    if (!this.stmts.getRoutingManifest) {
-      this.stmts.getRoutingManifest = this.db.prepare(`
+    const rows = this.db
+      .prepare(`
         SELECT
+          r.name AS url,
+          h.name AS handler,
           h.file_path AS handler_file,
-          COUNT(*) AS cnt
+          h.start_line AS handler_line,
+          h.kind AS handler_kind
         FROM nodes r
         JOIN edges e ON e.source = r.id
         JOIN nodes h ON e.target = h.id
         WHERE r.kind = 'route'
           AND e.kind IN ('references', 'calls')
           AND h.kind IN ('function', 'method', 'class')
-        GROUP BY h.file_path
-      `);
+        ORDER BY r.file_path, r.start_line
+        LIMIT ?
+      `)
+      .all(limit) as Array<{ url: string; handler: string; handler_file: string; handler_line: number; handler_kind: string }>;
+
+    const filtered = rows.filter(r => !isLowValueFile(r.handler_file));
+    if (filtered.length < TOP_ROUTE_MIN_TOTAL) return null;
+
+    const fileCounts: Record<string, number> = {};
+    for (const r of filtered) {
+      fileCounts[r.handler_file] = (fileCounts[r.handler_file] || 0) + 1;
     }
-    const handlerRows = this.stmts.getRoutingManifest.all() as Array<{ handler_file: string; cnt: number }>;
-    const handlerFiltered = handlerRows.filter(r => !isLowValueFile(r.handler_file));
-    const totalRoutes = handlerFiltered.reduce((sum, r) => sum + r.cnt, 0);
-    if (totalRoutes < TOP_ROUTE_MIN_TOTAL) return null;
+
     let topHandlerFile: string | null = null;
     let topHandlerFileCount = 0;
-    for (const r of handlerFiltered) {
-      if (r.cnt > topHandlerFileCount) {
-        topHandlerFile = r.handler_file;
-        topHandlerFileCount = r.cnt;
+    for (const [file, count] of Object.entries(fileCounts)) {
+      if (count > topHandlerFileCount) {
+        topHandlerFile = file;
+        topHandlerFileCount = count;
       }
     }
-    const routeRows = this.db
-      .prepare('SELECT * FROM nodes WHERE kind = ? ORDER BY file_path, start_line LIMIT ?')
-      .all('route', limit) as NodeRow[];
-    const entries = routeRows.filter(r => !isLowValueFile(r.file_path)).map(rowToNode);
+
+    const entries = filtered.map(r => ({
+      url: r.url,
+      handler: r.handler,
+      handlerFile: r.handler_file,
+      handlerLine: r.handler_line,
+      handlerKind: r.handler_kind,
+    }));
+
     return {
       entries,
       topHandlerFile,
       topHandlerFileCount,
-      totalRoutes,
+      totalRoutes: filtered.length,
     };
   }
 
@@ -1077,19 +1114,13 @@ export class QueryBuilder {
     return row?.last ?? null;
   }
 
-  /** Устаревшие файлы — хеш изменился с момента индексации. Файлы, отсутствующие в карте, считаются удалёнными. */
+  /** Устаревшие файлы — только файлы, чей хеш изменился. */
   getStaleFiles(currentHashes: Map<string, string>): IFileRecord[] {
     const files = this.getAllFiles();
-    const stale: IFileRecord[] = [];
-    for (const file of files) {
-      const currentHash = currentHashes.get(file.path);
-      if (currentHash === undefined) {
-        stale.push(file);
-      } else if (currentHash !== file.contentHash) {
-        stale.push(file);
-      }
-    }
-    return stale;
+    return files.filter((f) => {
+      const currentHash = currentHashes.get(f.path);
+      return currentHash && currentHash !== f.contentHash;
+    });
   }
 
   /** Все пути файлов (легковесный запрос). */
@@ -1114,6 +1145,14 @@ export class QueryBuilder {
     }
     const rows = this.stmts.getAllNodeNames.all() as Array<{ name: string }>;
     return rows.map((r) => r.name);
+  }
+
+  /** Ленивый итератор по всем именам узлов. */
+  *iterateNodeNames(): IterableIterator<string> {
+    const stmt = this.db.prepare('SELECT DISTINCT name FROM nodes');
+    for (const row of stmt.iterate()) {
+      yield (row as { name: string }).name;
+    }
   }
 
   // ===================================================================
@@ -1251,8 +1290,11 @@ export class QueryBuilder {
   /** Удаление по ID узлов. */
   deleteResolvedReferences(fromNodeIds: string[]): void {
     if (fromNodeIds.length === 0) return;
-    const placeholders = fromNodeIds.map(() => '?').join(',');
-    this.db.prepare(`DELETE FROM unresolved_refs WHERE from_node_id IN (${placeholders})`).run(...fromNodeIds);
+    for (let i = 0; i < fromNodeIds.length; i += SQLITE_PARAM_CHUNK_SIZE) {
+      const chunk = fromNodeIds.slice(i, i + SQLITE_PARAM_CHUNK_SIZE);
+      const placeholders = chunk.map(() => '?').join(',');
+      this.db.prepare(`DELETE FROM unresolved_refs WHERE from_node_id IN (${placeholders})`).run(...chunk);
+    }
   }
 
   /** Удаление конкретных разрешённых ссылок. */
@@ -1527,7 +1569,7 @@ export class QueryBuilder {
   findNodesByNameSubstring(
     substring: string,
     options: ISearchOptions & { excludePrefix?: boolean } = {}
-  ): INode[] {
+  ): ISearchResult[] {
     const { kinds, languages, limit = 30, excludePrefix } = options;
 
     let sql = `SELECT nodes.* FROM nodes WHERE name LIKE ?`;
@@ -1552,7 +1594,10 @@ export class QueryBuilder {
     params.push(limit);
 
     const rows = this.db.prepare(sql).all(...params) as NodeRow[];
-    return rows.map(rowToNode);
+    return rows.map((row) => ({
+      node: rowToNode(row),
+      score: 1.0,
+    }));
   }
 
   // ===================================================================
@@ -1595,7 +1640,7 @@ export class QueryBuilder {
   }
 
   /** Статистика графа. */
-  getStats(): { nodeCount: number; edgeCount: number; fileCount: number; nodesByKind: Record<NodeKind, number>; edgesByKind: Record<EdgeKind, number>; filesByLanguage: Record<string, number>; lastUpdated: number; } {
+  getStats(): IGraphStats {
     const counts = this.db.prepare(`
       SELECT
         (SELECT COUNT(*) FROM nodes) AS node_count,
@@ -1634,6 +1679,7 @@ export class QueryBuilder {
       nodesByKind,
       edgesByKind,
       filesByLanguage,
+      dbSizeBytes: 0,
       lastUpdated: Date.now(),
     };
   }

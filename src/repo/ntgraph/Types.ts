@@ -56,14 +56,14 @@ export type EdgeKind = (typeof EdgeKind)[keyof typeof EdgeKind];
 /** Вид ссылки — вид ребра или функциональная ссылка. */
 export type ReferenceKind = EdgeKind | 'function_ref';
 
-/** Поддерживаемые языки (40 значений). */
+/** Поддерживаемые языки (43 значения). */
 export const Language = Object.freeze([
   'typescript', 'javascript', 'tsx', 'jsx', 'python', 'go', 'rust', 'java',
   'c', 'cpp', 'csharp', 'razor', 'php', 'ruby', 'swift', 'kotlin', 'dart',
   'svelte', 'vue', 'astro', 'liquid', 'pascal', 'scala', 'lua', 'luau',
   'objc', 'r', 'yaml', 'twig', 'xml', 'properties', 'unknown',
   'html', 'css', 'sql', 'json', 'markdown', 'shell', 'dockerfile', 'toml', 'ini',
-  'cobol'
+  'cobol', 'cfml', 'cfscript', 'arkts'
 ] as const);
 
 export type Language = (typeof Language)[number];
@@ -439,10 +439,24 @@ export const TOP_ROUTE_MIN_TOTAL = 3;
 /** Минимальная концентрация (30%) для getTopRouteFile. */
 export const TOP_ROUTE_MIN_CONCENTRATION = 0.30;
 
+/** Запись манифеста маршрутизации — один route-узел с привязанным обработчиком. */
+export interface IRoutingManifestEntry {
+  /** URL-маршрут. */
+  url: string;
+  /** Имя обработчика. */
+  handler: string;
+  /** Файл обработчика. */
+  handlerFile: string;
+  /** Строка обработчика. */
+  handlerLine: number;
+  /** Вид обработчика. */
+  handlerKind: string;
+}
+
 /** Манифест маршрутизации — route-узлы и файл с наибольшим числом обработчиков. */
 export interface IRoutingManifest {
-  /** Route-узлы. */
-  entries: INode[];
+  /** Записи маршрутов с обработчиками. */
+  entries: IRoutingManifestEntry[];
   /** Файл с наибольшим числом обработчиков маршрутов. */
   topHandlerFile: string | null;
   /** Число обработчиков в файле topHandlerFile. */

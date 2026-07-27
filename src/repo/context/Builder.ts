@@ -225,10 +225,10 @@ export class ContextBuilder {
               kinds: ['class', 'interface', 'struct', 'type_alias', 'component'],
               limit: Math.ceil(opts.searchLimit / symbols.length),
             });
-            for (const node of prefixResults) {
-              if (!seenIds.has(node.id)) {
-                results.push({ node, score: 0.6 });
-                seenIds.add(node.id);
+            for (const r of prefixResults) {
+              if (!seenIds.has(r.node.id)) {
+                results.push({ node: r.node, score: 0.6 });
+                seenIds.add(r.node.id);
                 bestStep = 2;
               }
             }
@@ -285,10 +285,10 @@ export class ContextBuilder {
             ...DEFAULT_FIND_OPTIONS,
             limit: Math.ceil(opts.searchLimit / symbols.length),
           });
-         for (const node of likeResults) {
-              if (!seenIds.has(node.id)) {
-                results.push({ node, score: 0.4 });
-                seenIds.add(node.id);
+         for (const r of likeResults) {
+              if (!seenIds.has(r.node.id)) {
+                results.push({ node: r.node, score: 0.4 });
+                seenIds.add(r.node.id);
                 bestStep = 4;
               }
             }

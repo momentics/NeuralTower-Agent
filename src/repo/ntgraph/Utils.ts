@@ -16,6 +16,8 @@ import {
   SENSITIVE_PATHS,
   DATABASE_FILENAME,
   FileLock_STALE_TIMEOUT_MS,
+  IUnresolvedReference,
+  IResolutionContext,
 } from './Types';
 import { isGeneratedFile as isGeneratedFileFromDetection } from '../extraction/GeneratedDetection';
 
@@ -395,6 +397,86 @@ export function isLowValueFile(filePath: string): boolean {
     /_test\.dart$/.test(lp) ||
     isGeneratedFileFromDetection(filePath)
   );
+}
+
+// =============================================================================
+// Близость путей
+// =============================================================================
+
+/** Вычисляет близость путей когда первый путь уже разбит на сегменты директорий. */
+export function pathProximityFromDirs(dir1: string[], filePath2: string): number {
+  const dir2 = filePath2.split('/');
+  dir2.pop();
+  let shared = 0;
+  const limit = Math.min(dir1.length, dir2.length);
+  for (let i = 0; i < limit; i++) {
+    if (dir1[i] === dir2[i]) shared++;
+    else break;
+  }
+  return Math.min(shared * 15, 80);
+}
+
+/** Вычисляет близость двух путей: общее количество общих сегментов. */
+export function computePathProximity(pathA: string, pathB: string): number {
+  const dirA = pathA.split('/');
+  dirA.pop();
+  return pathProximityFromDirs(dirA, pathB);
+}
+
+/** Разделяет camelCase/PascalCase строку на слова. */
+export function splitCamelCase(str: string): string[] {
+  return str.replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    .split(/[\s._:\/\\]+/)
+    .filter(w => w.length > 1);
+}
+
+/** Находит лучший кандидат среди узлов для неразрешённой ссылки. */
+export function findBestMatch(
+  ref: IUnresolvedReference,
+  candidates: INode[],
+  _context: IResolutionContext
+): INode | null {
+  let bestScore = -1;
+  let bestNode: INode | null = null;
+
+  const refDirs = (ref.filePath ?? '').split('/');
+  refDirs.pop();
+
+  const hasSameLanguage = candidates.some((c) => c.language === ref.language);
+
+  for (const candidate of candidates) {
+    if (hasSameLanguage && candidate.language !== ref.language) continue;
+
+    let score = 0;
+
+    if (candidate.filePath === ref.filePath) score += 100;
+    score += pathProximityFromDirs(refDirs, candidate.filePath);
+
+    if (candidate.language === ref.language) score += 50;
+    else score -= 80;
+
+    if (ref.referenceKind === 'calls' && (candidate.kind === 'function' || candidate.kind === 'method')) score += 25;
+    if (ref.referenceKind === 'instantiates' && (candidate.kind === 'class' || candidate.kind === 'struct' || candidate.kind === 'interface')) score += 25;
+    if (ref.referenceKind === 'decorates') {
+      if (candidate.kind === 'function' || candidate.kind === 'method') score += 25;
+      else if (candidate.kind === 'class' || candidate.kind === 'interface') score += 15;
+    }
+
+    if (candidate.isExported) score += 10;
+
+    if (candidate.filePath === ref.filePath && candidate.startLine) {
+      const distance = Math.abs(candidate.startLine - ref.line);
+      score += Math.max(0, 20 - distance / 10);
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestNode = candidate;
+    }
+  }
+
+  return bestNode;
 }
 
 // =============================================================================

@@ -31,15 +31,19 @@ let resolver: ReferenceResolver | null = null;
 type InMessage =
   | { type: 'open'; dbPath: string; projectRoot: string }
   | { type: 'resolve'; id: number; refs: IUnresolvedReference[] }
+  | { type: 'synth'; id: number; pass: string }
+  | { type: 'recycle'; id: number }
   | { type: 'close' };
 
 let dbPath: string | null = null;
+let projectRoot: string | null = null;
 
 port.on('message', (msg: InMessage) => {
   try {
     switch (msg.type) {
       case 'open': {
         dbPath = msg.dbPath;
+        projectRoot = msg.projectRoot;
         const created = createDatabase(msg.dbPath);
         db = created.db;
         db.pragma('busy_timeout = 5000');
@@ -53,7 +57,41 @@ port.on('message', (msg: InMessage) => {
       case 'resolve': {
         if (!resolver) throw new Error('resolver-worker: разрешение до open');
         const out = resolver.resolveAll(msg.refs);
-        port.postMessage({ type: 'result', id: msg.id, resolved: out.resolved, unresolved: out.unresolved });
+        port.postMessage({
+          type: 'result',
+          id: msg.id,
+          resolved: out.resolved,
+          unresolved: out.unresolved,
+          deferredChain: [],
+          deferredThisMember: [],
+          byMethod: {},
+        });
+        break;
+      }
+      case 'synth': {
+        if (!resolver) throw new Error('resolver-worker: синтез до open');
+        const synthStart = Date.now();
+        const synthEdges: any[] = [];
+        port.postMessage({ type: 'synth-result', id: msg.id, edges: synthEdges, ms: Date.now() - synthStart });
+        break;
+      }
+      case 'recycle': {
+        if (!db || !dbPath || !projectRoot) throw new Error('resolver-worker: переработка до open');
+        try {
+          db.close();
+        } catch {
+          /* уже закрыто */
+        }
+        const recreated = createDatabase(dbPath);
+        db = recreated.db;
+        db.pragma('busy_timeout = 5000');
+        db.pragma('cache_size = -32000');
+        if (queries) {
+          queries.rebind(db);
+        }
+        resolver = new ReferenceResolver(projectRoot, queries!);
+        resolver.initialize();
+        port.postMessage({ type: 'recycled', id: msg.id });
         break;
       }
       case 'close': {

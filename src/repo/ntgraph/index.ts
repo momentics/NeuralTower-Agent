@@ -23,6 +23,7 @@ import {
   IDominantFile,
   ITopRouteFile,
   IRoutingManifest,
+  IRoutingManifestEntry,
   NodeKind,
   EdgeKind,
   DATABASE_FILENAME,
@@ -542,7 +543,7 @@ export class NtGraphDb {
   findNodesByNameSubstring(
     substring: string,
     options: ISearchOptions & { excludePrefix?: boolean } = {}
-  ): INode[] {
+  ): ISearchResult[] {
     return this._qb.findNodesByNameSubstring(substring, options);
   }
 
@@ -631,7 +632,7 @@ export class NtGraphDb {
 export {
   // Interfaces
   INode, IEdge, IFileRecord, IUnresolvedReference, ISearchOptions,
-  ISearchResult, IGraphStats, IDominantFile, ITopRouteFile, IExtractionResult,
+  ISearchResult, IGraphStats, IDominantFile, ITopRouteFile, IRoutingManifestEntry, IExtractionResult,
   IExtractionError, ISubgraph, Context, CodeBlock, TaskInput,
   BuildContextOptions, TaskContext, FindRelevantContextOptions,
   ParsedQuery, ITraversalOptions, IIndexProgress, IIndexResult,
@@ -691,6 +692,8 @@ export {
   extractSearchTerms, unquote, boundedEditDistance,
   // Search
   kindBonus, nameMatchBonus, scorePathRelevance, isLowValueFile,
+  // Path proximity
+  pathProximityFromDirs, computePathProximity, findBestMatch, splitCamelCase,
   // Query parser
   parseQuery,
   // File classifiers

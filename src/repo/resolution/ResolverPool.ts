@@ -11,13 +11,22 @@ import { Worker } from 'worker_threads';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import type { IResolvedRef, IUnresolvedReference } from '../ntgraph/Types';
+import type { IResolvedRef, IUnresolvedReference, IEdge } from '../ntgraph/Types';
 import { memoryBudgetBytes } from './MemoryBudget';
 
 /** Результат чанка разрешения. */
 export interface ChunkResult {
   resolved: IResolvedRef[];
   unresolved: IUnresolvedReference[];
+  deferredChain: IUnresolvedReference[];
+  deferredThisMember: IUnresolvedReference[];
+  byMethod: Record<string, number>;
+}
+
+/** Результат прохода синтеза. */
+export interface SynthPassResult {
+  edges: IEdge[];
+  ms: number;
 }
 
 interface PoolWorker {
@@ -50,6 +59,8 @@ export class ResolverPool {
   private workers: PoolWorker[] = [];
   private nextId = 0;
   private waiters = new Map<number, { resolve: (r: ChunkResult) => void; reject: (e: Error) => void }>();
+  private synthWaiters = new Map<number, { resolve: (r: SynthPassResult) => void; reject: (e: Error) => void }>();
+  private recycleWaiters = new Map<number, () => void>();
   private failed: Error | null = null;
 
   /**
@@ -128,7 +139,19 @@ export class ResolverPool {
           waiter?.resolve({
             resolved: msg.resolved!,
             unresolved: msg.unresolved!,
+            deferredChain: (msg as any).deferredChain ?? [],
+            deferredThisMember: (msg as any).deferredThisMember ?? [],
+            byMethod: (msg as any).byMethod ?? {},
           });
+        } else if (msg.type === 'synth-result' && msg.id !== undefined) {
+          pw.busy--;
+          const waiter = this.synthWaiters.get(msg.id);
+          this.synthWaiters.delete(msg.id);
+          waiter?.resolve({ edges: (msg as any).edges ?? [], ms: (msg as any).ms ?? 0 });
+        } else if (msg.type === 'recycled' && msg.id !== undefined) {
+          const waiter = this.recycleWaiters.get(msg.id);
+          this.recycleWaiters.delete(msg.id);
+          waiter?.();
         } else if (msg.type === 'error') {
           pw.busy--;
           const err = new Error(`resolver worker: ${msg.message}`);
@@ -160,6 +183,10 @@ export class ResolverPool {
     if (!this.failed) this.failed = err;
     for (const [, waiter] of this.waiters) waiter.reject(this.failed);
     this.waiters.clear();
+    for (const [, waiter] of this.synthWaiters) waiter.reject(this.failed);
+    this.synthWaiters.clear();
+    for (const [, done] of this.recycleWaiters) done();
+    this.recycleWaiters.clear();
   }
 
   /** Стоит ли распределять этот батч. */
@@ -193,12 +220,53 @@ export class ResolverPool {
       );
     }
     const chunks = await Promise.all(chunkPromises);
-    const out: ChunkResult = { resolved: [], unresolved: [] };
+    const out: ChunkResult = { resolved: [], unresolved: [], deferredChain: [], deferredThisMember: [], byMethod: {} };
     for (const c of chunks) {
       out.resolved.push(...c.resolved);
       out.unresolved.push(...c.unresolved);
+      out.deferredChain.push(...c.deferredChain);
+      out.deferredThisMember.push(...c.deferredThisMember);
+      for (const [k, v] of Object.entries(c.byMethod)) {
+        out.byMethod[k] = (out.byMethod[k] || 0) + v;
+      }
     }
     return out;
+  }
+
+  /** Запускает проход синтеза на наименее занятом воркере. */
+  async runSynthPass(passName: string): Promise<SynthPassResult> {
+    if (this.failed) throw this.failed;
+    const id = this.nextId++;
+    const pw = this.workers.reduce((a, b) => (b.busy < a.busy ? b : a));
+    pw.busy++;
+    return new Promise<SynthPassResult>((resolve, reject) => {
+      this.synthWaiters.set(id, { resolve, reject });
+      pw.worker.postMessage({ type: 'synth', id, pass: passName });
+    });
+  }
+
+  /** Переработка всех воркеров: закрытие и reopening БД. */
+  async recycleWorkers(): Promise<void> {
+    if (this.failed) throw this.failed;
+    await Promise.all(
+      this.workers.map(
+        (pw) => new Promise<void>((resolve, reject) => {
+          const id = this.nextId++;
+          const t = setTimeout(() => {
+            if (this.recycleWaiters.delete(id)) {
+              const err = new Error('resolver worker recycle timed out');
+              this.fail(err);
+              reject(err);
+            }
+          }, 10_000);
+          this.recycleWaiters.set(id, () => {
+            clearTimeout(t);
+            resolve();
+          });
+          pw.worker.postMessage({ type: 'recycle', id });
+        })
+      )
+    );
   }
 
   /** Уничтожение всех воркеров. */
