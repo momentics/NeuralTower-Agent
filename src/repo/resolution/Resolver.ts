@@ -32,13 +32,8 @@ import { LRUCache } from '../ntgraph/LruCache';
 import { isBuiltInSymbol } from './BuiltIns';
 import {
   matchReference,
-  matchFunctionRef,
-  matchByQualifiedName,
   matchDottedCallChain,
   matchScopedCallChain,
-  matchByFilePath,
-  matchFuzzy,
-  matchMethodCall,
   sameLanguageFamily,
   crossesKnownFamily,
 } from './NameMatcher';
@@ -216,61 +211,38 @@ export class ReferenceResolver {
       }
     }
 
-    // Стратегия 0: Совпадение по пути файла
-    const filePathResult = matchByFilePath(ref, this);
-    if (filePathResult) return filePathResult;
-
-    // Стратегия 1: Фреймворк-специфичное разрешение
+    // Стратегия 0: Фреймворк-специфичное разрешение
     const frameworkResult = this.resolveFramework(ref);
     if (frameworkResult) {
       const gated = this.gateFrameworkLanguage(frameworkResult, ref);
       if (gated) return gated;
     }
 
-    // Стратегия 2: Razor/Blazor @using
+    // Стратегия 1: Razor/Blazor @using
     const razorResult = this.resolveRazorUsing(ref);
     if (razorResult) return razorResult;
 
-    // Стратегия 3: JVM FQN импорт
+    // Стратегия 2: JVM FQN импорт
     const jvmResult = resolveJvmImport(ref, this);
     if (jvmResult) return jvmResult;
 
-    // Стратегия 4: Разрешение через импорты
+    // Стратегия 3: Разрешение через импорты
     const importResult = resolveViaImport(ref, this);
     if (importResult) {
       const gated = this.gateLanguage(importResult, ref);
       if (gated) return gated;
     }
 
-    // Стратегия 5: Разрешение по квалифицированному имени
-    const qnameResult = matchByQualifiedName(ref, this);
-    if (qnameResult) {
-      const gated = this.gateLanguage(qnameResult, ref);
+    // Стратегия 4: Мастер-диспетчер (file path, qualified name, chains, method call, exact, fuzzy)
+    const masterResult = matchReference(ref, this);
+    if (masterResult) {
+      const gated = this.gateLanguage(masterResult, ref);
       if (gated) return gated;
     }
 
-    // Стратегия 5.05: Разрешение вызова метода
-    const methodCallResult = matchMethodCall(ref, this);
-    if (methodCallResult) return methodCallResult;
-
-    // Стратегия 5.1: Сопоставление по имени
-    const nameResult = matchReference(ref, this);
-    if (nameResult) {
-      const gated = this.gateLanguage(nameResult, ref);
-      if (gated) return gated;
-    }
-
-    // Стратегия 6: Функции как значения
-    const fnResult = matchFunctionRef(ref, this);
-    if (fnResult) return fnResult;
-
-    // Стратегия 7: this.<member> разрешение
+    // Стратегия 5: this.<member> разрешение
     const thisResult = this.resolveThisMemberFnRef(ref);
     if (thisResult) return thisResult;
-
-    // Стратегия 8: Нечёткое совпадение
-    const fuzzyResult = matchFuzzy(ref, this);
-    if (fuzzyResult) return fuzzyResult;
 
     // PHP include path защита
     if (isPhpIncludePathRef(ref)) {

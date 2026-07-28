@@ -44,10 +44,10 @@ class NodeSqliteAdapter implements SqliteDatabase {
   private _db: any;
   private readonly _dbPath: string;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, opts?: { readOnly?: boolean }) {
     this._dbPath = dbPath;
-    const { DatabaseSync } = require('node:sqlite');
-    this._db = new DatabaseSync(dbPath);
+    const { DatabaseSync, OPEN_READONLY } = require('node:sqlite');
+    this._db = opts?.readOnly ? new DatabaseSync(dbPath, OPEN_READONLY) : new DatabaseSync(dbPath);
   }
 
   get open(): boolean {
@@ -83,13 +83,13 @@ class NodeSqliteAdapter implements SqliteDatabase {
   pragma(str: string, options?: { simple?: boolean }): any {
     const trimmed = str.trim();
 
-    // Write pragma ("key = value")
+    // Запись pragma ("key = value")
     if (trimmed.includes('=')) {
       this._db.exec(`PRAGMA ${trimmed}`);
       return;
     }
 
-    // Read pragma
+    // Чтение pragma
     const row = this._db.prepare(`PRAGMA ${trimmed}`).get();
     if (options?.simple) {
       return row && typeof row === 'object' ? Object.values(row)[0] : row;
@@ -159,9 +159,9 @@ class NodeSqliteAdapter implements SqliteDatabase {
  * Создаёт подключение к БД через `node:sqlite`.
  * Возвращает бэкенд и подключение для отчётности.
  */
-export function createDatabase(dbPath: string): { db: SqliteDatabase; backend: SqliteBackend } {
+export function createDatabase(dbPath: string, opts?: { readOnly?: boolean }): { db: SqliteDatabase; backend: SqliteBackend } {
   try {
-    return { db: new NodeSqliteAdapter(dbPath), backend: 'node-sqlite' };
+    return { db: new NodeSqliteAdapter(dbPath, opts), backend: 'node-sqlite' };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     throw new Error(

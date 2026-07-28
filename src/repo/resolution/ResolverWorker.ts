@@ -44,7 +44,7 @@ port.on('message', (msg: InMessage) => {
       case 'open': {
         dbPath = msg.dbPath;
         projectRoot = msg.projectRoot;
-        const created = createDatabase(msg.dbPath);
+        const created = createDatabase(msg.dbPath, { readOnly: true });
         db = created.db;
         db.pragma('busy_timeout = 5000');
         db.pragma('cache_size = -32000');
@@ -76,21 +76,18 @@ port.on('message', (msg: InMessage) => {
         break;
       }
       case 'recycle': {
-        if (!db || !dbPath || !projectRoot) throw new Error('resolver-worker: переработка до open');
+        if (!queries || !dbPath) throw new Error('resolver-worker: переработка до open');
         try {
-          db.close();
+          db?.close();
         } catch {
           /* уже закрыто */
         }
-        const recreated = createDatabase(dbPath);
-        db = recreated.db;
+        const reopened = createDatabase(dbPath, { readOnly: true });
+        db = reopened.db;
         db.pragma('busy_timeout = 5000');
         db.pragma('cache_size = -32000');
-        if (queries) {
-          queries.rebind(db);
-        }
-        resolver = new ReferenceResolver(projectRoot, queries!);
-        resolver.initialize();
+        queries.rebind(db);
+        // resolver сохраняется с тёплыми кэшами
         port.postMessage({ type: 'recycled', id: msg.id });
         break;
       }

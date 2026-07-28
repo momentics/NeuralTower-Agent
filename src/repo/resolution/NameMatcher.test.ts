@@ -24,7 +24,10 @@ describe("NameMatcher", () => {
 
     it("C languages are same family", () => {
       expect(sameLanguageFamily('c', 'cpp')).toBe(true)
-      expect(sameLanguageFamily('c', 'objc')).toBe(true)
+    })
+
+    it("Apple languages are same family", () => {
+      expect(sameLanguageFamily('swift', 'objc')).toBe(true)
     })
 
     it("Different families return false", () => {

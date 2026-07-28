@@ -159,6 +159,10 @@ export class ResolverPool {
             const waiter = this.waiters.get(msg.id)!;
             this.waiters.delete(msg.id);
             waiter.reject(err);
+          } else if (msg.id !== undefined && this.synthWaiters.has(msg.id)) {
+            const waiter = this.synthWaiters.get(msg.id)!;
+            this.synthWaiters.delete(msg.id);
+            waiter.reject(err);
           } else {
             this.fail(err);
           }

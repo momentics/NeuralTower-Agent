@@ -423,9 +423,7 @@ export class QueryBuilder {
     this.db.transaction(() => {
       const rows: unknown[][] = [];
       for (const name of names) {
-        for (const segment of splitIdentifierSegments(name)) {
-          rows.push([segment, name]);
-        }
+        this.collectNameSegmentRows(name, rows);
       }
       this.runBatched(
         'insertNameSegments',

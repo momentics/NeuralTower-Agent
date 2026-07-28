@@ -27,7 +27,7 @@ export const CHAIN_LANGUAGES = new Set([
 ]);
 
 /** Языки для scoped-цепей (::). */
-export const SCOPED_CHAIN_LANGUAGES = new Set(['rust']);
+export const SCOPED_CHAIN_LANGUAGES = new Set(['rust', 'php']);
 
 /** Форма цепного вызова: Foo().bar(). */
 export const CHAIN_SHAPE = /^(.+)\(\)\.(\w+)$/;

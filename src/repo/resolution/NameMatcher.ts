@@ -22,11 +22,11 @@ import { findBestMatch, computePathProximity, splitCamelCase } from '../ntgraph/
 
 /** Семейства языков для cross-family фильтрации. */
 const LANGUAGE_FAMILIES: ReadonlyMap<string, string> = new Map([
-  ['typescript', 'javascript'],
-  ['javascript', 'javascript'],
-  ['tsx', 'javascript'],
-  ['jsx', 'javascript'],
-  ['arkts', 'javascript'],
+  ['typescript', 'web'],
+  ['javascript', 'web'],
+  ['tsx', 'web'],
+  ['jsx', 'web'],
+  ['arkts', 'web'],
   ['python', 'python'],
   ['go', 'go'],
   ['rust', 'rust'],
@@ -39,18 +39,9 @@ const LANGUAGE_FAMILIES: ReadonlyMap<string, string> = new Map([
   ['razor', 'dotnet'],
   ['php', 'php'],
   ['ruby', 'ruby'],
-  ['swift', 'swift'],
+  ['swift', 'apple'],
+  ['objc', 'apple'],
   ['dart', 'dart'],
-  ['svelte', 'javascript'],
-  ['vue', 'javascript'],
-  ['astro', 'javascript'],
-  ['pascal', 'pascal'],
-  ['lua', 'lua'],
-  ['luau', 'lua'],
-  ['objc', 'c'],
-  ['r', 'r'],
-  ['cfml', 'cfml'],
-  ['cfscript', 'cfml'],
 ]);
 
 /**
@@ -200,16 +191,16 @@ function pickClosestFileNode(candidates: INode[], ref: IUnresolvedReference): IN
 }
 
 // =============================================================================
-// matchReference
+// matchByExactName
 // =============================================================================
 
 /**
- * Сопоставление ссылки по имени символа.
+ * Точное сопоставление ссылки по имени символа.
  *
  * Ищет узлы с совпадающим именем. Исключает import-узлы, применяет
  * языковую фильтрацию, проверку лексической достижимости и порог неоднозначности.
  */
-export function matchReference(
+export function matchByExactName(
   ref: IUnresolvedReference,
   context: IResolutionContext
 ): IResolvedRef | null {
@@ -252,6 +243,113 @@ export function matchReference(
       provenance: 'exact-match',
     };
   }
+  return null;
+}
+
+// =============================================================================
+// matchReference — мастер-диспетчер
+// =============================================================================
+
+/** Декораторы ARKUI для атрибутов UI в ArkTS. */
+const ARKUI_ATTRIBUTE_DECORATORS = new Set([
+  'Builder', 'build', 'customStyle', 'prop', 'watch',
+]);
+
+/**
+ * Мастер-диспетчер разрешения ссылок.
+ *
+ * Вызывает все стратегии в порядке убывания уверенности:
+ * function_ref → ArkTS → Erlang → file path → qualified name →
+ * C++ chain → scoped chain → dotted chain → method call → exact → fuzzy.
+ */
+export function matchReference(
+  ref: IUnresolvedReference,
+  context: IResolutionContext
+): IResolvedRef | null {
+  // Function-as-value — только через dedicated matcher
+  if (ref.referenceKind === 'function_ref') {
+    const fnResult = matchFunctionRef(ref, context);
+    if (fnResult) return fnResult;
+    // Фолбэк: если function_ref не найден, пробуем остальные стратегии
+  }
+
+  // ArkTS цепочки UI-атрибутов
+  if (ref.language === 'arkts' && ref.referenceName.startsWith('.')) {
+    const base = ref.referenceName.slice(1);
+    const candidates = context
+      .getNodesByName(base)
+      .filter(
+        (n) =>
+          n.language === 'arkts' &&
+          n.kind === 'function' &&
+          (n.decorators ?? []).some((d: string) => ARKUI_ATTRIBUTE_DECORATORS.has(d))
+      );
+    const chosen =
+      candidates.length > 1 ? preferCallSiteFile(candidates, ref.filePath ?? '') : candidates;
+    if (chosen.length !== 1) return null;
+    return {
+      original: ref,
+      targetNodeId: chosen[0]!.id,
+      confidence: 0.85,
+      provenance: 'exact-match',
+    };
+  }
+
+  // Erlang behaviour / .app ссылки
+  if (
+    (ref.language as string) === 'erlang' &&
+    (ref.referenceKind === 'implements' || /\.app(?:\.src)?$/i.test(ref.filePath ?? ''))
+  ) {
+    const modules = context
+      .getNodesByName(ref.referenceName)
+      .filter((n) => (n.language as string) === 'erlang' && n.kind === 'namespace');
+    const chosen = preferCallSiteFile(modules, ref.filePath ?? '')[0];
+    if (!chosen) return null;
+    return {
+      original: ref,
+      targetNodeId: chosen.id,
+      confidence: 0.9,
+      provenance: 'exact-match',
+    };
+  }
+
+  // Стратегии в порядке уверенности
+  const fp = matchByFilePath(ref, context);
+  if (fp) return fp;
+
+  const qn = matchByQualifiedName(ref, context);
+  if (qn) return qn;
+
+  // C++ chained call
+  if (ref.language === 'cpp' || ref.language === 'c') {
+    const cpp = matchCppCallChain(ref, context);
+    if (cpp) return cpp;
+  }
+
+  // Scoped factory chain (PHP, Rust) — цепочки через ::
+  if (ref.language === 'php' || ref.language === 'rust') {
+    const scoped = matchScopedCallChain(ref, context);
+    if (scoped) return scoped;
+  }
+
+  // Dotted factory chain — цепочки через .
+  if (CHAIN_LANGUAGES.has(ref.language ?? '') || CONSTRUCTS_VIA_BARE_CALL.has(ref.language ?? '')) {
+    const dotted = matchDottedCallChain(ref, context);
+    if (dotted) return dotted;
+  }
+
+  // Вызов метода
+  const mc = matchMethodCall(ref, context);
+  if (mc) return mc;
+
+  // Точное имя
+  const exact = matchByExactName(ref, context);
+  if (exact) return exact;
+
+  // Нечёткое совпадение
+  const fuzzy = matchFuzzy(ref, context);
+  if (fuzzy) return fuzzy;
+
   return null;
 }
 
@@ -313,26 +411,76 @@ export function matchFunctionRef(
 
   if (ref.referenceName.startsWith('this.')) return null;
 
-  const name = ref.referenceName;
-  const bareFnOnly = ['typescript', 'javascript', 'tsx', 'jsx', 'python', 'cpp', 'php'].includes(ref.language ?? '');
+  // :: qualified member pointers (C++ &Widget::on_click)
+  if (ref.referenceName.includes('::')) {
+    const memberName = ref.referenceName.slice(ref.referenceName.lastIndexOf('::') + 2);
+    const scoped = context
+      .getNodesByName(memberName)
+      .filter(
+        (n) =>
+          (n.kind === 'function' || n.kind === 'method') &&
+          sameLanguageFamily(n.language, ref.language ?? '') &&
+          n.id !== ref.fromNodeId &&
+          (n.qualifiedName === ref.referenceName ||
+            n.qualifiedName.endsWith(`::${ref.referenceName}`))
+      );
+    if (scoped.length === 0) return null;
+    const sameFileScoped = scoped.filter((n) => n.filePath === ref.filePath);
+    const pool = sameFileScoped.length > 0 ? sameFileScoped : scoped;
+    if (sameFileScoped.length === 0 && scoped.length > 1) return null;
+    const target = pool.reduce((a, b) => (a.startLine <= b.startLine ? a : b));
+    return {
+      original: ref,
+      targetNodeId: target.id,
+      confidence: 0.9,
+      provenance: 'function-ref',
+    };
+  }
 
-  const exactMatches = context.getNodesByName(name)
+  const name = ref.referenceName;
+  const bareFnOnly = ['typescript', 'javascript', 'tsx', 'jsx', 'python', 'cpp', 'php', 'arkts'].includes(ref.language ?? '');
+
+  let candidates = context.getNodesByName(name)
     .filter((n) =>
       (n.kind === 'function' || (!bareFnOnly && n.kind === 'method')) &&
       sameLanguageFamily(n.language, ref.language ?? '') &&
       n.id !== ref.fromNodeId
     );
 
-  if (exactMatches.length === 0) return null;
+  if (candidates.length === 0) return null;
+
+  // Swift implicit-self scoping — фильтрация по области видимости
+  if (ref.language === 'swift' && candidates.some((n) => n.kind === 'method')) {
+    const fromNode = context.getNodeById?.(ref.fromNodeId);
+    const sep = fromNode ? fromNode.qualifiedName.lastIndexOf('::') : -1;
+    const classPrefix = fromNode && sep > 0 ? fromNode.qualifiedName.slice(0, sep) : null;
+    candidates = candidates.filter((n) => {
+      if (n.kind !== 'method') return true;
+      if (!classPrefix) return false;
+      const mSep = n.qualifiedName.lastIndexOf('::');
+      if (mSep <= 0) return false;
+      const methodPrefix = n.qualifiedName.slice(0, mSep);
+      return (
+        methodPrefix === classPrefix ||
+        methodPrefix.endsWith(`::${classPrefix}`) ||
+        classPrefix.endsWith(`::${methodPrefix}`)
+      );
+    });
+    if (candidates.length === 0) return null;
+  }
 
   // Предпочитаем тот же файл
-  const sameFile = exactMatches.filter((n) => n.filePath === ref.filePath);
+  const sameFile = candidates.filter((n) => n.filePath === ref.filePath);
   if (sameFile.length > 0) {
+    // Swift неоднозначность методов в том же файле
+    if (ref.language === 'swift' && sameFile.length > 1 && sameFile.every((n) => n.kind === 'method')) {
+      return null;
+    }
     const target = sameFile.reduce((a, b) => (a.startLine <= b.startLine ? a : b));
     return { original: ref, targetNodeId: target.id, confidence: sameFile.length === 1 ? 0.95 : 0.9, provenance: 'function-ref' };
   }
-  if (exactMatches.length === 1) {
-    return { original: ref, targetNodeId: exactMatches[0]!.id, confidence: 0.8, provenance: 'function-ref' };
+  if (candidates.length === 1) {
+    return { original: ref, targetNodeId: candidates[0]!.id, confidence: 0.8, provenance: 'function-ref' };
   }
 
   return null;
@@ -367,8 +515,32 @@ export function matchDottedCallChain(
     const factoryMethod = factoryName.slice(lastDot + 1);
     const ret = lookupCalleeReturnType(`${factoryClass}::${factoryMethod}`, ref, context);
     if (ret) {
-      const resolved = resolveMethodOnType(ret, methodName!, ref, context, 0.85, 'instance-method');
+      const importedFqn = (ref.language === 'java' || ref.language === 'kotlin')
+        ? importedFqnOf(ret, ref, context)
+        : undefined;
+      const resolved = resolveMethodOnType(ret, methodName!, ref, context, 0.85, 'instance-method', importedFqn);
       if (resolved) return resolved;
+      // ObjC: factory returns instancetype → class itself
+      if (ref.language === 'objc' || ref.language === 'pascal') {
+        const resolved2 = resolveMethodOnType(factoryClass ?? ret, methodName!, ref, context, 0.8, 'instance-method');
+        if (resolved2) return resolved2;
+      }
+    }
+  } else {
+    // Go bare factory: New().Method() — фабрика без точки
+    if (ref.language === 'go') {
+      const ret = lookupCalleeReturnType(factoryName, ref, context);
+      if (ret) {
+        const importedFqn = importedFqnOf(ret, ref, context);
+        const gres = resolveMethodOnType(ret, methodName!, ref, context, 0.85, 'instance-method', importedFqn);
+        if (gres) return gres;
+      }
+    }
+    // Constructor receiver — языки с вызовом конструктора без new
+    if (CONSTRUCTS_VIA_BARE_CALL.has(ref.language ?? '') && /^[A-Z]/.test(factoryName)) {
+      const importedFqn = importedFqnOf(factoryName, ref, context);
+      const cres = resolveMethodOnType(factoryName, methodName!, ref, context, 0.85, 'instance-method', importedFqn);
+      if (cres) return cres;
     }
   }
 
@@ -403,9 +575,17 @@ export function matchDottedCallChain(
  * Ищет return type callee-функции для factory chain.
  */
 function lookupCalleeReturnType(callee: string, ref: IUnresolvedReference, context: IResolutionContext): string | null {
-  const candidates = context.getNodesByName(callee.split('.').pop() ?? callee).filter(
+  const name = callee.includes('::') ? callee.slice(callee.lastIndexOf('::') + 2) : callee.split('.').pop() ?? callee;
+  const candidates = context.getNodesByName(name).filter(
     (n) => (n.kind === 'method' || n.kind === 'function') && n.language === ref.language && !!n.returnType
   );
+  if (callee.includes('::')) {
+    const scoped = candidates.filter((n) => {
+      const qn = n.qualifiedName;
+      return qn === callee || qn.endsWith(`::${callee}`);
+    });
+    if (scoped.length > 0) return scoped[0]?.returnType ?? null;
+  }
   return candidates[0]?.returnType ?? null;
 }
 
@@ -416,12 +596,67 @@ function lookupCalleeReturnType(callee: string, ref: IUnresolvedReference, conte
 /** Форма цепного вызова C++: TypeName::method().method2() */
 const CPP_CHAIN_SHAPE = /^([A-Za-z_]\w*)::(\w+)\(\)(?:\.(\w+))?$/;
 
+/** Извлекает последний сегмент C++ имени через ::. */
+function cppLastSegment(name: string): string {
+  const idx = name.lastIndexOf('::');
+  return idx >= 0 ? name.slice(idx + 2) : name;
+}
+
+/** Проверяет существование C++ класса/структуры по имени. */
+function cppClassExists(name: string, ref: IUnresolvedReference, context: IResolutionContext): boolean {
+  const candidates = context.getNodesByName(name);
+  return candidates.some((n) => (n.kind === 'class' || n.kind === 'struct') && n.language === ref.language);
+}
+
 /**
- * Сопоставление цепных вызовов C++: TypeName::method().method2().
+ * Разрешает тип результата C++ вызова: make_unique<T>(), recv.method(), Class::method(), func(), Type(), ns::Type().
+ */
+function resolveCppCallResultType(
+  inner: string,
+  ref: IUnresolvedReference,
+  context: IResolutionContext,
+  depth: number = 0,
+): string | null {
+  if (depth > 4) return null;
+
+  // make_unique<T>() / make_shared<T>() → T
+  const mkMatch = inner.match(/make_(unique|shared)\s*<\s*([A-Za-z_]\w*(?:\s*<[^>]*>)?)\s*>\s*\(\)/);
+  if (mkMatch) {
+    return normalizeCppTypeName(mkMatch[2]) ?? null;
+  }
+
+  // recv.method() — ищет тип recv, затем return type метода
+  const dotCallMatch = inner.match(/^(.+)\.(\w+)$/);
+  if (dotCallMatch) {
+    const recv = dotCallMatch[1]!;
+    const method = dotCallMatch[2]!;
+    const ret = lookupCalleeReturnType(`${recv}::${method}`, ref, context);
+    if (ret) return ret;
+  }
+
+  // Class::method() / func() — return type callee
+  if (inner.includes('::')) {
+    const ret = lookupCalleeReturnType(inner, ref, context);
+    if (ret) return ret;
+  } else {
+    const ret = lookupCalleeReturnType(inner, ref, context);
+    if (ret) return ret;
+  }
+
+  // Прямая конструкция Type() / ns::Type()
+  const bareName = cppLastSegment(inner.replace(/\(\)$/, ''));
+  if (bareName && cppClassExists(bareName, ref, context)) {
+    return bareName;
+  }
+
+  return null;
+}
+
+/**
+ * Сопоставление цепных вызовов C++: X().method().
  *
- * Разрешает цепочки вида Widget::instance().render():
- * 1. Ищет метод method на типе TypeName (через resolveMethodOnType).
- * 2. Если есть method2 — пытается найти его на типе результата первого метода.
+ * Использует resolveCppCallResultType для определения типа результата X,
+ * затем ищет method на этом типе.
  */
 export function matchCppCallChain(
   ref: IUnresolvedReference,
@@ -432,46 +667,24 @@ export function matchCppCallChain(
     return null;
   }
 
-  const match = ref.referenceName.match(CPP_CHAIN_SHAPE);
-  if (!match) {
-    return null;
+  const m = ref.referenceName.match(/^(.+)\(\)\.(\w+)$/);
+  if (!m || !m[1] || !m[2]) return null;
+  const inner = m[1];
+  const method = m[2];
+
+  // Сначала пробуем новый resolveCppCallResultType
+  const cls = resolveCppCallResultType(inner, ref, context);
+  if (cls) {
+    return resolveMethodOnType(cls, method, ref, context, 0.85, 'cpp-call-chain');
   }
 
-  const [, typeName, firstMethod, secondMethod] = match;
+  // Фолбэк на старую логику для TypeName::method().method2()
+  const oldMatch = ref.referenceName.match(CPP_CHAIN_SHAPE);
+  if (!oldMatch) return null;
+  const [, typeName, firstMethod] = oldMatch;
 
-  // Разрешаем первый метод на типе
-  const first = resolveMethodOnType(
-    typeName,
-    firstMethod,
-    ref,
-    context,
-    0.7,
-    'cpp-call-chain'
-  );
-  if (!first) {
-    return null;
-  }
-
-  // Если есть второй метод — ищем его на типе результата
-  if (secondMethod) {
-    const firstNode = context.getNodeById(first.targetNodeId);
-    if (firstNode?.returnType) {
-      const returnTypeName = normalizeInferredTypeName(firstNode.returnType);
-      if (returnTypeName) {
-        const second = resolveMethodOnType(
-          returnTypeName,
-          secondMethod,
-          ref,
-          context,
-          0.5,
-          'cpp-call-chain'
-        );
-        if (second) {
-          return second;
-        }
-      }
-    }
-  }
+  const first = resolveMethodOnType(typeName, firstMethod, ref, context, 0.7, 'cpp-call-chain');
+  if (!first) return null;
 
   return first;
 }
@@ -519,11 +732,22 @@ export function inferLocalReceiverType(
 
   let scanReceiver = receiverName;
   let phpProperty = false;
+  let componentScoped = false;
+
   if (lang === 'php') {
     const scoped = receiverName.match(/^this->(.+)$/);
     if (scoped) {
       scanReceiver = scoped[1]!;
       phpProperty = true;
+    }
+  }
+
+  // CFML scope prefix stripping — удаление префиксов области видимости
+  if (lang === 'cfml' || lang === 'cfscript') {
+    const scoped = receiverName.match(/^(variables|this|local|arguments)\.(.+)$/i);
+    if (scoped) {
+      scanReceiver = scoped[2]!;
+      componentScoped = scoped[1]!.toLowerCase() === 'variables' || scoped[1]!.toLowerCase() === 'this';
     }
   }
 
@@ -534,7 +758,10 @@ export function inferLocalReceiverType(
   if (patterns.length === 0) return null;
 
   // Определяем начало области видимости
-  const startIdx = Math.max(0, enclosingScopeStartLine(ref, context) - 1);
+  let startIdx = 0;
+  if (!componentScoped) {
+    startIdx = Math.max(0, enclosingScopeStartLine(ref, context) - 1);
+  }
   const callLineIndex = Math.max(0, ref.line - 1);
   for (let i = callLineIndex; i >= startIdx; i--) {
     const line = lines[i];
@@ -546,6 +773,11 @@ export function inferLocalReceiverType(
         return normalizeInferredTypeName(m[1]!);
       }
     }
+  }
+
+  // PHP second-chance: $this->prop = $var → ищем тип $var
+  if (phpProperty) {
+    return inferPhpAssignedPropertyType(escaped, lines, callLineIndex);
   }
 
   return null;
@@ -575,7 +807,51 @@ function buildPhpPropertyTypePatterns(r: string): RegExp[] {
   return memoPatterns(`php-prop|${r}`, () => [
     new RegExp(`\\b(?:(?:private|protected|public|readonly|static|final)(?:\\(set\\))?\\s+)+\\??([A-Za-z_\\\\][\\w\\\\]*)\\s+&?\\$${r}\\b`),
     new RegExp(`\\$this->${r}\\b\\s*=\\s*new\\s+([A-Za-z_\\\\][\\w\\\\]*)`),
-  ]);
+   ]);
+}
+
+/**
+ * Второй шанс для PHP: $this->prop = $var → ищем тип $var.
+ */
+function inferPhpAssignedPropertyType(
+  escapedProp: string,
+  lines: string[],
+  callIdx: number,
+): string | null {
+  const assignRe = new RegExp(`\\$this->${escapedProp}\\b\\s*=\\s*\\$(\\w+)\\b`);
+  let assignIdx = -1;
+  let varName: string | null = null;
+  for (let i = callIdx; i >= 0; i--) {
+    const line = lines[i];
+    if (!line || line.length > 10000) continue;
+    const m = line.match(assignRe);
+    if (m) { assignIdx = i; varName = m[1]!; break; }
+  }
+  if (varName === null) {
+    for (let i = callIdx + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line || line.length > 10000) continue;
+      const m = line.match(assignRe);
+      if (m) { assignIdx = i; varName = m[1]!; break; }
+    }
+  }
+  if (varName === null) return null;
+
+  const varPatterns = localReceiverTypePatternsCached('php', varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  for (let i = assignIdx; i >= 0; i--) {
+    const line = lines[i];
+    if (line && line.length <= 10000) {
+      for (const re of varPatterns) {
+        const m = line.match(re);
+        if (m && m[1]) {
+          const type = normalizeInferredTypeName(m[1]);
+          if (type) return type;
+        }
+      }
+    }
+    if (line && /\bfunction\b/.test(line)) break;
+  }
+  return null;
 }
 
 // =============================================================================
@@ -606,6 +882,42 @@ function normalizeCppTypeName(typeName: string): string | null {
 }
 
 /**
+ * Определяет тип инициализатора для `auto` переменных C++.
+ *
+ * Анализирует правую часть: auto x = Type::method() → Type, auto x = make_unique<T>() → T.
+ */
+function inferCppAutoInitializerType(
+  line: string,
+  receiverName: string,
+  ref: IUnresolvedReference,
+  context: IResolutionContext,
+  depth: number,
+): string | null {
+  if (depth > 3) return null;
+  const esc = receiverName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  // auto x = make_unique<T>(...)
+  const mkMatch = line.match(new RegExp(`\\b${esc}\\b\\s*=\\s*make_(unique|shared)\\s*<\\s*([A-Za-z_]\\w*)`));
+  if (mkMatch) return mkMatch[2] ?? null;
+
+  // auto x = Type::method(...)
+  const qnMatch = line.match(new RegExp(`\\b${esc}\\b\\s*=\\s*([A-Za-z_]\\w*(?:::[A-Za-z_]\\w*)*)::(\\w+)\\s*\\(`));
+  if (qnMatch) {
+    const ret = lookupCalleeReturnType(qnMatch[1]! + '::' + qnMatch[2]!, ref, context);
+    if (ret) return ret;
+  }
+
+  // auto x = func(...) — return type
+  const fnMatch = line.match(new RegExp(`\\b${esc}\\b\\s*=\\s*(\\w+)\\s*\\(`));
+  if (fnMatch) {
+    const ret = lookupCalleeReturnType(fnMatch[1]!, ref, context);
+    if (ret) return ret;
+  }
+
+  return null;
+}
+
+/**
  * Инференс типа получателя для C++.
  *
  * Ищет объявление переменной в файле и хедере, нормализует тип.
@@ -631,7 +943,12 @@ export function inferCppReceiverType(
     const declaratorMatch = line.match(declaratorRegex);
     if (declaratorMatch) {
       const normalized = normalizeCppTypeName(declaratorMatch[1] ?? '');
-      if (normalized) return normalized;
+      if (normalized === 'auto') {
+        const initType = inferCppAutoInitializerType(line, receiverName, ref, context, 0);
+        if (initType) return initType;
+      } else if (normalized) {
+        return normalized;
+      }
     }
   }
 
@@ -655,6 +972,76 @@ export function inferCppReceiverType(
   }
 
   return null;
+}
+
+// =============================================================================
+// inferJavaFieldReceiverType
+// =============================================================================
+
+/**
+ * Инференс типа получателя из поля класса Java/Kotlin.
+ *
+ * Для вызовов вида `field.method()` ищет объявление поля в заключающем
+ * классе и извлекает тип из сигнатуры.
+ */
+export function inferJavaFieldReceiverType(
+  receiverName: string,
+  ref: IUnresolvedReference,
+  context: IResolutionContext,
+): string | null {
+  const inFile = context.getNodesByFile(ref.filePath ?? '');
+  if (inFile.length === 0) return null;
+
+  // Ищем класс, заключающий строку вызова
+  let enclosing: INode | null = null;
+  for (const n of inFile) {
+    if (n.kind !== 'class' && n.kind !== 'interface') continue;
+    if (n.language !== ref.language) continue;
+    const end = n.endLine ?? n.startLine;
+    if (n.startLine <= ref.line && end >= ref.line) {
+      if (!enclosing || n.startLine >= enclosing.startLine) enclosing = n;
+    }
+  }
+  if (!enclosing) return null;
+
+  const enclosingEnd = enclosing.endLine ?? enclosing.startLine;
+  const field = inFile.find(
+    (n) =>
+      n.kind === 'field' &&
+      n.name === receiverName &&
+      n.language === ref.language &&
+      n.startLine >= enclosing.startLine &&
+      (n.endLine ?? n.startLine) <= enclosingEnd,
+  );
+  if (!field || !field.signature) return null;
+
+  // Signature: "<TypeName> <fieldName>"
+  const beforeName = field.signature.slice(0, field.signature.lastIndexOf(field.name));
+  const typeRaw = beforeName.trim();
+  if (!typeRaw) return null;
+
+  const typeNoGenerics = typeRaw.replace(/<[^>]*>/g, '').trim();
+  const typeNoArray = typeNoGenerics.replace(/\[\s*\]/g, '').replace(/\.\.\.$/, '').trim();
+  const parts = typeNoArray.split(/[.\s]+/).filter(Boolean);
+  const lastPart = parts[parts.length - 1];
+  if (!lastPart || !/^[A-Z]/.test(lastPart)) return null;
+  return lastPart;
+}
+
+// =============================================================================
+// importedFqnOf
+// =============================================================================
+
+/**
+ * Возвращает FQN импортированного типа по локальному имени.
+ */
+export function importedFqnOf(
+  typeName: string,
+  ref: IUnresolvedReference,
+  context: IResolutionContext,
+): string | undefined {
+  const imports = context.getImportMappings(ref.filePath ?? '');
+  return imports.find((i) => i.localName === typeName)?.source;
 }
 
 /** Кэш паттернов для инференса типа получателя. */
@@ -772,6 +1159,11 @@ function buildLocalReceiverTypePatterns(language: string, r: string): RegExp[] {
         new RegExp(`\\b${r}\\b\\s*=\\s*[Cc]reate[Oo]bject\\s*\\(\\s*["']component["']\\s*,\\s*["']([\\w.]+)["']`),
         new RegExp(`\\b${r}\\b\\s*=\\s*[Cc]reate[Oo]bject\\s*\\(\\s*["']([\\w.]+)["']\\s*\\)`),
         new RegExp(`\\b([A-Z][\\w.]*)\\s+${r}\\b\\s*[=;,)]`),
+        // cfargument и property
+        new RegExp(`\\bcfargument[^>\\n]*\\bname\\s*=\\s*["']${r}["'][^>\\n]*\\btype\\s*=\\s*["']([\\w.]+)["']`, 'i'),
+        new RegExp(`\\bcfargument[^>\\n]*\\btype\\s*=\\s*["']([\\w.]+)["'][^>\\n]*\\bname\\s*=\\s*["']${r}["']`, 'i'),
+        new RegExp(`\\b(?:cf)?property\\b[^;\\n]*\\bname\\s*=\\s*["']${r}["'][^;\\n]*\\b(?:type|inject)\\s*=\\s*["']([\\w.]+)["']`, 'i'),
+        new RegExp(`\\b(?:cf)?property\\b[^;\\n]*\\b(?:type|inject)\\s*=\\s*["']([\\w.]+)["'][^;\\n]*\\bname\\s*=\\s*["']${r}["']`, 'i'),
       ];
     default:
       return [];
@@ -852,7 +1244,8 @@ export function matchByQualifiedName(
 // =============================================================================
 
 /**
- * Сопоставление цепных вызовов через `::` (Rust): Foo::bar() → поиск Foo::bar.
+ * Сопоставление цепных вызовов через `::` (Rust, PHP):
+ * Cls::for($x)->method() и Foo::new().bar().
  */
 export function matchScopedCallChain(
   ref: IUnresolvedReference,
@@ -862,42 +1255,19 @@ export function matchScopedCallChain(
     return null;
   }
 
-  const scopedMatch = ref.referenceName.match(/^(.+)::(\w+)$/);
-  if (!scopedMatch) {
-    return null;
-  }
+  const m = ref.referenceName.match(/^(.+)\(\)\.(\w+)$/);
+  if (!m || !m[1] || !m[2]) return null;
+  const inner = m[1];
+  const method = m[2];
+  if (!inner.includes('::')) return null;
 
-  const [, typeName, methodName] = scopedMatch;
+  const factoryClass = inner.slice(0, inner.lastIndexOf('::'));
+  const ret = lookupCalleeReturnType(inner, ref, context);
+  if (!ret) return null;
 
-  // Ищем метод по qualifiedName
-  const qualifiedName = `${typeName}::${methodName}`;
-  const exactMatches = context.getNodesByQualifiedName(qualifiedName);
-  if (exactMatches.length > 0) {
-    return {
-      original: ref,
-      targetNodeId: exactMatches[0]!.id,
-      confidence: 0.85,
-      provenance: 'scoped-call-chain',
-    };
-  }
-
-  // Ищем метод в типе
-  const typeNodes = context.getNodesByName(typeName);
-  for (const typeNode of typeNodes) {
-    if (!SUPERTYPE_BEARING_KINDS.has(typeNode.kind)) continue;
-
-    const methodNode = findMethodOnType(typeNode, methodName, context);
-    if (methodNode) {
-      return {
-        original: ref,
-        targetNodeId: methodNode.id,
-        confidence: 0.7,
-        provenance: 'scoped-call-chain',
-      };
-    }
-  }
-
-  return null;
+  // self marker → factory's class
+  const resolvedClass = ret === 'self' ? factoryClass : ret;
+  return resolveMethodOnType(resolvedClass, method, ref, context, 0.85, 'instance-method');
 }
 
 // =============================================================================
@@ -942,11 +1312,22 @@ export function matchMethodCall(
 
   // Стратегия 0.5: Определяемый получатель
   if (inferableReceiver) {
-    const inferredType = lang === 'cpp' || lang === 'c'
-      ? inferCppReceiverType(objectOrClass!, ref, context)
-      : inferLocalReceiverType(objectOrClass!, ref, context);
+    let inferredType: string | null;
+    if (lang === 'cpp' || lang === 'c') {
+      inferredType = inferCppReceiverType(objectOrClass!, ref, context);
+    } else if (lang === 'java' || lang === 'kotlin') {
+      inferredType = inferLocalReceiverType(objectOrClass!, ref, context)
+        ?? inferJavaFieldReceiverType(objectOrClass!, ref, context);
+    } else {
+      inferredType = inferLocalReceiverType(objectOrClass!, ref, context);
+    }
     if (inferredType) {
-      const typedMatch = resolveMethodOnType(inferredType, methodName!, ref, context, 0.9, 'instance-method');
+      const importedFqn = (lang === 'java' || lang === 'kotlin')
+        ? importedFqnOf(inferredType, ref, context)
+        : undefined;
+      const typedMatch = resolveMethodOnType(
+        inferredType, methodName!, ref, context, 0.9, 'instance-method', importedFqn
+      );
       if (typedMatch) return typedMatch;
     }
   }
@@ -1292,4 +1673,68 @@ export function resolveMethodOnType(
     confidence,
     provenance: resolvedBy,
   };
+}
+
+// =============================================================================
+// Состояние сканирования infer и очистка мемо
+// =============================================================================
+
+/** Состояние сканирования для infer-функций (по контексту). */
+const INFER_SCAN_STATES = new WeakMap<IResolutionContext, Map<string, unknown>>();
+
+/** Получает или создаёт состояние сканирования для контекста. */
+function getInferScanStates(context: IResolutionContext): Map<string, unknown> {
+  let states = INFER_SCAN_STATES.get(context);
+  if (!states) {
+    states = new Map();
+    INFER_SCAN_STATES.set(context, states);
+  }
+  return states;
+}
+
+/**
+ * Очищает все мемо NameMatcher: паттерны и состояния сканирования.
+ */
+export function clearNameMatcherMemos(context: IResolutionContext): void {
+  PATTERN_MEMO.clear();
+  getInferScanStates(context).clear();
+}
+
+// =============================================================================
+// Профилирование NameMatcher
+// =============================================================================
+
+/** Профиль времени выполнения функций NameMatcher. */
+const NM_PROFILE = new Map<string, { count: number; totalMs: number }>();
+
+/** Замеряет время функции void. */
+function nmTimed<T>(label: string, fn: () => T): T {
+  const start = Date.now();
+  try {
+    return fn();
+  } finally {
+    const ms = Date.now() - start;
+    const entry = NM_PROFILE.get(label);
+    if (entry) {
+      entry.count++;
+      entry.totalMs += ms;
+    } else {
+      NM_PROFILE.set(label, { count: 1, totalMs: ms });
+    }
+  }
+}
+
+/** Замеряет время функции с аргументом. */
+function nmTimedT<A, T>(label: string, fn: (a: A) => T, arg: A): T {
+  return nmTimed(label, () => fn(arg));
+}
+
+/**
+ * Выгружает профиль NameMatcher в log.
+ */
+export function dumpNameMatcherProfile(label: string): void {
+  console.log(`[NameMatcher profile] ${label}:`);
+  for (const [name, { count, totalMs }] of NM_PROFILE) {
+    console.log(`  ${name}: ${count} calls, ${totalMs}ms (${(totalMs / count).toFixed(1)}ms avg)`);
+  }
 }
