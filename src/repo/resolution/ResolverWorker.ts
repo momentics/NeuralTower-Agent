@@ -17,6 +17,8 @@ import { parentPort } from 'worker_threads';
 import { createDatabase, SqliteDatabase } from '../ntgraph/Adapter';
 import { QueryBuilder } from '../ntgraph/QueryBuilder';
 import { ReferenceResolver } from './Resolver';
+import { SYNTH_PASSES } from './CallbackSynthesizer';
+import { createYielder } from '../extraction/Orchestrator';
 import type { IUnresolvedReference } from '../ntgraph/Types';
 
 if (!parentPort) {
@@ -37,6 +39,7 @@ type InMessage =
 
 let dbPath: string | null = null;
 let projectRoot: string | null = null;
+const threadId = process.pid;
 
 port.on('message', (msg: InMessage) => {
   try {
@@ -57,22 +60,28 @@ port.on('message', (msg: InMessage) => {
       case 'resolve': {
         if (!resolver) throw new Error('resolver-worker: разрешение до open');
         const out = resolver.resolveAll(msg.refs);
-        port.postMessage({
-          type: 'result',
-          id: msg.id,
-          resolved: out.resolved,
-          unresolved: out.unresolved,
-          deferredChain: [],
-          deferredThisMember: [],
-          byMethod: {},
-        });
+        port.postMessage({ type: 'result', id: msg.id, ...out });
         break;
       }
       case 'synth': {
-        if (!resolver) throw new Error('resolver-worker: синтез до open');
-        const synthStart = Date.now();
-        const synthEdges: any[] = [];
-        port.postMessage({ type: 'synth-result', id: msg.id, edges: synthEdges, ms: Date.now() - synthStart });
+        if (!resolver || !queries) throw new Error('resolver-worker: синтез до open');
+        const pass = SYNTH_PASSES.find((p) => p.name === msg.pass);
+        if (!pass) throw new Error(`resolver-worker: неизвестный pass '${msg.pass}'`);
+        const q = queries;
+        const r = resolver;
+        void (async () => {
+          const t0 = Date.now();
+          try {
+            const edges = await pass.run(q, r.getResolutionContext(), createYielder());
+            port.postMessage({ type: 'synth-result', id: msg.id, edges, ms: Date.now() - t0 });
+          } catch (err) {
+            port.postMessage({
+              type: 'error',
+              id: msg.id,
+              message: err instanceof Error ? err.message : String(err),
+            });
+          }
+        })();
         break;
       }
       case 'recycle': {
@@ -92,6 +101,11 @@ port.on('message', (msg: InMessage) => {
         break;
       }
       case 'close': {
+        try {
+          resolver?.dumpResolveProfile(`worker#${threadId}`);
+        } catch {
+          /* диагностика не блокирует shutdown */
+        }
         try {
           db?.close();
         } catch {

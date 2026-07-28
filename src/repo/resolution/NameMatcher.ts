@@ -252,7 +252,7 @@ export function matchByExactName(
 
 /** Декораторы ARKUI для атрибутов UI в ArkTS. */
 const ARKUI_ATTRIBUTE_DECORATORS = new Set([
-  'Builder', 'build', 'customStyle', 'prop', 'watch',
+  'Extend', 'Styles', 'AnimatableExtend', 'Builder',
 ]);
 
 /**
@@ -268,9 +268,7 @@ export function matchReference(
 ): IResolvedRef | null {
   // Function-as-value — только через dedicated matcher
   if (ref.referenceKind === 'function_ref') {
-    const fnResult = matchFunctionRef(ref, context);
-    if (fnResult) return fnResult;
-    // Фолбэк: если function_ref не найден, пробуем остальные стратегии
+    return matchFunctionRef(ref, context);
   }
 
   // ArkTS цепочки UI-атрибутов
@@ -544,31 +542,7 @@ export function matchDottedCallChain(
     }
   }
 
-  // Находим фабричный тип
-  const factoryNodes = context.getNodesByName(factoryName);
-  if (factoryNodes.length === 0) {
-    return null;
-  }
-
-  const factoryNode = factoryNodes.find(
-    (n) => SUPERTYPE_BEARING_KINDS.has(n.kind)
-  );
-  if (!factoryNode) {
-    return null;
-  }
-
-  // Ищем метод на супертипах фабрики
-  const methodNode = findMethodOnSupertypes(factoryNode, methodName, context);
-  if (!methodNode) {
-    return null;
-  }
-
-  return {
-    original: ref,
-    targetNodeId: methodNode.id,
-    confidence: 0.6,
-    provenance: 'dotted-call-chain',
-  };
+  return null;
 }
 
 /**
@@ -582,7 +556,7 @@ function lookupCalleeReturnType(callee: string, ref: IUnresolvedReference, conte
   if (callee.includes('::')) {
     const scoped = candidates.filter((n) => {
       const qn = n.qualifiedName;
-      return qn === callee || qn.endsWith(`::${callee}`);
+      return qn === callee || qn.endsWith(`::${callee}`) || callee.endsWith(`::${qn}`);
     });
     if (scoped.length > 0) return scoped[0]?.returnType ?? null;
   }
@@ -593,8 +567,6 @@ function lookupCalleeReturnType(callee: string, ref: IUnresolvedReference, conte
 // matchCppCallChain
 // =============================================================================
 
-/** Форма цепного вызова C++: TypeName::method().method2() */
-const CPP_CHAIN_SHAPE = /^([A-Za-z_]\w*)::(\w+)\(\)(?:\.(\w+))?$/;
 
 /** Извлекает последний сегмент C++ имени через ::. */
 function cppLastSegment(name: string): string {
@@ -625,13 +597,15 @@ function resolveCppCallResultType(
     return normalizeCppTypeName(mkMatch[2]) ?? null;
   }
 
-  // recv.method() — ищет тип recv, затем return type метода
-  const dotCallMatch = inner.match(/^(.+)\.(\w+)$/);
-  if (dotCallMatch) {
-    const recv = dotCallMatch[1]!;
-    const method = dotCallMatch[2]!;
-    const ret = lookupCalleeReturnType(`${recv}::${method}`, ref, context);
-    if (ret) return ret;
+  // recv.method() — ищет тип recv, затем return type метода (только один уровень)
+  const dotIdx = inner.lastIndexOf('.');
+  if (dotIdx > 0) {
+    const recv = inner.slice(0, dotIdx);
+    const method = inner.slice(dotIdx + 1);
+    if (!recv.includes('.') && !recv.includes('(') && !recv.includes('::')) {
+      const ret = lookupCalleeReturnType(`${recv}::${method}`, ref, context);
+      if (ret) return ret;
+    }
   }
 
   // Class::method() / func() — return type callee
@@ -678,15 +652,7 @@ export function matchCppCallChain(
     return resolveMethodOnType(cls, method, ref, context, 0.85, 'cpp-call-chain');
   }
 
-  // Фолбэк на старую логику для TypeName::method().method2()
-  const oldMatch = ref.referenceName.match(CPP_CHAIN_SHAPE);
-  if (!oldMatch) return null;
-  const [, typeName, firstMethod] = oldMatch;
-
-  const first = resolveMethodOnType(typeName, firstMethod, ref, context, 0.7, 'cpp-call-chain');
-  if (!first) return null;
-
-  return first;
+  return null;
 }
 
 // =============================================================================
@@ -739,6 +705,7 @@ export function inferLocalReceiverType(
     if (scoped) {
       scanReceiver = scoped[1]!;
       phpProperty = true;
+      componentScoped = true;
     }
   }
 
@@ -763,6 +730,23 @@ export function inferLocalReceiverType(
     startIdx = Math.max(0, enclosingScopeStartLine(ref, context) - 1);
   }
   const callLineIndex = Math.max(0, ref.line - 1);
+
+  // Попытка использовать кэш инкрементального сканирования
+  let cachedResult: string | null = null;
+  if (!componentScoped) {
+    const states = getInferScanStates(context);
+    const cacheKey = `${ref.filePath}|${startIdx}|${lang}|${scanReceiver}`;
+    const cached = states.get(cacheKey) as { ansType?: string; hi?: number } | undefined;
+    if (cached && cached.ansType) {
+      if (callLineIndex <= (cached.hi ?? 0)) {
+        return cached.ansType;
+      }
+      // Расширяем сканирование только для новых строк
+      startIdx = (cached.hi ?? callLineIndex) + 1;
+      cachedResult = cached.ansType;
+    }
+  }
+
   for (let i = callLineIndex; i >= startIdx; i--) {
     const line = lines[i];
     if (!line || line.length > 10000) continue;
@@ -770,7 +754,27 @@ export function inferLocalReceiverType(
     for (const pattern of patterns) {
       const m = line.match(pattern);
       if (m && m[1]) {
-        return normalizeInferredTypeName(m[1]!);
+        const result = normalizeInferredTypeName(m[1]!);
+        if (result && !componentScoped) {
+          const states = getInferScanStates(context);
+          const cacheKey = `${ref.filePath}|${callLineIndex}|${lang}|${scanReceiver}`;
+          states.set(cacheKey, { ansType: result, hi: callLineIndex });
+        }
+        return result;
+      }
+    }
+  }
+
+  // Forward scan для componentScoped — объявление может быть ниже
+  if (componentScoped) {
+    for (let i = callLineIndex + 1; i < lines.length; i++) {
+      const line = lines[i];
+      if (!line || line.length > 10000) continue;
+      for (const pattern of patterns) {
+        const m = line.match(pattern);
+        if (m && m[1]) {
+          return normalizeInferredTypeName(m[1]!);
+        }
       }
     }
   }
@@ -896,6 +900,14 @@ function inferCppAutoInitializerType(
   if (depth > 3) return null;
   const esc = receiverName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+  // auto x = new Type(...)
+  const newMatch = line.match(new RegExp(`\\b${esc}\\b\\s*=\\s*new\\s+([A-Za-z_][\\w:]*(?:\\s*<[^>;]*>)?)\\s*\\(`));
+  if (newMatch) return newMatch[1]!;
+
+  // auto x = new Type (без скобок)
+  const newBare = line.match(new RegExp(`\\b${esc}\\b\\s*=\\s*new\\s+([A-Za-z_][\\w:]*)\\b`));
+  if (newBare) return newBare[1]!;
+
   // auto x = make_unique<T>(...)
   const mkMatch = line.match(new RegExp(`\\b${esc}\\b\\s*=\\s*make_(unique|shared)\\s*<\\s*([A-Za-z_]\\w*)`));
   if (mkMatch) return mkMatch[2] ?? null;
@@ -912,6 +924,14 @@ function inferCppAutoInitializerType(
   if (fnMatch) {
     const ret = lookupCalleeReturnType(fnMatch[1]!, ref, context);
     if (ret) return ret;
+  }
+
+  // Fallback: захватить всю правую часть и делегировать в resolveCppCallResultType
+  const fullRhs = line.match(new RegExp(`\\b${esc}\\b\\s*=\\s*([^;]+)`));
+  if (fullRhs) {
+    const rhs = fullRhs[1]!.trim();
+    const callResult = resolveCppCallResultType(rhs.replace(/\s*\(.*/, '()'), ref, context, depth + 1);
+    if (callResult) return callResult;
   }
 
   return null;
@@ -1275,7 +1295,7 @@ export function matchScopedCallChain(
 // =============================================================================
 
 /** Языки, в которых конструктор вызывается без `new`. */
-const CONSTRUCTS_VIA_BARE_CALL = new Set(['kotlin', 'swift', 'scala', 'dart', 'pascal']);
+const CONSTRUCTS_VIA_BARE_CALL = new Set(['kotlin', 'swift', 'scala', 'dart', 'pascal', 'java']);
 
 /**
  * Сопоставление вызова метода: receiver.method().
@@ -1290,7 +1310,8 @@ export function matchMethodCall(
   const lang = ref.language ?? '';
   const name = ref.referenceName;
 
-  const dotMatch = name.match(/^([\w.]+)\.(\w+)$/);
+  const dotMatch = name.match(/^([\w.]+)\.(\w+:?(?:\w+:)*)(?:$|\.operator[^\w\s.]+)$/);
+  const cxxOpMatch = name.match(/^([\w.]+)\.(operator[^\w\s.]+)$/);
   const colonMatch = name.match(/^(\w+)::(\w+)$/);
   const luaColonMatch = (lang === 'lua' || lang === 'luau') ? name.match(/^([\w.]+):(\w+)$/) : null;
   const rDollarMatch = lang === 'r' ? name.match(/^([\w.]+)\$(\w+)$/) : null;
@@ -1304,11 +1325,11 @@ export function matchMethodCall(
     return resolveMethodOnType(inferredType, phpMethodName!, ref, context, 0.9, 'instance-method');
   }
 
-  const match = dotMatch || colonMatch || luaColonMatch || rDollarMatch;
+  const match = cxxOpMatch || dotMatch || colonMatch || luaColonMatch || rDollarMatch;
   if (!match) return null;
 
   const [, objectOrClass, methodName] = match;
-  const inferableReceiver = dotMatch || luaColonMatch || rDollarMatch;
+  const inferableReceiver = dotMatch || cxxOpMatch || luaColonMatch || rDollarMatch;
 
   // Стратегия 0.5: Определяемый получатель
   if (inferableReceiver) {
@@ -1458,7 +1479,9 @@ function matchGoFieldChainCall(
         const pkg = rawType.split('.')[0]!;
         const mod = context.getGoModule?.();
         const imp = context.getImportMappings(s.filePath).find((i) => i.localName === pkg);
-        if (!mod || !imp || (!imp.source.startsWith(mod.modulePath))) continue;
+        if (!mod || !imp) continue;
+        const isLocal = imp.source === mod.modulePath || imp.source.startsWith(mod.modulePath + '/');
+        if (!isLocal) continue;
       }
       const fieldType = rawType.split('.').pop()!;
       if (!fieldType || !/^[A-Za-z_]/.test(fieldType) || GO_BUILTIN_FIELD_TYPES.has(fieldType)) continue;
@@ -1693,10 +1716,9 @@ function getInferScanStates(context: IResolutionContext): Map<string, unknown> {
 }
 
 /**
- * Очищает все мемо NameMatcher: паттерны и состояния сканирования.
+ * Очищает состояния сканирования infer (паттерны — чистые функции, безопасны для шаринга).
  */
 export function clearNameMatcherMemos(context: IResolutionContext): void {
-  PATTERN_MEMO.clear();
   getInferScanStates(context).clear();
 }
 
@@ -1704,24 +1726,26 @@ export function clearNameMatcherMemos(context: IResolutionContext): void {
 // Профилирование NameMatcher
 // =============================================================================
 
-/** Профиль времени выполнения функций NameMatcher. */
-const NM_PROFILE = new Map<string, { count: number; totalMs: number }>();
+/** Профиль времени выполнения (активно только при CODEGRAPH_RESOLVE_PROFILE=2). */
+const NM_PROFILE: Map<string, { n: number; ns: bigint }> | null =
+  process.env.CODEGRAPH_RESOLVE_PROFILE === '2'
+    ? new Map()
+    : null;
 
-/** Замеряет время функции void. */
+/** Замеряет время функции (no-op если профилирование выключено). */
 function nmTimed<T>(label: string, fn: () => T): T {
-  const start = Date.now();
-  try {
-    return fn();
-  } finally {
-    const ms = Date.now() - start;
-    const entry = NM_PROFILE.get(label);
-    if (entry) {
-      entry.count++;
-      entry.totalMs += ms;
-    } else {
-      NM_PROFILE.set(label, { count: 1, totalMs: ms });
-    }
+  if (!NM_PROFILE) return fn();
+  const t0 = process.hrtime.bigint();
+  const r = fn();
+  const dt = process.hrtime.bigint() - t0;
+  const entry = NM_PROFILE.get(label);
+  if (entry) {
+    entry.n++;
+    entry.ns += dt;
+  } else {
+    NM_PROFILE.set(label, { n: 1, ns: dt });
   }
+  return r;
 }
 
 /** Замеряет время функции с аргументом. */
@@ -1733,8 +1757,10 @@ function nmTimedT<A, T>(label: string, fn: (a: A) => T, arg: A): T {
  * Выгружает профиль NameMatcher в log.
  */
 export function dumpNameMatcherProfile(label: string): void {
+  if (!NM_PROFILE) return;
   console.log(`[NameMatcher profile] ${label}:`);
-  for (const [name, { count, totalMs }] of NM_PROFILE) {
-    console.log(`  ${name}: ${count} calls, ${totalMs}ms (${(totalMs / count).toFixed(1)}ms avg)`);
+  for (const [name, { n, ns }] of NM_PROFILE) {
+    const ms = Number(ns) / 1e6;
+    console.log(`  ${name}: ${n} calls, ${ms.toFixed(1)}ms (${(ms / n).toFixed(3)}ms avg)`);
   }
 }

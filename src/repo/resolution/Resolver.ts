@@ -987,4 +987,18 @@ export class ReferenceResolver {
     }
     return this.workspacePackages;
   }
+
+  /**
+   * Возвращает контекст разрешения для использования в synth-проходах.
+   */
+  getResolutionContext(): IResolutionContext {
+    return this;
+  }
+
+  /**
+   * Выгружает профиль разрешения (no-op — профилирование выключено по умолчанию).
+   */
+  dumpResolveProfile(_label: string): void {
+    /* диагностика не блокирует shutdown */
+  }
 }

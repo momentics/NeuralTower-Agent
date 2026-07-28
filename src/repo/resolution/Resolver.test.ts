@@ -432,7 +432,7 @@ describe("ReferenceResolver", () => {
   describe("3-pass resolution", () => {
     it("chained calls via conformance for Java", () => {
       insertNode("foo-cls", "class", "Foo", "src/Foo.java", "java")
-      insertNode("bar-meth", "method", "bar", "src/Foo.java", "java")
+      insertNode("bar-meth", "method", "bar", "src/Foo.java", "java", 1, 10, "Foo::bar")
       insertNode("src-node", "function", "main", "src/Main.java", "java")
       insertEdge("foo-cls", "bar-meth", "contains")
 
@@ -487,7 +487,7 @@ describe("ReferenceResolver", () => {
       const ref: IUnresolvedReference = {
         fromNodeId: "src-file",
         referenceName: "MyComponent",
-        referenceKind: "function_ref",
+        referenceKind: "references",
         line: 1,
         column: 1,
         language: "razor",

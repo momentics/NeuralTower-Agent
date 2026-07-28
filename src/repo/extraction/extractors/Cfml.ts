@@ -20,8 +20,23 @@ import { ExtractorBase } from '../ExtractorBase';
 
 /** Определяет, является ли файл bare-script CFML (компонентный синтаксис). */
 function isBareScriptCfml(source: string): boolean {
-  return /^\s*(?:component|interface)\b/i.test(source.trim()) ||
-    /<cfscript>/i.test(source) === false && /\bcomponent\s*\{/i.test(source);
+  let i = 0;
+  const len = source.length;
+  while (i < len) {
+    const ch = source[i];
+    if (ch === ' ' || ch === '\t' || ch === '\n' || ch === '\r' || ch === '\uFEFF') {
+      i++;
+    } else if (ch === '/' && source[i + 1] === '/') {
+      const nl = source.indexOf('\n', i);
+      i = nl === -1 ? len : nl + 1;
+    } else if (ch === '/' && source[i + 1] === '*') {
+      const end = source.indexOf('*/', i + 2);
+      i = end === -1 ? len : end + 2;
+    } else {
+      return ch !== '<';
+    }
+  }
+  return true;
 }
 
 export class CfmlExtractor extends ExtractorBase {
@@ -162,6 +177,10 @@ export class CfmlExtractor extends ExtractorBase {
       }
       const endLine = content.substring(0, endPos).split('\n').length;
 
+      // Извлекаем returnType из сигнатуры метода
+      const methodBody = content.substring(pos, endPos);
+      const returnMatch = methodBody.match(/returnType\s*=\s*"([^"]+)"/i);
+
       // Qualified names через :: separator
       const methodNode = this.createNode(
         filePath,
@@ -171,10 +190,26 @@ export class CfmlExtractor extends ExtractorBase {
         endLine,
         0,
         0,
-        { qualifiedName: `${componentName}::${methodName}` }
+        {
+          qualifiedName: `${componentName}::${methodName}`,
+          returnType: returnMatch?.[1],
+        }
       );
       nodes.push(methodNode);
       edges.push({ source: classNode.id, target: methodNode.id, kind: EdgeKind.Contains });
+
+      // returnType — unresolved reference на тип
+      if (returnMatch?.[1]) {
+        unresolvedRefs.push({
+          fromNodeId: methodNode.id,
+          referenceName: returnMatch[1],
+          referenceKind: 'type_of',
+          line: lineNum,
+          column: 0,
+          filePath,
+          language: lang,
+        });
+      }
     }
 
     // Извлекаем свойства
@@ -197,6 +232,39 @@ export class CfmlExtractor extends ExtractorBase {
       );
       nodes.push(propertyNode);
       edges.push({ source: classNode.id, target: propertyNode.id, kind: EdgeKind.Contains });
+    }
+
+    // Извлекаем переменные с типами (script-стиль: var x: Type или property name = "x" type = "Type")
+    const varTypeRegex = /\bvar\s+(\w+)\s*:\s*([A-Za-z_][\w.]*)/g;
+    let varMatch;
+    while ((varMatch = varTypeRegex.exec(content)) !== null) {
+      const varName = varMatch[1];
+      const varType = varMatch[2];
+      const pos = varMatch.index;
+      const lineNum = content.substring(0, pos).split('\n').length;
+
+      const varNode = this.createNode(
+        filePath,
+        NodeKind.Property,
+        varName,
+        lineNum,
+        lineNum,
+        0,
+        0,
+        { qualifiedName: `${componentName}::${varName}` }
+      );
+      nodes.push(varNode);
+      edges.push({ source: classNode.id, target: varNode.id, kind: EdgeKind.Contains });
+
+      unresolvedRefs.push({
+        fromNodeId: varNode.id,
+        referenceName: varType,
+        referenceKind: 'type_of',
+        line: lineNum,
+        column: 0,
+        filePath,
+        language: lang,
+      });
     }
 
     // Извлекаем cfproperty теги

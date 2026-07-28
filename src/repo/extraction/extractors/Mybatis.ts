@@ -76,6 +76,34 @@ export class MybatisExtractor extends ExtractorBase {
     return lo + 1;
   }
 
+  /** Находит корневой элемент mapper (sqlMap или mapper) и возвращает диапазон тела. */
+  private static findMapperRoot(cleaned: string, isIbatis2: boolean): { bodyStart: number; bodyEnd: number } {
+    if (isIbatis2) {
+      const m = cleaned.match(/<sqlMap[^>]*>/i);
+      if (m) {
+        const close = cleaned.indexOf('</sqlMap', m.index! + m[0].length);
+        return { bodyStart: m.index! + m[0].length, bodyEnd: close >= 0 ? close : cleaned.length };
+      }
+    } else {
+      const m = cleaned.match(/<mapper[^>]*>/i);
+      if (m) {
+        const close = cleaned.indexOf('</mapper', m.index! + m[0].length);
+        return { bodyStart: m.index! + m[0].length, bodyEnd: close >= 0 ? close : cleaned.length };
+      }
+    }
+    return { bodyStart: 0, bodyEnd: cleaned.length };
+  }
+
+  /** Для iBatis 2 без namespace: квалифицирует имя вида "Map.statement" → "Map::statement". */
+  private static qualifyStatement(stmtId: string, namespace: string): string {
+    if (namespace) return `${namespace}::${stmtId}`;
+    if (stmtId.includes('.')) {
+      const [type, name] = stmtId.split('.');
+      return `${type}::${name}`;
+    }
+    return stmtId;
+  }
+
   public extract(
     content: string,
     filePath: string,
@@ -117,8 +145,14 @@ export class MybatisExtractor extends ExtractorBase {
     // Проверяем iBatis 2 (<sqlMap>)
     const isIbatis2 = /<sqlMap\s*[^>]*>/i.test(cleaned) && !namespace;
 
-    // Извлекаем SQL-операции: select, insert, update, delete
-    const statementRegex = /<(select|insert|update|delete)\s+id\s*=\s*"([^"]+)"([^>]*)>/g;
+    // Определяем тело mapper для ограничения области парсинга
+    const mapperRoot = MybatisExtractor.findMapperRoot(cleaned, isIbatis2);
+
+    // Извлекаем SQL-операции: select, insert, update, delete (+ statement, procedure для iBatis 2)
+    const verbs = isIbatis2
+      ? 'select|insert|update|delete|statement|procedure'
+      : 'select|insert|update|delete';
+    const statementRegex = new RegExp(`<(${verbs})\\s+id\\s*=\\s*["']([^"']+)["']([^>]*)>`, 'g');
     let stmtMatch;
     while ((stmtMatch = statementRegex.exec(cleaned)) !== null) {
       const stmtType = stmtMatch[1];
@@ -141,7 +175,7 @@ export class MybatisExtractor extends ExtractorBase {
 
       // databaseId splitting — разные方言 создают разные узлы
       const dbSuffix = databaseIdMatch ? `_${databaseIdMatch[1]}` : '';
-      const qualifiedName = namespace ? `${namespace}.${stmtId}${dbSuffix}` : `${stmtId}${dbSuffix}`;
+      const qualifiedName = MybatisExtractor.qualifyStatement(stmtId, namespace) + dbSuffix;
 
       // Создаём узел функции для SQL-операции
       const stmtNode = this.createNode(
@@ -196,13 +230,19 @@ export class MybatisExtractor extends ExtractorBase {
       }
 
       // <include refid> cross-fragment ссылки
-      const includeRegex = /<include\s+refid\s*=\s*"([^"]+)"/g;
+      const includeRegex = /<include\b[^>]*\brefid\s*=\s*(["'])([^"']+)\1/g;
       let incMatch;
       const stmtBody = closeIndex >= 0 ? cleaned.substring(pos, closeIndex) : '';
       while ((incMatch = includeRegex.exec(stmtBody)) !== null) {
+        let refid = incMatch[2];
+        if (refid.includes('.')) {
+          refid = refid.replace('.', '::');
+        } else if (namespace) {
+          refid = `${namespace}::${refid}`;
+        }
         unresolvedRefs.push({
           fromNodeId: stmtNode.id,
-          referenceName: incMatch[1],
+          referenceName: refid,
           referenceKind: 'references',
           line: lineNum,
           column: 0,
@@ -231,7 +271,7 @@ export class MybatisExtractor extends ExtractorBase {
         0,
         0,
         {
-          qualifiedName: namespace ? `${namespace}.${rmId}` : rmId,
+          qualifiedName: namespace ? `${namespace}::${rmId}` : rmId,
           metadata: { mappedType: rmType },
         }
       );
@@ -267,7 +307,7 @@ export class MybatisExtractor extends ExtractorBase {
         0,
         0,
         {
-          qualifiedName: namespace ? `${namespace}.${sqlId}` : sqlId,
+          qualifiedName: namespace ? `${namespace}::${sqlId}` : sqlId,
           metadata: { isSqlFragment: true },
         }
       );

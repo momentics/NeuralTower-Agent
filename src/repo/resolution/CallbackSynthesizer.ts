@@ -246,6 +246,21 @@ export function synthesizeCallbackEdges(
   return edges;
 }
 
+/** Проход синтеза рёбер. */
+export interface ISynthPass {
+  name: string;
+  run(queries: QueryBuilder, context: IResolutionContext, onYield: MaybeYield): Promise<IEdge[]>;
+}
+
+/** Доступные проходы синтеза. */
+export const SYNTH_PASSES: ISynthPass[] = [
+  {
+    name: 'callback',
+    run: async (queries: QueryBuilder, context: IResolutionContext, onYield: MaybeYield) =>
+      synthesizeCallbackEdges(queries, context, onYield),
+  },
+];
+
 /**
  * Синтез callback-рёбер для React-обработчиков событий.
  */
