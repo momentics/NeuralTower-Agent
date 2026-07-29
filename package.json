@@ -267,7 +267,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "glob": "^10.3.0",
+    "glob": "^13.0.6",
     "web-tree-sitter": "^0.24.5"
   },
   "devDependencies": {
