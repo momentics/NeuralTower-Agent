@@ -214,8 +214,21 @@ export class AstroExtractor extends ExtractorBase {
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[]
   ): void {
-    const parser = require('tree-sitter');
-    const tsGrammar = require('tree-sitter-typescript');
+    let parser: any;
+    let tsGrammar: any;
+    try {
+      parser = require('tree-sitter');
+      tsGrammar = require('tree-sitter-typescript');
+    } catch {
+      // tree-sitter недоступен — парсинг frontmatter пропускается
+      errors.push(this.createError(
+        'tree-sitter недоступен',
+        filePath,
+        'error',
+        'parse_error'
+      ));
+      return;
+    }
 
     const p = new parser.Parser();
     p.setLanguage(tsGrammar.TSTypeScript);

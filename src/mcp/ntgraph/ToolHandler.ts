@@ -52,9 +52,10 @@ export class ToolHandler {
       return errorResult('Не удалось определить путь к проекту');
     }
 
-    const db = this.getNtGraph(projectPath);
-
     try {
+      // getNtGraph внутри try: NotIndexedError → textResult без isError
+      const db = this.getNtGraph(projectPath);
+
       switch (toolName) {
         case 'ntgraph_search':
           return searchHandler(db, params);
@@ -88,33 +89,47 @@ export class ToolHandler {
 
   /** Получить или создать соединение с БД. */
   getNtGraph(startPath: string): NtGraphDb {
-    const cached = projectCache.get(startPath);
-    if (cached) {
-      this.freshen(startPath);
-      return cached;
-    }
-
-    const dbPath = findNtGraphRoot(startPath);
-    if (!dbPath) {
+    const ntgraphDir = findNtGraphRoot(startPath);
+    if (!ntgraphDir) {
       throw new NotIndexedError(`Индекс не найден для: ${startPath}`);
     }
 
-    const db = new NtGraphDb(dbPath);
-    projectCache.set(dbPath, db);
+    // Ключ кэша — директория .ntgraph, а не исходный startPath
+    const cached = projectCache.get(ntgraphDir);
+    if (cached) {
+      this.freshen(startPath);
+      const fresh = projectCache.get(ntgraphDir);
+      if (fresh) return fresh;
+    }
+
+    const dbFile = path.join(ntgraphDir, 'ntgraph.db');
+    if (!fs.existsSync(dbFile)) {
+      throw new NotIndexedError(`Индекс не найден для: ${startPath}`);
+    }
+
+    // Корень проекта — родитель директории .ntgraph
+    const db = new NtGraphDb(dbFile, path.dirname(ntgraphDir));
+    db.initialize();
+    projectCache.set(ntgraphDir, db);
     return db;
   }
 
   /** Проверить и обновить соединение. */
   freshen(startPath: string): void {
-    const dbPath = findNtGraphRoot(startPath);
-    if (!dbPath) return;
+    const ntgraphDir = findNtGraphRoot(startPath);
+    if (!ntgraphDir) return;
 
-    const cached = projectCache.get(dbPath);
+    const cached = projectCache.get(ntgraphDir);
     if (!cached) return;
 
-    // Проверяем, существует ли БД
-    if (!fs.existsSync(path.join(dbPath, 'ntgraph.db'))) {
-      projectCache.delete(dbPath);
+    // Проверяем, существует ли файл БД
+    if (!fs.existsSync(path.join(ntgraphDir, 'ntgraph.db'))) {
+      try {
+        cached.close();
+      } catch {
+        // Игнорируем ошибки закрытия
+      }
+      projectCache.delete(ntgraphDir);
     }
   }
 

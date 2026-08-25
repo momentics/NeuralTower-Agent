@@ -178,6 +178,7 @@ function setupDisposal(
         () => deps.sessionStore.dispose(),
         () => deps.codebaseIndexer.dispose(),
         () => deps.mcpManager.disconnect(),
+        () => { try { deps.graphDb?.close() } catch { /* уже закрыта */ } },
         () => deps.telemetry.dispose(),
         () => outputChannel.dispose(),
       ]

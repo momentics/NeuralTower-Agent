@@ -234,7 +234,8 @@ describe("MCPEngine and ToolHandler", () => {
       const handler = new ToolHandler();
       const testDir = "/test/project";
       vi.spyOn(fs, "existsSync").mockImplementation((p: string) => {
-        return p === path.join(testDir, ".ntgraph");
+        return p === path.join(testDir, ".ntgraph")
+          || p === path.join(testDir, ".ntgraph", "ntgraph.db");
       });
       vi.spyOn(fs, "statSync").mockReturnValue({
         isDirectory: () => true,

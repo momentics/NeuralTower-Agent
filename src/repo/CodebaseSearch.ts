@@ -48,6 +48,7 @@ export interface IUnifiedSearchResult {
 export interface ICodebaseSearch {
   search(query: string, config?: Partial<ISearchConfig>, signal?: AbortSignal): Promise<IUnifiedSearchResult[]>
   indexChunks(chunks: ICodeChunk[], signal?: AbortSignal): Promise<void>
+  indexVectorChunks(chunks: ICodeChunk[], signal?: AbortSignal): Promise<void>
   deleteByFile(filePath: string): Promise<void>
   clear(): Promise<void>
   compactIfNeeded(): void
@@ -417,24 +418,37 @@ export class CodebaseSearch implements ICodebaseSearch {
     // Добавить в FTS
     this.fts.add(chunks)
 
-    // Добавить в векторное хранилище (если провайдер доступен)
-    if (this.embeddingProvider) {
-      try {
-        const embeddings = await this.embeddingProvider.embed(
-          chunks.map((c) => c.content)
-        )
+    // Добавить в векторное хранилище
+    await this.indexVectorChunks(chunks, signal)
+  }
 
-        const chunkEmbeddings = chunks.map((chunk, i) => ({
-          id: chunk.id,
-          chunk,
-          embedding: embeddings[i] ?? new Array(this.embeddingProvider!.dimension()).fill(0),
-        }))
+  /**
+   * Добавить фрагменты только в векторное хранилище (для семантического поиска).
+   *
+   * Графовая БД не затрагивается — узлы уже добавлены экстрактором
+   * с корректными видами (NodeKind), и обратное преобразование через
+   * ChunkNodeKind их исказило бы.
+   */
+  async indexVectorChunks(chunks: ICodeChunk[], signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) return
+    if (!this.embeddingProvider) return
+    if (chunks.length === 0) return
 
-        await this.vectorStore.add(chunkEmbeddings)
-      } catch (err: unknown) {
-        const msg = errorMessage(err)
-        log.warn(`Эмбеддинги недоступны: ${msg}`)
-      }
+    try {
+      const embeddings = await this.embeddingProvider.embed(
+        chunks.map((c) => c.content)
+      )
+
+      const chunkEmbeddings = chunks.map((chunk, i) => ({
+        id: chunk.id,
+        chunk,
+        embedding: embeddings[i] ?? new Array(this.embeddingProvider!.dimension()).fill(0),
+      }))
+
+      await this.vectorStore.add(chunkEmbeddings)
+    } catch (err: unknown) {
+      const msg = errorMessage(err)
+      log.warn(`Эмбеддинги недоступны: ${msg}`)
     }
   }
 

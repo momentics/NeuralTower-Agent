@@ -47,6 +47,9 @@ export interface InitOptions {
   dbPath?: string;
 }
 
+/** Имя директории графовой БД проекта. */
+export const NTGRAPH_DIR_NAME = '.ntgraph';
+
 /**
  * Главный класс модуля NtGraphDb.
  *
@@ -70,9 +73,11 @@ export class NtGraphDb {
   private _mutex = new Mutex();
   private _walValve: WalCheckpointValve | null = null;
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, projectRoot?: string) {
     this._dbPath = dbPath;
-    this._projectRoot = path.dirname(dbPath);
+    // Если БД лежит в поддиректории (например, .ntgraph/), корень проекта
+    // передаётся явно; иначе — родительская директория файла БД.
+    this._projectRoot = projectRoot ?? path.dirname(dbPath);
     this._projectNameTokens = deriveProjectNameTokens(this._projectRoot);
     this._fileLock = new FileLock(dbPath);
   }
@@ -623,6 +628,34 @@ export class NtGraphDb {
   getProjectNameTokens(): string[] {
     return Array.from(this._projectNameTokens);
   }
+}
+
+/**
+ * Путь к директории графовой БД проекта (.ntgraph).
+ */
+export function getNtGraphDirPath(projectRoot: string): string {
+  return path.join(projectRoot, NTGRAPH_DIR_NAME);
+}
+
+/**
+ * Путь к файлу графовой БД проекта (.ntgraph/ntgraph.db).
+ */
+export function getNtGraphDbPath(projectRoot: string): string {
+  return path.join(projectRoot, NTGRAPH_DIR_NAME, DATABASE_FILENAME);
+}
+
+/**
+ * Открывает (или создаёт) графовую БД проекта в директории .ntgraph.
+ *
+ * Создаёт директории при необходимости, применяет PRAGMA и миграции.
+ * Корень проекта передаётся явно, чтобы он не совпадал с директорией БД.
+ */
+export function openProjectGraphDb(projectRoot: string): NtGraphDb {
+  const dir = getNtGraphDirPath(projectRoot);
+  fs.mkdirSync(dir, { recursive: true });
+  const db = new NtGraphDb(path.join(dir, DATABASE_FILENAME), projectRoot);
+  db.initialize();
+  return db;
 }
 
 // =============================================================================

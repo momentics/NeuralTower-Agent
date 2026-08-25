@@ -49,9 +49,10 @@ export interface IMCPManager {
    connect(): Promise<void>
  discover(): Promise<IMCPTool[]>
    callTool(serverName: string, toolName: string, args: Record<string, unknown>): Promise<{ output: string; success: boolean }>
-   syncWithRegistry(registry: IToolRegistry): Promise<void>
-   initNtGraphEngine(opts?: IMCPEngineOptions): void
-   syncNtGraphWithRegistry(registry: IToolRegistry): Promise<void>
+    syncWithRegistry(registry: IToolRegistry): Promise<void>
+    initNtGraphEngine(opts?: IMCPEngineOptions): void
+    getNtGraphEngine(): MCPEngine | null
+    syncNtGraphWithRegistry(registry: IToolRegistry): Promise<void>
  listServers(): IMCPServerConfig[]
    getReadyServers(): string[]
  getToolsByServer(): Array<{ server: string; tools: IMCPTool[] }>
@@ -243,6 +244,11 @@ export class MCPManager implements IMCPManager {
   /** Инициализировать встроенный движок ntgraph. */
   initNtGraphEngine(opts?: IMCPEngineOptions): void {
     this._ntgraphEngine = new MCPEngine(opts)
+  }
+
+  /** Получить встроенный движок ntgraph (null, если не инициализирован). */
+  getNtGraphEngine(): MCPEngine | null {
+    return this._ntgraphEngine
   }
 
   /** Зарегистрировать инструменты ntgraph в реестре. */

@@ -2,7 +2,6 @@ import * as vscode from "vscode"
 import type { IAppConfig, ISessionConfig } from "../core/Config"
 import type { IGitService } from "../services/git/GitService"
 import type { ICodebaseSearch } from "../repo/CodebaseSearch"
-import type { ICodebaseChunker } from "../repo/CodebaseChunker"
 import type { IFileIndex } from "../repo/FileIndex"
 import type { IBackend, IBackendConfig } from "../core/IBackend"
 import type { IAgentOrchestrator } from "../core/IAgent"
@@ -46,7 +45,8 @@ import { TodoStore } from "../agent/TodoStore"
 import { InMemoryVectorStore } from "../repo/InMemoryVectorStore"
 import { FullTextSearch } from "../repo/FullTextSearch"
 import { CodebaseSearch } from "../repo/CodebaseSearch"
-import { CodebaseChunker, createDefaultChunkerConfig } from "../repo/CodebaseChunker"
+import { NtGraphDb, openProjectGraphDb } from "../repo/ntgraph"
+import { ExtractionOrchestrator } from "../repo/extraction/Orchestrator"
 import { CodebaseIndexer } from "../services/indexing/CodebaseIndexer"
 import { IndexingStatusBar } from "../services/indexing/IndexingStatusBar"
 import { loadAppConfig } from "../core/Config"
@@ -120,6 +120,7 @@ export interface IExtensionDeps {
   codebaseIndexer: CodebaseIndexer
   indexingStatusBar: IndexingStatusBar
   telemetry: TelemetryService
+  graphDb: NtGraphDb | null
   setWorkDir: (dir: string) => void
 }
 
@@ -130,9 +131,10 @@ export interface ISearchInfrastructureDeps {
   repoAnalyzer: RepoAnalyzer
   embeddingProvider: NeuralTowerEmbeddingProvider
   vectorStore: InMemoryVectorStore
-  fts: FullTextSearch
+  fts: FullTextSearch | null
   codebaseSearch: CodebaseSearch
-  chunker: CodebaseChunker
+  graphDb: NtGraphDb | null
+  orchestrator: ExtractionOrchestrator | null
 }
 
 export interface IServicesDeps {
@@ -205,17 +207,14 @@ export function createCodebaseSearch(
   return new CodebaseSearch(vectorStore, embeddingProvider, fts)
 }
 
-export function createCodebaseChunker(fileIndex: FileIndex): CodebaseChunker {
-  return new CodebaseChunker(fileIndex, createDefaultChunkerConfig())
-}
-
 export function createCodebaseIndexer(
   fileIndex: FileIndex,
-  chunker: ICodebaseChunker,
   search: ICodebaseSearch,
   embeddingProvider: NeuralTowerEmbeddingProvider,
+  orchestrator: ExtractionOrchestrator | null,
+  graphDb: NtGraphDb | null,
 ): CodebaseIndexer {
-  return new CodebaseIndexer(fileIndex, chunker, search, embeddingProvider)
+  return new CodebaseIndexer(fileIndex, search, embeddingProvider, orchestrator, graphDb)
 }
 
 export function createIndexingStatusBar(
@@ -226,14 +225,30 @@ export function createIndexingStatusBar(
 
 // ── Домен: Инфраструктура поиска ──────────────────────────
 
-export function createSearchInfrastructure(config: IAppConfig): ISearchInfrastructureDeps {
+export function createSearchInfrastructure(
+  config: IAppConfig,
+  workspaceRoot?: string,
+): ISearchInfrastructureDeps {
   const fileIndex = new FileIndex()
   const repoAnalyzer = new RepoAnalyzer()
   const embeddingProvider = createEmbeddingProvider(config)
   const vectorStore = createVectorStore()
-  const fts = createFullTextSearch()
-  const codebaseSearch = createCodebaseSearch(vectorStore, embeddingProvider, fts)
-  const chunker = createCodebaseChunker(fileIndex)
+
+  let fts: FullTextSearch | null = null
+  let graphDb: NtGraphDb | null = null
+  let orchestrator: ExtractionOrchestrator | null = null
+  let codebaseSearch: CodebaseSearch
+
+  if (workspaceRoot) {
+    // Графовая БД в .ntgraph/ + AST-экстракция (tree-sitter)
+    graphDb = openProjectGraphDb(workspaceRoot)
+    orchestrator = new ExtractionOrchestrator(workspaceRoot, graphDb)
+    codebaseSearch = CodebaseSearch.withGraphDb(vectorStore, embeddingProvider, graphDb)
+  } else {
+    // Рабочая область не открыта — in-memory FTS как фолбэк
+    fts = createFullTextSearch()
+    codebaseSearch = createCodebaseSearch(vectorStore, embeddingProvider, fts)
+  }
 
   return {
     fileIndex,
@@ -242,7 +257,8 @@ export function createSearchInfrastructure(config: IAppConfig): ISearchInfrastru
     vectorStore,
     fts,
     codebaseSearch,
-    chunker,
+    graphDb,
+    orchestrator,
   }
 }
 
@@ -432,7 +448,8 @@ export async function createMonitoringDomain(
   contextManager: ContextManager,
   gitService: IGitService,
   fileIndex: FileIndex,
-  chunker: ICodebaseChunker,
+  orchestrator: ExtractionOrchestrator | null,
+  graphDb: NtGraphDb | null,
   codebaseSearch: ICodebaseSearch,
   embeddingProvider: NeuralTowerEmbeddingProvider,
 ): Promise<IMonitoringDepsResult> {
@@ -446,9 +463,10 @@ export async function createMonitoringDomain(
 
   const codebaseIndexer = createCodebaseIndexer(
     fileIndex,
-    chunker,
     codebaseSearch,
     embeddingProvider,
+    orchestrator,
+    graphDb,
   )
 
   const indexingStatusBar = createIndexingStatusBar(codebaseIndexer)
@@ -496,22 +514,40 @@ export async function createDeps(
   const { sessionStore, permissionManager, gitService, notificationService } =
     await createServicesDomain(ctx, vsCfg, config.session)
 
+  // ── Корень рабочей области ──────────────────────────────
+  const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+
   // ── Инфраструктура поиска ───────────────────────────────
-  const { fileIndex, repoAnalyzer, embeddingProvider, codebaseSearch, chunker } =
-    createSearchInfrastructure(config)
+  const { fileIndex, repoAnalyzer, embeddingProvider, codebaseSearch, graphDb, orchestrator } =
+    createSearchInfrastructure(config, workspaceRoot)
 
   // ── Инструменты ─────────────────────────────────────────
   const todoStore = new TodoStore()
   const { tools, mcpManager, skills } = createToolsDomain(
-    vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+    workspaceRoot,
     codebaseSearch,
     todoStore,
   )
   await syncMCP(mcpManager, tools)
 
+  // ── Движок MCP ntgraph (граф-инструменты для агента) ────
+  if (workspaceRoot) {
+    try {
+      mcpManager.initNtGraphEngine()
+      const ntgraphEngine = mcpManager.getNtGraphEngine()
+      if (ntgraphEngine) {
+        ntgraphEngine.setProjectPathHint(workspaceRoot)
+        await ntgraphEngine.ensureInitialized(workspaceRoot)
+        await mcpManager.syncNtGraphWithRegistry(tools)
+      }
+    } catch (err: unknown) {
+      log.warn(`Инициализация движка ntgraph не выполнена: ${errorMessage(err)}`)
+    }
+  }
+
   // ── Состояние рабочей директории ────────────────────────
   const workDirState = {
-    current: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? "",
+    current: workspaceRoot ?? "",
   }
 
   // ── Контекст (должен создаваться до агента) ─────────────
@@ -553,7 +589,7 @@ export async function createDeps(
   // ── Мониторинг ──────────────────────────────────────────
   const { healthMonitor, commitMessageService, autocompleteService, codebaseIndexer, indexingStatusBar, telemetry } =
     await createMonitoringDomain(
-      backend, contextManager, gitService, fileIndex, chunker, codebaseSearch, embeddingProvider,
+      backend, contextManager, gitService, fileIndex, orchestrator, graphDb, codebaseSearch, embeddingProvider,
     )
 
   // Связать монитор здоровья с чат-провайдером для ленивой инициализации
@@ -597,6 +633,7 @@ export async function createDeps(
     codebaseIndexer,
     indexingStatusBar,
     telemetry,
+    graphDb,
     setWorkDir: (dir: string) => { workDirState.current = dir },
     ...options.overrides,
   }

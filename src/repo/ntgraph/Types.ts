@@ -689,6 +689,7 @@ export const EMBEDDED_REPO_SEARCH_ENTRIES = 2000;
 
 /** Директории по умолчанию для игнорирования. */
 export const DEFAULT_IGNORE_DIRS: ReadonlySet<string> = new Set([
+  '.git', '.ntgraph',
   'node_modules', 'bower_components', 'jspm_packages', 'web_modules',
   '.yarn', '.pnpm-store',
   '.next', '.nuxt', '.svelte-kit', '.turbo', '.vite', '.parcel-cache', '.angular',

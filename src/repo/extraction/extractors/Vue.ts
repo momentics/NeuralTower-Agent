@@ -218,8 +218,21 @@ export class VueExtractor extends ExtractorBase {
     componentId: string,
     state: ExtractionState
   ): void {
-    const parser = require('tree-sitter');
-    const tsGrammar = require('tree-sitter-typescript');
+    let parser: any;
+    let tsGrammar: any;
+    try {
+      parser = require('tree-sitter');
+      tsGrammar = require('tree-sitter-typescript');
+    } catch {
+      // tree-sitter недоступен — парсинг скрипта пропускается
+      state.errors.push(this.createError(
+        'tree-sitter недоступен',
+        filePath,
+        'error',
+        'parse_error'
+      ));
+      return;
+    }
 
     const p = new parser.Parser();
     p.setLanguage(tsGrammar.TSTypeScript);
