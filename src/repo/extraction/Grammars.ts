@@ -123,7 +123,7 @@ export function getSupportedLanguages(): string[] {
  */
 export async function initGrammars(): Promise<void> {
   try {
-    const Parser = (await import('web-tree-sitter')).default;
+    const { Parser } = await import('web-tree-sitter');
     await Parser.init();
   } catch {
     // Инициализация WASM не удалась — экстракторы обработают инициализацию сами

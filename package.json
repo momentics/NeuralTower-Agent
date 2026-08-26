@@ -268,7 +268,8 @@
   },
   "dependencies": {
     "glob": "^13.0.6",
-    "web-tree-sitter": "^0.24.5"
+    "tree-sitter-wasms": "^0.1.13",
+    "web-tree-sitter": "0.25.3"
   },
   "devDependencies": {
     "@types/glob": "^8.1.0",
