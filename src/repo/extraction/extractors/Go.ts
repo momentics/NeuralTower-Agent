@@ -1,9 +1,11 @@
 /**
  * Экстрактор для Go.
  *
- * Использует tree-sitter для парсинга и извлечения узлов, рёбер и неразрешённых ссылок.
+ * Парсинг через WASM-грамматики web-tree-sitter (WasmRuntime).
+ * Извлечение узлов, рёбер и неразрешённых ссылок.
  */
 
+import { getParserForFile } from '../WasmRuntime';
 import {
   INode,
   IEdge,
@@ -38,11 +40,16 @@ export class GoExtractor extends ExtractorBase {
     const errors: IExtractionError[] = [];
 
     try {
-      const Parser = require('tree-sitter');
-      const GoGrammar = require('tree-sitter-go');
-
-      const p = new Parser();
-      p.setLanguage(GoGrammar);
+      const p = getParserForFile('go', filePath);
+      if (!p) {
+        errors.push(this.createError(
+          'WASM-грамматика go не загружена',
+          filePath,
+          'error',
+          'parse_error'
+        ));
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
+      }
 
       const tree = p.parse(content);
       if (!tree) {
@@ -105,6 +112,7 @@ export class GoExtractor extends ExtractorBase {
 
       // Post-processing: implements edges
       this.processImplementsEdges(filePath, nodes, edges, unresolvedRefs);
+      tree.delete();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(

@@ -1,9 +1,11 @@
 /**
  * Экстрактор для Kotlin.
  *
- * Использует tree-sitter-kotlin для парсинга и извлечения узлов, рёбер и неразрешённых ссылок.
+ * Парсинг через WASM-грамматики web-tree-sitter (WasmRuntime).
+ * Извлечение узлов, рёбер и неразрешённых ссылок.
  */
 
+import { getParserForFile } from '../WasmRuntime';
 import {
   INode,
   IEdge,
@@ -37,22 +39,16 @@ export class KotlinExtractor extends ExtractorBase {
     const errors: IExtractionError[] = [];
 
     try {
-      const parser = require('tree-sitter');
-      let ktGrammar: any;
-      try {
-        ktGrammar = require('tree-sitter-kotlin');
-      } catch {
+      const p = getParserForFile('kotlin', filePath);
+      if (!p) {
         errors.push(this.createError(
-          'Грамматику tree-sitter-kotlin не удалось загрузить — извлечение выполнено без AST',
+          'WASM-грамматика kotlin не загружена',
           filePath,
-          'warning',
+          'error',
           'parse_error'
         ));
         return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
-
-      const p = new parser.Parser();
-      p.setLanguage(ktGrammar);
 
       const tree = p.parse(content);
       if (!tree) {
@@ -106,6 +102,7 @@ export class KotlinExtractor extends ExtractorBase {
         unresolvedRefs,
         errors
       );
+      tree.delete();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(
@@ -117,6 +114,28 @@ export class KotlinExtractor extends ExtractorBase {
     }
 
     return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
+  }
+
+  /**
+   * Имя символа Kotlin. WASM-сборка tree-sitter-kotlin (tree-sitter-wasms)
+   * не размечает поле 'name' у узлов символов — childForFieldName('name')
+   * возвращает null. Фолбэк: первый дочерний идентификатор
+   * (type_identifier / simple_identifier); для property_declaration имя
+   * лежит во вложенном variable_declaration.
+   */
+  protected ktSymbolName(node: any): any {
+    const byField = node.childForFieldName('name');
+    if (byField) return byField;
+    let c = node.firstChild;
+    while (c) {
+      if (c.type === 'type_identifier' || c.type === 'simple_identifier') return c;
+      if (c.type === 'variable_declaration') {
+        const v = c.firstChild;
+        if (v && (v.type === 'simple_identifier' || v.type === 'type_identifier')) return v;
+      }
+      c = c.nextSibling;
+    }
+    return null;
   }
 
   /** Обрабатывает узлы AST для Kotlin. */
@@ -350,7 +369,7 @@ export class KotlinExtractor extends ExtractorBase {
     errors: IExtractionError[],
     qualifiedNamePrefix: string
   ): void {
-    const nameNode = node.childForFieldName('name');
+    const nameNode = this.ktSymbolName(node);
     if (!nameNode) return;
 
     const name = nameNode.text;
@@ -502,7 +521,7 @@ export class KotlinExtractor extends ExtractorBase {
     errors: IExtractionError[],
     qualifiedNamePrefix: string
   ): void {
-    const nameNode = node.childForFieldName('name');
+    const nameNode = this.ktSymbolName(node);
     if (!nameNode) return;
 
     const name = nameNode.text;
@@ -605,7 +624,7 @@ export class KotlinExtractor extends ExtractorBase {
     errors: IExtractionError[],
     qualifiedNamePrefix: string
   ): void {
-    const nameNode = node.childForFieldName('name');
+    const nameNode = this.ktSymbolName(node);
     if (!nameNode) return;
 
     const name = nameNode.text;
@@ -723,7 +742,7 @@ export class KotlinExtractor extends ExtractorBase {
     errors: IExtractionError[],
     qualifiedNamePrefix: string
   ): void {
-    const nameNode = node.childForFieldName('name');
+    const nameNode = this.ktSymbolName(node);
     if (!nameNode) return;
 
     const name = nameNode.text;
@@ -840,7 +859,7 @@ export class KotlinExtractor extends ExtractorBase {
     errors: IExtractionError[],
     qualifiedNamePrefix: string
   ): void {
-    const nameNode = node.childForFieldName('name');
+    const nameNode = this.ktSymbolName(node);
     if (!nameNode) return;
 
     const name = nameNode.text;
@@ -932,7 +951,7 @@ export class KotlinExtractor extends ExtractorBase {
     errors: IExtractionError[],
     qualifiedNamePrefix: string
   ): void {
-    const nameNode = node.childForFieldName('name');
+    const nameNode = this.ktSymbolName(node);
     const isCompanion = this.hasModifier(node, 'companion');
 
     const name = nameNode ? nameNode.text : (isCompanion ? 'Companion' : 'Object');
@@ -1040,7 +1059,7 @@ export class KotlinExtractor extends ExtractorBase {
     errors: IExtractionError[],
     qualifiedNamePrefix: string
   ): void {
-    const nameNode = node.childForFieldName('name');
+    const nameNode = this.ktSymbolName(node);
     if (!nameNode) return;
 
     const name = nameNode.text;
@@ -1091,7 +1110,7 @@ export class KotlinExtractor extends ExtractorBase {
     errors: IExtractionError[],
     qualifiedNamePrefix: string
   ): void {
-    const nameNode = node.childForFieldName('name');
+    const nameNode = this.ktSymbolName(node);
     if (!nameNode) return;
 
     const name = nameNode.text;
@@ -1134,7 +1153,7 @@ export class KotlinExtractor extends ExtractorBase {
     errors: IExtractionError[],
     qualifiedNamePrefix: string
   ): void {
-    const nameNode = node.childForFieldName('name');
+    const nameNode = this.ktSymbolName(node);
     if (!nameNode) return;
 
     const name = nameNode.text;
@@ -1247,7 +1266,7 @@ export class KotlinExtractor extends ExtractorBase {
     let child = node.firstChild;
     while (child) {
       if (child.type === 'function_parameter') {
-        const nameNode = child.childForFieldName('name');
+        const nameNode = this.ktSymbolName(child);
         if (nameNode) {
           const paramName = nameNode.text;
           const paramNode = this.createNode(
@@ -1299,7 +1318,7 @@ export class KotlinExtractor extends ExtractorBase {
     let child = node.firstChild;
     while (child) {
       if (child.type === 'type_parameter') {
-        const nameNode = child.childForFieldName('name');
+        const nameNode = this.ktSymbolName(child);
         if (nameNode) {
           const name = nameNode.text;
 

@@ -1,11 +1,12 @@
 /**
  * Экстрактор для Swift.
  *
- * Использует tree-sitter для парсинга и извлечения узлов, рёбер и неразрешённых ссылок.
- * Поддерживает классы, структуры, перечисления, протоколы, функции, методы, свойства
- * и связанные типы.
+ * Парсинг через WASM-грамматики web-tree-sitter (WasmRuntime).
+ * Поддержка классов, структур, перечислений, протоколов, функций, методов, свойств
+ * и связанных типов.
  */
 
+import { getParserForFile } from '../WasmRuntime';
 import {
   INode,
   IEdge,
@@ -39,27 +40,16 @@ export class SwiftExtractor extends ExtractorBase {
     const errors: IExtractionError[] = [];
 
     try {
-      const Parser = require('tree-sitter');
-      let SwiftGrammar: any;
-
-      try {
-        SwiftGrammar = require('tree-sitter-swift');
-      } catch {
-        try {
-          SwiftGrammar = require('tree-sitter-swift').Language;
-        } catch {
-          errors.push(this.createError(
-            'Не удалось загрузить грамматику tree-sitter-swift',
-            filePath,
-            'error',
-            'parse_error'
-          ));
-          return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
-        }
+      const p = getParserForFile('swift', filePath);
+      if (!p) {
+        errors.push(this.createError(
+          'WASM-грамматика swift не загружена',
+          filePath,
+          'error',
+          'parse_error'
+        ));
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
-
-      const p = new Parser();
-      p.setLanguage(SwiftGrammar);
 
       const tree = p.parse(content);
       if (!tree) {
@@ -122,6 +112,7 @@ export class SwiftExtractor extends ExtractorBase {
         unresolvedRefs,
         errors
       );
+      tree.delete();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(

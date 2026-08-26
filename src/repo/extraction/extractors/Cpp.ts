@@ -1,10 +1,12 @@
 /**
  * Экстрактор для C/C++.
  *
- * Использует tree-sitter-c и tree-sitter-cpp для парсинга и извлечения узлов, рёбер и неразрешённых ссылок.
+ * Парсинг через WASM-грамматики web-tree-sitter (WasmRuntime).
  * Для .h файлов используется двойной парсинг: сначала C, затем C++.
  */
 
+import type { Parser } from 'web-tree-sitter';
+import { getParser } from '../WasmRuntime';
 import {
   INode,
   IEdge,
@@ -41,79 +43,94 @@ export class CppExtractor extends ExtractorBase {
     const start = Date.now();
 
     try {
-      const parser = require('tree-sitter');
-      const cppGrammar = require('tree-sitter-cpp');
-      const cGrammar = require('tree-sitter-c');
-
-      const p = new parser.Parser();
-
-      // Для .h файлов используется двойной парсинг: C сначала, затем C++
+      // Для .h файлов используется двойной парсинг: C сначала, затем C++.
+      // ВАЖНО: требование «оба парсера» — только для ветки .h. В
+      // C++-проектах без .c/.h загружена только грамматика 'cpp'
+      // (grammarNamesForLanguage('cpp') → ['cpp']), и .cpp-файлы не
+      // должны падать из-за отсутствия парсера 'c' (и наоборот для .c).
       if (filePath.endsWith('.h')) {
+        const pC = getParser('c');
+        const pCpp = getParser('cpp');
+        if (!pC || !pCpp) {
+          errors.push(this.createError(
+            'WASM-грамматики c/cpp не загружены',
+            filePath,
+            'error',
+            'parse_error'
+          ));
+          return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
+        }
         const result = this.extractWithDualGrammar(
-          p, cppGrammar, cGrammar, filePath, content,
+          pC, pCpp, filePath, content,
           nodes, edges, unresolvedRefs, errors
         );
         if (result) {
-       return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
-         }
-       } else {
-        // .c — только C, остальные — C++
-        if (filePath.endsWith('.c')) {
-          p.setLanguage(cGrammar.C);
-        } else {
-          p.setLanguage(cppGrammar.CPP);
+          return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
         }
-      }
+      } else {
+        // .c — только C, остальные — C++
+        const p = filePath.endsWith('.c') ? getParser('c') : getParser('cpp');
+        if (!p) {
+          errors.push(this.createError(
+            'WASM-грамматика c/cpp не загружена',
+            filePath,
+            'error',
+            'parse_error'
+          ));
+          return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
+        }
 
-      const tree = p.parse(content);
-      if (!tree) {
-        errors.push(this.createError(
-          'Не удалось распарсить файл',
+        const tree = p.parse(content);
+        if (!tree) {
+          errors.push(this.createError(
+            'Не удалось распарсить файл',
+            filePath,
+            'error',
+            'parse_error'
+          ));
+          return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
+        }
+
+        const root = tree.rootNode;
+
+        // Корневой узел — файл
+        const fileNode = this.createNode(
           filePath,
-          'error',
-          'parse_error'
-        ));
-   return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
-       }
+          NodeKind.File,
+          filePath,
+          1,
+          content.split('\n').length,
+          0,
+          0
+        );
+        nodes.push(fileNode);
 
-      const root = tree.rootNode;
+        // Модульный узел для C/C++ файлов
+        const moduleNode = this.createNode(
+          filePath,
+          NodeKind.Module,
+          filePath,
+          1,
+          content.split('\n').length,
+          0,
+          0
+        );
+        nodes.push(moduleNode);
+        edges.push(this.createEdge(fileNode.id, moduleNode.id, EdgeKind.Contains));
 
-     // Корневой узел — файл
-      const fileNode = this.createNode(
-        filePath,
-        NodeKind.File,
-        filePath,
-        1,
-        content.split('\n').length,
-        0,
-        0
-      );
-      nodes.push(fileNode);
-
-      // Модульный узел для C/C++ файлов
-      const moduleNode = this.createNode(
-        filePath,
-        NodeKind.Module,
-        filePath,
-        1,
-        content.split('\n').length,
-        0,
-        0
-      );
-      nodes.push(moduleNode);
-      edges.push(this.createEdge(fileNode.id, moduleNode.id, EdgeKind.Contains));
-
-      this._moduleId = moduleNode.id;
-      this.processCppNodes(
-        root,
-        filePath,
-        content,
-        moduleNode.id,
-        nodes,
-        edges,
-        unresolvedRefs,
-        errors
-      );
+        this._moduleId = moduleNode.id;
+        this.processCppNodes(
+          root,
+          filePath,
+          content,
+          moduleNode.id,
+          nodes,
+          edges,
+          unresolvedRefs,
+          errors
+        );
+        tree.delete();
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(
@@ -129,9 +146,8 @@ export class CppExtractor extends ExtractorBase {
 
   /** Двойной парсинг для .h файлов: C сначала, затем C++ при большом числе ошибок. */
   protected extractWithDualGrammar(
-    p: any,
-    cppGrammar: any,
-    cGrammar: any,
+    pC: Parser,
+    pCpp: Parser,
     filePath: string,
     content: string,
     nodes: INode[],
@@ -140,8 +156,7 @@ export class CppExtractor extends ExtractorBase {
     errors: IExtractionError[]
   ): boolean {
     // Пробуем C сначала
-    p.setLanguage(cGrammar.C);
-    const cTree = p.parse(content);
+    const cTree = pC.parse(content);
 
     if (cTree) {
       const cErrorCount = this.countParseErrors(cTree.rootNode);
@@ -182,13 +197,14 @@ export class CppExtractor extends ExtractorBase {
           unresolvedRefs,
           errors
         );
+        cTree.delete();
         return true;
       }
+      cTree.delete();
     }
 
     // Откат на C++ — много ошибок в C парсинге или парсинг не удался
-    p.setLanguage(cppGrammar.CPP);
-    const cppTree = p.parse(content);
+    const cppTree = pCpp.parse(content);
 
     if (cppTree) {
       const root = cppTree.rootNode;
@@ -226,6 +242,7 @@ export class CppExtractor extends ExtractorBase {
         unresolvedRefs,
         errors
       );
+      cppTree.delete();
       return true;
     }
 
@@ -752,6 +769,34 @@ export class CppExtractor extends ExtractorBase {
     errors: IExtractionError[],
     qualifiedNamePrefix: string
   ): void {
+    // Прототип функции C: declaration > function_declarator (прямой
+    // дочерний узел, без обёртки declarators/init_declarator) —
+    // основной контент .h-файлов.
+    let direct = node.firstChild;
+    while (direct) {
+      if (direct.type === 'function_declarator') {
+        const nameNode = direct.childForFieldName('declarator');
+        if (nameNode && nameNode.type === 'identifier') {
+          const name = nameNode.text;
+          const qualifiedName = qualifiedNamePrefix ? `${qualifiedNamePrefix}::${name}` : name;
+          const funcNode = this.createNode(
+            filePath,
+            NodeKind.Function,
+            name,
+            direct.startPosition.row + 1,
+            direct.endPosition.row + 1,
+            direct.startPosition.column,
+            direct.endPosition.column,
+            { qualifiedName }
+          );
+          nodes.push(funcNode);
+          edges.push(this.createEdge(parentId, funcNode.id, EdgeKind.Contains));
+        }
+        return;
+      }
+      direct = direct.nextSibling;
+    }
+
     const declarators = node.childForFieldName('declarators');
     if (!declarators) return;
 

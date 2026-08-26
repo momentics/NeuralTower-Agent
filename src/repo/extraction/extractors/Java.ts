@@ -1,9 +1,11 @@
 /**
  * Экстрактор для Java.
  *
- * Использует tree-sitter-java для парсинга и извлечения узлов, рёбер и неразрешённых ссылок.
+ * Парсинг через WASM-грамматики web-tree-sitter (WasmRuntime).
+ * Извлечение узлов, рёбер и неразрешённых ссылок.
  */
 
+import { getParserForFile } from '../WasmRuntime';
 import {
   INode,
   IEdge,
@@ -41,11 +43,16 @@ export class JavaExtractor extends ExtractorBase {
     const errors: IExtractionError[] = [];
 
     try {
-      const parser = require('tree-sitter');
-      const javaGrammar = require('tree-sitter-java');
-
-      const p = new parser.Parser();
-      p.setLanguage(javaGrammar);
+      const p = getParserForFile('java', filePath);
+      if (!p) {
+        errors.push(this.createError(
+          'WASM-грамматика java не загружена',
+          filePath,
+          'error',
+          'parse_error'
+        ));
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
+      }
 
       const tree = p.parse(content);
       if (!tree) {
@@ -129,6 +136,7 @@ export class JavaExtractor extends ExtractorBase {
         unresolvedRefs,
         errors
       );
+      tree.delete();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(

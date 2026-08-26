@@ -1,9 +1,11 @@
 /**
  * Экстрактор для TypeScript/JavaScript.
  *
- * Использует tree-sitter для парсинга и извлечения узлов, рёбер и неразрешённых ссылок.
+ * Парсинг через WASM-грамматики web-tree-sitter (WasmRuntime).
+ * Извлечение узлов, рёбер и неразрешённых ссылок.
  */
 
+import { getParserForFile } from '../WasmRuntime';
 import {
   INode,
   IEdge,
@@ -45,14 +47,16 @@ export class TypeScriptExtractor extends ExtractorBase {
     const errors: IExtractionError[] = [];
 
     try {
-      const parser = require('tree-sitter');
-      const tsGrammar = require('tree-sitter-typescript');
-
-      const p = new parser.Parser();
-      const grammar = filePath.endsWith('.tsx')
-        ? tsGrammar.TSX
-        : tsGrammar.TSTypeScript;
-      p.setLanguage(grammar);
+      const p = getParserForFile('typescript', filePath);
+      if (!p) {
+        errors.push(this.createError(
+          'WASM-грамматика typescript не загружена',
+          filePath,
+          'error',
+          'parse_error'
+        ));
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
+      }
 
       const tree = p.parse(content);
       if (!tree) {
@@ -110,6 +114,7 @@ export class TypeScriptExtractor extends ExtractorBase {
         unresolvedRefs,
         errors
       );
+      tree.delete();
 
       // Извлечение маршрутов Next.js
       if (this.isNextjs) {
@@ -1373,14 +1378,19 @@ export class TypeScriptExtractor extends ExtractorBase {
         ));
       }
 
-      // Обработка экспортируемых объявлений
-      let child = node.firstChild;
-      while (child) {
-        if (child.type !== 'string' && child.type !== 'import_clause') {
-          this.processTsNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
-        }
-        child = child.nextSibling;
+    }
+
+    // Обработка экспортируемых объявлений — для всех видов export:
+    // export <declaration> (plain export_statement), export { ... },
+    // export * from '...'. Раньше рекурсия была только в ветке
+    // export_named_declaration, и plain export_statement
+    // (export class/function/const/...) не обрабатывался вовсе.
+    let child = node.firstChild;
+    while (child) {
+      if (child.type !== 'string' && child.type !== 'import_clause') {
+        this.processTsNodes(child, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       }
+      child = child.nextSibling;
     }
   }
 

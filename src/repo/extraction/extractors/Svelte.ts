@@ -2,9 +2,11 @@
  * Экстрактор для Svelte SFC (Single File Component).
  *
  * Разбивает файл на блоки: <script>, <template>, <style>.
- * Скрипт парсится через tree-sitter-typescript, шаблон — через регулярные выражения.
+ * Скрипт парсится через WASM-грамматики web-tree-sitter (WasmRuntime,
+ * TypeScript), шаблон — через регулярные выражения.
  */
 
+import { getParserForFile } from '../WasmRuntime';
 import {
   INode,
   IEdge,
@@ -196,11 +198,16 @@ export class SvelteExtractor extends ExtractorBase {
     errors: IExtractionError[]
   ): void {
     try {
-      const parser = require('tree-sitter');
-      const tsGrammar = require('tree-sitter-typescript');
-
-      const p = new parser.Parser();
-      p.setLanguage(tsGrammar.TSTypeScript);
+      const p = getParserForFile('typescript', filePath);
+      if (!p) {
+        errors.push(this.createError(
+          'WASM-грамматика typescript не загружена',
+          filePath,
+          'error',
+          'parse_error'
+        ));
+        return;
+      }
 
       const tree = p.parse(scriptContent);
       if (!tree) {
@@ -229,6 +236,7 @@ export class SvelteExtractor extends ExtractorBase {
         );
         child = child.nextSibling;
       }
+      tree.delete();
     } catch (err) {
       // Фолбэк: регулярные выражения для извлечения функций и методов
       this.extractScriptRegex(

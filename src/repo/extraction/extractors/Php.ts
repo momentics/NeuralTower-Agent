@@ -1,9 +1,11 @@
 /**
  * Экстрактор для PHP.
  *
- * Использует tree-sitter для парсинга и извлечения узлов, рёбер и неразрешённых ссылок.
+ * Парсинг через WASM-грамматики web-tree-sitter (WasmRuntime).
+ * Извлечение узлов, рёбер и неразрешённых ссылок.
  */
 
+import { getParserForFile } from '../WasmRuntime';
 import {
   INode,
   IEdge,
@@ -37,14 +39,15 @@ export class PhpExtractor extends ExtractorBase {
     const errors: IExtractionError[] = [];
 
     try {
-      const parser = require('tree-sitter');
-      const phpGrammar = require('tree-sitter-php');
-
-      const p = new parser.Parser();
-      if (typeof phpGrammar.default !== 'undefined') {
-        p.setLanguage(phpGrammar.default);
-      } else {
-        p.setLanguage(phpGrammar);
+      const p = getParserForFile('php', filePath);
+      if (!p) {
+        errors.push(this.createError(
+          'WASM-грамматика php не загружена',
+          filePath,
+          'error',
+          'parse_error'
+        ));
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
 
       const tree = p.parse(content);
@@ -96,6 +99,7 @@ export class PhpExtractor extends ExtractorBase {
         unresolvedRefs,
         errors
       );
+      tree.delete();
 
       const sameFileFunctionNames = new Set(
           nodes.filter(n => n.kind === NodeKind.Function || n.kind === NodeKind.Method).map(n => n.name)

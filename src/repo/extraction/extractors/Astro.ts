@@ -2,11 +2,13 @@
  * Экстрактор для Astro SFC (Single File Component).
  *
  * Разбивает файл на блоки: frontmatter (---), HTML-шаблон, <style>.
- * Frontmatter парсится через tree-sitter-typescript или regex.
+ * Frontmatter парсится через WASM-грамматики web-tree-sitter
+ * (WasmRuntime, TypeScript) или regex.
  * Шаблон разбирается через регулярные выражения для извлечения
  * компонент, обработчиков событий и клиентских директив.
  */
 
+import { getParserForFile } from '../WasmRuntime';
 import {
   INode,
   IEdge,
@@ -214,24 +216,17 @@ export class AstroExtractor extends ExtractorBase {
     unresolvedRefs: IUnresolvedReference[],
     errors: IExtractionError[]
   ): void {
-    let parser: any;
-    let tsGrammar: any;
-    try {
-      parser = require('tree-sitter');
-      tsGrammar = require('tree-sitter-typescript');
-    } catch {
-      // tree-sitter недоступен — парсинг frontmatter пропускается
+    const p = getParserForFile('typescript', filePath);
+    if (!p) {
+      // WASM-грамматика недоступна — парсинг frontmatter пропускается
       errors.push(this.createError(
-        'tree-sitter недоступен',
+        'WASM-грамматика typescript не загружена',
         filePath,
         'error',
         'parse_error'
       ));
       return;
     }
-
-    const p = new parser.Parser();
-    p.setLanguage(tsGrammar.TSTypeScript);
 
     const tree = p.parse(content);
     if (!tree) {
@@ -260,6 +255,7 @@ export class AstroExtractor extends ExtractorBase {
       unresolvedRefs,
       errors
     );
+    tree.delete();
   }
 
   /** Обрабатывает узел AST frontmatter с коррекцией номеров строк. */
@@ -649,14 +645,16 @@ export class AstroExtractor extends ExtractorBase {
           filePath
         ));
       }
+    }
 
-      let child = node.firstChild;
-      while (child) {
-        if (child.type !== 'string' && child.type !== 'import_clause') {
-          this.processFrontmatterNode(child, offsetLine, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
-        }
-        child = child.nextSibling;
+    // Обработка экспортируемых объявлений — для всех видов export
+    // (plain export_statement, export { ... }, export * from '...').
+    let child = node.firstChild;
+    while (child) {
+      if (child.type !== 'string' && child.type !== 'import_clause') {
+        this.processFrontmatterNode(child, offsetLine, filePath, content, parentId, nodes, edges, unresolvedRefs, errors);
       }
+      child = child.nextSibling;
     }
   }
 

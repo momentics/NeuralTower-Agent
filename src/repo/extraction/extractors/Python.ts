@@ -1,9 +1,11 @@
 /**
  * Экстрактор для Python.
  *
- * Использует tree-sitter-python для парсинга и извлечения узлов, рёбер и неразрешённых ссылок.
+ * Парсинг через WASM-грамматики web-tree-sitter (WasmRuntime).
+ * Извлечение узлов, рёбер и неразрешённых ссылок.
  */
 
+import { getParserForFile } from '../WasmRuntime';
 import {
   INode,
   IEdge,
@@ -39,11 +41,16 @@ export class PythonExtractor extends ExtractorBase {
     const start = Date.now();
 
     try {
-      const parser = require('tree-sitter');
-      const pyGrammar = require('tree-sitter-python');
-
-      const p = new parser.Parser();
-      p.setLanguage(pyGrammar);
+      const p = getParserForFile('python', filePath);
+      if (!p) {
+        errors.push(this.createError(
+          'WASM-грамматика python не загружена',
+          filePath,
+          'error',
+          'parse_error'
+        ));
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
+      }
 
       const tree = p.parse(content);
       if (!tree) {
@@ -95,6 +102,7 @@ export class PythonExtractor extends ExtractorBase {
         false,
         isDjango
       );
+      tree.delete();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(

@@ -2,10 +2,12 @@
  * Экстрактор для Vue SFC (Single File Component).
  *
  * Разбирает файлы .vue, разделяя их на блоки <script>, <template>, <style>.
- * Скрипт парсится через tree-sitter (TypeScript/JavaScript) или через regex-фоллбэк.
+ * Скрипт парсится через WASM-грамматики web-tree-sitter (WasmRuntime,
+ * TypeScript/JavaScript) или через regex-фоллбэк.
  * Шаблон парсится через regex для извлечения обработчиков событий и ссылок на компоненты.
  */
 
+import { getParserForFile } from '../WasmRuntime';
 import { basename, extname } from 'path';
 import {
   INode,
@@ -218,24 +220,17 @@ export class VueExtractor extends ExtractorBase {
     componentId: string,
     state: ExtractionState
   ): void {
-    let parser: any;
-    let tsGrammar: any;
-    try {
-      parser = require('tree-sitter');
-      tsGrammar = require('tree-sitter-typescript');
-    } catch {
-      // tree-sitter недоступен — парсинг скрипта пропускается
+    const p = getParserForFile('typescript', filePath);
+    if (!p) {
+      // WASM-грамматика недоступна — парсинг скрипта пропускается
       state.errors.push(this.createError(
-        'tree-sitter недоступен',
+        'WASM-грамматика typescript не загружена',
         filePath,
         'error',
         'parse_error'
       ));
       return;
     }
-
-    const p = new parser.Parser();
-    p.setLanguage(tsGrammar.TSTypeScript);
 
     const tree = p.parse(content);
     if (!tree) {
@@ -261,6 +256,7 @@ export class VueExtractor extends ExtractorBase {
       );
       child = child.nextSibling;
     }
+    tree.delete();
   }
 
   /** Обрабатывает узел скрипта из tree-sitter AST. */

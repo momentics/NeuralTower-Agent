@@ -1,9 +1,11 @@
 /**
  * Экстрактор для Ruby.
  *
- * Использует tree-sitter-ruby для парсинга и извлечения узлов, рёбер и неразрешённых ссылок.
+ * Парсинг через WASM-грамматики web-tree-sitter (WasmRuntime).
+ * Извлечение узлов, рёбер и неразрешённых ссылок.
  */
 
+import { getParserForFile } from '../WasmRuntime';
 import {
   INode,
   IEdge,
@@ -38,24 +40,16 @@ export class RubyExtractor extends ExtractorBase {
     const start = Date.now();
 
     try {
-      let Parser: any;
-      let rubyGrammar: any;
-
-      try {
-        Parser = require('tree-sitter');
-        rubyGrammar = require('tree-sitter-ruby');
-      } catch (grammarErr) {
+      const p = getParserForFile('ruby', filePath);
+      if (!p) {
         errors.push(this.createError(
-          'tree-sitter-ruby не установлен: ' + (grammarErr instanceof Error ? grammarErr.message : String(grammarErr)),
+          'WASM-грамматика ruby не загружена',
           filePath,
-          'warning',
+          'error',
           'parse_error'
         ));
         return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
       }
-
-      const p = new Parser();
-      p.setLanguage(rubyGrammar);
 
       const tree = p.parse(content);
       if (!tree) {
@@ -112,6 +106,7 @@ export class RubyExtractor extends ExtractorBase {
         false,
         isRails
       );
+      tree.delete();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(

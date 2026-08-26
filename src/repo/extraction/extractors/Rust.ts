@@ -1,9 +1,11 @@
 /**
  * Экстрактор для Rust.
  *
- * Использует tree-sitter для парсинга и извлечения узлов, рёбер и неразрешённых ссылок.
+ * Парсинг через WASM-грамматики web-tree-sitter (WasmRuntime).
+ * Извлечение узлов, рёбер и неразрешённых ссылок.
  */
 
+import { getParserForFile } from '../WasmRuntime';
 import {
   INode,
   IEdge,
@@ -38,11 +40,16 @@ public extract(
     const errors: IExtractionError[] = [];
 
     try {
-      const parser = require('tree-sitter');
-      const rustGrammar = require('tree-sitter-rust');
-
-      const p = new parser.Parser();
-      p.setLanguage(rustGrammar.language);
+      const p = getParserForFile('rust', filePath);
+      if (!p) {
+        errors.push(this.createError(
+          'WASM-грамматика rust не загружена',
+          filePath,
+          'error',
+          'parse_error'
+        ));
+        return { nodes, edges, unresolvedReferences: unresolvedRefs, errors, durationMs: Date.now() - start };
+      }
 
       const tree = p.parse(content);
       if (!tree) {
@@ -83,6 +90,7 @@ public extract(
         unresolvedRefs,
         errors
       );
+      tree.delete();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(this.createError(
