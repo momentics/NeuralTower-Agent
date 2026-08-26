@@ -22,6 +22,13 @@ const GREP_OUTPUT_TRUNCATE = 10000
  * При отсутствии rg используется рекурсивный поиск по файлам.
  */
 export class GrepTool extends FilesystemTool {
+  /**
+   * Доступность ripgrep.
+   * `undefined` — автоопределение: пробуем rg, при ошибке переходим на JS-фолбэк.
+   * `false` — принудительно использовать JS-фолбэк (используется в тестах).
+   */
+  static rgAvailable: boolean | undefined = undefined
+
   name = "grep"
   description = "Поиск содержимого файлов по регулярному выражению. Использует ripgrep, если доступно."
   category = "filesystem"
@@ -48,11 +55,13 @@ export class GrepTool extends FilesystemTool {
     const result = await this.resolvePath(root)
     if ("error" in result) return { output: result.error, success: false }
 
-    try {
-      return await this.executeRg(pattern, result.resolved, include)
-    } catch (err: unknown) {
-      const msg = errorMessage(err)
-      log.error(`ripgrep недоступен: ${msg}`)
+    if (GrepTool.rgAvailable !== false) {
+      try {
+        return await this.executeRg(pattern, result.resolved, include)
+      } catch (err: unknown) {
+        const msg = errorMessage(err)
+        log.error(`ripgrep недоступен: ${msg}`)
+      }
     }
 
     return await this.executeFallback(pattern, result.resolved, include, signal)
@@ -63,10 +72,15 @@ export class GrepTool extends FilesystemTool {
     root: string,
     include: string | undefined,
   ): Promise<IToolResult> {
-    const fileArg = include ? ["-g", include, root] : [root]
-    const { stdout, stderr, code } = await runProcess("rg", [
-      "-n", "--no-heading", "--color=never", pattern, ...fileArg,
-    ], { timeout: RG_TIMEOUT_MS, maxBuffer: RG_MAX_BUFFER })
+    const args: string[] = ["-n", "--no-heading", "--color=never"]
+    if (include) args.push("-g", include)
+    // rg сам не пропускает node_modules без .gitignore — исключаем явно,
+    // чтобы поведение совпадало с JS-фолбэком
+    args.push("-g", "!node_modules", pattern, root)
+    const { stdout, stderr, code } = await runProcess("rg", args, {
+      timeout: RG_TIMEOUT_MS,
+      maxBuffer: RG_MAX_BUFFER,
+    })
     if (code !== 0 && code !== 1 && stderr) {
       return { output: `Ошибка ripgrep: ${stderr}`, success: false }
     }
