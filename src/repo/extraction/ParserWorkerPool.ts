@@ -6,6 +6,9 @@
  */
 
 import { Worker } from 'worker_threads';
+import * as fs from 'fs';
+import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { Language, IExtractionResult } from '../ntgraph/Types';
 
 export interface ParsePoolWorker {
@@ -31,12 +34,8 @@ interface ParseWorkerPoolOptions {
   parseTimeoutMs?: number;
   createWorker?: () => ParsePoolWorker;
   log?: (msg: string) => void;
-  /**
-   * Предсчитанные байты WASM-грамматик по языкам, передаются каждому воркеру
-   * в сообщении load-grammars, чтобы при перезапуске загрузить грамматики из
-   * памяти вместо повторного чтения с диска.
-   */
-  grammarBuffers?: Record<string, Uint8Array>;
+  /** execArgv для воркеров (V8-флаги). */
+  workerExecArgv?: readonly string[];
 }
 
 interface ParseJob {
@@ -79,7 +78,7 @@ export function resolveParsePoolSize(envVal: string | undefined, cpuCount: numbe
   if (envVal !== undefined && envVal !== '') {
     const n = Number(envVal);
     if (Number.isFinite(n) && n >= 0) {
-      return Math.max(1, Math.min(Math.floor(n), MAX_PARSE_POOL_SIZE));
+      return Math.max(0, Math.min(Math.floor(n), MAX_PARSE_POOL_SIZE));
     }
   }
   return Math.max(1, Math.min(cpuCount - 1, DEFAULT_PARSE_POOL_CAP));
@@ -111,11 +110,9 @@ export class ParseWorkerPool {
   private readonly parseTimeoutMs: number;
   private readonly createWorker: () => ParsePoolWorker;
   private readonly log: (msg: string) => void;
-  private readonly grammarBuffers?: Record<string, Uint8Array>;
 
   constructor(opts: ParseWorkerPoolOptions) {
     this.languages = opts.languages;
-    this.grammarBuffers = opts.grammarBuffers;
     this.maxSize = Math.max(1, Math.min(opts.size, MAX_PARSE_POOL_SIZE));
     this.recycleInterval = opts.recycleInterval ?? DEFAULT_RECYCLE_INTERVAL;
     this.parseTimeoutMs = opts.parseTimeoutMs ?? DEFAULT_PARSE_TIMEOUT_MS;
@@ -124,7 +121,8 @@ export class ParseWorkerPool {
       this.createWorker = opts.createWorker;
     } else if (opts.workerScriptPath) {
       const scriptPath = opts.workerScriptPath;
-      this.createWorker = () => new Worker(scriptPath);
+      const execArgv = [...(opts.workerExecArgv ?? [])];
+      this.createWorker = () => new Worker(scriptPath, { execArgv });
     } else {
       throw new Error('ParseWorkerPool требует workerScriptPath или createWorker');
     }
@@ -189,9 +187,8 @@ export class ParseWorkerPool {
     });
 
     // Загрузка грамматик; воркер отвечает 'grammars-loaded', после чего становится idle.
-    // Предчитанные WASM-байты (если оркестратор предоставил их) делают это
-    // загрузкой из памяти вместо чтения с диска при каждом запуске.
-    w.postMessage({ type: 'load-grammars', languages: this.languages, grammarBuffers: this.grammarBuffers });
+    // Грамматики воркер читает с диска сам (WasmRuntime.resolveWasmDir).
+    w.postMessage({ type: 'load-grammars', languages: this.languages });
   }
 
   private onMessage(w: ParsePoolWorker, m: ParseWorkerMessage): void {
@@ -361,3 +358,31 @@ export class ParseWorkerPool {
     await Promise.all(ws.map((w) => Promise.resolve(w.terminate()).catch(() => { /* уже ушёл */ })));
   }
 }
+
+/**
+ * Путь к бандлу воркера парсинга (out/ParserWorker.js) или null,
+ * если бандл не собран (dev/тесты без build:worker).
+ */
+export function resolveParseWorkerPath(): string | null {
+  const here = typeof __dirname !== 'undefined'
+    ? __dirname
+    : path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.join(here, 'ParserWorker.js'), // бандл: out/
+    path.join(here, '..', '..', '..', 'out', 'ParserWorker.js'), // dev: src/repo/extraction → корень/out
+  ];
+  for (const c of candidates) {
+    try {
+      if (fs.statSync(c).isFile()) return c;
+    } catch {
+      // кандидата нет — пробуем следующий
+    }
+  }
+  return null;
+}
+
+/**
+ * V8-флаги воркеров парсинга: --liftoff-only исключает OOM/краш
+ * турбосhaft-компиляции больших WASM-грамматик (см. план_wasm.md §1.3).
+ */
+export const WASM_WORKER_EXEC_ARGV: readonly string[] = ['--liftoff-only'];

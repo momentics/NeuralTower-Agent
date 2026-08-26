@@ -22,17 +22,6 @@ import { InMemoryVectorStore } from "../../repo/InMemoryVectorStore";
 import { ToolHandler } from "./ToolHandler";
 import { NotIndexedError } from "./Errors";
 
-let treeSitterAvailable = false;
-try {
-  const Parser = require("tree-sitter");
-  const tsGrammar = require("tree-sitter-typescript");
-  const p = new Parser();
-  p.setLanguage(tsGrammar.TSTypeScript);
-  treeSitterAvailable = true;
-} catch {
-  // tree-sitter недоступен — реальный парсинг проверяется в другом окружении
-}
-
 const SRC_A = `import { helperB } from "./b";
 
 export class UserService {
@@ -323,13 +312,8 @@ describe("production wiring: incremental update", () => {
   it("indexFile runs the in-process extraction path", async () => {
     const result = await orchestrator.indexFile("src/a.ts");
 
-    if (treeSitterAvailable) {
-      // Реальный парсинг: узлы извлечены
-      expect(result.nodes.length).toBeGreaterThan(0);
-      expect(result.errors.filter((e) => e.code === "parse_error")).toHaveLength(0);
-    } else {
-      // Без tree-sitter: быстрый parse_error без зависаний
-      expect(result.errors.some((e) => e.code === "parse_error")).toBe(true);
-    }
+    // Реальный WASM-парсинг: узлы извлечены, без parse_error
+    expect(result.nodes.length).toBeGreaterThan(0);
+    expect(result.errors.filter((e) => e.code === "parse_error")).toHaveLength(0);
   });
 });

@@ -45,34 +45,15 @@ import {
   DEFAULT_IGNORE_PATTERNS,
 } from '../ntgraph/Types';
 import { EXTRACTION_VERSION } from './ExtractionVersion';
-import { detectLanguage, loadExtensionOverrides, isFileLevelOnlyLanguage } from './LanguageDetector';
+import { detectLanguage, loadExtensionOverrides, isFileLevelOnlyLanguage, isSourceFile } from './LanguageDetector';
 import { shouldIndexFile, isBinaryFile, isTooLarge, resolveRelativePath } from './PathValidation';
 import { detectFrameworks, getAllFrameworkResolvers } from '../resolution/Frameworks';
 import { discoverEmbeddedRepoRoots, findIgnoredEmbeddedRepos } from './EmbeddedRepos';
 import { readGitignorePatterns, matchGitignorePattern } from './Gitignore';
-import { IExtractor, ExtractorBase } from './ExtractorBase';
-import { CppExtractor } from './extractors/Cpp';
-import { TypeScriptExtractor } from './extractors/TypeScript';
-import { PythonExtractor } from './extractors/Python';
-import { GoExtractor } from './extractors/Go';
-import { RustExtractor } from './extractors/Rust';
-import { JavaExtractor } from './extractors/Java';
-import { CSharpExtractor } from './extractors/CSharp';
-import { KotlinExtractor } from './extractors/Kotlin';
-import { RazorExtractor } from './extractors/Razor';
-import { DefaultExtractor } from './extractors/Default';
-import { SwiftExtractor } from './extractors/Swift';
-import { VueExtractor } from './extractors/Vue';
-import { AstroExtractor } from './extractors/Astro';
-import { SvelteExtractor } from './extractors/Svelte';
-import { LiquidExtractor } from './extractors/Liquid';
-import { PhpExtractor } from './extractors/Php';
-import { RubyExtractor } from './extractors/Ruby';
-import { CfmlExtractor } from './extractors/Cfml';
-import { DfmExtractor } from './extractors/Dfm';
-import { MybatisExtractor } from './extractors/Mybatis';
 import { stripCommentsForRegex } from './StripComments';
-import { ParseWorkerPool, resolveParsePoolSize } from './ParserWorkerPool';
+import { ParseWorkerPool, resolveParsePoolSize, resolveParseWorkerPath, WASM_WORKER_EXEC_ARGV } from './ParserWorkerPool';
+import { getSupportedLanguages, getExtractor, extractFromSource } from './extractors/registry';
+import { loadGrammarsForLanguages } from './WasmRuntime';
 import { QueryBuilder } from '../ntgraph/QueryBuilder';
 import { GraphTraverser } from '../ntgraph/Traversal';
 import { ContextBuilder } from '../context/Builder';
@@ -95,75 +76,6 @@ export interface IIndexAndResolveResult {
   indexing: IIndexResult;
   resolution: IResolutionResult;
   durationMs: number;
-}
-
-/** Карта расширение → язык. */
-const EXT_TO_LANGUAGE: Record<string, Language> = {
-  '.ts': 'typescript',
-  '.tsx': 'typescript',
-  '.js': 'javascript',
-  '.jsx': 'javascript',
-  '.mjs': 'javascript',
-  '.cjs': 'javascript',
-  '.py': 'python',
-  '.pyi': 'python',
-  '.go': 'go',
-  '.rs': 'rust',
-  '.java': 'java',
-  '.cpp': 'cpp',
-  '.cc': 'cpp',
-  '.cxx': 'cpp',
-  '.hpp': 'cpp',
-  '.h': 'cpp',
-  '.c': 'c',
-  '.cs': 'csharp',
- '.kt': 'kotlin',
-  '.kts': 'kotlin',
-  '.swift': 'swift',
-  '.vue': 'vue',
-  '.astro': 'astro',
-  '.svelte': 'svelte',
-  '.php': 'php',
-  '.rb': 'ruby',
-  '.cfm': 'cfml',
-  '.cfc': 'cfml',
-  '.dfm': 'pascal',
-};
-
-/** Определяет язык по расширению файла. */
-function extToLanguage(filePath: string): Language {
-  const ext = path.extname(filePath).toLowerCase();
-  return EXT_TO_LANGUAGE[ext] ?? 'unknown';
-}
-
-/** Карта язык → экстрактор. */
-const EXTRACTOR_MAP = new Map<string, IExtractor>();
-
-/** Инициализирует карту экстракторов (ленивая инициализация). */
-function ensureExtractors(): void {
-  if (EXTRACTOR_MAP.size === 0) {
-    EXTRACTOR_MAP.set('typescript', new TypeScriptExtractor());
-    EXTRACTOR_MAP.set('python', new PythonExtractor());
-    EXTRACTOR_MAP.set('cpp', new CppExtractor());
-    EXTRACTOR_MAP.set('c', new CppExtractor());
-    EXTRACTOR_MAP.set('go', new GoExtractor());
-    EXTRACTOR_MAP.set('rust', new RustExtractor());
-    EXTRACTOR_MAP.set('java', new JavaExtractor());
-    EXTRACTOR_MAP.set('csharp', new CSharpExtractor());
-    EXTRACTOR_MAP.set('razor', new RazorExtractor());
-    EXTRACTOR_MAP.set('swift', new SwiftExtractor());
-    EXTRACTOR_MAP.set('kotlin', new KotlinExtractor());
-     EXTRACTOR_MAP.set('vue', new VueExtractor());
-     EXTRACTOR_MAP.set('liquid', new LiquidExtractor());
-     EXTRACTOR_MAP.set('astro', new AstroExtractor());
-       EXTRACTOR_MAP.set('php', new PhpExtractor());
-       EXTRACTOR_MAP.set('ruby', new RubyExtractor());
-       EXTRACTOR_MAP.set('cfml', new CfmlExtractor());
-       EXTRACTOR_MAP.set('cfscript', new CfmlExtractor());
-       EXTRACTOR_MAP.set('pascal', new DfmExtractor());
-       EXTRACTOR_MAP.set('xml', new MybatisExtractor());
-       EXTRACTOR_MAP.set('unknown', new DefaultExtractor());
-  }
 }
 
 /** Вычисляет SHA-256 хеш содержимого файла. */
@@ -204,30 +116,11 @@ function checkAbort(signal?: AbortSignal): void {
 }
 
 /**
- * Проверяет, является ли язык поддерживаемым для индексации.
+ * Проверяет, является ли язык поддерживаемым для индексации
+ * (есть ли для него экстрактор в реестре).
  */
 function isLanguageSupported(language: string): boolean {
-  return language !== 'unknown';
-}
-
-/**
- * Проверяет, является ли файл исходным по расширению.
- */
-function isSourceFile(filePath: string): boolean {
-  const ext = path.extname(filePath).toLowerCase();
-  const supported = new Set([
-    '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
-    '.py', '.pyi',
-    '.go', '.rs', '.java',
-    '.cpp', '.cc', '.cxx', '.hpp', '.h',
-    '.c', '.cs',
-    '.kt', '.kts',
-    '.vue',
-    '.liquid',
-    '.php',
-    '.rb',
-  ]);
-  return supported.has(ext);
+  return getSupportedLanguages().includes(language);
 }
 
 /**
@@ -560,9 +453,6 @@ export class ExtractionOrchestrator {
 
       onProgress?.({ phase: 'parsing', current: 0, total, file: '', durationMs: 0 });
 
-      // Инициализация экстракторов
-      ensureExtractors();
-
       // Создание yielder с бюджетом
       const yielder = createYielder();
 
@@ -578,22 +468,32 @@ export class ExtractionOrchestrator {
         }
       }
 
-      // Создаём пул воркеров для мульти-поточного парсинга
-      try {
-        require.resolve('worker_threads');
+      // Создаём пул воркеров для мульти-поточного парсинга — только если
+      // собран бандл воркера (out/ParserWorker.js после compile/build:worker).
+      const workerScriptPath = resolveParseWorkerPath();
+      if (workerScriptPath) {
         const poolSize = resolveParsePoolSize(process.env.CODEGRAPH_PARSE_WORKERS, os.cpus().length);
         if (poolSize > 0) {
-          const workerScriptPath = require.resolve('./ParserWorker.script.js');
           parsePool = new ParseWorkerPool({
             languages: [...neededLanguages] as Language[],
             size: poolSize,
             workerScriptPath,
+            workerExecArgv: WASM_WORKER_EXEC_ARGV,
             log: verbose ? (msg: string) => console.log(`[pool] ${msg}`) : undefined,
           });
+          // Массовая индексация знает, что понадобятся все ядра:
+          // предзапускаем весь пул, чтобы холодный старт воркеров
+          // (загрузка WASM-грамматик) не съедал фазу парсинга
+          // (см. JSDoc prewarm() в ParserWorkerPool.ts).
+          parsePool.prewarm();
           usePool = true;
         }
-      } catch {
-        // worker_threads не доступны — используем синхронный режим
+      }
+
+      // In-process режим: грамматики загружаются в основном потоке.
+      // (В режиме пула грамматики грузят сами воркеры — см. ParserWorkerEntry.)
+      if (!usePool) {
+        await loadGrammarsForLanguages([...neededLanguages]);
       }
 
       // Обработка батчами для параллельного чтения файлов
@@ -860,15 +760,6 @@ await this.storeExtractionResult(fileRecord, result);
       // Git-путь: быстрое обнаружение изменений
       const { modified, added, removed } = gitChanges;
 
-      // Собираем уникальный набор языков из файлов, которые будут обработаны
-      const neededLanguages = new Set<string>();
-      for (const filePath of [...modified, ...added]) {
-        const lang = detectLanguage(filePath);
-        if (lang !== 'unknown' && isLanguageSupported(lang)) {
-          neededLanguages.add(lang);
-        }
-      }
-
       // Удалённые файлы — удаляем из БД
       for (const filePath of removed) {
         checkAbort(signal);
@@ -926,16 +817,7 @@ await this.storeExtractionResult(fileRecord, result);
       const currentFiles = await scanDirectory(this.rootDir, { onProgress, signal });
       filesChecked = currentFiles.length;
 
-      // Собираем уникальный набор языков из файлов
-      const neededLanguages = new Set<string>();
-      for (const filePath of currentFiles) {
-        const lang = detectLanguage(filePath);
-        if (lang !== 'unknown' && isLanguageSupported(lang)) {
-          neededLanguages.add(lang);
-        }
-      }
-
-       const currentSet = new Set(currentFiles);
+      const currentSet = new Set(currentFiles);
 
       const trackedFiles = this.db.getAllFiles();
       const trackedMap = new Map<string, IFileRecord>();
@@ -1717,13 +1599,19 @@ await this.storeExtractionResult(fileRecord, result);
     this._detectedFrameworks = null;
     const frameworkNames = this.ensureDetectedFrameworks(filePaths);
 
+    // In-process режим: загрузка грамматик для языков списка файлов
+    const neededLangs = new Set<string>();
+    for (const fp of filePaths) {
+      const lang = detectLanguage(fp);
+      if (isLanguageSupported(lang) && !isFileLevelOnlyLanguage(lang)) neededLangs.add(lang);
+    }
+    await loadGrammarsForLanguages([...neededLangs]);
+
     // Уровень 2: сборка списка файлов, которые не удалось распарсить
     const failedFiles: { filePath: string; content: string; language: string; stats: fs.Stats }[] = [];
 
     const total = filePaths.length;
     let processed = 0;
-
-    ensureExtractors();
 
     for (let i = 0; i < filePaths.length; i += FILE_IO_BATCH_SIZE) {
       const batch = filePaths.slice(i, i + FILE_IO_BATCH_SIZE);
@@ -1841,9 +1729,9 @@ await this.storeExtractionResult(fileRecord, result);
     for (const { filePath, content, language, stats } of failedFiles) {
       // Фолбэк: пробовать каждый доступный экстрактор
       let fallbackResult: IExtractionResult | null = null;
-      for (const [lang, extractor] of EXTRACTOR_MAP) {
+      for (const lang of [...getSupportedLanguages(), 'default']) {
         try {
-          fallbackResult = extractor.extract(content, filePath, frameworkNames);
+          fallbackResult = getExtractor(lang).extract(content, filePath, frameworkNames);
           if (fallbackResult.nodes.length > 0) {
             break;
           }
@@ -1975,7 +1863,7 @@ await this.storeExtractionResult(fileRecord, result);
       };
     }
 
-    ensureExtractors();
+    await loadGrammarsForLanguages([language]);
 
     const frameworkNames = this._detectedFrameworks ?? undefined;
 
@@ -2275,39 +2163,20 @@ await this.storeExtractionResult(fileRecord, result);
      return line;
    }
 
+   /**
+    * Извлекает AST из файла через соответствующий экстрактор (реестр).
+    */
    private extractFile(
-    filePath: string,
-    content: string,
-    language: string,
-    frameworkNames?: string[],
-  ): IExtractionResult {
-    ensureExtractors();
-
-    const extractor = EXTRACTOR_MAP.get(language);
-
-    if (!extractor) {
-      return {
-        nodes: [],
-        edges: [],
-        unresolvedReferences: [],
-        errors: [
-          {
-            message: `Экстрактор для языка ${language} не найден`,
-            filePath,
-            severity: 'warning',
-            code: 'parse_error',
-          },
-        ],
-        durationMs: 0,
-      };
-    }
-
-    const start = Date.now();
-    const result = extractor.extract(content, filePath, frameworkNames);
-    result.durationMs = Date.now() - start;
-
-    return result;
-  }
+     filePath: string,
+     content: string,
+     language: string,
+     frameworkNames?: string[],
+   ): IExtractionResult {
+     const start = Date.now();
+     const result = extractFromSource(filePath, content, language, frameworkNames);
+     result.durationMs = Date.now() - start;
+     return result;
+   }
 
  /**
     * Сохраняет результат извлечения в БД.
@@ -2459,7 +2328,7 @@ await this.storeExtractionResult(fileRecord, result);
       return;
     }
 
-    ensureExtractors();
+    await loadGrammarsForLanguages([language]);
 
     const frameworkNames = this._detectedFrameworks ?? undefined;
 

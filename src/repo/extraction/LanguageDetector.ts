@@ -1,6 +1,7 @@
 import { Language } from '../ntgraph/Types';
 import fs from 'fs';
 import path from 'path';
+import { getSupportedLanguages as registryGetSupportedLanguages } from './extractors/registry';
 
 // Карта соответствия расширений файлов языкам программирования
 export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
@@ -62,6 +63,9 @@ export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
   '.twig': 'twig',
   '.razor': 'razor',
   '.cshtml': 'razor',
+  '.cfm': 'cfml',
+  '.cfc': 'cfml',
+  '.dfm': 'pascal',
 };
 
 /**
@@ -95,9 +99,6 @@ export function detectLanguage(filePath: string, content?: string): Language {
   return 'unknown';
 }
 
-// Список языков, для которых есть tree-sitter экстракторы
-const SUPPORTED_LANGUAGES = ['typescript', 'python', 'go', 'rust', 'java', 'cpp', 'c', 'csharp'];
-
 // Языки, которые поддерживаются только на уровне файла (без символьной структуры)
 const FILE_LEVEL_ONLY_LANGUAGES = ['yaml', 'properties', 'xml'];
 
@@ -129,15 +130,10 @@ export function isSourceFile(filePath: string): boolean {
 }
 
 /**
- * Проверяет, поддерживается ли язык tree-sitter экстрактором.
+ * Поддерживается ли язык экстрактором (реестр — источник правды).
  */
 export function isLanguageSupported(lang: string): boolean {
-  // Возвращаем false для неизвестных или неподдерживаемых языков
-  if (lang === 'unknown') {
-    return false;
-  }
-
-  return SUPPORTED_LANGUAGES.includes(lang);
+  return registryGetSupportedLanguages().includes(lang);
 }
 
 /**
@@ -175,19 +171,7 @@ export function loadExtensionOverrides(rootDir: string): void {
   }
 }
 
-/**
- * Проверяет, загружена ли грамматика для заданного языка.
- */
-export function isGrammarLoaded(language: string): boolean {
-  // Импортируем из модуля Grammars для проверки кэша
-  const { isGrammarCached } = require('./Grammars');
-  return isGrammarCached(language);
-}
-
-/**
- * Возвращает массив языков с доступными tree-sitter грамматиками.
- */
+/** Возвращает массив языков с доступными экстракторами. */
 export function getSupportedLanguages(): string[] {
-  // Возвращаем список языков с tree-sitter поддержкой
-  return [...SUPPORTED_LANGUAGES];
+  return registryGetSupportedLanguages();
 }

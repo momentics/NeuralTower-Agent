@@ -10,7 +10,7 @@ import {
   getSupportedLanguages,
   EXTENSION_TO_LANGUAGE,
 } from "./LanguageDetector"
-import { isGrammarCached, isGrammarLoaded, loadGrammar } from "./Grammars"
+import { isGrammarLoaded, loadGrammarWasm } from "./WasmRuntime"
 
 
 
@@ -172,24 +172,60 @@ describe("isLanguageSupported", () => {
     expect(isLanguageSupported("unknown")).toBe(false)
   })
 
-  it("returns false for ruby", () => {
-    expect(isLanguageSupported("ruby")).toBe(false)
+  it("returns true for ruby", () => {
+    expect(isLanguageSupported("ruby")).toBe(true)
   })
 
-  it("returns false for php", () => {
-    expect(isLanguageSupported("php")).toBe(false)
+  it("returns true for php", () => {
+    expect(isLanguageSupported("php")).toBe(true)
   })
 
-  it("returns false for swift", () => {
-    expect(isLanguageSupported("swift")).toBe(false)
+  it("returns true for swift", () => {
+    expect(isLanguageSupported("swift")).toBe(true)
   })
 
-  it("returns false for kotlin", () => {
-    expect(isLanguageSupported("kotlin")).toBe(false)
+  it("returns true for kotlin", () => {
+    expect(isLanguageSupported("kotlin")).toBe(true)
   })
 
   it("returns false for dart", () => {
     expect(isLanguageSupported("dart")).toBe(false)
+  })
+
+  it("returns true for vue", () => {
+    expect(isLanguageSupported("vue")).toBe(true)
+  })
+
+  it("returns true for svelte", () => {
+    expect(isLanguageSupported("svelte")).toBe(true)
+  })
+
+  it("returns true for astro", () => {
+    expect(isLanguageSupported("astro")).toBe(true)
+  })
+
+  it("returns true for liquid", () => {
+    expect(isLanguageSupported("liquid")).toBe(true)
+  })
+
+  it("returns true for razor", () => {
+    expect(isLanguageSupported("razor")).toBe(true)
+  })
+
+  it("returns true for cfml", () => {
+    expect(isLanguageSupported("cfml")).toBe(true)
+  })
+
+  it("returns true for pascal", () => {
+    expect(isLanguageSupported("pascal")).toBe(true)
+  })
+
+  it("returns false for scala", () => {
+    expect(isLanguageSupported("scala")).toBe(false)
+  })
+
+  it("returns false for lua", () => {
+    expect(isLanguageSupported("lua")).toBe(false)
   })
 
   it("returns false for yaml", () => {
@@ -220,8 +256,8 @@ describe("isLanguageSupported", () => {
     expect(isLanguageSupported("html")).toBe(false)
   })
 
-  it("returns false for xml", () => {
-    expect(isLanguageSupported("xml")).toBe(false)
+  it("returns true for xml", () => {
+    expect(isLanguageSupported("xml")).toBe(true)
   })
 
   it("returns false for arbitrary string", () => {
@@ -466,32 +502,19 @@ describe("loadExtensionOverrides", () => {
 // --- isGrammarLoaded ---
 // Тесты для грамматик — проверяем доступность WASM-грамматик через isGrammarCached
 
-describe("isGrammarLoaded", () => {
-  it("isGrammarCached returns false for unloaded language", () => {
-    expect(isGrammarCached("typescript")).toBe(false)
+describe("WasmRuntime (grammars)", () => {
+  it("isGrammarLoaded returns false before load", () => {
+    expect(isGrammarLoaded("python")).toBe(false)
   })
 
-  it("isGrammarCached returns false for arbitrary language", () => {
-    expect(isGrammarCached("nonexistent")).toBe(false)
+  it("loadGrammarWasm loads a real grammar", async () => {
+    const ok = await loadGrammarWasm("python")
+    expect(ok).toBe(true)
+    expect(isGrammarLoaded("python")).toBe(true)
   })
 
-  it("isGrammarCached returns true after successful load", async () => {
-    const result = await loadGrammar("typescript")
-    if (result) {
-      expect(isGrammarCached("typescript")).toBe(true)
-    } else {
-      expect(isGrammarCached("typescript")).toBe(false)
-    }
-  })
-
-  it("isGrammarLoaded returns false for unloaded language", () => {
-    expect(isGrammarLoaded("typescript")).toBe(false)
-  })
-
-  it("loadGrammar returns null for unsupported language", async () => {
-    const result = await loadGrammar("nonexistent")
-    expect(result).toBeNull()
-    expect(isGrammarCached("nonexistent")).toBe(false)
+  it("loadGrammarWasm returns false for unknown language", async () => {
+    expect(await loadGrammarWasm("nonexistent")).toBe(false)
   })
 })
 
@@ -499,9 +522,9 @@ describe("isGrammarLoaded", () => {
 // Тесты для функции getSupportedLanguages — проверка списка поддерживаемых языков
 
 describe("getSupportedLanguages", () => {
-  it("returns array of 8 languages", () => {
+  it("returns array of 24 languages", () => {
     const langs = getSupportedLanguages()
-    expect(langs).toHaveLength(8)
+    expect(langs).toHaveLength(24)
   })
 
   it("contains typescript", () => {
@@ -536,12 +559,12 @@ describe("getSupportedLanguages", () => {
     expect(getSupportedLanguages()).toContain("csharp")
   })
 
-  it("does not contain ruby", () => {
-    expect(getSupportedLanguages()).not.toContain("ruby")
+  it("contains ruby", () => {
+    expect(getSupportedLanguages()).toContain("ruby")
   })
 
-  it("does not contain php", () => {
-    expect(getSupportedLanguages()).not.toContain("php")
+  it("contains php", () => {
+    expect(getSupportedLanguages()).toContain("php")
   })
 
   it("does not contain yaml", () => {

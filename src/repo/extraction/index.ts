@@ -33,7 +33,7 @@ export { VueExtractor } from './extractors/Vue';
 // =============================================================================
 
 // Экстракция
-export { extractFromSource } from './tree-sitter';
+export { extractFromSource, getExtractor } from './extractors/registry';
 
 // Языки
 export {
@@ -42,26 +42,27 @@ export {
   EXTENSION_TO_LANGUAGE,
   isSourceFile,
   isLanguageSupported,
-  isGrammarLoaded,
   getSupportedLanguages,
   isFileLevelOnlyLanguage,
 } from './LanguageDetector';
 
-// Грамматики
+// Грамматики (WASM-рантайм)
 export {
-  initGrammars,
+  initWasmRuntime,
+  resolveWasmDir,
+  loadGrammarWasm,
   loadGrammarsForLanguages,
-  loadAllGrammars,
-  loadGrammar,
-  getGrammarName,
-  getGrammarVariant,
-} from './Grammars';
+  getParser,
+  getParserForFile,
+  isGrammarLoaded,
+} from './WasmRuntime';
 
 // =============================================================================
-// Парсер (worker-поток)
+// Пул воркеров парсинга
 // =============================================================================
 
-export { parseFile, destroy, loadGrammars } from './ParserWorker';
+export { ParseWorkerPool, resolveParsePoolSize, resolveParseWorkerPath, WASM_WORKER_EXEC_ARGV } from './ParserWorkerPool';
+export type { ParseTask, ParsePoolWorker } from './ParserWorkerPool';
 
 // =============================================================================
 // Валидация путей

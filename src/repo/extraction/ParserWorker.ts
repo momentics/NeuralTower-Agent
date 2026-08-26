@@ -39,10 +39,10 @@ async function parseInProcess(
   frameworkNames: string[],
   languages: string[],
 ): Promise<IExtractionResult> {
-  const { loadGrammarsForLanguages } = await import('./Grammars');
+  const { loadGrammarsForLanguages } = await import('./WasmRuntime');
   await loadGrammarsForLanguages(languages);
 
-  const { extractFromSource } = await import('./tree-sitter');
+  const { extractFromSource } = await import('./extractors/registry');
   return extractFromSource(filePath, content, language, frameworkNames);
 }
 
