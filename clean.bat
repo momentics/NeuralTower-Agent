@@ -2,11 +2,11 @@
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo Cleaning temporary files: nt-agent
+echo Cleaning build artifacts: NeuralTower-Agent
 echo ========================================
 echo.
 
-echo [1/5] Cleaning out/ directory...
+echo [1/4] Cleaning out/ directory (bundles + WASM assets)...
 if exist "out\" (
     rmdir /s /q "out" >nul 2>&1
     echo   deleted
@@ -14,7 +14,7 @@ if exist "out\" (
     echo   empty
 )
 
-echo [2/5] Cleaning VSIX packages...
+echo [2/4] Cleaning VSIX packages...
 set "found=0"
 for %%f in (NeuralTower-Agent-*.vsix) do (
     del "%%f" >nul 2>&1
@@ -26,15 +26,7 @@ if "!found!"=="1" (
     echo   empty
 )
 
-echo [3/5] Cleaning dist/ directory...
-if exist "dist\" (
-    rmdir /s /q "dist" >nul 2>&1
-    echo   deleted
-) else (
-    echo   empty
-)
-
-echo [4/5] Cleaning .vscode-test/ directory...
+echo [3/4] Cleaning .vscode-test/ directory...
 if exist ".vscode-test\" (
     rmdir /s /q ".vscode-test" >nul 2>&1
     echo   deleted
@@ -42,7 +34,7 @@ if exist ".vscode-test\" (
     echo   empty
 )
 
-echo [5/5] Cleaning log files...
+echo [4/4] Cleaning log files...
 del /q *.log >nul 2>&1
 del /q npm-debug.log* >nul 2>&1
 del /q yarn-debug.log* >nul 2>&1

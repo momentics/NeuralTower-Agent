@@ -261,9 +261,12 @@
   "versionScript": "node ./bump-version.js",
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc --noEmit && esbuild ./src/Extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
-    "watch": "npm run compile -- --watch",
+    "compile": "tsc --noEmit && npm run build:bundle && npm run build:worker",
+    "build:bundle": "esbuild ./src/Extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap --alias:web-tree-sitter=./node_modules/web-tree-sitter/tree-sitter.cjs",
+    "build:worker": "esbuild ./src/repo/extraction/ParserWorkerEntry.ts --bundle --outfile=out/ParserWorker.js --format=cjs --platform=node --alias:web-tree-sitter=./node_modules/web-tree-sitter/tree-sitter.cjs && node ./scripts/copy-wasm-assets.mjs",
+    "watch": "npm run build:worker && esbuild ./src/Extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch --alias:web-tree-sitter=./node_modules/web-tree-sitter/tree-sitter.cjs",
     "test": "vitest run",
+    "pretest": "npm run build:worker",
     "test:watch": "vitest"
   },
   "dependencies": {

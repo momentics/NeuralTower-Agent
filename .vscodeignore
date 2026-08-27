@@ -1,4 +1,12 @@
-node_modules/
+node_modules/web-tree-sitter/
+node_modules/tree-sitter-wasms/debug/
+node_modules/tree-sitter-wasms/web-tree-sitter.cjs
+node_modules/tree-sitter-wasms/web-tree-sitter.js
+node_modules/tree-sitter-wasms/web-tree-sitter.d.ts
+node_modules/tree-sitter-wasms/web-tree-sitter.d.cts
+node_modules/tree-sitter-wasms/web-tree-sitter.wasm
+node_modules/tree-sitter-wasms/README.md
+node_modules/**/*.map
 .vscode-test/
 out/**/*.js.map
 ref/

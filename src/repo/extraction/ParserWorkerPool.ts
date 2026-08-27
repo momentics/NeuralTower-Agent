@@ -121,8 +121,20 @@ export class ParseWorkerPool {
       this.createWorker = opts.createWorker;
     } else if (opts.workerScriptPath) {
       const scriptPath = opts.workerScriptPath;
-      const execArgv = [...(opts.workerExecArgv ?? [])];
-      this.createWorker = () => new Worker(scriptPath, { execArgv });
+      // Node валидирует ЯВНО переданный execArgv воркера по
+      // process.allowedNodeEnvironmentFlags и отклоняет V8-флаги (например
+      // --liftoff-only); наследуемый execArgv проверке не подвергается.
+      // Поэтому являем только допустимые флаги, а если их нет — не передаём
+      // execArgv вовсе: воркер унаследует флаги родителя (в тестовых форках
+      // vitest это --liftoff-only; в extension host V8-флагов нет, а воркер
+      // грузит только грамматики проекта — стабильно, см. §1.3).
+      const execArgv = (opts.workerExecArgv ?? []).filter(
+        (f) => process.allowedNodeEnvironmentFlags.has(f),
+      );
+      this.createWorker = () =>
+        execArgv.length > 0
+          ? new Worker(scriptPath, { execArgv })
+          : new Worker(scriptPath);
     } else {
       throw new Error('ParseWorkerPool требует workerScriptPath или createWorker');
     }
