@@ -9,17 +9,6 @@ import { detectLanguage } from "../extraction/LanguageDetector"
 import { shouldIndexFile, isBinaryFile, isTooLarge, resolveRelativePath } from "../extraction/PathValidation"
 import { NodeKind, EdgeKind, DEFAULT_IGNORE_DIRS, MAX_FILE_SIZE } from "../ntgraph/Types"
 
-let treeSitterAvailable = false
-try {
-  const Parser = require("tree-sitter")
-  const tsGrammar = require("tree-sitter-typescript")
-  const p = new Parser()
-  p.setLanguage(tsGrammar.TSTypeScript)
-  treeSitterAvailable = true
-} catch {
-  // tree-sitter недоступен
-}
-
 function initGit(dir: string): void {
   try {
     execFileSync("git", ["init"], { cwd: dir, stdio: "pipe" })
@@ -167,7 +156,6 @@ describe("extraction pipeline", () => {
 
   describe("TypeScript extractor", () => {
     it("extracts class declaration with methods", async () => {
-      if (!treeSitterAvailable) return
       const srcDir = path.join(tmpDir, "ts-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -193,9 +181,7 @@ describe("extraction pipeline", () => {
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
-      expect(result.filesIndexed).toBeGreaterThan(0)
-      expect(result.nodesCreated).toBeGreaterThan(0)
-      expect(result.edgesCreated).toBeGreaterThan(0)
+      expect(result.indexed).toBeGreaterThan(0)
 
       const stats = testDb.getStats()
       expect(stats.nodeCount).toBeGreaterThan(0)
@@ -206,7 +192,6 @@ describe("extraction pipeline", () => {
     })
 
     it("extracts function declaration with parameters", async () => {
-      if (!treeSitterAvailable) return
       const srcDir = path.join(tmpDir, "ts-func-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -227,15 +212,14 @@ export function add(a: number, b: number): number {
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
-      expect(result.filesIndexed).toBeGreaterThan(0)
-      expect(result.nodesCreated).toBeGreaterThan(0)
+      expect(result.indexed).toBeGreaterThan(0)
+      expect(testDb.getStats().nodeCount).toBeGreaterThan(0)
 
       testDb.close()
       await fs.rm(srcDir, { recursive: true, force: true })
     })
 
     it("extracts interface with extends", async () => {
-      if (!treeSitterAvailable) return
       const srcDir = path.join(tmpDir, "ts-iface-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -257,14 +241,13 @@ interface Extended extends Base {
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
-      expect(result.filesIndexed).toBeGreaterThan(0)
+      expect(result.indexed).toBeGreaterThan(0)
 
       testDb.close()
       await fs.rm(srcDir, { recursive: true, force: true })
     })
 
     it("extracts import statements", async () => {
-      if (!treeSitterAvailable) return
       const srcDir = path.join(tmpDir, "ts-import-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -281,14 +264,13 @@ import React from 'react';`
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
-      expect(result.filesIndexed).toBeGreaterThan(0)
+      expect(result.indexed).toBeGreaterThan(0)
 
       testDb.close()
       await fs.rm(srcDir, { recursive: true, force: true })
     })
 
     it("extracts enum with members", async () => {
-      if (!treeSitterAvailable) return
       const srcDir = path.join(tmpDir, "ts-enum-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -308,14 +290,13 @@ import React from 'react';`
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
-      expect(result.filesIndexed).toBeGreaterThan(0)
+      expect(result.indexed).toBeGreaterThan(0)
 
       testDb.close()
       await fs.rm(srcDir, { recursive: true, force: true })
     })
 
     it("extracts type alias", async () => {
-      if (!treeSitterAvailable) return
       const srcDir = path.join(tmpDir, "ts-type-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -331,14 +312,13 @@ import React from 'react';`
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
-      expect(result.filesIndexed).toBeGreaterThan(0)
+      expect(result.indexed).toBeGreaterThan(0)
 
       testDb.close()
       await fs.rm(srcDir, { recursive: true, force: true })
     })
 
     it("handles empty file gracefully", async () => {
-      if (!treeSitterAvailable) return
       const srcDir = path.join(tmpDir, "ts-empty-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -362,7 +342,6 @@ import React from 'react';`
 
   describe("Python extractor", () => {
     it("extracts class with methods", async () => {
-      if (!treeSitterAvailable) return
       const srcDir = path.join(tmpDir, "py-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -384,15 +363,14 @@ import React from 'react';`
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
-      expect(result.filesIndexed).toBeGreaterThan(0)
-      expect(result.nodesCreated).toBeGreaterThan(0)
+      expect(result.indexed).toBeGreaterThan(0)
+      expect(testDb.getStats().nodeCount).toBeGreaterThan(0)
 
       testDb.close()
       await fs.rm(srcDir, { recursive: true, force: true })
     })
 
     it("extracts standalone function", async () => {
-      if (!treeSitterAvailable) return
       const srcDir = path.join(tmpDir, "py-func-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -410,7 +388,7 @@ import React from 'react';`
       const orch = new ExtractionOrchestrator(srcDir, testDb)
       const result = await orch.indexAll()
 
-      expect(result.filesIndexed).toBeGreaterThan(0)
+      expect(result.indexed).toBeGreaterThan(0)
 
       testDb.close()
       await fs.rm(srcDir, { recursive: true, force: true })
@@ -466,7 +444,7 @@ import React from 'react';`
   // --- Интеграция с Orchestrator ---
 
   describe("Orchestrator", () => {
-    it.skip("reports progress during indexing", 30000, async () => {
+    it("reports progress during indexing", async () => {
       const srcDir = path.join(tmpDir, "orch-progress-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -496,7 +474,7 @@ import React from 'react';`
 
       testDb.close()
       await fs.rm(srcDir, { recursive: true, force: true })
-    })
+    }, 30000)
 
     it("handles abort signal", async () => {
       const srcDir = path.join(tmpDir, "orch-abort-test")
@@ -524,7 +502,6 @@ import React from 'react';`
     })
 
     it("skips binary files", async () => {
-      if (!treeSitterAvailable) return
       const srcDir = path.join(tmpDir, "orch-binary-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -551,7 +528,6 @@ import React from 'react';`
     })
 
     it("skips files exceeding max size", async () => {
-      if (!treeSitterAvailable) return
       const srcDir = path.join(tmpDir, "orch-size-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -575,10 +551,6 @@ import React from 'react';`
     })
 
     it("returns graph stats after indexing", async () => {
-      if (!treeSitterAvailable) {
-        return
-      }
-
       const srcDir = path.join(tmpDir, "orch-stats-test")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)

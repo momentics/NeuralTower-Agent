@@ -7,17 +7,6 @@ import { NtGraphDb } from "../ntgraph/index"
 import { ExtractionOrchestrator } from "../extraction/Orchestrator"
 import { NodeKind, EdgeKind } from "../ntgraph/Types"
 
-let treeSitterAvailable = false
-try {
-  const Parser = require("tree-sitter")
-  const tsGrammar = require("tree-sitter-typescript")
-  const p = new Parser()
-  p.setLanguage(tsGrammar.TSTypeScript)
-  treeSitterAvailable = true
-} catch {
-  // tree-sitter недоступен
-}
-
 function initGit(dir: string): void {
   try {
     execFileSync("git", ["init"], { cwd: dir, stdio: "pipe" })
@@ -42,8 +31,6 @@ describe("cross-file edge preservation", () => {
 
   describe("cross-file edges survive re-indexing", () => {
     it("imports edge survives when imported file is re-indexed", async () => {
-      if (!treeSitterAvailable) return
-
       const srcDir = path.join(tmpDir, "cross-import")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -62,11 +49,12 @@ export function main() {
       )
 
       const dbPath = path.join(tmpDir, "cross-import.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath, srcDir)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
 
       const result1 = await orch.indexAll()
-      expect(result1.filesIndexed).toBe(2)
+      expect(result1.indexed).toBe(2)
 
       const stats1 = testDb.getStats()
       const edgesBefore = stats1.edgeCount
@@ -78,7 +66,7 @@ export function main() {
       )
 
       const result2 = await orch.indexAll()
-      expect(result2.filesIndexed).toBeGreaterThan(0)
+      expect(result2.indexed).toBeGreaterThan(0)
 
       const stats2 = testDb.getStats()
       expect(stats2.edgeCount).toBeGreaterThanOrEqual(edgesBefore - 1)
@@ -88,8 +76,6 @@ export function main() {
     })
 
     it("calls edge survives when called function file is re-indexed", async () => {
-      if (!treeSitterAvailable) return
-
       const srcDir = path.join(tmpDir, "cross-calls")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -110,7 +96,8 @@ export function process(s: string): string {
       )
 
       const dbPath = path.join(tmpDir, "cross-calls.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath, srcDir)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
 
       await orch.indexAll()
@@ -138,8 +125,6 @@ export function process(s: string): string {
 
   describe("node identity across re-indexing", () => {
     it("node ID changes when line number changes", async () => {
-      if (!treeSitterAvailable) return
-
       const srcDir = path.join(tmpDir, "node-id-change")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -150,13 +135,16 @@ export function process(s: string): string {
       await fs.writeFile(path.join(srcDir, "greet.ts"), original)
 
       const dbPath = path.join(tmpDir, "node-id-change.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath, srcDir)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
 
       await orch.indexAll()
 
       const nodes1 = testDb.getNodesByFile("greet.ts")
-      const greetNode1 = nodes1.find((n) => n.name === "greet")
+      // Ищем именно function-узел: module-узел тоже называется «greet»,
+      // но привязан к началу файла (строка 1) и ID у него стабилен.
+      const greetNode1 = nodes1.find((n) => n.name === "greet" && n.kind === "function")
       expect(greetNode1).toBeDefined()
       const id1 = greetNode1!.id
 
@@ -171,7 +159,7 @@ export function greet() {
       await orch.indexAll()
 
       const nodes2 = testDb.getNodesByFile("greet.ts")
-      const greetNode2 = nodes2.find((n) => n.name === "greet")
+      const greetNode2 = nodes2.find((n) => n.name === "greet" && n.kind === "function")
       expect(greetNode2).toBeDefined()
       const id2 = greetNode2!.id
 
@@ -182,8 +170,6 @@ export function greet() {
     })
 
     it("node ID stays same when content unchanged", async () => {
-      if (!treeSitterAvailable) return
-
       const srcDir = path.join(tmpDir, "node-id-same")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -194,7 +180,8 @@ export function greet() {
       await fs.writeFile(path.join(srcDir, "stable.ts"), content)
 
       const dbPath = path.join(tmpDir, "node-id-same.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath, srcDir)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
 
       await orch.indexAll()
@@ -223,8 +210,6 @@ export function greet() {
 
   describe("content hash prevents redundant re-indexing", () => {
     it("skips file when content hash matches", async () => {
-      if (!treeSitterAvailable) return
-
       const srcDir = path.join(tmpDir, "hash-skip")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -235,11 +220,12 @@ export function greet() {
       )
 
       const dbPath = path.join(tmpDir, "hash-skip.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath, srcDir)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
 
       const result1 = await orch.indexAll()
-      expect(result1.filesIndexed).toBeGreaterThan(0)
+      expect(result1.indexed).toBeGreaterThan(0)
 
       const stats1 = testDb.getStats()
 
@@ -258,8 +244,6 @@ export function greet() {
 
   describe("FK cascade deletes on file re-index", () => {
     it("old nodes and edges are removed when file is re-indexed", async () => {
-      if (!treeSitterAvailable) return
-
       const srcDir = path.join(tmpDir, "cascade-delete")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -271,7 +255,8 @@ export function oldFunc2() { return 2; }`
       )
 
       const dbPath = path.join(tmpDir, "cascade-delete.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath, srcDir)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
 
       await orch.indexAll()
@@ -302,8 +287,6 @@ export function oldFunc2() { return 2; }`
 
   describe("multi-file project integrity", () => {
     it("all nodes and edges are consistent after indexing multiple files", async () => {
-      if (!treeSitterAvailable) return
-
       const srcDir = path.join(tmpDir, "multi-file")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -343,11 +326,12 @@ export class UserController {
       )
 
       const dbPath = path.join(tmpDir, "multi-file.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath, srcDir)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
 
       const result = await orch.indexAll()
-      expect(result.filesIndexed).toBe(3)
+      expect(result.indexed).toBe(3)
 
       const stats = testDb.getStats()
       expect(stats.nodeCount).toBeGreaterThan(0)
@@ -369,8 +353,6 @@ export class UserController {
     })
 
     it("edges reference valid nodes after re-index", async () => {
-      if (!treeSitterAvailable) return
-
       const srcDir = path.join(tmpDir, "edge-validity")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -389,7 +371,8 @@ export function b() {
       )
 
       const dbPath = path.join(tmpDir, "edge-validity.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath, srcDir)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
 
       await orch.indexAll()
@@ -414,8 +397,6 @@ export function a() { return 1; }`
 
   describe("unresolved references", () => {
     it("unresolved references are stored for imports", async () => {
-      if (!treeSitterAvailable) return
-
       const srcDir = path.join(tmpDir, "unresolved-refs")
       await fs.mkdir(srcDir, { recursive: true })
       initGit(srcDir)
@@ -428,11 +409,12 @@ export class App {}`
       )
 
       const dbPath = path.join(tmpDir, "unresolved-refs.db")
-      const testDb = NtGraphDb.initialize({ projectRoot: srcDir, dbPath })
+      const testDb = new NtGraphDb(dbPath, srcDir)
+      testDb.initialize()
       const orch = new ExtractionOrchestrator(srcDir, testDb)
 
       const result = await orch.indexAll()
-      expect(result.filesIndexed).toBeGreaterThan(0)
+      expect(result.indexed).toBeGreaterThan(0)
 
       testDb.close()
       await fs.rm(srcDir, { recursive: true, force: true })

@@ -16,9 +16,9 @@ describe("NtGraphDb", () => {
   let dbPath: string
   let db: NtGraphDb
 
-  beforeAll(() => {
+  beforeAll(async () => {
     tmpDir = path.join(os.tmpdir(), `ntgraph-db-test-${Date.now()}`)
-    fs.mkdir(tmpDir, { recursive: true })
+    await fs.mkdir(tmpDir, { recursive: true })
     dbPath = path.join(tmpDir, "ntgraph.db")
     db = new NtGraphDb(dbPath)
     db.initialize()

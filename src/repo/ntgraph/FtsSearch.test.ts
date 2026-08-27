@@ -15,9 +15,9 @@ describe("FtsSearch", () => {
   let tmpDir: string
   let db: NtGraphDb
 
-  beforeAll(() => {
+  beforeAll(async () => {
     tmpDir = path.join(os.tmpdir(), `ntgraph-fts-test-${Date.now()}`)
-    fs.mkdir(tmpDir, { recursive: true })
+    await fs.mkdir(tmpDir, { recursive: true })
     const dbPath = path.join(tmpDir, 'ntgraph.db')
     db = new NtGraphDb(dbPath)
     db.initialize()
