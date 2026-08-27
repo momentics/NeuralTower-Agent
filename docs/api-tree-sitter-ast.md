@@ -2,7 +2,7 @@
 
 ## Обзор
 
-Модуль `extraction` предоставляет детерминированное извлечение кода на основе AST через tree-sitter. Каждый файл анализируется парсером, который выдаёт узлы и рёбра графа. Результаты сохраняются в SQLite-базу из [API SQLite FTS5](api-sqlite-fts5.md).
+Модуль `extraction` предоставляет детерминированное извлечение кода на основе AST через tree-sitter (WASM-грамматики `web-tree-sitter` 0.25.x + `tree-sitter-wasms`, кроссплатформенно: Windows / Linux / macOS). Каждый файл анализируется парсером, который выдаёт узлы и рёбра графа. Результаты сохраняются в SQLite-базу из [API SQLite FTS5](api-sqlite-fts5.md).
 
 ---
 
@@ -217,8 +217,10 @@
 
 ## Класс ExtractionOrchestrator
 
-Оркестратор индексации: сканирование, обнаружение фреймворков, парсинг через ParseWorkerPool,
-хранение в SQLite, инкрементальная синхронизация.
+Оркестратор индексации: сканирование, обнаружение фреймворков, парсинг через
+ParseWorkerPool (воркеры с `--liftoff-only`) или in-process WASM-парсинг
+(грамматики — web-tree-sitter 0.25.x + tree-sitter-wasms), хранение в SQLite,
+инкрементальная синхронизация.
 
 ### Конструктор
 
@@ -291,9 +293,15 @@ constructor(rootDir: string, db: NtGraphDb)
 
 ## Подбор экстрактора
 
-Экстракторы выбираются из приватной карты `EXTRACTOR_MAP` (ленивая инициализация).
-Для неподдерживаемых языков возвращается `DefaultExtractor`. Публичный API — функция
-`extractFromSource` в модуле `tree-sitter`.
+Единый реестр `extractors/registry.ts` — единственный источник правды
+«язык → экстрактор» (ленивая инициализация). Используется и основным потоком
+(Orchestrator), и воркером парсинга (ParserWorkerEntry).
+
+| Функция | Возврат | Описание |
+|---|---|---|
+| `getExtractor(language)` | `IExtractor` | Экстрактор для языка (фолбэк — `DefaultExtractor`) |
+| `getSupportedLanguages()` | `string[]` | 24 языка с выделенным экстрактором (включая javascript/jsx/tsx) |
+| `extractFromSource(filePath, content, language, frameworkNames?)` | `IExtractionResult` | Диспетчер: извлечение через соответствующий экстрактор |
 
 Доступные экстракторы:
 - `TypeScriptExtractor` — TypeScript/JavaScript (.ts, .tsx, .js, .jsx)
@@ -329,25 +337,34 @@ constructor(rootDir: string, db: NtGraphDb)
 | `isSourceFile(filePath)` | `boolean` | Проверка на исходный файл (не бинарный, не генерируемый) |
 | `isLanguageSupported(lang)` | `boolean` | Проверка поддержки языка |
 | `isFileLevelOnlyLanguage(lang)` | `boolean` | Язык без символьной структуры (yaml, properties, xml) |
-| `isGrammarLoaded(lang)` | `boolean` | Проверка загрузки грамматики |
+| `isGrammarLoaded(name)` | `boolean` | Проверка загрузки грамматики (модуль WasmRuntime) |
 | `getSupportedLanguages()` | `string[]` | Список поддерживаемых языков |
 | `loadExtensionOverrides(rootDir)` | `void` | Загрузка кастомных маппингов из `ntgraph.json` |
 
 ---
 
-## Модуль грамматик
+## Модуль WASM-рантайма (WasmRuntime)
 
-Управление WASM-грамматиками tree-sitter.
+Управление WASM-грамматиками tree-sitter через `web-tree-sitter` 0.25.x
+(кроссплатформенно: Windows / Linux / macOS). Грамматики — файлы
+`tree-sitter-*.wasm` из npm-пакета `tree-sitter-wasms`; карта
+«язык → файл» — `src/repo/extraction/wasm-manifest.json` (31 рабочая
+грамматика; 5 битых в пакете — elm, ql, yaml, systemrdl, tlaplus — в
+манифест не входят).
 
-| Функция | Возврат | Описание |
+| Функция | Сигнатура | Назначение |
 |---|---|---|
-| `initGrammars()` | `Promise<void>` | Инициализация WASM-рантайма |
-| `loadGrammarsForLanguages(languages)` | `Promise<void>` | Загрузка грамматик для заданных языков |
-| `loadAllGrammars()` | `Promise<void>` | Загрузка всех доступных грамматик |
-| `loadGrammar(language)` | `Promise<any>` | Загрузка грамматики с LRU-кэшем (макс 50) |
-| `getGrammarVariant(language, filePath)` | `Promise<any>` | Вариант грамматики (tsx/ts для TS, c/cpp для .h) |
-| `getGrammarName(language)` | `string` | Имя npm-пакета грамматики |
-| `isGrammarCached(language)` | `boolean` | Проверка кэша грамматики |
+| `initWasmRuntime()` | `() => Promise<void>` | Инициализация рантайма (идемпотентно) |
+| `resolveWasmDir()` | `() => string \| null` | Директория с .wasm-грамматиками (out/wasm в бандле, node_modules в dev) |
+| `loadGrammarWasm(name)` | `(grammarName: string) => Promise<boolean>` | Загрузка грамматики из байтов (идемпотентно); false — недоступна |
+| `loadGrammarsForLanguages(langs)` | `(languages: string[]) => Promise<void>` | Загрузка всех грамматик для языков |
+| `getParser(name)` | `(grammarName: string) => Parser \| null` | Готовый синхронный парсер |
+| `getParserForFile(lang, path)` | `(language: string, filePath: string) => Parser \| null` | Парсер с учётом ts/tsx/js/jsx, vue/svelte/astro, c/cpp |
+| `isGrammarLoaded(name)` | `(grammarName: string) => boolean` | Загружена ли грамматика |
+
+Загрузка только из байтов (`Language.load(Uint8Array)`). Если грамматика
+не загрузилась — экстрактор возвращает быстрый `parse_error` без узлов,
+без зависаний.
 
 ---
 
@@ -361,7 +378,7 @@ constructor(rootDir: string, db: NtGraphDb)
 constructor(opts: ParseWorkerPoolOptions)
 ```
 
-Параметры: `languages`, `size`, `workerScriptPath`, `recycleInterval?`, `parseTimeoutMs?`, `createWorker?`, `log?`.
+Параметры: `languages`, `size`, `workerScriptPath`, `recycleInterval?`, `parseTimeoutMs?`, `createWorker?`, `log?`, `workerExecArgv?` (V8-флаги воркеров, по умолчанию `['--liftoff-only']`).
 
 ### Методы
 
@@ -378,30 +395,34 @@ constructor(opts: ParseWorkerPoolOptions)
 ### Протокол сообщений
 
 Main -> Worker:
-- `{ type: 'load-grammars', languages: string[] }` — загрузка грамматик
+- `{ type: 'load-grammars', languages: string[] }` — загрузка грамматик (воркер читает .wasm-файлы с диска сам: out/wasm/ в бандле, node_modules в dev)
 - `{ type: 'parse', id: number, filePath: string, content: string, language: string, frameworkNames?: string[] }` — запрос на парсинг
 
 Worker -> Main:
 - `{ type: 'grammars-loaded' }` — подтверждение загрузки
-- `{ type: 'parse-result', id: number, result: IExtractionResult }` — результат парсинга
-- `{ type: 'parse-error', id: number, error: string }` — ошибка при парсинге
+- `{ type: 'parse-result', id: number, result: IExtractionResult, parseMs: number }` — результат парсинга (ошибки возвращаются внутри `result.errors`, отдельного сообщения об ошибке нет)
 
 ### Жизненный цикл
 
+- Воркеры запускаются с `execArgv: ['--liftoff-only']` — защита от OOM/краша V8 turboshaft при компиляции WASM-грамматик
+- Перед массовой индексацией пул предзапускается целиком (`prewarm()`) — холодный старт воркеров (загрузка WASM-грамматик) не съедает фазу парсинга
 - Lazy growth: воркеры спавнятся по мере необходимости (throttling MAX_CONCURRENT_SPAWN = 2)
 - Двухфазный таймаут: базовый таймер → mark `timerExpired` → hard kill (×3 base) → убить воркер
 - Поздний результат: если результат пришёл до hard kill, принимается
 - Пересоздание воркера каждые 250 файлов (WASM линейная память не сжимается)
 - Восстановление после краша: `onWorkerGone()` -> `spawnOne()`
-- In-process fallback: парсинг на основном потоке при недоступности worker_threads
+- In-process fallback: парсинг на основном потоке тем же WASM-рантаймом, если воркер недоступен (бандл не собран — dev/тесты)
 - Бюджет крашей: 100 — после исчерпания пул больше не возрождает воркеры
+- Путь к бандлу воркера — `resolveParseWorkerPath()` (out/ParserWorker.js); если бандл не собран — пул не создаётся, парсинг идёт in-process
 
 ### Функции
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `resolveParsePoolSize(envVal?, cpuCount)` | `number` | Размер пула (max 16, по умолчанию min(8, cpuCount - 1)) |
+| `resolveParsePoolSize(envVal?, cpuCount)` | `number` | Размер пула (max 16, `0` — отключение пула; по умолчанию min(8, cpuCount - 1)) |
 | `resolveParseTimeoutMs(envVal?)` | `number` | Таймаут парсинга из окружения |
+| `resolveParseWorkerPath()` | `string \| null` | Путь к бандлу воркера (out/ParserWorker.js) или null, если бандл не собран |
+| `WASM_WORKER_EXEC_ARGV` | `readonly string[]` | V8-флаги воркеров парсинга: `['--liftoff-only']` |
 
 ---
 
@@ -691,7 +712,7 @@ constructor(baseDir: string, embeddedRepoRoots: string[])
 
 | Функция | Возврат | Описание |
 |---|---|---|
-| `extractFromSource(filePath, content, language, frameworkNames?)` | `IExtractionResult` | Парсинг файла через tree-sitter: AST-обход, извлечение узлов, ребер и ссылок |
+| `extractFromSource(filePath, content, language, frameworkNames?)` | `IExtractionResult` | Парсинг файла через WASM-экстракторы (реестр `extractors/registry.ts` + WasmRuntime): AST-обход, извлечение узлов, рёбер и ссылок |
 
 ---
 
