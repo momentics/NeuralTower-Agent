@@ -83,7 +83,7 @@ export function applyMigrations(db: SqliteDatabase): void {
 }
 
 /**
- * Применяет миграции начиная с указанной версии (совместимо с API референса).
+ * Применяет миграции начиная с указанной версии.
  */
 export function runMigrations(db: SqliteDatabase, fromVersion: number): void {
   const pending = ALL_MIGRATIONS.filter(m => m.version > fromVersion).sort((a, b) => a.version - b.version);
