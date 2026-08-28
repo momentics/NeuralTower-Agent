@@ -19,13 +19,16 @@ function createMockAgent() {
   }
   let modeHandler: ((m: string) => void) | null = null
   let runResolver: ((v: { role: string; content: string; timestamp: number }) => void) | null = null
+  let runArgs: unknown[] = []
 
   const agent = {
     run: vi.fn(
-      () =>
-        new Promise<{ role: string; content: string; timestamp: number }>((resolve) => {
+      (...args: unknown[]) => {
+        runArgs = args
+        return new Promise<{ role: string; content: string; timestamp: number }>((resolve) => {
           runResolver = resolve
-        }),
+        })
+      },
     ),
     reload: vi.fn(async () => {}),
     dispose: vi.fn(),
@@ -67,6 +70,7 @@ function createMockAgent() {
   return {
     agent: agent as unknown as IAgentOrchestrator,
     resolveRun: () => runResolver?.({ role: "assistant", content: "готово", timestamp: Date.now() }),
+    getRunArgs: () => runArgs,
   }
 }
 
@@ -112,27 +116,59 @@ function createMockSettingsProvider(): ISettingsProvider {
   return { show: vi.fn(), dispose: vi.fn() }
 }
 
+function createMockSnapshotService() {
+  return {
+    isEnabled: vi.fn(() => true),
+    track: vi.fn(async () => "hash-1"),
+    patch: vi.fn(async (hash: string) => ({ hash, files: [] })),
+    revert: vi.fn(async () => ({ ok: true, restored: [], deleted: [], failed: [] })),
+    restore: vi.fn(async () => {}),
+    cleanup: vi.fn(async () => {}),
+    dispose: vi.fn(),
+  }
+}
+
+function createMockSnapshotStore() {
+  return {
+    save: vi.fn(async () => {}),
+    get: vi.fn(async () => null),
+    listBySession: vi.fn(async () => []),
+    prune: vi.fn(async () => {}),
+    dispose: vi.fn(),
+  }
+}
+
 describe("ChatMessageHandler", () => {
   let agent: IAgentOrchestrator
   let webview: ReturnType<typeof createMockWebview>
   let sessionStore: ISessionStore
+  let notificationService: ReturnType<typeof createMockNotificationService>
+  let snapshotService: ReturnType<typeof createMockSnapshotService>
+  let snapshotStore: ReturnType<typeof createMockSnapshotStore>
   let handler: ChatMessageHandler
   let onMessage: (msg: unknown) => Promise<void>
   let resolveRun: () => void
+  let getRunArgs: () => unknown[]
 
   beforeEach(() => {
     const mock = createMockAgent()
     agent = mock.agent
     resolveRun = mock.resolveRun
+    getRunArgs = mock.getRunArgs
     webview = createMockWebview()
     sessionStore = createMockSessionStore()
+    notificationService = createMockNotificationService()
+    snapshotService = createMockSnapshotService()
+    snapshotStore = createMockSnapshotStore()
     handler = new ChatMessageHandler(
       agent,
       sessionStore,
-      createMockNotificationService(),
+      notificationService,
       createMockPermissionManager(),
       webview as never,
       createMockSettingsProvider(),
+      snapshotService,
+      snapshotStore,
     )
     handler.subscribe([])
     onMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0][0] as (msg: unknown) => Promise<void>
@@ -213,5 +249,126 @@ describe("ChatMessageHandler", () => {
     expect(webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: "modeChanged", mode: "build" }),
     )
+  })
+
+  // ── Чекпоинты ────────────────────────────────────────────
+
+  it("saves snapshot record and posts snapshotInfo when files changed", async () => {
+    onMessage({ type: "sendMessage", content: "задача" })
+    await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1))
+    const args = getRunArgs()
+    const onSnapshot = args[6] as (p: unknown) => void
+    onSnapshot({ hash: "abc123", files: ["/work/a.ts", "/work/b.ts"] })
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(snapshotStore.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: expect.any(String),
+        sessionId: "sess-1",
+        hash: "abc123",
+        files: ["/work/a.ts", "/work/b.ts"],
+      }),
+    )
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "snapshotInfo", hash: "abc123", fileCount: 2 }),
+    )
+    resolveRun()
+  })
+
+  it("does not post snapshotInfo when no files changed", async () => {
+    onMessage({ type: "sendMessage", content: "задача" })
+    await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1))
+    const onSnapshot = getRunArgs()[6] as (p: unknown) => void
+    onSnapshot({ hash: "abc123", files: [] })
+    await new Promise((r) => setTimeout(r, 20))
+
+    expect(snapshotStore.save).toHaveBeenCalledWith(
+      expect.objectContaining({ hash: "abc123", files: [] }),
+    )
+    expect(
+      vi.mocked(webview.postMessage).mock.calls.some(
+        (c) => (c[0] as { type: string }).type === "snapshotInfo",
+      ),
+    ).toBe(false)
+    resolveRun()
+  })
+
+  it("revertSnapshot reverts changes and posts success", async () => {
+    const record = {
+      runId: "123",
+      sessionId: "sess-1",
+      hash: "abc",
+      files: ["/work/a.ts"],
+      createdAt: 1,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(record)
+    vi.mocked(snapshotService.revert).mockResolvedValue({
+      ok: true,
+      restored: ["/work/a.ts"],
+      deleted: [],
+      failed: [],
+    })
+
+    await onMessage({ type: "revertSnapshot", runId: "123" })
+
+    expect(snapshotService.revert).toHaveBeenCalledWith(record)
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "snapshotReverted", runId: "123", ok: true }),
+    )
+    expect(notificationService.show).toHaveBeenCalledWith(
+      "agentDone",
+      expect.stringContaining("откатлены"),
+    )
+  })
+
+  it("revertSnapshot posts error when checkpoint not found", async () => {
+    vi.mocked(snapshotStore.get).mockResolvedValue(null)
+    await onMessage({ type: "revertSnapshot", runId: "404" })
+    expect(snapshotService.revert).not.toHaveBeenCalled()
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "snapshotReverted",
+        runId: "404",
+        ok: false,
+        error: "Чекпоинт не найден",
+      }),
+    )
+  })
+
+  it("revertSnapshot posts error details on partial failure", async () => {
+    const record = {
+      runId: "123",
+      sessionId: "sess-1",
+      hash: "abc",
+      files: ["/work/a.ts"],
+      createdAt: 1,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(record)
+    vi.mocked(snapshotService.revert).mockResolvedValue({
+      ok: false,
+      restored: [],
+      deleted: [],
+      failed: [{ file: "/work/a.ts", error: "сбой восстановления" }],
+    })
+
+    await onMessage({ type: "revertSnapshot", runId: "123" })
+
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "snapshotReverted",
+        runId: "123",
+        ok: false,
+        error: "сбой восстановления",
+      }),
+    )
+  })
+
+  it("revertSnapshot is ignored while streaming", async () => {
+    onMessage({ type: "sendMessage", content: "задача" })
+    await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1))
+    await onMessage({ type: "revertSnapshot", runId: "123" })
+    expect(snapshotService.revert).not.toHaveBeenCalled()
+    resolveRun()
+    await new Promise((r) => setTimeout(r, 20))
   })
 })

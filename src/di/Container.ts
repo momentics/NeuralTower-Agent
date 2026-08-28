@@ -1,6 +1,11 @@
 import * as vscode from "vscode"
+import * as path from "path"
+import { createHash } from "crypto"
 import type { IAppConfig, ISessionConfig } from "../core/Config"
 import type { IGitService } from "../services/git/GitService"
+import { GitRunner } from "../services/git/GitRunner"
+import { SnapshotService, SnapshotStore } from "../services/snapshot"
+import type { ISnapshotService, ISnapshotStore } from "../services/snapshot"
 import type { ICodebaseSearch } from "../repo/CodebaseSearch"
 import type { IFileIndex } from "../repo/FileIndex"
 import type { IBackend, IBackendConfig } from "../core/IBackend"
@@ -113,6 +118,8 @@ export interface IExtensionDeps {
   mcpManager: IMCPManager
   contextManager: IContextManager
   subagentRunner: SubagentRunner
+  snapshotService: ISnapshotService | null
+  snapshotStore: ISnapshotStore | null
  config: IAppConfig
   agentDeps: IAgentFullDependencies
   fileIndex: IFileIndex
@@ -285,6 +292,42 @@ export async function createServicesDomain(
   return { sessionStore, permissionManager, gitService, notificationService }
 }
 
+// ── Домен: Снапшоты (чекпоинты) ───────────────────────────
+
+/**
+ * Стабильный идентификатор workspace для директории зеркала:
+ * 16 hex-символов sha256 нормализованного пути.
+ * На Windows путь приводится к нижнему регистру (регистронезависимость ФС).
+ */
+function snapshotKeyForWorkspace(workspaceRoot: string): string {
+  let normalized = workspaceRoot.replace(/\\/g, "/").replace(/\/+$/, "")
+  if (process.platform === "win32") {
+    normalized = normalized.toLowerCase()
+  }
+  return createHash("sha256").update(normalized).digest("hex").slice(0, 16)
+}
+
+export function createSnapshotDomain(
+  workspaceRoot: string | undefined,
+  globalStorageUri: vscode.Uri,
+  gitService: IGitService,
+  config: IAppConfig,
+): { snapshotService: ISnapshotService | null; snapshotStore: ISnapshotStore | null } {
+  if (!workspaceRoot) return { snapshotService: null, snapshotStore: null }
+
+  const dir = path.join(globalStorageUri.fsPath, "snapshot", snapshotKeyForWorkspace(workspaceRoot))
+  const snapshotService = new SnapshotService(
+    workspaceRoot,
+    dir,
+    new GitRunner(),
+    config.snapshots,
+    () => gitService.findRoot(workspaceRoot),
+  )
+  const snapshotStore = new SnapshotStore(path.join(dir, "ledger.json"))
+
+  return { snapshotService, snapshotStore }
+}
+
 // ── Домен: Инструменты ────────────────────────────────────
 
 export function createToolsDomain(
@@ -433,10 +476,26 @@ export function createUIDomain(
   notificationService: INotificationService,
   permissionManager: IPermissionManager,
   backend: IBackend,
+  snapshotService: ISnapshotService | null,
+  snapshotStore: ISnapshotStore | null,
+  gitService: IGitService,
+  getWorkDir: () => string,
 ): IUIDepsResult {
   const settingsProvider = new SettingsProvider(extUri, backend)
-  const chatProvider = new ChatProvider(extUri, agent, sessionStore, notificationService, permissionManager, settingsProvider)
   const diffViewer = new DiffViewerProvider(extUri)
+  const chatProvider = new ChatProvider(
+    extUri,
+    agent,
+    sessionStore,
+    notificationService,
+    permissionManager,
+    settingsProvider,
+    snapshotService,
+    snapshotStore,
+    diffViewer,
+    gitService,
+    getWorkDir,
+  )
 
   return { chatProvider, diffViewer, settingsProvider }
 }
@@ -517,6 +576,22 @@ export async function createDeps(
   // ── Корень рабочей области ──────────────────────────────
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
 
+  // ── Снапшоты (чекпоинты) ────────────────────────────────
+  const { snapshotService, snapshotStore } = createSnapshotDomain(
+    workspaceRoot, ctx.globalStorageUri, gitService, config,
+  )
+  if (snapshotService) {
+    // Раз в сессию: очистка старых объектов и устаревших записей
+    snapshotService.cleanup().catch((err: unknown) => {
+      log.warn(`Очистка снапшотов не выполнена: ${errorMessage(err)}`)
+    })
+  }
+  if (snapshotStore) {
+    snapshotStore.prune(config.snapshots.retentionDays).catch((err: unknown) => {
+      log.warn(`Очистка реестра чекпоинтов не выполнена: ${errorMessage(err)}`)
+    })
+  }
+
   // ── Инфраструктура поиска ───────────────────────────────
   const { fileIndex, repoAnalyzer, embeddingProvider, codebaseSearch, graphDb, orchestrator } =
     createSearchInfrastructure(config, workspaceRoot)
@@ -572,6 +647,7 @@ export async function createDeps(
     gitService,
     permissionManager,
     mcpManager,
+    snapshotService,
   }
 
   const spawnFactory: AgentSpawnFactory = (deps, b, t, s, ts) =>
@@ -583,7 +659,16 @@ export async function createDeps(
 
   // ── Интерфейс ───────────────────────────────────────────
   const { chatProvider, diffViewer, settingsProvider } = createUIDomain(
-    ctx.extensionUri, agent, sessionStore, notificationService, permissionManager, backend,
+    ctx.extensionUri,
+    agent,
+    sessionStore,
+    notificationService,
+    permissionManager,
+    backend,
+    snapshotService,
+    snapshotStore,
+    gitService,
+    () => workDirState.current,
   )
 
   // ── Мониторинг ──────────────────────────────────────────
@@ -626,6 +711,8 @@ export async function createDeps(
     mcpManager,
     contextManager,
     subagentRunner,
+    snapshotService,
+    snapshotStore,
     config,
     agentDeps,
     fileIndex,

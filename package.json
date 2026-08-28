@@ -254,6 +254,24 @@
           "default": 2048,
           "minimum": 128,
           "description": "Максимальное число токенов в промпте автодополнения"
+        },
+        "neuralTowerAgent.snapshots.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Снимать чекпоинты перед запросами агента (только git-репозитории)"
+        },
+        "neuralTowerAgent.snapshots.retentionDays": {
+          "type": "number",
+          "default": 7,
+          "minimum": 1,
+          "maximum": 30,
+          "description": "Сколько дней хранить чекпоинты"
+        },
+        "neuralTowerAgent.snapshots.maxFileSizeBytes": {
+          "type": "number",
+          "default": 2097152,
+          "minimum": 1048576,
+          "description": "Максимальный размер файла для чекпоинта, байты"
         }
       }
     }

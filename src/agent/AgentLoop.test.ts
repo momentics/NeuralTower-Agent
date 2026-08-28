@@ -77,6 +77,16 @@ const createMockPlanner = (): AgentPlanner => ({
   setCurrentPlan: vi.fn(),
 } as unknown as AgentPlanner)
 
+const createMockSnapshotService = () => ({
+  isEnabled: vi.fn(() => true),
+  track: vi.fn(async () => "snapshot-hash"),
+  patch: vi.fn(async (hash: string) => ({ hash, files: ["/work/a.ts"] })),
+  revert: vi.fn(async () => ({ ok: true, restored: [], deleted: [], failed: [] })),
+  restore: vi.fn(async () => {}),
+  cleanup: vi.fn(async () => {}),
+  dispose: vi.fn(),
+})
+
 describe("AgentLoop", () => {
   let backend: IBackend
   let memory: AgentMemory
@@ -354,8 +364,7 @@ const loop = new AgentLoop(
     const loop = new AgentLoop(
       backend, memory, compactor, modeManager, sessionContext,
       contextBuilder, mockToolExecutor, planner,
-      undefined,
-      2,
+      { maxRecoveryAttempts: 2 },
     )
     const result = await loop.run("test query", [], () => {})
 
@@ -399,10 +408,7 @@ const loop = new AgentLoop(
     const loop = new AgentLoop(
       backend, memory, compactor, modeManager, sessionContext,
       contextBuilder, mockToolExecutor, mockPlanner,
-      undefined,
-      undefined,
-      true,
-      2,
+      { replanOnFailure: true, maxReplanAttempts: 2 },
     )
     const result = await loop.run("test query", [], () => {})
 
@@ -639,11 +645,7 @@ const loop = new AgentLoop(
     const loop = new AgentLoop(
       backend, memory, mockCompactor, modeManager, sessionContext,
       contextBuilder, mockToolExecutor, planner,
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      2,
+      { maxCompactions: 2 },
     )
     const result = await loop.run("test query", [], () => {})
 
@@ -824,5 +826,135 @@ const loop = new AgentLoop(
     )
     expect(errorMsg).toBeDefined()
     expect(errorMsg?.content).toContain("backend")
+  })
+
+  // ── Интеграция со снапшотами ────────────────────────────
+
+  it("run calls track once and notifies onSnapshot with patch on text exit", async () => {
+    const snapshot = createMockSnapshotService()
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, toolExecutor, planner, {}, snapshot,
+    )
+    const patches: unknown[] = []
+    const result = await loop.run(
+      "test query", [], () => {}, undefined, undefined, undefined, undefined,
+      (p) => patches.push(p),
+    )
+    expect(result.content).toBe("Test response")
+    expect(snapshot.track).toHaveBeenCalledTimes(1)
+    expect(snapshot.patch).toHaveBeenCalledTimes(1)
+    expect(patches).toEqual([expect.objectContaining({ hash: "snapshot-hash", files: ["/work/a.ts"] })])
+  })
+
+  it("run calls patch on maxIterations exit", async () => {
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend).mockResolvedValue({
+      type: "tool_calls",
+      toolCalls: [{ toolName: "read", arguments: {} }],
+    })
+    const snapshot = createMockSnapshotService()
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner, { maxIterations: 1 }, snapshot,
+    )
+    const patches: unknown[] = []
+    const result = await loop.run(
+      "test query", [], () => {}, undefined, undefined, undefined, undefined,
+      (p) => patches.push(p),
+    )
+    expect(result.content).toContain("максимальное число итераций")
+    expect(snapshot.track).toHaveBeenCalledTimes(1)
+    expect(snapshot.patch).toHaveBeenCalledTimes(1)
+    expect(patches).toHaveLength(1)
+  })
+
+  it("run calls patch on recovery-break exit", async () => {
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend).mockResolvedValue({
+      type: "tool_calls",
+      toolCalls: [{ toolName: "read", arguments: {} }],
+    })
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValue({
+      anyFailed: true,
+      failedTools: [{ name: "read", error: "error" }],
+    })
+    const snapshot = createMockSnapshotService()
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner, { maxRecoveryAttempts: 1 }, snapshot,
+    )
+    const patches: unknown[] = []
+    await loop.run(
+      "test query", [], () => {}, undefined, undefined, undefined, undefined,
+      (p) => patches.push(p),
+    )
+    expect(snapshot.patch).toHaveBeenCalledTimes(1)
+    expect(patches).toHaveLength(1)
+  })
+
+  it("run skips track and patch when signal is already aborted", async () => {
+    const snapshot = createMockSnapshotService()
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, toolExecutor, planner, {}, snapshot,
+    )
+    const ac = new AbortController()
+    ac.abort()
+    const patches: unknown[] = []
+    await expect(
+      loop.run(
+        "test", [], () => {}, undefined, undefined, ac.signal, undefined,
+        (p) => patches.push(p),
+      ),
+    ).rejects.toThrow("Задача отменена")
+    expect(snapshot.track).not.toHaveBeenCalled()
+    expect(snapshot.patch).not.toHaveBeenCalled()
+    expect(patches).toHaveLength(0)
+  })
+
+  it("track failure does not break run", async () => {
+    const snapshot = createMockSnapshotService()
+    vi.mocked(snapshot.track).mockRejectedValueOnce(new Error("git down"))
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, toolExecutor, planner, {}, snapshot,
+    )
+    const patches: unknown[] = []
+    const result = await loop.run(
+      "test query", [], () => {}, undefined, undefined, undefined, undefined,
+      (p) => patches.push(p),
+    )
+    expect(result.content).toBe("Test response")
+    expect(patches).toEqual([null])
+  })
+
+  it("patch failure does not break run", async () => {
+    const snapshot = createMockSnapshotService()
+    vi.mocked(snapshot.patch).mockRejectedValueOnce(new Error("diff down"))
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, toolExecutor, planner, {}, snapshot,
+    )
+    const patches: unknown[] = []
+    const result = await loop.run(
+      "test query", [], () => {}, undefined, undefined, undefined, undefined,
+      (p) => patches.push(p),
+    )
+    expect(result.content).toBe("Test response")
+    expect(patches).toEqual([null])
+  })
+
+  it("without snapshot service onSnapshot is called with null", async () => {
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, toolExecutor, planner, {},
+    )
+    const patches: unknown[] = []
+    await loop.run(
+      "test query", [], () => {}, undefined, undefined, undefined, undefined,
+      (p) => patches.push(p),
+    )
+    expect(patches).toEqual([null])
   })
 })

@@ -11,6 +11,7 @@ import type { Plan } from "./Plan"
 import type { TodoStore } from "./TodoStore"
 import type { IToolResult } from "./AgentTypes"
 import type { IContextItem } from "../core/providers/context/Types"
+import type { ISnapshotPatch } from "../services/snapshot/SnapshotTypes"
 
 /**
  * AgentOrchestrator — тонкий фасад над AgentCore.
@@ -86,9 +87,10 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     onToolResult?: (name: string, result: IToolResult) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
+    onSnapshot?: (patch: ISnapshotPatch | null) => void,
   ): Promise<IChatMessage> {
     const combined = AbortSignal.any([this.abortController.signal, signal].filter((s): s is AbortSignal => !!s))
-    return this.core.run(query, onChunk, onToolUse, onToolResult, combined, onCompaction)
+    return this.core.run(query, onChunk, onToolUse, onToolResult, combined, onCompaction, onSnapshot)
   }
 
   // ── Планирование ───────────────────────────────────────

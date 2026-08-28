@@ -9,6 +9,8 @@ export interface IProcessRunnerOptions {
   maxBuffer?: number
   shell?: boolean
   env?: Record<string, string>
+  /** Данные для stdin процесса (например, NUL-разделённые пути). */
+  stdin?: string
   signal?: AbortSignal
 }
 
@@ -47,6 +49,7 @@ export function runProcess(
     maxBuffer = DEFAULT_PROCESS_MAX_BUFFER,
     shell = false,
     env = process.env,
+    stdin,
     signal,
   } = options
 
@@ -69,6 +72,14 @@ export function runProcess(
     const opts: SpawnOptions = { cwd, shell, env }
 
     const proc: ChildProcess = spawn(command, args, opts)
+
+    // Передача данных в stdin (например, NUL-разделённые пути для git).
+    // Глотаем EPIPE: дочерний процесс может завершиться до чтения stdin.
+    if (stdin !== undefined && proc.stdin) {
+      proc.stdin.on("error", () => { /* EPIPE при раннем выходе процесса */ })
+      proc.stdin.write(stdin)
+      proc.stdin.end()
+    }
 
     // Node.js spawn не поддерживает `timeout`; применяем вручную
     let timeoutId: ReturnType<typeof setTimeout> | undefined

@@ -7,6 +7,8 @@ import { buildWebviewHtml } from "../shared/WebviewBuilder"
  */
 export interface IDiffViewerProvider {
   openPanel(diff?: GitDiffOutcome): void
+  /** Открыта ли панель. */
+  isOpen(): boolean
   close(): void
   dispose(): void
 }
@@ -47,6 +49,10 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
     }, null, this.disposables)
 
     if (diff) this.updateDiff(diff)
+  }
+
+  isOpen(): boolean {
+    return this.panel !== undefined
   }
 
   close(): void {

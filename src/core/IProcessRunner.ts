@@ -14,6 +14,8 @@ export interface IProcessRunOptions {
   maxBuffer?: number
   shell?: boolean
   env?: Record<string, string>
+  /** Данные для stdin процесса (например, NUL-разделённые пути). */
+  stdin?: string
   signal?: AbortSignal
 }
 

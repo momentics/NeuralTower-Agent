@@ -1,4 +1,6 @@
 export { GitService, type IGitService, type IGitDiffResult, type IGitDiffError, type GitDiffOutcome, type IGitBranchInfo } from "./git/GitService"
+export { GitRunner, GitUnavailableError, makeNonInteractiveEnv, GIT_MAX_BUFFER, type IGitRunner, type IGitRunOptions, type IGitRunResult } from "./git/GitRunner"
+export { SnapshotService, SnapshotStore, SnapshotError, type ISnapshotService, type ISnapshotStore, type ISnapshotPatch, type ISnapshotRecord, type IRevertResult } from "./snapshot"
 export { PermissionManager, type IPermissionManager } from "./permission/PermissionManager"
 export { NotificationService } from "./notification/NotificationService"
 export type { INotificationService, NotificationType, INotificationServiceOptions } from "./notification/NotificationService"

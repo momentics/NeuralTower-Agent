@@ -7,7 +7,7 @@ import type { IAgentFullDependencies } from "./AgentDependencies"
 import { ContextManager } from "../core/ContextManager"
 import { ContextProviderRegistry } from "../core/providers/context/Registry"
 import { FileIndex } from "../repo/FileIndex"
-import { loadDefaultAgentConfig, loadDefaultCompactorConfig, loadDefaultContextConfig, loadDefaultSessionConfig } from "../core/Config"
+import { loadDefaultAgentConfig, loadDefaultCompactorConfig, loadDefaultContextConfig, loadDefaultSessionConfig, loadDefaultSnapshotConfig } from "../core/Config"
 import { TodoStore } from "./TodoStore"
 
 const createMockBackend = (): IBackend => ({
@@ -38,6 +38,7 @@ const createDeps = (): IAgentFullDependencies => {
       context: loadDefaultContextConfig(),
       compactor: loadDefaultCompactorConfig(),
       session: loadDefaultSessionConfig(),
+      snapshots: loadDefaultSnapshotConfig(),
     },
     contextProviderRegistry: registry,
     contextManager,
@@ -45,6 +46,7 @@ const createDeps = (): IAgentFullDependencies => {
     gitService: null,
     permissionManager: null,
     mcpManager: null,
+    snapshotService: null,
   }
 }
 

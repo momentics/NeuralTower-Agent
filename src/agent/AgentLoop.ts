@@ -13,6 +13,7 @@ import type { AgentPlanner } from "./AgentPlanner"
 import { AbortError, errorMessage } from "../core/Errors"
 import { loadDefaultAgentConfig } from "../core/Config"
 import { createDomainLogger } from "../core/Logger"
+import type { ISnapshotService, ISnapshotPatch } from "../services/snapshot/SnapshotTypes"
 
 const log = createDomainLogger("AgentLoop")
 
@@ -34,6 +35,7 @@ export class AgentLoop {
   private readonly replanOnFailure: boolean
   private readonly maxReplanAttempts: number
   private readonly maxCompactions: number
+  private readonly snapshot: ISnapshotService | null
 
   private pushSessionMessage(msg: IChatMessage): void {
     if (this.sessionContext) {
@@ -281,6 +283,7 @@ export class AgentLoop {
     private readonly toolExecutor: AgentToolExecutor,
     private readonly planner: AgentPlanner,
     config: IAgentLoopConfig = {},
+    snapshot: ISnapshotService | null = null,
   ) {
     const defaults = loadDefaultAgentConfig()
     this.maxIterations = config.maxIterations ?? defaults.maxIterations
@@ -288,9 +291,32 @@ export class AgentLoop {
     this.replanOnFailure = config.replanOnFailure ?? defaults.replanOnFailure
     this.maxReplanAttempts = config.maxReplanAttempts ?? defaults.maxReplanAttempts
     this.maxCompactions = config.maxCompactions ?? DEFAULT_MAX_COMPACTIONS
+    this.snapshot = snapshot
   }
 
- async run(
+  /**
+   * Вычислить патч снимка на пути выхода и уведомить колбэк.
+   * Ошибки снапшотов не влияют на результат выполнения.
+   */
+  private async finishWithSnapshot(
+    snapshotHash: string | null,
+    onSnapshot?: (patch: ISnapshotPatch | null) => void,
+  ): Promise<void> {
+    if (!onSnapshot) return
+    if (!snapshotHash || !this.snapshot) {
+      onSnapshot(null)
+      return
+    }
+    let patch: ISnapshotPatch | null = null
+    try {
+      patch = await this.snapshot.patch(snapshotHash)
+    } catch (err: unknown) {
+      log.warn(`Не удалось вычислить изменения запроса: ${errorMessage(err)}`)
+    }
+    onSnapshot(patch)
+  }
+
+  async run(
     query: string,
     activeSkills: ISkill[],
     onChunk: (text: string) => void,
@@ -298,6 +324,7 @@ export class AgentLoop {
     onToolResult?: (name: string, result: IToolResult) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
+    onSnapshot?: (patch: ISnapshotPatch | null) => void,
   ): Promise<IChatMessage> {
     const currentMode = this.modeManager.getModeName()
 
@@ -322,6 +349,17 @@ export class AgentLoop {
     const compactionResult = await this.tryCompact(conversation, systemPrompt)
     let workingConversation: IChatMessage[] = this.applyCompaction(compactionResult, systemPrompt) ?? conversation
 
+    // Снимок состояния до начала выполнения (до любого изменения файлов,
+    // включая изменения субагентов). Сбой не прерывает запрос.
+    let snapshotHash: string | null = null
+    if (!signal?.aborted) {
+      try {
+        snapshotHash = (await this.snapshot?.track()) ?? null
+      } catch (err: unknown) {
+        log.warn(`Не удалось снять снимок состояния: ${errorMessage(err)}`)
+      }
+    }
+
     let iterations = 0
     let recoveryAttempts = 0
     let compactionCount = 0
@@ -344,6 +382,7 @@ export class AgentLoop {
         }
       } catch (err: unknown) {
         if (err === MAX_COMPACTIONS_ERROR) {
+          await this.finishWithSnapshot(snapshotHash, onSnapshot)
           return {
             role: "assistant",
             content: "Контекст превышает допустимые пределы. Задача может быть незавершённой.",
@@ -363,8 +402,10 @@ export class AgentLoop {
 
       if (turn.type === "text") {
         if (turn.content) {
+          await this.finishWithSnapshot(snapshotHash, onSnapshot)
           return workingConversation[workingConversation.length - 1] as IChatMessage
         }
+        // Пустой ответ: выход через общий return после цикла
         break
       }
 
@@ -377,6 +418,7 @@ export class AgentLoop {
         )
         recoveryAttempts = recovery.recoveryAttempts
 
+        // Выход через общий return после цикла
         if (recovery.shouldBreak) break
         if (recovery.shouldReplan) continue
         continue
@@ -389,9 +431,11 @@ export class AgentLoop {
       )
       recoveryAttempts = recovery.recoveryAttempts
 
+      // Выход через общий return после цикла
       if (recovery.shouldBreak) break
     }
 
+    await this.finishWithSnapshot(snapshotHash, onSnapshot)
     return {
       role: "assistant",
       content: "Достигнуто максимальное число итераций. Операция может быть незавершённой.",

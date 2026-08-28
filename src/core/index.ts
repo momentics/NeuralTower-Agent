@@ -64,6 +64,9 @@ export {
   loadDefaultCompactorConfig,
   loadDefaultSessionConfig,
   loadDefaultAutocompleteConfig,
+  loadDefaultSnapshotConfig,
+  SNAPSHOT_DEFAULT_RETENTION_DAYS,
+  SNAPSHOT_DEFAULT_MAX_FILE_SIZE,
 } from "./Config"
 export type {
   IAppConfig,
@@ -72,6 +75,7 @@ export type {
   ICompactorConfig,
   ISessionConfig,
   IAutocompleteConfig,
+  ISnapshotConfig,
 } from "./Config"
 export {
   VscodeCommandExecutor,

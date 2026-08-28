@@ -8,6 +8,7 @@ import type { IPermissionManager } from "../services/permission/PermissionManage
 import type { IMCPManager } from "../mcp/MCPManager"
 import type { IAppConfig } from "../core/Config"
 import type { IFileIndex } from "../repo/FileIndex"
+import type { ISnapshotService } from "../services/snapshot/SnapshotTypes"
 import type { TodoStore } from "./TodoStore"
 
 /**
@@ -64,6 +65,9 @@ export interface IAgentOptionalDependencies {
 
   /** Менеджер MCP (null если не подключен). */
   readonly mcpManager: IMCPManager | null
+
+  /** Сервис снапшотов (null если недоступен: не-git, git не установлен, выключено). */
+  readonly snapshotService: ISnapshotService | null
 }
 
 /**

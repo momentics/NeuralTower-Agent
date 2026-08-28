@@ -13,6 +13,7 @@ import { Replanner } from "./Replanner"
 import { SessionContext } from "./SessionContext"
 import type { IAgentFullDependencies } from "./AgentDependencies"
 import type { IToolResult } from "./AgentTypes"
+import type { ISnapshotPatch } from "../services/snapshot/SnapshotTypes"
 import type { AgentModeName, IAgentMode } from "./AgentMode"
 import type { IContextItem } from "../core/providers/context/Types"
 import { TodoStore } from "./TodoStore"
@@ -84,6 +85,7 @@ function createAgentInternals(
       replanOnFailure: deps.config.agent.replanOnFailure,
       maxReplanAttempts: deps.config.agent.maxReplanAttempts,
     },
+    deps.snapshotService,
   )
 
   return {
@@ -143,6 +145,7 @@ export class AgentCore {
     onToolResult?: (name: string, result: IToolResult) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
+    onSnapshot?: (patch: ISnapshotPatch | null) => void,
   ): Promise<IChatMessage> {
     if (this.disposed) {
       throw new AgentError("Агент освобождён")
@@ -189,6 +192,7 @@ export class AgentCore {
       onToolResult,
       signal,
       onCompaction,
+      onSnapshot,
     )
   }
 

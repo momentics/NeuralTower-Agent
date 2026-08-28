@@ -4,10 +4,13 @@ import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { INotificationService } from "../services/notification/NotificationService"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
+import type { IGitService } from "../services/git/GitService"
+import type { ISnapshotService, ISnapshotStore } from "../services/snapshot"
 import type { ISettingsProvider } from "./SettingsProvider"
 import type { ExtToWebview } from "../shared/Messages"
 import { buildWebviewHtml } from "../shared/WebviewBuilder"
 import { ChatMessageHandler } from "./ChatMessageHandler"
+import type { IDiffViewerProvider } from "./DiffViewerProvider"
 import { chatHtml } from "./chat.html"
 
 /**
@@ -28,6 +31,11 @@ export class ChatProvider implements IProvider {
     private readonly notificationService: INotificationService,
     private readonly permissionManager: IPermissionManager,
     private readonly settingsProvider: ISettingsProvider,
+    private readonly snapshotService: ISnapshotService | null = null,
+    private readonly snapshotStore: ISnapshotStore | null = null,
+    private readonly diffViewer: IDiffViewerProvider | null = null,
+    private readonly gitService: IGitService | null = null,
+    private readonly getWorkDir: () => string = () => "",
   ) {}
 
   /** Установить монитор здоровья для ленивой инициализации при первом открытии sidebar. */
@@ -55,6 +63,11 @@ export class ChatProvider implements IProvider {
       this.permissionManager,
       view.webview,
       this.settingsProvider,
+      this.snapshotService,
+      this.snapshotStore,
+      this.diffViewer,
+      this.gitService,
+      this.getWorkDir,
     )
 
     this.messageHandler.subscribe(this.disposables)

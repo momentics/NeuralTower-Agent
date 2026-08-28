@@ -176,6 +176,8 @@ function setupDisposal(
         () => deps.notificationService.dispose(),
         () => deps.permissionManager.dispose(),
         () => deps.sessionStore.dispose(),
+        () => deps.snapshotService?.dispose(),
+        () => deps.snapshotStore?.dispose(),
         () => deps.codebaseIndexer.dispose(),
         () => deps.mcpManager.disconnect(),
         () => { try { deps.graphDb?.close() } catch { /* уже закрыта */ } },

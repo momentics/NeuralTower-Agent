@@ -131,6 +131,32 @@ export function loadDefaultAutocompleteConfig(): IAutocompleteConfig {
   }
 }
 
+// ── Снапшоты (чекпоинты) ─────────────────────────────────
+
+/** Дефолтное число дней хранения чекпоинтов. */
+export const SNAPSHOT_DEFAULT_RETENTION_DAYS = 7
+/** Дефолтный максимальный размер файла для чекпоинта, байты. */
+export const SNAPSHOT_DEFAULT_MAX_FILE_SIZE = 2 * 1024 * 1024
+
+export interface ISnapshotConfig {
+  /** Включить снапшоты (работает только для git-репозиториев). */
+  enabled: boolean
+
+  /** Сколько дней хранить снимки. */
+  retentionDays: number
+
+  /** Максимальный размер файла для стейджинга, байты. */
+  maxFileSizeBytes: number
+}
+
+export function loadDefaultSnapshotConfig(): ISnapshotConfig {
+  return {
+    enabled: true,
+    retentionDays: SNAPSHOT_DEFAULT_RETENTION_DAYS,
+    maxFileSizeBytes: SNAPSHOT_DEFAULT_MAX_FILE_SIZE,
+  }
+}
+
 // ── Единая конфигурация приложения ────────────────────────
 
 export interface IAppConfig {
@@ -140,6 +166,7 @@ export interface IAppConfig {
   compactor: ICompactorConfig
   session: ISessionConfig
   autocomplete: IAutocompleteConfig
+  snapshots: ISnapshotConfig
 }
 
 /**
@@ -178,6 +205,11 @@ export function loadAppConfig(): IAppConfig {
       enabled: cfg.get<boolean>("autocomplete.enabled", loadDefaultAutocompleteConfig().enabled)!,
       debounceMs: cfg.get<number>("autocomplete.debounceMs", loadDefaultAutocompleteConfig().debounceMs)!,
       maxPromptTokens: cfg.get<number>("autocomplete.maxPromptTokens", loadDefaultAutocompleteConfig().maxPromptTokens)!,
+    },
+    snapshots: {
+      enabled: cfg.get<boolean>("snapshots.enabled", loadDefaultSnapshotConfig().enabled)!,
+      retentionDays: cfg.get<number>("snapshots.retentionDays", loadDefaultSnapshotConfig().retentionDays)!,
+      maxFileSizeBytes: cfg.get<number>("snapshots.maxFileSizeBytes", loadDefaultSnapshotConfig().maxFileSizeBytes)!,
     },
   }
 }

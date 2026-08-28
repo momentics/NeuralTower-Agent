@@ -56,6 +56,7 @@ let currentMode = "build"
 let allowedModes: string[] = ["plan", "explore"]
 let pendingPermission: { requestId: string; toolName: string; description: string } | null = null
 let modeErrorTimer: number | null = null
+let pendingSnapshot: { runId: string; fileCount: number } | null = null
 
 const modeNames: Record<string, string> = {
   build: "Построение",
@@ -234,6 +235,10 @@ window.addEventListener("message", (event: MessageEvent) => {
 
     case "streamDone":
       removeStreamingDot()
+      if (pendingSnapshot && currentEl) {
+        attachRevertButton(currentEl, pendingSnapshot)
+      }
+      pendingSnapshot = null
       setStreaming(false)
       currentEl = null
       break
@@ -287,6 +292,36 @@ window.addEventListener("message", (event: MessageEvent) => {
     case "modeSwitchError":
       showModeError(String(data.message))
       break
+
+    case "snapshotInfo": {
+      const info = { runId: String(data.runId), fileCount: Number(data.fileCount) }
+      if (info.fileCount > 0) {
+        pendingSnapshot = info
+        if (currentEl) {
+          attachRevertButton(currentEl, info)
+          pendingSnapshot = null
+        }
+      }
+      break
+    }
+
+    case "snapshotReverted": {
+      const runId = String(data.runId)
+      const ok = Boolean(data.ok)
+      showToast(
+        ok ? "Изменения откатлены" : `Не удалось откатить: ${String(data.error ?? "ошибка")}`,
+        ok,
+      )
+      if (ok) {
+        // Скрыть кнопку отката для этого запроса
+        document
+          .querySelectorAll<HTMLElement>(".snapshot-revert[data-run-id]")
+          .forEach((el) => {
+            if (el.dataset.runId === runId) el.remove()
+          })
+      }
+      break
+    }
   }
 })
 
@@ -359,6 +394,53 @@ function appendToolResult(toolName: string, output: string, success: boolean): v
   el.textContent = `[${toolName}] ${truncated}`
   messages.appendChild(el)
   messages.scrollTop = messages.scrollHeight
+}
+
+// ── Чекпоинты: откат изменений запроса ──────────────────
+
+/**
+ * Прикрепить кнопку отката к assistant-сообщению.
+ * @param bubble элемент пузыря сообщения
+ */
+function attachRevertButton(bubble: HTMLElement, info: { runId: string; fileCount: number }): void {
+  const wrapper = bubble.closest(".msg") ?? bubble.parentElement
+  if (!wrapper) return
+  // Не дублировать кнопку для одного запроса
+  if (wrapper.querySelector(`.snapshot-revert[data-run-id="${info.runId}"]`)) return
+
+  const row = document.createElement("div")
+  row.className = "snapshot-revert-row"
+
+  const btn = document.createElement("button")
+  btn.type = "button"
+  btn.className = "snapshot-revert"
+  btn.dataset.runId = info.runId
+  btn.textContent = `↩ Откатить изменения (${info.fileCount})`
+  btn.title = "Вернуть файлы к состоянию перед этим запросом"
+  btn.addEventListener("click", () => {
+    const confirmed = window.confirm(
+      `Откатить ${info.fileCount} файл(ов) к состоянию перед запросом? Действие нельзя отменить.`,
+    )
+    if (!confirmed) return
+    btn.disabled = true
+    vscode.postMessage({ type: "revertSnapshot", runId: info.runId })
+  })
+
+  row.appendChild(btn)
+  wrapper.appendChild(row)
+  messages.scrollTop = messages.scrollHeight
+}
+
+/** Показать всплывающее уведомление (toast) в чате. */
+function showToast(text: string, success: boolean): void {
+  const toast = document.createElement("div")
+  toast.className = `nt-toast${success ? " ok" : " err"}`
+  toast.textContent = text
+  document.body.appendChild(toast)
+  window.setTimeout(() => {
+    toast.classList.add("hide")
+    window.setTimeout(() => toast.remove(), 300)
+  }, 4000)
 }
 
 // ── Скрытие / показ пустого состояния ─────────────────

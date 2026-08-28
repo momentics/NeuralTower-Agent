@@ -4,6 +4,7 @@ import type { IBackend, IChatMessage } from "./IBackend"
 import type { Plan } from "../agent/Plan"
 import type { IToolResult } from "../agent/AgentTypes"
 import type { AgentModeName, IAgentMode } from "../agent/AgentMode"
+import type { ISnapshotPatch } from "../services/snapshot/SnapshotTypes"
 
 /**
  * Интерфейс оркестратора агента. Управляет циклом агента:
@@ -17,6 +18,9 @@ export interface IAgentOrchestrator {
    * текста в интерфейс. Обработчик `onToolUse` вызывается при
    * вызове инструмента. `signal` позволяет отменить выполнение.
    * Обработчик `onCompaction` вызывается при компактизации истории.
+   * Обработчик `onSnapshot` вызывается на завершении запроса
+   * со списком файлов, изменённых за запрос (null если снапшоты
+   * недоступны или изменения не зафиксированы).
    */
   run(
     query: string,
@@ -25,6 +29,7 @@ export interface IAgentOrchestrator {
     onToolResult?: (name: string, result: IToolResult) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
+    onSnapshot?: (patch: ISnapshotPatch | null) => void,
   ): Promise<IChatMessage>
 
   /** Перезагрузить навыки и инструменты с диска/конфигурации. */
