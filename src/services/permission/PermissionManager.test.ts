@@ -113,6 +113,82 @@ describe("PermissionManager", () => {
   })
 })
 
+describe("PermissionManager — isSafeForArgs (per-operation classification)", () => {
+  let pm: PermissionManager
+
+  beforeEach(() => {
+    pm = new PermissionManager()
+  })
+
+  it("allows unsafe tool when isSafeForArgs says the call is safe", async () => {
+    const tool = {
+      name: "git",
+      isSafe: false,
+      isSafeForArgs: (args: Record<string, unknown>) => args.operation === "status",
+      execute: vi.fn(),
+    } as any
+    const result = await pm.checkPermission(tool, { operation: "status" })
+    expect(result).toBe(true)
+  })
+
+  it("asks permission when isSafeForArgs says the call is not safe", async () => {
+    const tool = {
+      name: "git",
+      isSafe: false,
+      isSafeForArgs: (args: Record<string, unknown>) => args.operation === "status",
+      execute: vi.fn(),
+    } as any
+    const checkPromise = pm.checkPermission(tool, { operation: "commit" }, 5000)
+    const reqs = (pm as any).pendingRequests
+    expect(reqs).toHaveLength(1)
+    pm.resolveRequest(reqs[0].id, true, false)
+    expect(await checkPromise).toBe(true)
+  })
+
+  it("includes describeCall text in the permission request", async () => {
+    const tool = {
+      name: "git",
+      isSafe: false,
+      isSafeForArgs: () => false,
+      describeCall: () => "Force push в origin/main (перезапишет историю remote)",
+      execute: vi.fn(),
+    } as any
+    const handler = vi.fn()
+    pm.onDidRequestPermission(handler)
+    const checkPromise = pm.checkPermission(tool, {}, 5000)
+    expect(handler).toHaveBeenCalled()
+    const req = handler.mock.calls[0][0]
+    expect(req.description).toBe("Force push в origin/main (перезапишет историю remote)")
+    pm.resolveRequest(req.id, true, false)
+    await checkPromise
+  })
+
+  it("saved deny overrides isSafeForArgs", async () => {
+    pm.setPermission("git", "deny")
+    const tool = {
+      name: "git",
+      isSafe: false,
+      isSafeForArgs: () => true,
+      execute: vi.fn(),
+    } as any
+    const result = await pm.checkPermission(tool, { operation: "status" })
+    expect(result).toBe(false)
+  })
+
+  it("saved allow skips isSafeForArgs entirely", async () => {
+    pm.setPermission("git", "allow")
+    const tool = {
+      name: "git",
+      isSafe: false,
+      isSafeForArgs: vi.fn(() => false),
+      execute: vi.fn(),
+    } as any
+    const result = await pm.checkPermission(tool, { operation: "push" })
+    expect(result).toBe(true)
+    expect(tool.isSafeForArgs).not.toHaveBeenCalled()
+  })
+})
+
 describe("PermissionManager — persistence", () => {
   it("persists permissions to Memento on setPermission", () => {
     const memento = createMockMemento()

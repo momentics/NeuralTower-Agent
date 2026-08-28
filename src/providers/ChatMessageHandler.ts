@@ -174,7 +174,9 @@ export class ChatMessageHandler {
           type: "permissionRequest",
           requestId: req.id ?? "",
           toolName: req.toolName,
-          description: `Инструмент "${req.toolName}" хочет выполнить вызов с аргументами: ${JSON.stringify(req.args).slice(0, UI_ARGS_LOG_TRUNCATE)}`,
+          description: req.description
+            ? `Инструмент "${req.toolName}": ${req.description}`
+            : `Инструмент "${req.toolName}" хочет выполнить вызов с аргументами: ${JSON.stringify(req.args).slice(0, UI_ARGS_LOG_TRUNCATE)}`,
         } as ExtToWebview)
       } catch (err: unknown) {
         const msg = errorMessage(err)

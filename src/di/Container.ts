@@ -3,7 +3,7 @@ import * as path from "path"
 import { createHash } from "crypto"
 import type { IAppConfig, ISessionConfig } from "../core/Config"
 import type { IGitService } from "../services/git/GitService"
-import { GitRunner } from "../services/git/GitRunner"
+import { GitRunner, type IGitRunner } from "../services/git/GitRunner"
 import { SnapshotService, SnapshotStore } from "../services/snapshot"
 import type { ISnapshotService, ISnapshotStore } from "../services/snapshot"
 import type { ICodebaseSearch } from "../repo/CodebaseSearch"
@@ -95,6 +95,7 @@ import {
   LspTool,
   TodoWriteTool,
   CodebaseSearchTool,
+  GitTool,
 } from "../tools"
 
 const log = createDomainLogger("DI")
@@ -275,6 +276,7 @@ export async function createServicesDomain(
   ctx: vscode.ExtensionContext,
   vsCfg: vscode.WorkspaceConfiguration,
   sessionConfig: ISessionConfig,
+  gitRunner: IGitRunner,
 ): Promise<IServicesDeps> {
   const sessionStore = PersistentSessionStore.withFileStorage(ctx.globalStorageUri, sessionConfig.maxSessions)
   await sessionStore.init()
@@ -285,7 +287,7 @@ export async function createServicesDomain(
   const autoApproveTools = vsCfg.get<string[]>("autoApprove.tools", [])
   permissionManager.setAutoApprove({ enabled: autoApproveEnabled, tools: autoApproveTools, maxCost: 0 })
 
-  const gitService = new GitService()
+  const gitService = new GitService(gitRunner)
   const notificationService = new NotificationService(new VscodeWindowService())
   await notificationService.init()
 
@@ -312,6 +314,7 @@ export function createSnapshotDomain(
   globalStorageUri: vscode.Uri,
   gitService: IGitService,
   config: IAppConfig,
+  gitRunner: IGitRunner,
 ): { snapshotService: ISnapshotService | null; snapshotStore: ISnapshotStore | null } {
   if (!workspaceRoot) return { snapshotService: null, snapshotStore: null }
 
@@ -319,7 +322,7 @@ export function createSnapshotDomain(
   const snapshotService = new SnapshotService(
     workspaceRoot,
     dir,
-    new GitRunner(),
+    gitRunner,
     config.snapshots,
     () => gitService.findRoot(workspaceRoot),
   )
@@ -334,6 +337,7 @@ export function createToolsDomain(
   workspaceRoot: string | undefined,
   codebaseSearch: ICodebaseSearch | undefined,
   todoStore: TodoStore,
+  gitRunner: IGitRunner,
 ): IToolsDeps {
   const tools = new ToolRegistry()
 
@@ -346,6 +350,7 @@ export function createToolsDomain(
     tools.register(new MoveFileTool(workspaceRoot))
     tools.register(new GlobTool(workspaceRoot))
     tools.register(new GrepTool(workspaceRoot))
+    tools.register(new GitTool(workspaceRoot, gitRunner))
   }
 
   tools.register(new BashTool())
@@ -569,16 +574,19 @@ export async function createDeps(
     }
   })
 
+  // Единый процессный слой git: снапшоты (Фаза 5), GitService и git-инструмент (Фаза 6)
+  const gitRunner = new GitRunner()
+
   // ── Сервисы ─────────────────────────────────────────────
   const { sessionStore, permissionManager, gitService, notificationService } =
-    await createServicesDomain(ctx, vsCfg, config.session)
+    await createServicesDomain(ctx, vsCfg, config.session, gitRunner)
 
   // ── Корень рабочей области ──────────────────────────────
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
 
   // ── Снапшоты (чекпоинты) ────────────────────────────────
   const { snapshotService, snapshotStore } = createSnapshotDomain(
-    workspaceRoot, ctx.globalStorageUri, gitService, config,
+    workspaceRoot, ctx.globalStorageUri, gitService, config, gitRunner,
   )
   if (snapshotService) {
     // Раз в сессию: очистка старых объектов и устаревших записей
@@ -602,6 +610,7 @@ export async function createDeps(
     workspaceRoot,
     codebaseSearch,
     todoStore,
+    gitRunner,
   )
   await syncMCP(mcpManager, tools)
 

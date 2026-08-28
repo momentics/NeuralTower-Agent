@@ -104,6 +104,9 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
       { tool: "edit", level: "ask" },
       { tool: "write", level: "ask" },
       { tool: "bash", level: "ask" },
+      // git: read-only операции проходят без запроса (isSafeForArgs),
+      // изменяющие и опасные — с подтверждением
+      { tool: "git", level: "ask" },
       { tool: "todo_write", level: "allow" },
       { tool: "*", level: "ask" },
     ],
@@ -133,6 +136,8 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
       { tool: "edit", level: "deny" },
       { tool: "write", level: "deny" },
       { tool: "bash", level: "deny" },
+      // git: чтение состояния (status/diff/log) без запроса, изменения — с подтверждением
+      { tool: "git", level: "ask" },
       { tool: "*", level: "deny" },
     ],
     systemPromptAddon: `# Режим: Планирование
@@ -163,6 +168,8 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
       { tool: "write", level: "deny" },
       { tool: "bash", level: "deny" },
       { tool: "todo_write", level: "deny" },
+      // git: чтение состояния (status/diff/log) без запроса, изменения — с подтверждением
+      { tool: "git", level: "ask" },
       { tool: "*", level: "deny" },
     ],
     systemPromptAddon: `# Режим: Исследование

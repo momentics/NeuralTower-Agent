@@ -44,8 +44,21 @@ export interface ITool {
   execute(args: Record<string, unknown>, signal?: AbortSignal): Promise<IToolResult>
 
   /**
-   * Безопасен ли инструмент для автоматического вызова.
-   * Разрушительные инструменты (удаление, принудительная отправка) должны возвращать false.
-   */
+    * Безопасен ли инструмент для автоматического вызова.
+    * Разрушительные инструменты (удаление, принудительная отправка) должны возвращать false.
+    */
   readonly isSafe: boolean
+
+  /**
+    * Безопасен ли конкретный вызов по аргументам.
+    * Для инструментов с миксом операций (например, git: read-only и mutating):
+    * read-only операции проходят без запроса, хотя isSafe = false.
+    */
+  readonly isSafeForArgs?: (args: Record<string, unknown>) => boolean
+
+  /**
+    * Человекочитаемое описание конкретного вызова
+    * для текста запроса разрешения (например, «Force push в origin/main»).
+    */
+  readonly describeCall?: (args: Record<string, unknown>) => string
 }

@@ -84,11 +84,11 @@ export class PermissionManager implements IPlugin, IPermissionManager {
     if (level === "allow") return true
     if (level === "deny") return false
 
-    if (tool.isSafe) return true
+    if (tool.isSafe || tool.isSafeForArgs?.(args)) return true
 
     if (this.autoApprove.enabled && this.autoApprove.tools.includes(tool.name)) return true
 
-    return this.askPermission(tool.name, args, timeoutMs)
+    return this.askPermission(tool.name, tool.describeCall?.(args) ?? "", args, timeoutMs)
   }
 
   setPermission(toolName: string, level: PermissionLevel): void {
@@ -146,12 +146,19 @@ export class PermissionManager implements IPlugin, IPermissionManager {
 
   private askPermission(
     toolName: string,
+    description: string,
     args: Record<string, unknown>,
     timeoutMs: number,
   ): Promise<boolean> {
     return new Promise<boolean>((resolve) => {
       const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      const req: IPermissionRequest = { toolName, args, resolve, id }
+      const req: IPermissionRequest = {
+        toolName,
+        description: description || undefined,
+        args,
+        resolve,
+        id,
+      }
       this.pendingRequests.push(req)
       if (this.requestEmitter) {
         this.requestEmitter.fire(req)

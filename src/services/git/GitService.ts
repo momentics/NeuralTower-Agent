@@ -1,7 +1,8 @@
 import type { IService } from "../../shared/Types"
 import { createDomainLogger } from "../../core/Logger"
 import { errorMessage } from "../../core/Errors"
-import { runProcess } from "../../utils/ProcessRunner"
+import type { IGitRunner } from "./GitRunner"
+import { GitRunner } from "./GitRunner"
 
 const log = createDomainLogger("Git")
 
@@ -43,37 +44,38 @@ export interface IGitService {
 }
 
 /**
- * Выполнить команду git через spawn (без оболочки) для защиты от инъекций.
- */
-async function gitSpawn(
-  dir: string,
-  args: string[],
-  timeout: number,
-  maxBuffer = GIT_MAX_BUFFER,
-): Promise<{ stdout: string; stderr: string }> {
-  const result = await runProcess("git", ["-C", dir, ...args], {
-    cwd: process.cwd(),
-    timeout,
-    maxBuffer,
-  })
-  if (result.code !== 0) {
-    throw new Error(`Git exited with code ${result.code}: ${result.stderr}`)
-  }
-  return { stdout: result.stdout, stderr: result.stderr }
-}
-
-/**
  * Git-сервис. Предоставляет различия, статус, информацию о ветке
  * и внедрение контекста различий для агента.
+ *
+ * Процессный слой — общий GitRunner (spawn без оболочки, аргументы-массивы).
  */
 export class GitService implements IService, IGitService {
   name = "git"
   private root: string | null = null
 
+  constructor(private readonly runner: IGitRunner = new GitRunner()) {}
+
+  /**
+   * Выполнить git-команду через GitRunner.
+   * Поведение сохранено: не-ноль код — исключение с stderr.
+   */
+  private async runGit(
+    dir: string,
+    args: string[],
+    timeout: number,
+    maxBuffer = GIT_MAX_BUFFER,
+  ): Promise<{ stdout: string; stderr: string }> {
+    const result = await this.runner.run(args, { workTree: dir, timeout, maxBuffer })
+    if (result.code !== 0) {
+      throw new Error(`Git exited with code ${result.code}: ${result.stderr}`)
+    }
+    return { stdout: result.stdout, stderr: result.stderr }
+  }
+
   async findRoot(cwd: string): Promise<string | null> {
     if (this.root) return this.root
     try {
-      const { stdout } = await gitSpawn(cwd, ["rev-parse", "--show-toplevel"], GIT_ROOT_TIMEOUT_MS)
+      const { stdout } = await this.runGit(cwd, ["rev-parse", "--show-toplevel"], GIT_ROOT_TIMEOUT_MS)
       this.root = stdout.trim()
       return this.root
     } catch (err: unknown) {
@@ -89,7 +91,7 @@ export class GitService implements IService, IGitService {
 
   async getDiff(dir: string): Promise<GitDiffOutcome> {
     try {
-      const { stdout } = await gitSpawn(dir, ["diff", "--stat", "--numstat"], GIT_DIFF_TIMEOUT_MS)
+      const { stdout } = await this.runGit(dir, ["diff", "--stat", "--numstat"], GIT_DIFF_TIMEOUT_MS)
       const lines = stdout.trim().split("\n")
       const changed: string[] = []
       let additions = 0
@@ -114,7 +116,7 @@ export class GitService implements IService, IGitService {
 
   async getBranchInfo(dir: string): Promise<IGitBranchInfo | null> {
     try {
-      const { stdout } = await gitSpawn(dir, ["status", "--porcelain=2", "--branch"], GIT_DIFF_TIMEOUT_MS)
+      const { stdout } = await this.runGit(dir, ["status", "--porcelain=2", "--branch"], GIT_DIFF_TIMEOUT_MS)
       const headBranch = stdout.match(/^# host .* head (.*?) branch.*/m)
       const behindAhead = stdout.match(/^# .* (\d+) .* (\d+)/m)
       return {
@@ -131,7 +133,7 @@ export class GitService implements IService, IGitService {
 
   async getDiffContext(dir: string): Promise<string> {
     try {
-      const { stdout } = await gitSpawn(
+      const { stdout } = await this.runGit(
         dir,
         ["diff", "--unified=0"],
         GIT_DIFF_TIMEOUT_MS,
@@ -148,7 +150,7 @@ export class GitService implements IService, IGitService {
 
   async getCachedDiff(dir: string): Promise<string> {
     try {
-      const { stdout } = await gitSpawn(
+      const { stdout } = await this.runGit(
         dir,
         ["diff", "--cached"],
         GIT_DIFF_TIMEOUT_MS,

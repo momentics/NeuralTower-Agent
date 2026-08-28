@@ -11,6 +11,8 @@ export interface IPermissionRequest {
   resolve: (allowed: boolean) => void
   id?: string
   timer?: ReturnType<typeof setTimeout>
+  /** Человекочитаемое описание вызова (из инструмента), если доступно. */
+  description?: string
 }
 
 export interface IAutoApproveConfig {

@@ -91,6 +91,18 @@ describe("BUILT_IN_MODES", () => {
     expect(resolveToolPermission(BUILT_IN_MODES.explore, "todo_write")).toBe("deny")
   })
 
+  it("git is ask in build mode (read-only ops pass via isSafeForArgs)", () => {
+    expect(resolveToolPermission(BUILT_IN_MODES.build, "git")).toBe("ask")
+  })
+
+  it("git is ask in plan mode, not denied like other mutating tools", () => {
+    expect(resolveToolPermission(BUILT_IN_MODES.plan, "git")).toBe("ask")
+  })
+
+  it("git is ask in explore mode, not denied like other mutating tools", () => {
+    expect(resolveToolPermission(BUILT_IN_MODES.explore, "git")).toBe("ask")
+  })
+
   it("build has correct transitions", () => {
     expect(BUILT_IN_MODES.build.transitions).toContain("plan")
     expect(BUILT_IN_MODES.build.transitions).toContain("explore")
