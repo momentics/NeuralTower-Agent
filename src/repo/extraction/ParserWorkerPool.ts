@@ -8,7 +8,6 @@
 import { Worker } from 'worker_threads';
 import * as fs from 'fs';
 import * as path from 'path';
-import { fileURLToPath } from 'url';
 import { Language, IExtractionResult } from '../ntgraph/Types';
 
 export interface ParsePoolWorker {
@@ -376,12 +375,12 @@ export class ParseWorkerPool {
  * если бандл не собран (dev/тесты без build:worker).
  */
 export function resolveParseWorkerPath(): string | null {
-  const here = typeof __dirname !== 'undefined'
-    ? __dirname
-    : path.dirname(fileURLToPath(import.meta.url));
+  // Бандл (CJS): __dirname = out/. Dev (vitest): каталог исходников —
+  // поэтому dev-кандидат ведёт от корня репо (тесты запускаются из корня).
+  const here = typeof __dirname !== 'undefined' ? __dirname : process.cwd();
   const candidates = [
     path.join(here, 'ParserWorker.js'), // бандл: out/
-    path.join(here, '..', '..', '..', 'out', 'ParserWorker.js'), // dev: src/repo/extraction → корень/out
+    path.join(process.cwd(), 'out', 'ParserWorker.js'), // dev: корень/out
   ];
   for (const c of candidates) {
     try {
