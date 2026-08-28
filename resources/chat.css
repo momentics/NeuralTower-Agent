@@ -825,6 +825,32 @@ body {
   cursor: default;
 }
 
+.snapshot-undo {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--accent);
+  font-family: var(--font);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.snapshot-undo:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+}
+
+.snapshot-undo:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* ═══════════════════════════════════════════
     TOAST
     ═══════════════════════════════════════════ */

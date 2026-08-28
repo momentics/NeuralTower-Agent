@@ -4,7 +4,7 @@ import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { INotificationService } from "../services/notification/NotificationService"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import type { IGitService } from "../services/git/GitService"
-import type { ISnapshotService, ISnapshotStore, ISnapshotPatch } from "../services/snapshot"
+import type { ISnapshotService, ISnapshotStore, ISnapshotPatch, ISnapshotRecord, IRevertResult } from "../services/snapshot"
 import type { ISettingsProvider } from "./SettingsProvider"
 import type { IDiffViewerProvider } from "./DiffViewerProvider"
 import { BUILT_IN_MODES } from "../agent/AgentMode"
@@ -16,6 +16,11 @@ import { UI_ARGS_LOG_TRUNCATE } from "../core/Config"
 
 const log = createDomainLogger("ChatHandler")
 const PLAN_MARKER = "__PLAN__"
+
+/** Результат отката с флагом возможности отмены (undo-запись создана). */
+interface IPerformedRevert extends IRevertResult {
+  undoAvailable: boolean
+}
 
 /**
  * Обработчик сообщений чата — изолирует логику маршрутизации
@@ -159,6 +164,12 @@ export class ChatMessageHandler {
               await this.handleRevertSnapshot(msg.runId)
             }
             break
+          case "undoRevertSnapshot":
+            // Отмена отката тоже недоступна во время выполнения агента
+            if (!this.streaming) {
+              await this.handleUndoRevertSnapshot(msg.runId)
+            }
+            break
         }
       } catch (err: unknown) {
         const msg = errorMessage(err)
@@ -252,48 +263,112 @@ export class ChatMessageHandler {
   }
 
   /**
+   * Выполнить откат файлов записи. Для kind="request" дополнительно создаёт
+   * запись undo (снимки до/после отката) и сообщает webview о возможности отмены.
+   * Возвращает null, если сервисы недоступны.
+   */
+  private async performRevert(
+    record: ISnapshotRecord,
+    filesToRevert: string[],
+    forceFiles: Iterable<string>,
+    extraSkipped = 0,
+  ): Promise<IPerformedRevert | null> {
+    if (!this.snapshotService || !this.snapshotStore) return null
+    const pre = record.kind === "request" ? await this.snapshotService.track() : null
+    const result = await this.snapshotService.revert(
+      { ...record, files: filesToRevert },
+      { forceFiles },
+    )
+    const ok = result.failed.length === 0
+    let undoAvailable = false
+    if (ok && record.kind === "request" && pre) {
+      const post = await this.snapshotService.track()
+      if (post) {
+        const revertedFiles = [...result.restored, ...result.deleted]
+        await this.snapshotStore.save({
+          runId: `undo-${record.runId}`,
+          sessionId: record.sessionId,
+          kind: "preRevert",
+          revertsRunId: record.runId,
+          hash: pre,
+          endHash: post,
+          files: revertedFiles,
+          createdAt: Date.now(),
+        })
+        undoAvailable = revertedFiles.length > 0
+      }
+    }
+    if (ok) {
+      const count = result.restored.length + result.deleted.length
+      this.notificationService.show("agentDone", `Изменения откатлены (${count} файлов)`)
+      await this.refreshDiffViewer()
+    }
+    return { ...result, undoAvailable }
+  }
+
+  /** Сообщить webview о результате отката. */
+  private postRevert(runId: string, ok: boolean, error?: string, skippedCount = 0, undoAvailable = false): void {
+    this.webview.postMessage({ type: "snapshotReverted", runId, ok, error, skippedCount, undoAvailable } as ExtToWebview)
+  }
+
+  /**
    * Откатить изменения запроса к состоянию чекпоинта.
    * Результат сообщается webview; при успехе обновляется
    * DiffViewer (если открыт) и показывается уведомление.
    */
   private async handleRevertSnapshot(runId: string): Promise<void> {
-    const fail = (error: string): void => {
-      this.webview.postMessage({
-        type: "snapshotReverted",
-        runId,
-        ok: false,
-        error,
-      } as ExtToWebview)
-    }
-
-    if (!this.snapshotService || !this.snapshotStore) {
-      fail("Чекпоинты недоступны")
+    const record = await this.snapshotStore?.get(runId)
+    if (!this.snapshotService || !this.snapshotStore || !record || record.kind !== "request") {
+      this.postRevert(runId, false, "Чекпоинт не найден")
       return
     }
-
-    const record = await this.snapshotStore.get(runId)
-    if (!record) {
-      fail("Чекпоинт не найден")
-      return
-    }
-
     try {
-      const result = await this.snapshotService.revert(record)
-      const ok = result.failed.length === 0
-      this.webview.postMessage({
-        type: "snapshotReverted",
-        runId,
-        ok,
-        error: ok ? undefined : result.failed.map((f) => f.error).join("; "),
-      } as ExtToWebview)
-
-      if (ok) {
-        const count = result.restored.length + result.deleted.length
-        this.notificationService.show("agentDone", `Изменения откатлены (${count} файлов)`)
-        await this.refreshDiffViewer()
+      const result = await this.performRevert(record, record.files, [])
+      if (!result) {
+        this.postRevert(runId, false, "Чекпоинты недоступны")
+        return
       }
+      this.postRevert(
+        runId,
+        result.ok,
+        result.ok ? undefined : result.failed.map((f) => f.error).join("; "),
+        result.skipped.length,
+        result.undoAvailable,
+      )
     } catch (err: unknown) {
-      fail(errorMessage(err))
+      this.postRevert(runId, false, errorMessage(err))
+    }
+  }
+
+  /**
+   * Отменить откат: восстановить файлы по записи undo (kind="preRevert")
+   * и удалить её из реестра.
+   */
+  private async handleUndoRevertSnapshot(runId: string): Promise<void> {
+    const undoRunId = `undo-${runId}`
+    const record = await this.snapshotStore?.get(undoRunId)
+    if (!this.snapshotService || !this.snapshotStore || !record) {
+      this.webview.postMessage({ type: "undoReverted", runId, ok: false, error: "Отмена отката недоступна" } as ExtToWebview)
+      return
+    }
+    try {
+      const result = await this.performRevert(record, record.files, [])
+      if (!result) {
+        this.webview.postMessage({ type: "undoReverted", runId, ok: false, error: "Чекпоинты недоступны" } as ExtToWebview)
+        return
+      }
+      if (result.ok) {
+        await this.snapshotStore.delete(undoRunId)
+      }
+      this.webview.postMessage({
+        type: "undoReverted",
+        runId,
+        ok: result.ok,
+        error: result.ok ? undefined : result.failed.map((f) => f.error).join("; "),
+      } as ExtToWebview)
+      if (result.ok) await this.refreshDiffViewer()
+    } catch (err: unknown) {
+      this.webview.postMessage({ type: "undoReverted", runId, ok: false, error: errorMessage(err) } as ExtToWebview)
     }
   }
 

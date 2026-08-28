@@ -107,6 +107,8 @@ export interface ISnapshotStore {
   get(runId: string): Promise<ISnapshotRecord | null>
   /** Все записи сессии (по убыванию createdAt). */
   listBySession(sessionId: string): Promise<ISnapshotRecord[]>
+  /** Удалить запись по runId. */
+  delete(runId: string): Promise<void>
   /** Удалить записи старше retention и обрезать реестр. */
   prune(retentionDays: number): Promise<void>
   /** Закрыть ресурс (no-op, интерфейс единообразия). */

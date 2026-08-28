@@ -133,6 +133,7 @@ function createMockSnapshotStore() {
     save: vi.fn(async () => {}),
     get: vi.fn(async () => null),
     listBySession: vi.fn(async () => []),
+    delete: vi.fn(async () => {}),
     prune: vi.fn(async () => {}),
     dispose: vi.fn(),
   }
@@ -316,7 +317,7 @@ describe("ChatMessageHandler", () => {
 
     await onMessage({ type: "revertSnapshot", runId: "123" })
 
-    expect(snapshotService.revert).toHaveBeenCalledWith(record)
+    expect(snapshotService.revert).toHaveBeenCalledWith(record, { forceFiles: [] })
     expect(webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: "snapshotReverted", runId: "123", ok: true }),
     )
@@ -367,6 +368,129 @@ describe("ChatMessageHandler", () => {
         runId: "123",
         ok: false,
         error: "сбой восстановления",
+      }),
+    )
+  })
+
+  it("успешный откат создаёт запись undo и сообщает undoAvailable", async () => {
+    const record = {
+      runId: "run-1",
+      sessionId: "sess-1",
+      kind: "request",
+      hash: "abc",
+      endHash: "def",
+      files: ["/w/a.txt"],
+      createdAt: 1,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(record)
+    vi.mocked(snapshotService.track)
+      .mockResolvedValueOnce("pre-hash")
+      .mockResolvedValueOnce("post-hash")
+    vi.mocked(snapshotService.revert).mockResolvedValue({
+      ok: true,
+      restored: ["/w/a.txt"],
+      deleted: [],
+      skipped: [],
+      failed: [],
+    })
+
+    await onMessage({ type: "revertSnapshot", runId: "run-1" })
+
+    expect(snapshotStore.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: "undo-run-1",
+        kind: "preRevert",
+        revertsRunId: "run-1",
+        hash: "pre-hash",
+        endHash: "post-hash",
+        files: ["/w/a.txt"],
+      }),
+    )
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "snapshotReverted",
+        runId: "run-1",
+        ok: true,
+        undoAvailable: true,
+      }),
+    )
+  })
+
+  it("undoRevertSnapshot выполняет revert по записи preRevert и удаляет её", async () => {
+    const undoRecord = {
+      runId: "undo-run-1",
+      sessionId: "sess-1",
+      kind: "preRevert",
+      revertsRunId: "run-1",
+      hash: "pre-hash",
+      endHash: "post-hash",
+      files: ["/w/a.txt"],
+      createdAt: 2,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(undoRecord)
+    vi.mocked(snapshotService.revert).mockResolvedValue({
+      ok: true,
+      restored: ["/w/a.txt"],
+      deleted: [],
+      skipped: [],
+      failed: [],
+    })
+
+    await onMessage({ type: "undoRevertSnapshot", runId: "run-1" })
+
+    expect(snapshotService.revert).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "undo-run-1", files: ["/w/a.txt"] }),
+      { forceFiles: [] },
+    )
+    expect(snapshotStore.delete).toHaveBeenCalledWith("undo-run-1")
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "undoReverted", runId: "run-1", ok: true }),
+    )
+  })
+
+  it("undoRevertSnapshot без записи сообщает об ошибке", async () => {
+    vi.mocked(snapshotStore.get).mockResolvedValue(null)
+
+    await onMessage({ type: "undoRevertSnapshot", runId: "run-1" })
+
+    expect(snapshotService.revert).not.toHaveBeenCalled()
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "undoReverted",
+        runId: "run-1",
+        ok: false,
+        error: "Отмена отката недоступна",
+      }),
+    )
+  })
+
+  it("откат с пропусками передаёт skippedCount", async () => {
+    const record = {
+      runId: "run-1",
+      sessionId: "sess-1",
+      kind: "request",
+      hash: "abc",
+      endHash: "def",
+      files: ["/w/a.txt"],
+      createdAt: 1,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(record)
+    vi.mocked(snapshotService.revert).mockResolvedValue({
+      ok: true,
+      restored: [],
+      deleted: [],
+      skipped: [{ file: "/w/a.txt", reason: "Файл изменялся после запроса" }],
+      failed: [],
+    })
+
+    await onMessage({ type: "revertSnapshot", runId: "run-1" })
+
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "snapshotReverted",
+        runId: "run-1",
+        ok: true,
+        skippedCount: 1,
       }),
     )
   })

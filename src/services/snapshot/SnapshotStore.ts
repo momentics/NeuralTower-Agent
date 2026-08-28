@@ -89,6 +89,17 @@ export class SnapshotStore implements ISnapshotStore {
     })
   }
 
+  /** Удалить запись по runId. */
+  async delete(runId: string): Promise<void> {
+    if (this.disposed) return
+    await this.mutex.withLock(async () => {
+      await this.ensureLoaded()
+      const before = this.records.length
+      this.records = this.records.filter((r) => r.runId !== runId)
+      if (this.records.length !== before) await this.saveLocked()
+    })
+  }
+
   /** Удалить записи старше retentionDays. */
   async prune(retentionDays: number): Promise<void> {
     if (this.disposed) return

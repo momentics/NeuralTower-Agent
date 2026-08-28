@@ -13,6 +13,7 @@ export type WebviewToExt =
   | { type: "settings" }
   | { type: "switchMode"; mode: string }
   | { type: "revertSnapshot"; runId: string }
+  | { type: "undoRevertSnapshot"; runId: string }
 
 export type ExtToWebview =
   | { type: "messageConfirmed"; content: string }
@@ -29,7 +30,8 @@ export type ExtToWebview =
   | { type: "modeChanged"; mode: AgentModeName; allowed: AgentModeName[] }
   | { type: "modeSwitchError"; message: string }
   | { type: "snapshotInfo"; runId: string; hash: string; fileCount: number }
-  | { type: "snapshotReverted"; runId: string; ok: boolean; error?: string }
+  | { type: "snapshotReverted"; runId: string; ok: boolean; error?: string; skippedCount?: number; undoAvailable?: boolean }
+  | { type: "undoReverted"; runId: string; ok: boolean; error?: string }
 
 export type SettingsToExt =
   | { type: "settingsSave"; url: string; model: string; maxRetries?: number; timeoutMs?: number; autoApprove?: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean }

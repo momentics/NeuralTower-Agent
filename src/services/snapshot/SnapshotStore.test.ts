@@ -70,6 +70,26 @@ describe("SnapshotStore", () => {
     expect(loaded!.files).toEqual(["b.txt"])
   })
 
+  it("delete удаляет запись с диска", async () => {
+    const store = new SnapshotStore(ledgerPath)
+    await store.save(makeRecord("run-1"))
+    await store.save(makeRecord("run-2"))
+    await store.delete("run-1")
+    expect(await store.get("run-1")).toBeNull()
+    expect(await store.get("run-2")).not.toBeNull()
+
+    const store2 = new SnapshotStore(ledgerPath)
+    expect(await store2.get("run-1")).toBeNull()
+    expect(await store2.get("run-2")).not.toBeNull()
+  })
+
+  it("delete с неизвестным runId — безоперационный", async () => {
+    const store = new SnapshotStore(ledgerPath)
+    await store.save(makeRecord("run-1"))
+    await store.delete("nope")
+    expect(await store.get("run-1")).not.toBeNull()
+  })
+
   it("listBySession returns only session records sorted by createdAt desc", async () => {
     const store = new SnapshotStore(ledgerPath)
     await store.save(makeRecord("run-1", { sessionId: "sess-1", createdAt: 1000 }))

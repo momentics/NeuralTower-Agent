@@ -57,6 +57,7 @@ let allowedModes: string[] = ["plan", "explore"]
 let pendingPermission: { requestId: string; toolName: string; description: string } | null = null
 let modeErrorTimer: number | null = null
 let pendingSnapshot: { runId: string; fileCount: number } | null = null
+const snapshotInfos = new Map<string, { fileCount: number }>()
 
 const modeNames: Record<string, string> = {
   build: "Построение",
@@ -308,17 +309,43 @@ window.addEventListener("message", (event: MessageEvent) => {
     case "snapshotReverted": {
       const runId = String(data.runId)
       const ok = Boolean(data.ok)
+      const undoAvailable = Boolean(data.undoAvailable)
+      const skipped = Number(data.skippedCount ?? 0)
       showToast(
-        ok ? "Изменения откатлены" : `Не удалось откатить: ${String(data.error ?? "ошибка")}`,
+        ok
+          ? `Изменения откатлены${skipped > 0 ? `, пропущено: ${skipped} (изменялись после запроса)` : ""}`
+          : `Не удалось откатить: ${String(data.error ?? "ошибка")}`,
         ok,
       )
       if (ok) {
-        // Скрыть кнопку отката для этого запроса
-        document
-          .querySelectorAll<HTMLElement>(".snapshot-revert[data-run-id]")
-          .forEach((el) => {
-            if (el.dataset.runId === runId) el.remove()
-          })
+        const revertBtn = document.querySelector<HTMLButtonElement>(`.snapshot-revert[data-run-id="${runId}"]`)
+        const undoBtn = document.querySelector<HTMLButtonElement>(`.snapshot-undo[data-run-id="${runId}"]`)
+        if (undoAvailable && revertBtn && undoBtn) {
+          // Откат можно отменить — показать кнопку undo вместо revert
+          revertBtn.style.display = "none"
+          undoBtn.style.display = ""
+          undoBtn.disabled = false
+        } else {
+          // Undo недоступен — убрать обе кнопки для этого запроса
+          document.querySelectorAll<HTMLElement>(".snapshot-revert[data-run-id], .snapshot-undo[data-run-id]")
+            .forEach((el) => { if (el.dataset.runId === runId) el.remove() })
+        }
+      }
+      break
+    }
+
+    case "undoReverted": {
+      const runId = String(data.runId)
+      const ok = Boolean(data.ok)
+      showToast(
+        ok ? "Откат отменён — изменения возвращены" : `Не удалось отменить откат: ${String(data.error ?? "ошибка")}`,
+        ok,
+      )
+      if (ok) {
+        const revertBtn = document.querySelector<HTMLButtonElement>(`.snapshot-revert[data-run-id="${runId}"]`)
+        const undoBtn = document.querySelector<HTMLButtonElement>(`.snapshot-undo[data-run-id="${runId}"]`)
+        if (revertBtn) { revertBtn.style.display = ""; revertBtn.disabled = false }
+        if (undoBtn) undoBtn.style.display = "none"
       }
       break
     }
@@ -408,6 +435,8 @@ function attachRevertButton(bubble: HTMLElement, info: { runId: string; fileCoun
   // Не дублировать кнопку для одного запроса
   if (wrapper.querySelector(`.snapshot-revert[data-run-id="${info.runId}"]`)) return
 
+  snapshotInfos.set(info.runId, info)
+
   const row = document.createElement("div")
   row.className = "snapshot-revert-row"
 
@@ -419,14 +448,27 @@ function attachRevertButton(bubble: HTMLElement, info: { runId: string; fileCoun
   btn.title = "Вернуть файлы к состоянию перед этим запросом"
   btn.addEventListener("click", () => {
     const confirmed = window.confirm(
-      `Откатить ${info.fileCount} файл(ов) к состоянию перед запросом? Действие нельзя отменить.`,
+      `Откатить ${info.fileCount} файл(ов) к состоянию перед запросом? Откат можно отменить.`,
     )
     if (!confirmed) return
     btn.disabled = true
     vscode.postMessage({ type: "revertSnapshot", runId: info.runId })
   })
 
+  const undoBtn = document.createElement("button")
+  undoBtn.type = "button"
+  undoBtn.className = "snapshot-undo"
+  undoBtn.dataset.runId = info.runId
+  undoBtn.textContent = "↺ Отменить откат"
+  undoBtn.style.display = "none"
+  undoBtn.addEventListener("click", () => {
+    if (!window.confirm("Вернуть изменения запроса обратно?")) return
+    undoBtn.disabled = true
+    vscode.postMessage({ type: "undoRevertSnapshot", runId: info.runId })
+  })
+
   row.appendChild(btn)
+  row.appendChild(undoBtn)
   wrapper.appendChild(row)
   messages.scrollTop = messages.scrollHeight
 }
