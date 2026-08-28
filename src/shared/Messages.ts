@@ -14,6 +14,8 @@ export type WebviewToExt =
   | { type: "switchMode"; mode: string }
   | { type: "revertSnapshot"; runId: string }
   | { type: "undoRevertSnapshot"; runId: string }
+  | { type: "listCheckpoints" }
+  | { type: "restoreCheckpoint"; runId: string }
 
 export type ExtToWebview =
   | { type: "messageConfirmed"; content: string }
@@ -32,6 +34,7 @@ export type ExtToWebview =
   | { type: "snapshotInfo"; runId: string; hash: string; fileCount: number }
   | { type: "snapshotReverted"; runId: string; ok: boolean; error?: string; skippedCount?: number; undoAvailable?: boolean }
   | { type: "undoReverted"; runId: string; ok: boolean; error?: string }
+  | { type: "checkpointList"; checkpoints: Array<{ runId: string; createdAt: number; fileCount: number }> }
 
 export type SettingsToExt =
   | { type: "settingsSave"; url: string; model: string; maxRetries?: number; timeoutMs?: number; autoApprove?: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean }

@@ -5,6 +5,7 @@ import type { INotificationService } from "../services/notification/Notification
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import type { IGitService } from "../services/git/GitService"
 import type { ISnapshotService, ISnapshotStore, ISnapshotPatch, ISnapshotRecord, IRevertResult } from "../services/snapshot"
+import { pathKey } from "../services/snapshot"
 import type { ISettingsProvider } from "./SettingsProvider"
 import type { IDiffViewerProvider } from "./DiffViewerProvider"
 import { BUILT_IN_MODES } from "../agent/AgentMode"
@@ -168,6 +169,15 @@ export class ChatMessageHandler {
             // Отмена отката тоже недоступна во время выполнения агента
             if (!this.streaming) {
               await this.handleUndoRevertSnapshot(msg.runId)
+            }
+            break
+          case "listCheckpoints":
+            this.handleListCheckpoints()
+            break
+          case "restoreCheckpoint":
+            // Возврат к чекпоинту недоступен во время выполнения агента
+            if (!this.streaming) {
+              await this.handleRestoreCheckpoint(msg.runId)
             }
             break
         }
@@ -369,6 +379,72 @@ export class ChatMessageHandler {
       if (result.ok) await this.refreshDiffViewer()
     } catch (err: unknown) {
       this.webview.postMessage({ type: "undoReverted", runId, ok: false, error: errorMessage(err) } as ExtToWebview)
+    }
+  }
+
+  /** Отправить webview список чекпоинтов активной сессии (только kind="request"). */
+  private handleListCheckpoints(): void {
+    if (!this.snapshotStore) {
+      this.webview.postMessage({ type: "checkpointList", checkpoints: [] } as ExtToWebview)
+      return
+    }
+    const sessionId = this.sessionStore.activeId
+    this.snapshotStore
+      .listBySession(sessionId)
+      .then((records) => {
+        const checkpoints = records
+          .filter((r) => r.kind === "request")
+          .map((r) => ({ runId: r.runId, createdAt: r.createdAt, fileCount: r.files.length }))
+        this.webview.postMessage({ type: "checkpointList", checkpoints } as ExtToWebview)
+      })
+      .catch((err: unknown) => {
+        log.warn(`Не удалось получить список чекпоинтов: ${errorMessage(err)}`)
+        this.webview.postMessage({ type: "checkpointList", checkpoints: [] } as ExtToWebview)
+      })
+  }
+
+  /**
+   * Файлы записи, не затронутые более поздними запросами.
+   * Возвращает [откатывать, число пропущено из-за поздних запросов].
+   */
+  private async filterByLaterRequests(record: ISnapshotRecord): Promise<[string[], number]> {
+    const all = await this.snapshotStore!.listBySession(this.sessionStore.activeId)
+    const later = all.filter((r) => r.kind === "request" && r.createdAt > record.createdAt)
+    const laterTouched = new Set(later.flatMap((r) => r.files).map(pathKey))
+    const toRevert = record.files.filter((f) => !laterTouched.has(pathKey(f)))
+    return [toRevert, record.files.length - toRevert.length]
+  }
+
+  /**
+   * Вернуть файлы к состоянию чекпоинта, минуя файлы, изменённые
+   * последующими запросами (они отчитываются как пропущенные).
+   */
+  private async handleRestoreCheckpoint(runId: string): Promise<void> {
+    const record = await this.snapshotStore?.get(runId)
+    if (!this.snapshotService || !this.snapshotStore || !record || record.kind !== "request") {
+      this.postRevert(runId, false, "Чекпоинт не найден")
+      return
+    }
+    try {
+      const [toRevert, skippedByLater] = await this.filterByLaterRequests(record)
+      if (toRevert.length === 0) {
+        this.postRevert(runId, false, "Все файлы этого запроса были изменены последующими запросами")
+        return
+      }
+      const result = await this.performRevert(record, toRevert, [], skippedByLater)
+      if (!result) {
+        this.postRevert(runId, false, "Чекпоинты недоступны")
+        return
+      }
+      this.postRevert(
+        runId,
+        result.ok,
+        result.ok ? undefined : result.failed.map((f) => f.error).join("; "),
+        result.skipped.length + skippedByLater,
+        result.undoAvailable,
+      )
+    } catch (err: unknown) {
+      this.postRevert(runId, false, errorMessage(err))
     }
   }
 

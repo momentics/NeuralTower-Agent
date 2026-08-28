@@ -495,6 +495,129 @@ describe("ChatMessageHandler", () => {
     )
   })
 
+  it("listCheckpoints шлёт только записи request в порядке реестра", async () => {
+    const newReq = {
+      runId: "run-new",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "h1",
+      endHash: "e1",
+      files: ["/w/a.ts"],
+      createdAt: 200,
+    }
+    const preRev = {
+      runId: "undo-run-old",
+      sessionId: "sess-1",
+      kind: "preRevert" as const,
+      revertsRunId: "run-old",
+      hash: "h2",
+      endHash: "e2",
+      files: ["/w/b.ts"],
+      createdAt: 150,
+    }
+    const oldReq = {
+      runId: "run-old",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "h3",
+      endHash: "e3",
+      files: ["/w/b.ts"],
+      createdAt: 100,
+    }
+    vi.mocked(snapshotStore.listBySession).mockResolvedValue([newReq, preRev, oldReq])
+
+    await onMessage({ type: "listCheckpoints" })
+
+    expect(snapshotStore.listBySession).toHaveBeenCalledWith("sess-1")
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: "checkpointList",
+      checkpoints: [
+        { runId: "run-new", createdAt: 200, fileCount: 1 },
+        { runId: "run-old", createdAt: 100, fileCount: 1 },
+      ],
+    })
+  })
+
+  it("restoreCheckpoint отфильтровывает файлы поздних запросов", async () => {
+    const record = {
+      runId: "run-1",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "abc",
+      endHash: "def",
+      files: ["/w/a.ts", "/w/b.ts"],
+      createdAt: 100,
+    }
+    const later = {
+      runId: "run-2",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "h2",
+      endHash: "e2",
+      files: ["/w/b.ts"],
+      createdAt: 200,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(record)
+    vi.mocked(snapshotStore.listBySession).mockResolvedValue([record, later])
+    vi.mocked(snapshotService.revert).mockResolvedValue({
+      ok: true,
+      restored: ["/w/a.ts"],
+      deleted: [],
+      skipped: [],
+      failed: [],
+    })
+
+    await onMessage({ type: "restoreCheckpoint", runId: "run-1" })
+
+    expect(snapshotService.revert).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "run-1", files: ["/w/a.ts"] }),
+      { forceFiles: [] },
+    )
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "snapshotReverted",
+        runId: "run-1",
+        ok: true,
+        skippedCount: 1,
+      }),
+    )
+  })
+
+  it("restoreCheckpoint с пустым набором файлов не вызывает revert", async () => {
+    const record = {
+      runId: "run-1",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "abc",
+      endHash: "def",
+      files: ["/w/a.ts"],
+      createdAt: 100,
+    }
+    const later = {
+      runId: "run-2",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "h2",
+      endHash: "e2",
+      files: ["/w/a.ts"],
+      createdAt: 200,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(record)
+    vi.mocked(snapshotStore.listBySession).mockResolvedValue([record, later])
+
+    await onMessage({ type: "restoreCheckpoint", runId: "run-1" })
+
+    expect(snapshotService.revert).not.toHaveBeenCalled()
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "snapshotReverted",
+        runId: "run-1",
+        ok: false,
+        error: "Все файлы этого запроса были изменены последующими запросами",
+      }),
+    )
+  })
+
   it("revertSnapshot is ignored while streaming", async () => {
     onMessage({ type: "sendMessage", content: "задача" })
     await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1))

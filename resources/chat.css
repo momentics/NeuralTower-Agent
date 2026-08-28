@@ -852,6 +852,60 @@ body {
 }
 
 /* ═══════════════════════════════════════════
+    CHECKPOINT LIST (список чекпоинтов)
+    ═══════════════════════════════════════════ */
+.checkpoint-panel {
+  margin: 4px 12px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.checkpoint-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 4px;
+}
+
+.checkpoint-row:hover { background: var(--bg-surface); }
+
+.checkpoint-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--mono, monospace);
+}
+
+.checkpoint-restore {
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: none;
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.checkpoint-restore:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
+.checkpoint-restore:disabled { opacity: 0.5; cursor: default; }
+
+.checkpoint-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 4px 6px;
+}
+
+/* ═══════════════════════════════════════════
     TOAST
     ═══════════════════════════════════════════ */
 .nt-toast {

@@ -36,6 +36,7 @@ const sessionsSection = document.getElementById("sessions-section") as HTMLDivEl
 const newChatBtn = document.getElementById("btn-new-chat") as HTMLButtonElement
 const settingsBtn = document.getElementById("btn-settings") as HTMLButtonElement
 const sessionsBtn = document.getElementById("btn-sessions") as HTMLButtonElement
+const checkpointsBtn = document.getElementById("btn-checkpoints") as HTMLButtonElement
 const modeErrorEl = document.getElementById("mode-error") as HTMLDivElement
 
 // ── Типы и состояние ──────────────────────────────────
@@ -180,6 +181,23 @@ sessionsBtn.addEventListener("click", () => {
   vscode.postMessage({ type: "sessionList" })
 })
 
+// ── Чекпоинты: панель списка ───────────────────────────
+
+/** Панель чекпоинтов активной сессии (рядом со списком сессий). */
+const checkpointPanel = document.createElement("div")
+checkpointPanel.className = "checkpoint-panel"
+checkpointPanel.style.display = "none"
+if (sessionsList) sessionsList.insertAdjacentElement("afterend", checkpointPanel)
+
+checkpointsBtn.addEventListener("click", () => {
+  if (checkpointPanel.style.display === "none") {
+    vscode.postMessage({ type: "listCheckpoints" })
+    checkpointPanel.style.display = "block"
+  } else {
+    checkpointPanel.style.display = "none"
+  }
+})
+
 // ── Разрешения ────────────────────────────────────────
 
 permAllowBtn.addEventListener("click", () => {
@@ -302,6 +320,39 @@ window.addEventListener("message", (event: MessageEvent) => {
           attachRevertButton(currentEl, info)
           pendingSnapshot = null
         }
+      }
+      break
+    }
+
+    case "checkpointList": {
+      checkpointPanel.innerHTML = ""
+      const list = (data.checkpoints as Array<{ runId: string; createdAt: number; fileCount: number }>) ?? []
+      if (list.length === 0) {
+        const empty = document.createElement("div")
+        empty.className = "checkpoint-empty"
+        empty.textContent = "Чекпоинтов пока нет"
+        checkpointPanel.appendChild(empty)
+        break
+      }
+      for (const cp of list) {
+        const rowEl = document.createElement("div")
+        rowEl.className = "checkpoint-row"
+        const time = new Date(cp.createdAt).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
+        const label = document.createElement("span")
+        label.className = "checkpoint-label"
+        label.textContent = `${time} · ${cp.fileCount} файл(ов)`
+        const btn = document.createElement("button")
+        btn.type = "button"
+        btn.className = "checkpoint-restore"
+        btn.textContent = "Откатить"
+        btn.addEventListener("click", () => {
+          if (!window.confirm("Откатить изменения этого запроса? Файлы, изменённые последующими запросами, не будут затронуты.")) return
+          btn.disabled = true
+          vscode.postMessage({ type: "restoreCheckpoint", runId: cp.runId })
+        })
+        rowEl.appendChild(label)
+        rowEl.appendChild(btn)
+        checkpointPanel.appendChild(rowEl)
       }
       break
     }

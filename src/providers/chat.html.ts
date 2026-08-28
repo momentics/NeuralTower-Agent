@@ -40,6 +40,9 @@ export const chatHtml = `
   <div id="sessions-section">
     <div class="sessions-header">
       <span class="sessions-label">Сессии</span>
+      <button class="icon-btn" id="btn-checkpoints" title="Чекпоинты">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </button>
       <button class="icon-btn" id="btn-sessions" title="Все сессии">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
