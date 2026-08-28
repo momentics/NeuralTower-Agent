@@ -163,3 +163,60 @@ describe("AgentModeManager", () => {
     expect(mgr.getMode().displayName).toBe("Custom Build")
   })
 })
+
+describe("AgentModeManager events", () => {
+  let mgr: AgentModeManager
+
+  beforeEach(() => {
+    mgr = new AgentModeManager()
+  })
+
+  it("fires onModeChanged on successful switch", () => {
+    const events: string[] = []
+    mgr.onModeChanged((mode) => events.push(mode))
+    mgr.switchMode("plan")
+    expect(events).toEqual(["plan"])
+  })
+
+  it("does not fire on rejected switch", () => {
+    const events: string[] = []
+    mgr.onModeChanged((mode) => events.push(mode))
+    mgr.switchMode("plan")
+    events.length = 0
+    expect(mgr.switchMode("explore")).toBe(false)
+    expect(events).toEqual([])
+  })
+
+  it("same-mode switch is a no-op returning true without event", () => {
+    const events: string[] = []
+    mgr.onModeChanged((mode) => events.push(mode))
+    expect(mgr.switchMode("build")).toBe(true)
+    expect(mgr.getModeName()).toBe("build")
+    expect(events).toEqual([])
+  })
+
+  it("unsubscribe stops events", () => {
+    const events: string[] = []
+    const sub = mgr.onModeChanged((mode) => events.push(mode))
+    sub.dispose()
+    mgr.switchMode("plan")
+    expect(events).toEqual([])
+  })
+
+  it("resetMode returns to build and fires event", () => {
+    const events: string[] = []
+    mgr.onModeChanged((mode) => events.push(mode))
+    mgr.switchMode("plan")
+    events.length = 0
+    mgr.resetMode()
+    expect(mgr.getModeName()).toBe("build")
+    expect(events).toEqual(["build"])
+  })
+
+  it("resetMode does not fire when already in build", () => {
+    const events: string[] = []
+    mgr.onModeChanged((mode) => events.push(mode))
+    mgr.resetMode()
+    expect(events).toEqual([])
+  })
+})

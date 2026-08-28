@@ -13,7 +13,7 @@ import { Replanner } from "./Replanner"
 import { SessionContext } from "./SessionContext"
 import type { IAgentFullDependencies } from "./AgentDependencies"
 import type { IToolResult } from "./AgentTypes"
-import type { AgentModeName } from "./AgentMode"
+import type { AgentModeName, IAgentMode } from "./AgentMode"
 import type { IContextItem } from "../core/providers/context/Types"
 import { TodoStore } from "./TodoStore"
 import type { Plan } from "./Plan"
@@ -228,6 +228,20 @@ export class AgentCore {
   }
 
   /**
+   * Вернуть полное описание текущего режима.
+   */
+  getModeInfo(): IAgentMode {
+    return this.modeManager.getMode()
+  }
+
+  /**
+   * Подписаться на события смены режима.
+   */
+  onModeChanged(handler: (mode: AgentModeName) => void): { dispose(): void } {
+    return this.modeManager.onModeChanged(handler)
+  }
+
+  /**
    * Вернуть хранилище задач.
    */
   getTodoStore(): TodoStore {
@@ -258,6 +272,7 @@ export class AgentCore {
     this.planner.clearPlan()
     this.todoStore.clear()
     this.deps.contextManager.reset()
+    this.modeManager.resetMode()
   }
 
   /**

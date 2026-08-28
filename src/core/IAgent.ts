@@ -3,6 +3,7 @@ import type { ISkill } from "../skills/ISkill"
 import type { IBackend, IChatMessage } from "./IBackend"
 import type { Plan } from "../agent/Plan"
 import type { IToolResult } from "../agent/AgentTypes"
+import type { AgentModeName, IAgentMode } from "../agent/AgentMode"
 
 /**
  * Интерфейс оркестратора агента. Управляет циклом агента:
@@ -43,4 +44,16 @@ export interface IAgentOrchestrator {
 
   /** Вернуть текущий план (или null, если плана нет). */
   getPlan(): Plan | null
+
+  /** Вернуть имя текущего режима. */
+  getMode(): AgentModeName
+
+  /** Вернуть полное описание текущего режима (имя, переходы, правила инструментов). */
+  getModeInfo(): IAgentMode
+
+  /** Переключить режим. Возвращает false, если переход не допустим. */
+  switchMode(mode: AgentModeName): boolean
+
+  /** Подписаться на события смены режима. Возвращает объект с dispose(). */
+  onModeChanged(handler: (mode: AgentModeName) => void): { dispose(): void }
 }

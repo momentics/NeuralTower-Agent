@@ -231,4 +231,30 @@ describe("AgentOrchestrator", () => {
     await orchestrator.restoreSession([])
     expect(orchestrator.getTodoStore().getItems()).toEqual([])
   })
+
+  it("onModeChanged survives restoreSession and reports build", async () => {
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps, null, new TodoStore())
+    const events: string[] = []
+    orchestrator.onModeChanged((mode) => events.push(mode))
+    orchestrator.switchMode("plan")
+    await orchestrator.restoreSession([])
+    expect(events).toEqual(["plan", "build"])
+    expect(orchestrator.getMode()).toBe("build")
+  })
+
+  it("onModeChanged survives reload", async () => {
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps, null, new TodoStore())
+    const events: string[] = []
+    orchestrator.onModeChanged((mode) => events.push(mode))
+    orchestrator.switchMode("explore")
+    await orchestrator.reload()
+    expect(events).toEqual(["explore", "build"])
+  })
+
+  it("getModeInfo returns mode descriptor", () => {
+    const orchestrator = new AgentOrchestrator(backend, toolRegistry, skillManager, deps, null, new TodoStore())
+    const info = orchestrator.getModeInfo()
+    expect(info.name).toBe("build")
+    expect(info.transitions).toContain("plan")
+  })
 })

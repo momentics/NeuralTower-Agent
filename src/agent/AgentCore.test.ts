@@ -153,4 +153,29 @@ describe("AgentCore", () => {
     expect(core.getTodoStore().getItems()).toEqual([])
     expect(core.getPlan()).toBeNull()
   })
+
+  it("getModeInfo returns current mode descriptor", () => {
+    const core = new AgentCore(backend, toolRegistry, skillManager, deps, new TodoStore())
+    expect(core.getModeInfo().name).toBe("build")
+    expect(core.getModeInfo().transitions).toEqual(["plan", "explore"])
+  })
+
+  it("onModeChanged receives switch events", () => {
+    const core = new AgentCore(backend, toolRegistry, skillManager, deps, new TodoStore())
+    const events: string[] = []
+    core.onModeChanged((mode) => events.push(mode))
+    core.switchMode("plan")
+    expect(events).toEqual(["plan"])
+  })
+
+  it("resetSession resets mode to build", () => {
+    const core = new AgentCore(backend, toolRegistry, skillManager, deps, new TodoStore())
+    const events: string[] = []
+    core.onModeChanged((mode) => events.push(mode))
+    core.switchMode("plan")
+    events.length = 0
+    core.resetSession()
+    expect(core.getMode()).toBe("build")
+    expect(events).toEqual(["build"])
+  })
 })

@@ -1,6 +1,11 @@
 import type { PermissionLevel } from "../shared/PermissionTypes"
 
 /**
+ * Обработчик события смены режима.
+ */
+export type ModeChangeHandler = (mode: AgentModeName) => void
+
+/**
  * Режим агента определяет набор разрешений и системный промпт
  * для конкретного типа работы.
  *
@@ -180,6 +185,7 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
 export class AgentModeManager {
   private currentMode: AgentModeName = "build"
   private overrides: Map<AgentModeName, IAgentMode> = new Map()
+  private modeListeners: Set<ModeChangeHandler> = new Set()
 
   /**
    * Вернуть текущий режим.
@@ -196,14 +202,19 @@ export class AgentModeManager {
   }
 
   /**
-   * Переключить режим. Возвращает true, если переход допустим.
+   * Переключить режим. Возвращает true, если переход допустим
+   * (или режим уже текущий — no-op).
    */
   switchMode(newMode: AgentModeName): boolean {
+    if (newMode === this.currentMode) {
+      return true
+    }
     const current = this.getMode()
     if (!current.transitions.includes(newMode)) {
       return false
     }
     this.currentMode = newMode
+    this.emitModeChanged()
     return true
   }
 
@@ -239,6 +250,39 @@ export class AgentModeManager {
    */
   registerMode(mode: IAgentMode): void {
     this.overrides.set(mode.name, mode)
+  }
+
+  /**
+   * Подписаться на события смены режима.
+   * Событие fires при успешном switchMode и при resetMode.
+   * Возвращает объект с dispose() для отписки.
+   */
+  onModeChanged(handler: ModeChangeHandler): { dispose(): void } {
+    this.modeListeners.add(handler)
+    return {
+      dispose: () => {
+        this.modeListeners.delete(handler)
+      },
+    }
+  }
+
+  /**
+   * Сбросить режим на дефолтный ("build").
+   * Вызывается при новом чате / сбросе сессии.
+   */
+  resetMode(): void {
+    if (this.currentMode === "build") {
+      return
+    }
+    this.currentMode = "build"
+    this.emitModeChanged()
+  }
+
+  private emitModeChanged(): void {
+    const mode = this.currentMode
+    for (const handler of [...this.modeListeners]) {
+      handler(mode)
+    }
   }
 
 }

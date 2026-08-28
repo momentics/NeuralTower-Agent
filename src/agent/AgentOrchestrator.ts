@@ -5,7 +5,7 @@ import type { ISkillManager } from "../skills/SkillManager"
 import type { ISkill } from "../skills/ISkill"
 import { AgentCore } from "./AgentCore"
 import { SubAgentSpawner } from "./SubAgentSpawner"
-import type { AgentModeName } from "./AgentMode"
+import type { AgentModeName, IAgentMode } from "./AgentMode"
 import type { IAgentFullDependencies, AgentSpawnFactory } from "./AgentDependencies"
 import type { Plan } from "./Plan"
 import type { TodoStore } from "./TodoStore"
@@ -26,6 +26,8 @@ export class AgentOrchestrator implements IAgentOrchestrator {
   private spawner: SubAgentSpawner
   private disposed = false
   private abortController: AbortController = new AbortController()
+  private readonly modeListeners: Set<(mode: AgentModeName) => void> = new Set()
+  private coreModeSub: { dispose(): void } | null = null
 
   constructor(
     private readonly backend: IBackend,
@@ -36,6 +38,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     private readonly todoStore: TodoStore,
   ) {
     this.core = this.createCore()
+    this.bindCoreModeEvents()
     this.spawner = new SubAgentSpawner(
       this.deps,
       this.backend,
@@ -54,6 +57,24 @@ export class AgentOrchestrator implements IAgentOrchestrator {
       this.deps,
       this.todoStore,
     )
+  }
+
+  /**
+   * Подписаться на события режима текущего core.
+   * Вызывается при создании core (конструктор, restoreSession, reload):
+   * отписывается от старого core и уведомляет подписчиков о текущем
+   * режиме нового core (свежий core всегда стартует в "build").
+   */
+  private bindCoreModeEvents(): void {
+    this.coreModeSub?.dispose()
+    this.coreModeSub = this.core.onModeChanged((mode) => this.emitModeChanged(mode))
+    this.emitModeChanged(this.core.getMode())
+  }
+
+  private emitModeChanged(mode: AgentModeName): void {
+    for (const handler of [...this.modeListeners]) {
+      handler(mode)
+    }
   }
 
   // ── Выполнение ─────────────────────────────────────────
@@ -94,6 +115,27 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     return this.core.switchMode(newMode)
   }
 
+  /**
+   * Вернуть полное описание текущего режима.
+   */
+  getModeInfo(): IAgentMode {
+    return this.core.getModeInfo()
+  }
+
+  /**
+   * Подписаться на события смены режима.
+   * Подписка переживает пересоздание внутреннего core
+   * (restoreSession, reload).
+   */
+  onModeChanged(handler: (mode: AgentModeName) => void): { dispose(): void } {
+    this.modeListeners.add(handler)
+    return {
+      dispose: () => {
+        this.modeListeners.delete(handler)
+      },
+    }
+  }
+
   // ── Todo ───────────────────────────────────────────────
 
   getTodoStore(): TodoStore {
@@ -107,6 +149,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     this.core.dispose()
     this.abortController = new AbortController()
     this.core = this.createCore()
+    this.bindCoreModeEvents()
     await this.core.restoreSession(messages)
   }
 
@@ -137,6 +180,7 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     }
     this.abortController = new AbortController()
     this.core = this.createCore()
+    this.bindCoreModeEvents()
   }
 
   dispose(): void {
