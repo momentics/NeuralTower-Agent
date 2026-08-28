@@ -1,3 +1,5 @@
+import type { AgentModeName } from "../agent/AgentMode"
+
 export type WebviewToExt =
   | { type: "sendMessage"; content: string }
   | { type: "switchSession"; sessionId: string }
@@ -23,6 +25,8 @@ export type ExtToWebview =
   | { type: "switchSession"; sessionId: string }
   | { type: "agentDone" }
   | { type: "permissionRequest"; requestId: string; toolName: string; description: string }
+  | { type: "modeChanged"; mode: AgentModeName; allowed: AgentModeName[] }
+  | { type: "modeSwitchError"; message: string }
 
 export type SettingsToExt =
   | { type: "settingsSave"; url: string; model: string; maxRetries?: number; timeoutMs?: number; autoApprove?: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean }

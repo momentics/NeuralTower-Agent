@@ -60,6 +60,7 @@ export class ChatProvider implements IProvider {
     this.messageHandler.subscribe(this.disposables)
     this.messageHandler.sendSessionList()
     this.messageHandler.sendActiveMessages()
+    this.messageHandler.sendModeChanged()
 
     // Ленивая инициализация мониторинга здоровья — только когда пользователь открыл sidebar
     if (this.healthMonitor) {

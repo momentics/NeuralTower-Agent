@@ -4,6 +4,8 @@ import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { INotificationService } from "../services/notification/NotificationService"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import type { ISettingsProvider } from "./SettingsProvider"
+import { BUILT_IN_MODES } from "../agent/AgentMode"
+import type { AgentModeName } from "../agent/AgentMode"
 import type { WebviewToExt, ExtToWebview } from "../shared/Messages"
 import { handleBackendError, errorMessage } from "../core/Errors"
 import { UI_ARGS_LOG_TRUNCATE } from "../core/Config"
@@ -17,6 +19,7 @@ const PLAN_MARKER = "__PLAN__"
 export class ChatMessageHandler {
   private streaming = false
   private abortController: AbortController | null = null
+  private readonly validModes: readonly string[] = Object.keys(BUILT_IN_MODES)
 
   constructor(
     private readonly agent: IAgentOrchestrator,
@@ -31,6 +34,7 @@ export class ChatMessageHandler {
   subscribe(disposables: vscode.Disposable[]): void {
     disposables.push(this.createMessageHandler())
     disposables.push(this.createPermissionHandler())
+    disposables.push(this.agent.onModeChanged(() => this.sendModeChanged()))
   }
 
   /** Прервать выполнение агента. */
@@ -64,12 +68,29 @@ export class ChatMessageHandler {
     }
   }
 
+  /** Отправить текущий режим и допустимые переходы в webview. */
+  sendModeChanged(): void {
+    const info = this.agent.getModeInfo()
+    this.webview.postMessage({
+      type: "modeChanged",
+      mode: info.name,
+      allowed: info.transitions,
+    } as ExtToWebview)
+  }
+
   // ── Создание обработчиков ────────────────────────────────
 
   private createMessageHandler(): vscode.Disposable {
     return this.webview.onDidReceiveMessage(async (msg: WebviewToExt) => {
       try {
-        if (this.streaming && msg.type !== "permissionResponse" && msg.type !== "stopAgent") return
+        if (
+          this.streaming &&
+          msg.type !== "permissionResponse" &&
+          msg.type !== "stopAgent" &&
+          msg.type !== "switchMode"
+        ) {
+          return
+        }
 
         switch (msg.type) {
           case "sendMessage": {
@@ -84,11 +105,17 @@ export class ChatMessageHandler {
             await this.agent.restoreSession(messages)
             this.sendActiveMessages()
             this.sendSessionList()
+            this.sendModeChanged()
             break
-          case "createSession":
+          case "createSession": {
             await this.sessionStore.newSession()
+            this.agent.clearPlan()
+            this.agent.resetSession()
+            this.webview.postMessage({ type: "newChat" } as ExtToWebview)
             this.sendSessionList()
+            this.sendModeChanged()
             break
+          }
           case "deleteSession":
             await this.sessionStore.deleteSession(msg.sessionId)
             this.sendSessionList()
@@ -114,6 +141,7 @@ export class ChatMessageHandler {
             this.settingsProvider.show()
             break
           case "switchMode":
+            this.handleSwitchMode(msg.mode)
             break
         }
       } catch (err: unknown) {
@@ -147,6 +175,30 @@ export class ChatMessageHandler {
       this.webview.postMessage({
         type: "streamError",
         error: `Истёк срок запроса разрешения для "${msg.requestId}"`,
+      } as ExtToWebview)
+    }
+  }
+
+  /**
+   * Обработать запрос смены режима из webview.
+   * При успехе сообщение modeChanged отправляет подписка
+   * на agent.onModeChanged; при ошибке — modeSwitchError.
+   */
+  private handleSwitchMode(rawMode: string): void {
+    if (!this.validModes.includes(rawMode)) {
+      this.webview.postMessage({
+        type: "modeSwitchError",
+        message: `Неизвестный режим: ${rawMode}`,
+      } as ExtToWebview)
+      return
+    }
+
+    const ok = this.agent.switchMode(rawMode as AgentModeName)
+    if (!ok) {
+      const info = this.agent.getModeInfo()
+      this.webview.postMessage({
+        type: "modeSwitchError",
+        message: `Переход в режим «${rawMode}» недоступен из режима «${info.name}». Доступно: ${info.transitions.join(", ")}`,
       } as ExtToWebview)
     }
   }
