@@ -10,6 +10,7 @@ export {
   SNAPSHOT_MAX_BUFFER,
   SNAPSHOT_REVERT_BATCH_SIZE,
   SNAPSHOT_LEDGER_MAX_RECORDS,
+  SNAPSHOT_COMMIT_REF,
 } from "./SnapshotTypes"
 export type {
   ISnapshotService,
@@ -18,4 +19,6 @@ export type {
   ISnapshotRecord,
   ISnapshotConfig,
   IRevertResult,
+  IRevertOptions,
+  SnapshotRecordKind,
 } from "./SnapshotTypes"

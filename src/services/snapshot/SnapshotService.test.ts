@@ -38,7 +38,7 @@ interface Fixture {
   mirror: string
   service: SnapshotService
   config: ISnapshotConfig
-  record: (hash: string, files: string[]) => ISnapshotRecord
+  record: (hash: string, endHash: string, files: string[]) => ISnapshotRecord
 }
 
 /**
@@ -87,10 +87,12 @@ async function createFixture(configOverrides: Partial<ISnapshotConfig> = {}): Pr
     mirror,
     service,
     config,
-    record: (hash, files) => ({
+    record: (hash, endHash, files) => ({
       runId: "run-1",
       sessionId: "sess-1",
+      kind: "request",
       hash,
+      endHash,
       files,
       createdAt: Date.now(),
     }),
@@ -185,7 +187,7 @@ describeGit("SnapshotService (интеграция с git)", () => {
     const hash = (await fx.service.track())!
     await fs.writeFile(path.join(fx.repo, "a.txt"), "changed\n", "utf-8")
     const patch = await fx.service.patch(hash)
-    const result = await fx.service.revert(fx.record(hash, patch.files))
+    const result = await fx.service.revert(fx.record(hash, patch.endHash, patch.files))
     expect(result.ok).toBe(true)
     expect(result.failed).toHaveLength(0)
     expect(await fs.readFile(path.join(fx.repo, "a.txt"), "utf-8")).toBe("alpha\n")
@@ -196,7 +198,7 @@ describeGit("SnapshotService (интеграция с git)", () => {
     const newFile = path.join(fx.repo, "new.txt")
     await fs.writeFile(newFile, "new\n", "utf-8")
     const patch = await fx.service.patch(hash)
-    const result = await fx.service.revert(fx.record(hash, patch.files))
+    const result = await fx.service.revert(fx.record(hash, patch.endHash, patch.files))
     expect(result.ok).toBe(true)
     expect(result.deleted).toContain(toPosix(newFile))
     await expect(fs.stat(newFile)).rejects.toThrow()
@@ -207,7 +209,7 @@ describeGit("SnapshotService (интеграция с git)", () => {
     const file = path.join(fx.repo, "sub", "b.txt")
     await fs.rm(file)
     const patch = await fx.service.patch(hash)
-    const result = await fx.service.revert(fx.record(hash, patch.files))
+    const result = await fx.service.revert(fx.record(hash, patch.endHash, patch.files))
     expect(result.ok).toBe(true)
     expect(result.restored).toContain(toPosix(file))
     expect(await fs.readFile(file, "utf-8")).toBe("beta\n")
@@ -218,7 +220,7 @@ describeGit("SnapshotService (интеграция с git)", () => {
     await fs.writeFile(path.join(fx.repo, "a.txt"), "changed\n", "utf-8")
     const missing = "0".repeat(40)
     const result = await fx.service.revert(
-      fx.record(missing, [toPosix(path.join(fx.repo, "a.txt"))]),
+      fx.record(missing, missing, [toPosix(path.join(fx.repo, "a.txt"))]),
     )
     expect(result.ok).toBe(false)
     expect(result.failed).toHaveLength(1)
@@ -251,7 +253,7 @@ describeGit("SnapshotService (интеграция с git)", () => {
       const patch = await service.patch(hash)
       expect(patch.files).toHaveLength(2)
 
-      const result = await service.revert(fx.record(hash, patch.files))
+      const result = await service.revert(fx.record(hash, patch.endHash, patch.files))
       expect(result.ok).toBe(false)
       expect(result.restored).toContain(toPosix(path.join(fx.repo, "sub", "b.txt")))
       expect(result.failed.some((f) => f.file === toPosix(path.join(fx.repo, "a.txt")))).toBe(true)
@@ -265,7 +267,7 @@ describeGit("SnapshotService (интеграция с git)", () => {
   it("revert rejects paths outside the workspace", async () => {
     const hash = (await fx.service.track())!
     const outside = toPosix(path.join(fx.root, "outside.txt"))
-    const result = await fx.service.revert(fx.record(hash, [outside]))
+    const result = await fx.service.revert(fx.record(hash, hash, [outside]))
     expect(result.ok).toBe(false)
     expect(result.failed[0].error).toContain("вне рабочей области")
   })
@@ -282,11 +284,13 @@ describeGit("SnapshotService (интеграция с git)", () => {
       )
       expect(await service.track()).toBeNull()
       expect(service.isEnabled()).toBe(false)
-      expect(await service.patch("abc")).toEqual({ hash: "abc", files: [] })
+      expect(await service.patch("abc")).toEqual({ hash: "abc", endHash: "abc", files: [] })
       const result = await service.revert({
         runId: "r",
         sessionId: "s",
+        kind: "request",
         hash: "abc",
+        endHash: "abc",
         files: [],
         createdAt: 1,
       })
@@ -326,11 +330,13 @@ describeGit("SnapshotService (интеграция с git)", () => {
       async () => fx.repo,
     )
     expect(await service.track()).toBeNull()
-    expect(await service.patch("abc")).toEqual({ hash: "abc", files: [] })
+    expect(await service.patch("abc")).toEqual({ hash: "abc", endHash: "abc", files: [] })
     const result = await service.revert({
       runId: "r",
       sessionId: "s",
+      kind: "request",
       hash: "abc",
+      endHash: "abc",
       files: [],
       createdAt: 1,
     })
@@ -362,7 +368,7 @@ describeGit("SnapshotService (интеграция с git)", () => {
     const patch = await fx.service.patch(hash)
     const [h2, result] = await Promise.all([
       fx.service.track(),
-      fx.service.revert(fx.record(hash, patch.files)),
+      fx.service.revert(fx.record(hash, patch.endHash, patch.files)),
     ])
     expect(h2).toBeTruthy()
     expect(result.ok).toBe(true)
@@ -376,6 +382,134 @@ describeGit("SnapshotService (интеграция с git)", () => {
     expect(fx.service.isEnabled()).toBe(true)
   })
 
+
+  it("track фиксирует коммит на refs/nt/snapshots", async () => {
+    const hash = (await fx.service.track())!
+    const res = await git(
+      ["--git-dir", fx.mirror, "rev-parse", "--verify", "refs/nt/snapshots^{tree}"],
+      fx.repo,
+    )
+    expect(res.code).toBe(0)
+    expect(res.stdout.trim()).toBe(hash)
+  })
+
+  it("повторный track без изменений не создаёт новый коммит", async () => {
+    await fx.service.track()
+    await fx.service.track()
+    const res = await git(
+      ["--git-dir", fx.mirror, "rev-list", "--count", "refs/nt/snapshots"],
+      fx.repo,
+    )
+    expect(res.stdout.trim()).toBe("1")
+  })
+
+  it("быстрый путь patch без изменений: endHash = hash, write-tree не нужен", async () => {
+    const h = (await fx.service.track())!
+    const p = await fx.service.patch(h)
+    expect(p).toEqual({ hash: h, endHash: h, files: [] })
+  })
+
+  it("patch с изменениями возвращает endHash ≠ hash", async () => {
+    const h = (await fx.service.track())!
+    await fs.writeFile(path.join(fx.repo, "a.txt"), "changed\n", "utf-8")
+    const p = await fx.service.patch(h)
+    expect(p.hash).toBe(h)
+    expect(p.endHash).not.toBe(p.hash)
+    expect(p.files).toContain(toPosix(path.join(fx.repo, "a.txt")))
+  })
+
+  it("revert пропускает файл, изменённый пользователем после запроса", async () => {
+    const h = (await fx.service.track())!
+    const aFile = toPosix(path.join(fx.repo, "a.txt"))
+    await fs.writeFile(path.join(fx.repo, "a.txt"), "agent\n", "utf-8")
+    const p = await fx.service.patch(h)
+    await fs.writeFile(path.join(fx.repo, "a.txt"), "user\n", "utf-8")
+    const r = await fx.service.revert(fx.record(h, p.endHash, [aFile]))
+    expect(r.skipped.some((s) => s.file === aFile)).toBe(true)
+    expect(r.restored).toHaveLength(0)
+    expect(r.ok).toBe(true)
+    // Правка пользователя сохранена
+    expect(await fs.readFile(path.join(fx.repo, "a.txt"), "utf-8")).toBe("user\n")
+  })
+
+  it("revert с forceFiles затирает правку пользователя", async () => {
+    const h = (await fx.service.track())!
+    const aFile = toPosix(path.join(fx.repo, "a.txt"))
+    await fs.writeFile(path.join(fx.repo, "a.txt"), "agent\n", "utf-8")
+    const p = await fx.service.patch(h)
+    await fs.writeFile(path.join(fx.repo, "a.txt"), "user\n", "utf-8")
+    const r = await fx.service.revert(fx.record(h, p.endHash, [aFile]), { forceFiles: [aFile] })
+    expect(r.restored).toContain(aFile)
+    expect(r.skipped).toHaveLength(0)
+    // Содержимое возвращено к состоянию «до запроса»
+    expect(await fs.readFile(path.join(fx.repo, "a.txt"), "utf-8")).toBe("alpha\n")
+  })
+
+  it("revert удаляет созданный запросом файл, если пользователь не трогал", async () => {
+    const h = (await fx.service.track())!
+    const newFile = toPosix(path.join(fx.repo, "new.txt"))
+    await fs.writeFile(path.join(fx.repo, "new.txt"), "new\n", "utf-8")
+    const p = await fx.service.patch(h)
+    const r = await fx.service.revert(fx.record(h, p.endHash, [newFile]))
+    expect(r.deleted).toContain(newFile)
+    expect(r.ok).toBe(true)
+    await expect(fs.stat(path.join(fx.repo, "new.txt"))).rejects.toThrow()
+  })
+
+  it("revert восстанавливает удалённый запросом файл", async () => {
+    const h = (await fx.service.track())!
+    const bFile = toPosix(path.join(fx.repo, "sub", "b.txt"))
+    await fs.rm(path.join(fx.repo, "sub", "b.txt"))
+    const p = await fx.service.patch(h)
+    const r = await fx.service.revert(fx.record(h, p.endHash, [bFile]))
+    expect(r.restored).toContain(bFile)
+    expect(r.ok).toBe(true)
+    expect(await fs.readFile(path.join(fx.repo, "sub", "b.txt"), "utf-8")).toBe("beta\n")
+  })
+
+  it("cleanup удаляет старые коммиты, свежие сохраняет", async () => {
+    await fx.service.track()
+    // Задатированный коммит текущего дерева зеркала на ref снимков
+    const treeRes = await git(["--git-dir", fx.mirror, "write-tree"], fx.repo)
+    const treeHash = treeRes.stdout.trim()
+    expect(treeHash).toBeTruthy()
+    const oldCommit = await runProcess(
+      "git",
+      ["--git-dir", fx.mirror, "commit-tree", "-m", "old snapshot", treeHash],
+      {
+        cwd: fx.repo,
+        env: {
+          ...process.env,
+          GIT_AUTHOR_DATE: "2026-01-01T00:00:00Z",
+          GIT_COMMITTER_DATE: "2026-01-01T00:00:00Z",
+        },
+        timeout: 15000,
+      },
+    )
+    const oldHash = oldCommit.stdout.trim()
+    expect(oldHash).toBeTruthy()
+    await git(["--git-dir", fx.mirror, "update-ref", "refs/nt/snapshots", oldHash], fx.repo)
+    // Свежий снимок: новое дерево → новый коммит в цепочке
+    await fs.writeFile(path.join(fx.repo, "a.txt"), "changed\n", "utf-8")
+    const fresh = await fx.service.track()
+    expect(fresh).toBeTruthy()
+    await fx.service.cleanup()
+    const count = await git(
+      ["--git-dir", fx.mirror, "rev-list", "--count", "refs/nt/snapshots"],
+      fx.repo,
+    )
+    expect(count.stdout.trim()).toBe("1")
+  })
+
+  it("снимок переживает cleanup", async () => {
+    const h = (await fx.service.track())!
+    await fs.writeFile(path.join(fx.repo, "a.txt"), "changed\n", "utf-8")
+    const p = await fx.service.patch(h)
+    await fx.service.cleanup()
+    const r = await fx.service.revert(fx.record(h, p.endHash, [toPosix(path.join(fx.repo, "a.txt"))]))
+    expect(r.ok).toBe(true)
+  })
+
   it("never touches the source repository .git", async () => {
     const gitDir = path.join(fx.repo, ".git")
     const before = await listDirWithHashes(gitDir)
@@ -385,7 +519,7 @@ describeGit("SnapshotService (интеграция с git)", () => {
     await fs.writeFile(path.join(fx.repo, "new.txt"), "new\n", "utf-8")
     const patch = await fx.service.patch(hash)
     expect(patch.files.length).toBeGreaterThanOrEqual(2)
-    await fx.service.revert(fx.record(hash, patch.files))
+    await fx.service.revert(fx.record(hash, patch.endHash, patch.files))
 
     const after = await listDirWithHashes(gitDir)
     // Главный .git проекта не читается и не пишется сервисом

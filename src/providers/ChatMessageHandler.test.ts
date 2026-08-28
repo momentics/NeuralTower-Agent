@@ -120,8 +120,8 @@ function createMockSnapshotService() {
   return {
     isEnabled: vi.fn(() => true),
     track: vi.fn(async () => "hash-1"),
-    patch: vi.fn(async (hash: string) => ({ hash, files: [] })),
-    revert: vi.fn(async () => ({ ok: true, restored: [], deleted: [], failed: [] })),
+    patch: vi.fn(async (hash: string) => ({ hash, endHash: hash, files: [] })),
+    revert: vi.fn(async () => ({ ok: true, restored: [], deleted: [], skipped: [], failed: [] })),
     restore: vi.fn(async () => {}),
     cleanup: vi.fn(async () => {}),
     dispose: vi.fn(),
@@ -258,14 +258,16 @@ describe("ChatMessageHandler", () => {
     await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1))
     const args = getRunArgs()
     const onSnapshot = args[6] as (p: unknown) => void
-    onSnapshot({ hash: "abc123", files: ["/work/a.ts", "/work/b.ts"] })
+    onSnapshot({ hash: "abc123", endHash: "def456", files: ["/work/a.ts", "/work/b.ts"] })
     await new Promise((r) => setTimeout(r, 20))
 
     expect(snapshotStore.save).toHaveBeenCalledWith(
       expect.objectContaining({
         runId: expect.any(String),
         sessionId: "sess-1",
+        kind: "request",
         hash: "abc123",
+        endHash: "def456",
         files: ["/work/a.ts", "/work/b.ts"],
       }),
     )
@@ -279,11 +281,11 @@ describe("ChatMessageHandler", () => {
     onMessage({ type: "sendMessage", content: "задача" })
     await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1))
     const onSnapshot = getRunArgs()[6] as (p: unknown) => void
-    onSnapshot({ hash: "abc123", files: [] })
+    onSnapshot({ hash: "abc123", endHash: "abc123", files: [] })
     await new Promise((r) => setTimeout(r, 20))
 
     expect(snapshotStore.save).toHaveBeenCalledWith(
-      expect.objectContaining({ hash: "abc123", files: [] }),
+      expect.objectContaining({ kind: "request", hash: "abc123", endHash: "abc123", files: [] }),
     )
     expect(
       vi.mocked(webview.postMessage).mock.calls.some(
@@ -297,7 +299,9 @@ describe("ChatMessageHandler", () => {
     const record = {
       runId: "123",
       sessionId: "sess-1",
+      kind: "request",
       hash: "abc",
+      endHash: "def",
       files: ["/work/a.ts"],
       createdAt: 1,
     }
@@ -306,6 +310,7 @@ describe("ChatMessageHandler", () => {
       ok: true,
       restored: ["/work/a.ts"],
       deleted: [],
+      skipped: [],
       failed: [],
     })
 
@@ -339,7 +344,9 @@ describe("ChatMessageHandler", () => {
     const record = {
       runId: "123",
       sessionId: "sess-1",
+      kind: "request",
       hash: "abc",
+      endHash: "def",
       files: ["/work/a.ts"],
       createdAt: 1,
     }
@@ -348,6 +355,7 @@ describe("ChatMessageHandler", () => {
       ok: false,
       restored: [],
       deleted: [],
+      skipped: [],
       failed: [{ file: "/work/a.ts", error: "сбой восстановления" }],
     })
 

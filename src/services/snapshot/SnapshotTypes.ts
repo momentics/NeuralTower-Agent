@@ -15,15 +15,20 @@ export class SnapshotError extends Error {
 }
 
 /**
- * Снимок-патч: хэш дерева зеркального git-репозитория
- * и список файлов, изменённых относительно него.
+ * Снимок-патч: деревья «до» и «после» запроса в зеркальном
+ * git-репозитории и список файлов, изменённых между ними.
  */
 export interface ISnapshotPatch {
-  /** Хэш дерева зеркального git-репо. */
+  /** Хэш дерева «до запроса». */
   hash: string
-  /** Абсолютные пути (с прямыми слэшами) изменённых файлов. */
+  /** Хэш дерева «после запроса». */
+  endHash: string
+  /** Абсолютные пути файлов, изменённых между hash и endHash. */
   files: string[]
 }
+
+/** Тип записи: снимок запроса или снимок «до отката». */
+export type SnapshotRecordKind = "request" | "preRevert"
 
 /**
  * Запись реестра: привязка снимка к запросу пользователя.
@@ -33,17 +38,24 @@ export interface ISnapshotRecord {
   runId: string
   /** ID сессии, в которой выполнен запрос. */
   sessionId: string
-  /** Хэш дерева «до запроса». */
+  /** Тип записи: снимок запроса или снимок «до отката». */
+  kind: SnapshotRecordKind
+  /** Базовое состояние: «до запроса» (request) / «до отката» (preRevert). */
   hash: string
-  /** Список файлов, изменённых за запрос (заполняется после patch()). */
+  /** Итоговое состояние: «после запроса» (request) / «после отката» (preRevert). */
+  endHash: string
+  /** Файлы, изменённые между hash и endHash (абсолютные пути). */
   files: string[]
   /** Время создания снимка. */
   createdAt: number
+  /** Для kind=preRevert: runId откатываемого запроса. */
+  revertsRunId?: string
 }
 
 /**
  * Результат отката: честный отчёт — успех только если
- * ни один файл не завершился ошибкой.
+ * ни один файл не завершился ошибкой (пропущенные файлы
+ * правок пользователя не делают результат неудачным).
  */
 export interface IRevertResult {
   ok: boolean
@@ -51,8 +63,16 @@ export interface IRevertResult {
   restored: string[]
   /** Файлы, удалённые (их не было в снимке). */
   deleted: string[]
+  /** Файлы, НЕ откатанные: пользователь изменил их после запроса. */
+  skipped: Array<{ file: string; reason: string }>
   /** Файлы, которые не удалось восстановить. */
   failed: Array<{ file: string; error: string }>
+}
+
+/** Параметры отката. */
+export interface IRevertOptions {
+  /** Файлы, для которых проверка «пользователь изменял» не применяется (явный выбор пользователя). */
+  forceFiles?: Iterable<string>
 }
 
 /**
@@ -64,10 +84,10 @@ export interface ISnapshotService {
   isEnabled(): boolean
   /** Снять снимок текущего состояния. null — если недоступно или ошибка. */
   track(): Promise<string | null>
-  /** Список файлов, изменённых относительно снимка. */
+  /** Деревья «до/после» запроса и список файлов, изменённых между ними. */
   patch(hash: string): Promise<ISnapshotPatch>
   /** Откатить файлы, изменённые после снимка (по списку из patch). */
-  revert(record: ISnapshotRecord): Promise<IRevertResult>
+  revert(record: ISnapshotRecord, opts?: IRevertOptions): Promise<IRevertResult>
   /** Полное восстановление рабочего дерева к снимку. */
   restore(hash: string): Promise<void>
   /** Очистка старых объектов (gc --prune). Не чаще раза в сессию. */
@@ -92,6 +112,14 @@ export interface ISnapshotStore {
   /** Закрыть ресурс (no-op, интерфейс единообразия). */
   dispose(): void
 }
+
+// ── Refs ──────────────────────────────────────────────────
+
+/**
+ * Ref цепочки коммитов, фиксирующих деревья снимков.
+ * Пока дерево достижимо с этого ref — git gc не удалит его.
+ */
+export const SNAPSHOT_COMMIT_REF = "refs/nt/snapshots"
 
 // ── Таймауты git-операций ─────────────────────────────────
 

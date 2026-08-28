@@ -80,8 +80,8 @@ const createMockPlanner = (): AgentPlanner => ({
 const createMockSnapshotService = () => ({
   isEnabled: vi.fn(() => true),
   track: vi.fn(async () => "snapshot-hash"),
-  patch: vi.fn(async (hash: string) => ({ hash, files: ["/work/a.ts"] })),
-  revert: vi.fn(async () => ({ ok: true, restored: [], deleted: [], failed: [] })),
+  patch: vi.fn(async (hash: string) => ({ hash, endHash: hash, files: ["/work/a.ts"] })),
+  revert: vi.fn(async () => ({ ok: true, restored: [], deleted: [], skipped: [], failed: [] })),
   restore: vi.fn(async () => {}),
   cleanup: vi.fn(async () => {}),
   dispose: vi.fn(),
@@ -844,7 +844,9 @@ const loop = new AgentLoop(
     expect(result.content).toBe("Test response")
     expect(snapshot.track).toHaveBeenCalledTimes(1)
     expect(snapshot.patch).toHaveBeenCalledTimes(1)
-    expect(patches).toEqual([expect.objectContaining({ hash: "snapshot-hash", files: ["/work/a.ts"] })])
+    expect(patches).toEqual([
+      expect.objectContaining({ hash: "snapshot-hash", endHash: "snapshot-hash", files: ["/work/a.ts"] }),
+    ])
   })
 
   it("run calls patch on maxIterations exit", async () => {
@@ -867,6 +869,7 @@ const loop = new AgentLoop(
     expect(snapshot.track).toHaveBeenCalledTimes(1)
     expect(snapshot.patch).toHaveBeenCalledTimes(1)
     expect(patches).toHaveLength(1)
+    expect(patches[0]).toEqual(expect.objectContaining({ hash: "snapshot-hash", endHash: "snapshot-hash" }))
   })
 
   it("run calls patch on recovery-break exit", async () => {

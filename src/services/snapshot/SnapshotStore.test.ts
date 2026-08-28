@@ -11,7 +11,9 @@ function makeRecord(runId: string, overrides: Partial<ISnapshotRecord> = {}): IS
   return {
     runId,
     sessionId: "sess-1",
+    kind: "request",
     hash: `hash-${runId}`,
+    endHash: `end-${runId}`,
     files: ["a.txt"],
     createdAt: Date.now(),
     ...overrides,

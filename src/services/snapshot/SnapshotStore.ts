@@ -24,7 +24,9 @@ function isValidRecord(value: unknown): value is ISnapshotRecord {
   return (
     typeof r.runId === "string" &&
     typeof r.sessionId === "string" &&
+    typeof r.kind === "string" &&
     typeof r.hash === "string" &&
+    typeof r.endHash === "string" &&
     Array.isArray(r.files) &&
     typeof r.createdAt === "number"
   )

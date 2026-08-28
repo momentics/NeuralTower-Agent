@@ -232,7 +232,9 @@ export class ChatMessageHandler {
       ?.save({
         runId,
         sessionId,
+        kind: "request",
         hash: patch.hash,
+        endHash: patch.endHash,
         files: patch.files,
         createdAt: Date.now(),
       })

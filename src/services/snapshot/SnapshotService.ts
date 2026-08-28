@@ -15,11 +15,13 @@ import {
   SNAPSHOT_MAX_BUFFER,
   SNAPSHOT_REVERT_BATCH_SIZE,
   SNAPSHOT_STAT_CONCURRENCY,
+  SNAPSHOT_COMMIT_REF,
   SnapshotError,
   type ISnapshotConfig,
   type ISnapshotPatch,
   type ISnapshotRecord,
   type IRevertResult,
+  type IRevertOptions,
   type ISnapshotService,
 } from "./SnapshotTypes"
 
@@ -43,6 +45,13 @@ function splitLines(s: string): string[] {
 function literalPathspecs(files: string[]): string {
   return files.map((f) => `:(top,literal)${f}`).join("\0") + "\0"
 }
+
+/**
+ * Бюджет длины аргументов-путей в одной git-команде.
+ * Командная строка Windows ограничена ~32k символов; 8k — безопасный запас
+ * с учётом --git-dir/--work-tree и остальных аргументов.
+ */
+const PATHSPEC_ARG_BUDGET = 8_000
 
 interface IRevertOp {
   /** Абсолютный путь файла. */
@@ -77,6 +86,8 @@ export class SnapshotService implements IService, ISnapshotService {
   private sourceGitDir: string | null = null
   private sourceExcludeText = ""
   private readonly blockedPaths = new Set<string>()
+  /** Хэш последнего зафиксированного коммитом дерева (оптимизация commitTree). */
+  private lastTreeHash: string | null = null
 
   constructor(
     /** Корень рабочей области (work-tree зеркала). */
@@ -231,10 +242,12 @@ export class SnapshotService implements IService, ISnapshotService {
 
   /**
    * Собрать изменённые/новые файлы и обновить индекс зеркала.
-   * Первый успешный стейджинг покрывает всё рабочее дерево;
-   * последующие — только кандидатов (быстро в больших репозиториях).
+   * Возвращает список застейдированных файлов (пустой массив,
+   * если кандидатов не было). Первый успешный стейджинг покрывает
+   * всё рабочее дерево; последующие — только кандидатов
+   * (быстро в больших репозиториях).
    */
-  private async addCandidates(): Promise<void> {
+  private async collectAndStage(): Promise<string[]> {
     const [diffRes, otherRes] = await Promise.all([
       this.git.run(["diff-files", "--name-only", "-z", "--", "."], this.gitOpts()),
       this.git.run(
@@ -244,13 +257,13 @@ export class SnapshotService implements IService, ISnapshotService {
     ])
     if (diffRes.code !== 0 || otherRes.code !== 0) {
       log.warn(`Не удалось перечислить изменённые файлы: ${diffRes.stderr || otherRes.stderr}`)
-      return
+      return []
     }
 
     const tracked = splitNul(diffRes.stdout).map(toPosix)
     const untracked = splitNul(otherRes.stdout).map(toPosix)
     const all = [...new Set([...tracked, ...untracked])]
-    if (all.length === 0) return
+    if (all.length === 0) return []
 
     // Игнорируемые файлы: паттерны исходного репозитория, без учёта индекса
     const ignored = await this.checkIgnored(all)
@@ -260,7 +273,7 @@ export class SnapshotService implements IService, ISnapshotService {
     }
 
     const allow = all.filter((f) => !ignored.has(f))
-    if (allow.length === 0) return
+    if (allow.length === 0) return []
 
     // Лимит размера: большие неотслеживаемые файлы не индексируем
     const large = await this.findLargeFiles(allow)
@@ -273,8 +286,9 @@ export class SnapshotService implements IService, ISnapshotService {
 
     const blockedSet = new Set(block)
     const stage = allow.filter((f) => !blockedSet.has(f))
-    if (stage.length === 0) return
+    if (stage.length === 0) return []
     await this.stageFiles(stage)
+    return stage
   }
 
   /**
@@ -390,13 +404,14 @@ export class SnapshotService implements IService, ISnapshotService {
           await this.initMirror()
           this.mirrorReady = true
         }
-        await this.addCandidates()
+        await this.collectAndStage()
         const res = await this.git.run(["write-tree"], this.gitOpts())
         const hash = res.stdout.trim()
         if (res.code !== 0 || !hash) {
           log.warn(`Не удалось вычислить снимок: ${res.stderr}`)
           return null
         }
+        await this.commitTree(hash)
         log.info(`Снимок состояния: ${hash.slice(0, 12)}`)
         return hash
       })
@@ -412,40 +427,88 @@ export class SnapshotService implements IService, ISnapshotService {
     }
   }
 
+  /**
+   * Зафиксировать дерево коммитом на refs/nt/snapshots.
+   * Дерево становится достижимым — git gc не удалит его.
+   * Ошибка не роняет track: хэш валиден и так.
+   */
+  private async commitTree(treeHash: string): Promise<void> {
+    try {
+      if (this.lastTreeHash === treeHash) return // дерево не изменилось — коммит не нужен
+      this.lastTreeHash = treeHash
+      const parentRes = await this.git.run(
+        ["rev-parse", "-q", "--verify", `${SNAPSHOT_COMMIT_REF}^{commit}`],
+        this.gitOpts(),
+      )
+      const args = ["commit-tree", treeHash]
+      if (parentRes.code === 0 && parentRes.stdout.trim()) {
+        args.push("-p", parentRes.stdout.trim())
+      }
+      args.push("-m", `snapshot ${new Date().toISOString()}`)
+      const commitRes = await this.git.run(args, this.gitOpts())
+      if (commitRes.code !== 0 || !commitRes.stdout.trim()) {
+        log.warn(`Не удалось закоммитить снимок: ${commitRes.stderr.trim()}`)
+        return
+      }
+      const refRes = await this.git.run(
+        ["update-ref", SNAPSHOT_COMMIT_REF, commitRes.stdout.trim()],
+        this.gitOpts(),
+      )
+      if (refRes.code !== 0) {
+        log.warn(`Не удалось обновить ref снимков: ${refRes.stderr.trim()}`)
+      }
+    } catch (err: unknown) {
+      log.warn(`Не удалось зафиксировать снимок: ${errorMessage(err)}`)
+    }
+  }
+
   async patch(hash: string): Promise<ISnapshotPatch> {
-    if (this.disposed) return { hash, files: [] }
-    if (!(await this.ensureEnabled())) return { hash, files: [] }
+    if (this.disposed) return { hash, endHash: hash, files: [] }
+    if (!(await this.ensureEnabled())) return { hash, endHash: hash, files: [] }
     try {
       return await this.mutex.withLock(async () => {
-        if (!this.mirrorReady) return { hash, files: [] }
-        await this.addCandidates()
-        const res = await this.git.run(
+        if (!this.mirrorReady) return { hash, endHash: hash, files: [] }
+        const staged = await this.collectAndStage()
+        if (staged.length === 0) {
+          // Быстрый путь: с момента снимка ничего не изменилось — дерево то же самое,
+          // write-tree не нужен.
+          return { hash, endHash: hash, files: [] }
+        }
+        const res = await this.git.run(["write-tree"], this.gitOpts())
+        const endHash = res.stdout.trim()
+        if (res.code !== 0 || !endHash) {
+          log.warn(`Не удалось вычислить итоговое дерево: ${res.stderr}`)
+          return { hash, endHash: hash, files: [] }
+        }
+        await this.commitTree(endHash)
+        const diffRes = await this.git.run(
           ["diff", "--cached", "--no-ext-diff", "--no-renames", "--name-only", hash, "--", "."],
           this.gitOpts(),
         )
-        if (res.code !== 0) {
-          log.warn(`Не удалось вычислить diff против снимка: ${res.stderr}`)
-          return { hash, files: [] }
+        if (diffRes.code !== 0) {
+          log.warn(`Не удалось вычислить diff против снимка: ${diffRes.stderr}`)
+          return { hash, endHash, files: [] }
         }
-        const files = splitLines(res.stdout).map(toPosix)
+        const files = splitLines(diffRes.stdout).map(toPosix)
         const ignored = await this.checkIgnored(files)
         const changed = files
           .filter((f) => !ignored.has(f))
           .map((f) => toPosix(path.join(this.workTree, f)))
-        return { hash, files: changed }
+        return { hash, endHash, files: changed }
       })
     } catch (err: unknown) {
       log.warn(`Не удалось вычислить изменения: ${errorMessage(err)}`)
-      return { hash, files: [] }
+      return { hash, endHash: hash, files: [] }
     }
   }
 
-  async revert(record: ISnapshotRecord): Promise<IRevertResult> {
+  async revert(record: ISnapshotRecord, opts?: IRevertOptions): Promise<IRevertResult> {
     if (this.disposed || !(await this.ensureEnabled())) {
       return {
         ok: false,
         restored: [],
         deleted: [],
+        skipped: [],
         failed: [{ file: "*", error: "Снапшоты недоступны" }],
       }
     }
@@ -456,48 +519,79 @@ export class SnapshotService implements IService, ISnapshotService {
             ok: false,
             restored: [],
             deleted: [],
+            skipped: [],
             failed: [{ file: "*", error: "Снимок не создан" }],
           }
         }
-        const result: IRevertResult = { ok: true, restored: [], deleted: [], failed: [] }
+        const result: IRevertResult = {
+          ok: true,
+          restored: [],
+          deleted: [],
+          skipped: [],
+          failed: [],
+        }
 
-        // Валидация ДО изменений: дерево снимка должно существовать
-        const check = await this.git.run(
-          ["cat-file", "-e", `${record.hash}^{tree}`],
-          this.gitOpts(SNAPSHOT_REVERT_TIMEOUT_MS),
-        )
-        if (check.code !== 0) {
-          return {
-            ok: false,
-            restored: [],
-            deleted: [],
-            failed: [
-              {
-                file: "*",
-                error: `Чекпоинт ${record.hash.slice(0, 7)} недоступен (возможно, очищен)`,
-              },
-            ],
+        // Валидация ДО изменений: оба дерева снимка должны существовать
+        for (const h of [record.hash, record.endHash]) {
+          const check = await this.git.run(
+            ["cat-file", "-e", `${h}^{tree}`],
+            this.gitOpts(SNAPSHOT_REVERT_TIMEOUT_MS),
+          )
+          if (check.code !== 0) {
+            return {
+              ok: false,
+              restored: [],
+              deleted: [],
+              skipped: [],
+              failed: [
+                {
+                  file: "*",
+                  error: `Чекпоинт ${h.slice(0, 7)} недоступен (возможно, очищен)`,
+                },
+              ],
+            }
           }
         }
 
         // Уникальные операции с валидацией вложенности в workspace
-        const ops: IRevertOp[] = []
-        const seen = new Set<string>()
-        for (const file of record.files) {
-          if (seen.has(pathKey(file))) continue
-          seen.add(pathKey(file))
-          const rel = toPosix(path.relative(this.workTree, file))
-          if (
-            !rel ||
-            rel.startsWith("..") ||
-            path.isAbsolute(rel) ||
-            !isInsideWorkspace(path.join(this.workTree, rel), this.workTree)
-          ) {
-            result.failed.push({ file, error: "Путь вне рабочей области" })
-            continue
+        const ops = this.buildOps(record.files, result)
+
+        // Наличие файлов в обоих деревьях и пользовательские правки
+        // вычисляются один раз для всех путей
+        let haveStart = new Set<string>()
+        let haveEnd = new Set<string>()
+        let touched = new Set<string>()
+        if (ops.length > 0) {
+          const rels = ops.map((o) => o.rel)
+          const [startRes, endRes] = await Promise.all([
+            this.runWithPathArgs(
+              ["ls-tree", "--name-only", record.hash],
+              rels,
+              SNAPSHOT_REVERT_TIMEOUT_MS,
+            ),
+            this.runWithPathArgs(
+              ["ls-tree", "--name-only", record.endHash],
+              rels,
+              SNAPSHOT_REVERT_TIMEOUT_MS,
+            ),
+          ])
+          haveStart = new Set(startRes.code === 0 ? splitLines(startRes.stdout).map(pathKey) : [])
+          haveEnd = new Set(endRes.code === 0 ? splitLines(endRes.stdout).map(pathKey) : [])
+          touched = await this.findUserTouched(record.endHash, rels)
+          // Файла нет в состоянии «после», но он появился на диске:
+          // пользователь воссоздал удалённый запросом файл
+          for (const op of ops) {
+            const key = pathKey(op.rel)
+            if (haveEnd.has(key)) continue
+            try {
+              await fs.access(op.file)
+              touched.add(key)
+            } catch {
+              // Файла нет — как и в снимке
+            }
           }
-          ops.push({ file, rel })
         }
+        const force = new Set([...(opts?.forceFiles ?? [])].map(pathKey))
 
         // Батчи до 100 соседних файлов с непересекающимися путями
         let i = 0
@@ -512,18 +606,27 @@ export class SnapshotService implements IService, ISnapshotService {
             batch.push(ops[j])
             j++
           }
-          if (batch.length === 1) {
-            await this.revertSingle(batch[0], record.hash, result)
-          } else {
-            await this.revertBatch(batch, record.hash, result)
+          for (const op of batch) {
+            const key = pathKey(op.rel)
+            if (touched.has(key) && !force.has(pathKey(op.file)) && !force.has(key)) {
+              result.skipped.push({ file: op.file, reason: "Файл изменялся после запроса" })
+              continue
+            }
+            if (haveStart.has(key)) {
+              await this.checkoutFile(op, record.hash, result)
+            } else {
+              await this.deleteFile(op, result)
+            }
           }
           i = j
         }
 
         // Честный отчёт: успех только без единого провала
+        // (пропущенные правки пользователя не делают результат неудачным)
         result.ok = result.failed.length === 0
         log.info(
-          `Откат: ${result.restored.length} восстановлено, ${result.deleted.length} удалено, ${result.failed.length} ошибок`,
+          `Откат: ${result.restored.length} восстановлено, ${result.deleted.length} удалено, ` +
+            `${result.skipped.length} пропущено (правки пользователя), ${result.failed.length} ошибок`,
         )
         return result
       })
@@ -533,6 +636,7 @@ export class SnapshotService implements IService, ISnapshotService {
         ok: false,
         restored: [],
         deleted: [],
+        skipped: [],
         failed: [{ file: "*", error: errorMessage(err) }],
       }
     }
@@ -571,8 +675,11 @@ export class SnapshotService implements IService, ISnapshotService {
     try {
       await this.mutex.withLock(async () => {
         if (!this.mirrorReady) return
+        await this.pruneSnapshotRef()
+        // --local: не копировать заимствованные объекты (alternates с Фазы 6);
+        // без alternates поведение совпадает с обычным gc
         const res = await this.git.run(
-          ["gc", `--prune=${this.config.retentionDays}.days`],
+          ["gc", `--prune=${this.config.retentionDays}.days`, "--local"],
           this.gitOpts(SNAPSHOT_GC_TIMEOUT_MS),
         )
         if (res.code !== 0) {
@@ -587,11 +694,92 @@ export class SnapshotService implements IService, ISnapshotService {
     }
   }
 
+  /**
+   * Обрезать цепочку снимков до retention: более старые коммиты становятся
+   * недостижимыми и удаляются gc. Для этого цепочка перерезается: самый старый
+   * сохраняемый коммит заменяется корневым (без родителя) с тем же деревом
+   * и датой — иначе ссылка на родителя удерживала бы старые коммиты.
+   */
+  private async pruneSnapshotRef(): Promise<void> {
+    try {
+      const cutoff = new Date(Date.now() - this.config.retentionDays * 86_400_000).toISOString()
+      const res = await this.git.run(
+        ["rev-list", SNAPSHOT_COMMIT_REF, `--since=${cutoff}`],
+        this.gitOpts(),
+      )
+      if (res.code !== 0) return // ref ещё не создан
+      const commits = splitLines(res.stdout)
+      if (commits.length === 0) {
+        await this.git.run(["update-ref", "-d", SNAPSHOT_COMMIT_REF], this.gitOpts())
+        return
+      }
+      // rev-list выводит от новых к старым — последний = самый старый сохраняемый
+      const oldest = commits[commits.length - 1]
+      const parentRes = await this.git.run(
+        ["rev-parse", "-q", "--verify", `${oldest}^`],
+        this.gitOpts(),
+      )
+      if (parentRes.code !== 0) return // уже корневой — цепочка обрезана
+      const meta = await this.git.run(["log", "-1", "--format=%ct%x00%s", oldest], this.gitOpts())
+      if (meta.code !== 0) return
+      const [date, subject] = meta.stdout.split("\0")
+      const treeRes = await this.git.run(["rev-parse", `${oldest}^{tree}`], this.gitOpts())
+      if (treeRes.code !== 0) return
+      const newCommit = await this.git.run(
+        ["commit-tree", treeRes.stdout.trim(), "-m", subject || "snapshot"],
+        { ...this.gitOpts(), env: { GIT_COMMITTER_DATE: date, GIT_AUTHOR_DATE: date } },
+      )
+      if (newCommit.code !== 0 || !newCommit.stdout.trim()) {
+        log.warn(`Не удалось перерезать цепочку снимков: ${newCommit.stderr.trim()}`)
+        return
+      }
+      const refRes = await this.git.run(
+        ["update-ref", SNAPSHOT_COMMIT_REF, newCommit.stdout.trim()],
+        this.gitOpts(),
+      )
+      if (refRes.code !== 0) {
+        log.warn(`Не удалось обновить ref снимков: ${refRes.stderr.trim()}`)
+      }
+    } catch (err: unknown) {
+      log.warn(`Не удалось обрезать цепочку снимков: ${errorMessage(err)}`)
+    }
+  }
+
   dispose(): void {
     this.disposed = true
   }
 
   // ── Приватные помощники отката ──────────────────────────
+
+  /**
+   * Выполнить git-команду с путями как прямыми аргументами после "--",
+   * разбивая их на батчи по бюджету длины (лимит командной строки Windows).
+   * Пути, начинающиеся с ":", получают префикс "./" (защита от pathspec-magic).
+   * Возвращает объединённый stdout; при ошибке — результат первого провального батча.
+   */
+  private async runWithPathArgs(
+    baseArgs: string[],
+    rels: string[],
+    timeout: number,
+  ): Promise<IGitRunResult> {
+    const head = [...baseArgs, "--"]
+    let stdout = ""
+    for (let i = 0; i < rels.length; ) {
+      const batch: string[] = []
+      let size = head.length
+      while (i < rels.length) {
+        const p = rels[i].startsWith(":") ? `./${rels[i]}` : rels[i]
+        if (batch.length > 0 && size + p.length + 1 > PATHSPEC_ARG_BUDGET) break
+        batch.push(p)
+        size += p.length + 1
+        i++
+      }
+      const res = await this.git.run([...head, ...batch], this.gitOpts(timeout))
+      if (res.code !== 0) return res
+      stdout += res.stdout
+    }
+    return { stdout, stderr: "", code: 0 }
+  }
 
   /** Пересекаются ли пути (один вложен в другой). */
   private pathsClash(paths: string[], candidate: string): boolean {
@@ -603,64 +791,62 @@ export class SnapshotService implements IService, ISnapshotService {
     )
   }
 
-  /** Откат одного файла: checkout или удаление (файла не было в снимке). */
-  private async revertSingle(op: IRevertOp, hash: string, result: IRevertResult): Promise<void> {
+  /**
+   * Уникальные операции отката с валидацией путей.
+   * Дедупликация по pathKey; пути вне workspace — в result.failed.
+   */
+  private buildOps(files: string[], result: IRevertResult): IRevertOp[] {
+    const ops: IRevertOp[] = []
+    const seen = new Set<string>()
+    for (const file of files) {
+      if (seen.has(pathKey(file))) continue
+      seen.add(pathKey(file))
+      const rel = toPosix(path.relative(this.workTree, file))
+      if (
+        !rel ||
+        rel.startsWith("..") ||
+        path.isAbsolute(rel) ||
+        !isInsideWorkspace(path.join(this.workTree, rel), this.workTree)
+      ) {
+        result.failed.push({ file, error: "Путь вне рабочей области" })
+        continue
+      }
+      ops.push({ file, rel })
+    }
+    return ops
+  }
+
+  /**
+   * Файлы, чьё текущее содержимое отличается от состояния endHash
+   * (пользователь поменял их после запроса). Возвращает множество pathKey.
+   * При ошибке git — вернёт все пути (безопасный режим: ничего не затираем).
+   */
+  private async findUserTouched(endHash: string, rels: string[]): Promise<Set<string>> {
+    if (rels.length === 0) return new Set<string>()
+    const res = await this.runWithPathArgs(
+      ["diff", "--name-only", "--no-ext-diff", endHash],
+      rels,
+      SNAPSHOT_REVERT_TIMEOUT_MS,
+    )
+    if (res.code !== 0) {
+      log.warn(`Не удалось проверить пользовательские правки: ${res.stderr}`)
+      return new Set(rels.map((r) => pathKey(r)))
+    }
+    return new Set(splitLines(res.stdout).map(pathKey))
+  }
+
+  /** Восстановить файл из дерева «до запроса» (checkout). */
+  private async checkoutFile(op: IRevertOp, hash: string, result: IRevertResult): Promise<void> {
     const opts = this.gitOpts(SNAPSHOT_REVERT_TIMEOUT_MS)
     const res = await this.git.run(["checkout", hash, "--", op.rel], opts)
     if (res.code === 0) {
       result.restored.push(op.file)
       return
     }
-    const tree = await this.git.run(["ls-tree", hash, "--", op.rel], opts)
-    if (tree.code !== 0) {
-      result.failed.push({ file: op.file, error: `Чекпоинт недоступен: ${tree.stderr.trim()}` })
-      return
-    }
-    if (tree.stdout.trim()) {
-      // Файл есть в снимке, но git не смог его восстановить
-      result.failed.push({
-        file: op.file,
-        error: `Не удалось восстановить файл: ${res.stderr.trim() || "ошибка git checkout"}`,
-      })
-      return
-    }
-    await this.deleteFile(op, result)
-  }
-
-  /**
-   * Откат батча: единый ls-tree определяет, какие файлы были в снимке;
-   * единый checkout восстанавливает их; отсутствующие удаляются.
-   * При сбое батча — пофайловый фолбэк.
-   */
-  private async revertBatch(batch: IRevertOp[], hash: string, result: IRevertResult): Promise<void> {
-    const opts = this.gitOpts(SNAPSHOT_REVERT_TIMEOUT_MS)
-    const tree = await this.git.run(
-      ["ls-tree", "--name-only", hash, "--", ...batch.map((o) => o.rel)],
-      opts,
-    )
-    if (tree.code !== 0) {
-      for (const op of batch) await this.revertSingle(op, hash, result)
-      return
-    }
-
-    const have = new Set(splitLines(tree.stdout))
-    const present = batch.filter((o) => have.has(o.rel))
-    if (present.length > 0) {
-      const res = await this.git.run(
-        ["checkout", hash, "--", ...present.map((o) => o.rel)],
-        opts,
-      )
-      if (res.code !== 0) {
-        for (const op of batch) await this.revertSingle(op, hash, result)
-        return
-      }
-      result.restored.push(...present.map((o) => o.file))
-    }
-
-    for (const op of batch) {
-      if (have.has(op.rel)) continue
-      await this.deleteFile(op, result)
-    }
+    result.failed.push({
+      file: op.file,
+      error: `Не удалось восстановить файл: ${res.stderr.trim() || "ошибка git checkout"}`,
+    })
   }
 
   /** Удалить файл, которого не было в снимке. */
