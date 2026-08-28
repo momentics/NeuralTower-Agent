@@ -7,7 +7,7 @@ import * as vscode from "vscode"
 export interface IWebviewConfig {
   /** CSS-файл (относительно resources/), undefined — без CSS */
   css?: string
-  /** JS-файл (относительно resources/), undefined — без внешнего JS */
+  /** JS-файл (путь относительно корня расширения, например "out/webview/chat.js"), undefined — без внешнего JS */
   js?: string
   /** Встроенный CSS-блок, undefined — без встроенного CSS */
   inlineCss?: string
@@ -44,7 +44,7 @@ export function buildWebviewHtml(
   let jsScript = ""
   if (config.js) {
     const jsUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(extUri, "resources", config.js),
+      vscode.Uri.joinPath(extUri, config.js),
     )
     jsScript = `<script nonce="${nonce}" src="${jsUri}"></script>`
   }

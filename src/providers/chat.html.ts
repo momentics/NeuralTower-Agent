@@ -10,10 +10,10 @@ export const chatHtml = `
       <span class="chat-title">NeuralTower</span>
     </div>
     <div class="header-actions">
-      <button class="icon-btn" title="Новый чат" onclick="vscode.postMessage({type:'createSession'})">
+      <button class="icon-btn" id="btn-new-chat" title="Новый чат">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       </button>
-      <button class="icon-btn" title="Настройки" onclick="vscode.postMessage({type:'settings'})">
+      <button class="icon-btn" id="btn-settings" title="Настройки">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
       </button>
     </div>
@@ -21,26 +21,27 @@ export const chatHtml = `
 
   <!-- Mode bar -->
   <div id="mode-bar">
-    <div class="mode-chip build active" data-mode="build" onclick="switchMode('build')">
+    <div class="mode-chip build" data-mode="build">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
       Построение
     </div>
-    <div class="mode-chip plan" data-mode="plan" onclick="switchMode('plan')">
+    <div class="mode-chip plan inactive" data-mode="plan">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
       Планирование
     </div>
-    <div class="mode-chip explore" data-mode="explore" onclick="switchMode('explore')">
+    <div class="mode-chip explore inactive" data-mode="explore">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       Исследование
     </div>
+    <div id="mode-error" class="mode-error"></div>
   </div>
 
   <!-- Sessions -->
   <div id="sessions-section">
     <div class="sessions-header">
       <span class="sessions-label">Сессии</span>
-      <button class="icon-btn" style="width:20px;height:20px;" title="Все сессии" onclick="vscode.postMessage({type:'sessionList'})">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:12px;height:12px"><polyline points="6 9 12 15 18 9"/></svg>
+      <button class="icon-btn" id="btn-sessions" title="Все сессии">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
     </div>
     <div id="sessions-list"></div>
@@ -59,19 +60,19 @@ export const chatHtml = `
       <div class="empty-title">NeuralTower Agent</div>
       <div class="empty-subtitle">ИИ-ассистент для разработки. Задайте задачу — и агент выполнит её.</div>
       <div class="quick-actions">
-        <div class="quick-action" onclick="sendQuick('Исправить баг')">
+        <div class="quick-action" data-text="Исправить баг">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
           Исправить баг
         </div>
-        <div class="quick-action" onclick="sendQuick('Объяснить код')">
+        <div class="quick-action" data-text="Объяснить код">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
           Объяснить код
         </div>
-        <div class="quick-action" onclick="sendQuick('Написать тесты')">
+        <div class="quick-action" data-text="Написать тесты">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
           Написать тесты
         </div>
-        <div class="quick-action" onclick="sendQuick('Искать в коде')">
+        <div class="quick-action" data-text="Искать в коде">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
           Искать в коде
         </div>
@@ -80,18 +81,18 @@ export const chatHtml = `
   </div>
 
   <!-- Permission dialog overlay -->
-  <div id="perm-overlay" class="perm-overlay" style="display:none">
+  <div id="perm-overlay" class="perm-overlay">
     <div class="perm-dialog">
       <div class="perm-title">
         <span class="warn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:16px;height:16px"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
         </span>
         Запрос разрешения
       </div>
       <div class="perm-desc" id="perm-desc"></div>
       <div class="perm-actions">
-        <button class="perm-btn deny" onclick="denyPermission()">Отклонить</button>
-        <button class="perm-btn allow" onclick="allowPermission()">Разрешить</button>
+        <button class="perm-btn deny" id="perm-deny">Отклонить</button>
+        <button class="perm-btn allow" id="perm-allow">Разрешить</button>
       </div>
     </div>
   </div>
@@ -116,7 +117,7 @@ export const chatHtml = `
           <button type="submit" id="send-btn" class="send-btn send" title="Отправить">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
           </button>
-          <button type="button" id="stop-btn" class="send-btn stop" title="Остановить" style="display:none">
+          <button type="button" id="stop-btn" class="send-btn stop" title="Остановить">
             <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
           </button>
         </div>
@@ -135,7 +136,7 @@ export const chatHtml = `
     </div>
     <div class="status-right">
       <div class="status-item" id="status-mode">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:10px;height:10px"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
         Построение
       </div>
     </div>

@@ -24,6 +24,10 @@ if not exist "out\ParserWorker.js" (
     echo Missing out\ParserWorker.js. Exiting.
     exit /b 1
 )
+if not exist "out\webview\chat.js" (
+    echo Missing out\webview\chat.js. Exiting.
+    exit /b 1
+)
 if not exist "out\tree-sitter.wasm" (
     echo Missing out\tree-sitter.wasm. Exiting.
     exit /b 1
@@ -34,7 +38,7 @@ if !wasmCount! neq 31 (
     echo Expected 31 grammars in out\wasm, got !wasmCount!. Exiting.
     exit /b 1
 )
-echo   out\extension.js, out\ParserWorker.js, out\tree-sitter.wasm, out\wasm\ (!wasmCount! grammars) - OK
+echo   out\extension.js, out\ParserWorker.js, out\webview\chat.js, out\tree-sitter.wasm, out\wasm\ (!wasmCount! grammars) - OK
 echo.
 
 echo [3/5] Running tests...

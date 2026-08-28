@@ -124,6 +124,7 @@ body {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  position: relative;
 }
 
 .mode-chip {
@@ -170,6 +171,37 @@ body {
 
 .mode-chip.inactive svg {
   opacity: 0.5;
+}
+
+.mode-chip.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.mode-error {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 12px;
+  right: 12px;
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(243, 139, 168, 0.12);
+  border: 1px solid rgba(243, 139, 168, 0.4);
+  color: var(--red);
+  font-size: 11px;
+  z-index: 10;
+}
+
+#btn-sessions {
+  width: 20px;
+  height: 20px;
+}
+
+#btn-sessions svg {
+  width: 12px;
+  height: 12px;
 }
 
 /* ═══════════════════════════════════════════
@@ -485,7 +517,7 @@ body {
   position: absolute;
   inset: 0;
   background: rgba(0,0,0,0.5);
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: center;
   z-index: 10;
@@ -513,11 +545,24 @@ body {
   color: var(--yellow);
 }
 
+.perm-title .warn svg {
+  width: 16px;
+  height: 16px;
+}
+
 .perm-desc {
   font-size: 11px;
   color: var(--text-muted);
   margin-bottom: 12px;
   line-height: 1.5;
+}
+
+.perm-desc code {
+  font-family: var(--mono);
+  font-size: 10px;
+  background: var(--bg-primary);
+  padding: 1px 4px;
+  border-radius: 3px;
 }
 
 .perm-actions {
@@ -695,6 +740,10 @@ body {
   color: var(--bg-tertiary);
 }
 
+#stop-btn {
+  display: none;
+}
+
 .send-btn svg {
   width: 15px;
   height: 15px;
@@ -736,6 +785,11 @@ body {
 .status-dot.green { background: var(--green); }
 .status-dot.yellow { background: var(--yellow); }
 .status-dot.red { background: var(--red); }
+
+#status-mode svg {
+  width: 10px;
+  height: 10px;
+}
 
 /* ═══════════════════════════════════════════
    SCROLLBAR

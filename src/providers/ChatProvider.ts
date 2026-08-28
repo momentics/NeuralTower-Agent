@@ -97,7 +97,7 @@ export class ChatProvider implements IProvider {
   private html(): string {
     return buildWebviewHtml(this.getWebview(), this.extUri, {
       css: "chat.css",
-      js: "chat.js",
+      js: "out/webview/chat.js",
       body: chatHtml,
     })
   }
