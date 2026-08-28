@@ -6,6 +6,8 @@ import { createDomainLogger } from "../../core/Logger"
 import { errorMessage } from "../../core/Errors"
 import { isInsideWorkspace } from "../../utils/WorkspaceGuard"
 import type { IGitRunner, IGitRunOptions, IGitRunResult } from "../git/GitRunner"
+import { toPosix, pathKey } from "./PathUtils"
+import { removeFileWithRetry } from "./FileOps"
 import {
   SNAPSHOT_GIT_TIMEOUT_MS,
   SNAPSHOT_REVERT_TIMEOUT_MS,
@@ -22,11 +24,6 @@ import {
 } from "./SnapshotTypes"
 
 const log = createDomainLogger("Snapshot")
-
-/** Нормализовать путь в прямые слэши (Windows-безопасно). */
-function toPosix(p: string): string {
-  return p.replace(/\\/g, "/")
-}
 
 /** Разобрать NUL-разделённый вывод git. */
 function splitNul(s: string): string[] {
@@ -195,6 +192,12 @@ export class SnapshotService implements IService, ISnapshotService {
       ["core.quotepath", "false"],
       // Кэш неотслеживаемых файлов: ускорение ls-files в больших репозиториях
       ["core.untrackedCache", "true"],
+      // Детерминированная обработка регистра (по умолчанию git решает сам по платформе)
+      ["core.ignorecase", process.platform === "linux" ? "false" : "true"],
+      // Идентичность для коммитов зеркального репозитория (нужно с Фазы 1)
+      ["user.name", "NeuralTower Agent"],
+      ["user.email", "agent@neuraltower.local"],
+      ["commit.gpgsign", "false"],
     ]
     for (const [key, value] of settings) {
       const res = await this.git.run(["config", key, value], this.gitOpts())
@@ -290,7 +293,7 @@ export class SnapshotService implements IService, ISnapshotService {
       const rel = toPosix(path.relative(this.repoRoot, path.join(this.workTree, file)))
       if (rel.startsWith("..")) continue
       relToRoot.push(rel)
-      byRel.set(rel, file)
+      byRel.set(pathKey(rel), file)
     }
     if (relToRoot.length === 0) return new Set<string>()
 
@@ -312,7 +315,7 @@ export class SnapshotService implements IService, ISnapshotService {
     const ignored = new Set<string>()
     for (const raw of splitNul(res.stdout)) {
       const rel = raw.startsWith("./:") ? raw.slice(2) : raw
-      const file = byRel.get(rel)
+      const file = byRel.get(pathKey(rel))
       if (file) ignored.add(file)
     }
     return ignored
@@ -481,8 +484,8 @@ export class SnapshotService implements IService, ISnapshotService {
         const ops: IRevertOp[] = []
         const seen = new Set<string>()
         for (const file of record.files) {
-          if (seen.has(file)) continue
-          seen.add(file)
+          if (seen.has(pathKey(file))) continue
+          seen.add(pathKey(file))
           const rel = toPosix(path.relative(this.workTree, file))
           if (
             !rel ||
@@ -593,7 +596,10 @@ export class SnapshotService implements IService, ISnapshotService {
   /** Пересекаются ли пути (один вложен в другой). */
   private pathsClash(paths: string[], candidate: string): boolean {
     return paths.some(
-      (p) => p === candidate || p.startsWith(`${candidate}/`) || candidate.startsWith(`${p}/`),
+      (p) =>
+        pathKey(p) === pathKey(candidate) ||
+        pathKey(p).startsWith(pathKey(candidate) + "/") ||
+        pathKey(candidate).startsWith(pathKey(p) + "/"),
     )
   }
 
@@ -660,7 +666,7 @@ export class SnapshotService implements IService, ISnapshotService {
   /** Удалить файл, которого не было в снимке. */
   private async deleteFile(op: IRevertOp, result: IRevertResult): Promise<void> {
     try {
-      await fs.rm(op.file, { force: true })
+      await removeFileWithRetry(op.file)
       result.deleted.push(op.file)
     } catch (err: unknown) {
       result.failed.push({ file: op.file, error: `Не удалось удалить файл: ${errorMessage(err)}` })

@@ -1,5 +1,7 @@
 export { SnapshotService } from "./SnapshotService"
 export { SnapshotStore } from "./SnapshotStore"
+export { toPosix, pathKey, isCaseInsensitivePlatform } from "./PathUtils"
+export { removeFileWithRetry } from "./FileOps"
 export {
   SnapshotError,
   SNAPSHOT_GIT_TIMEOUT_MS,

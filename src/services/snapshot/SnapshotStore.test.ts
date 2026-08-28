@@ -57,6 +57,17 @@ describe("SnapshotStore", () => {
     expect(list[0].files).toEqual(["b.txt"])
   })
 
+  it("повторное сохранение перезаписывает файл", async () => {
+    const store = new SnapshotStore(ledgerPath)
+    await store.save(makeRecord("run-1", { files: ["a.txt"] }))
+    await store.save(makeRecord("run-1", { files: ["b.txt"] }))
+
+    const store2 = new SnapshotStore(ledgerPath)
+    const loaded = await store2.get("run-1")
+    expect(loaded).not.toBeNull()
+    expect(loaded!.files).toEqual(["b.txt"])
+  })
+
   it("listBySession returns only session records sorted by createdAt desc", async () => {
     const store = new SnapshotStore(ledgerPath)
     await store.save(makeRecord("run-1", { sessionId: "sess-1", createdAt: 1000 }))
