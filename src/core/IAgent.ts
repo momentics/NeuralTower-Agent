@@ -21,6 +21,8 @@ export interface IAgentOrchestrator {
    * Обработчик `onSnapshot` вызывается на завершении запроса
    * со списком файлов, изменённых за запрос (null если снапшоты
    * недоступны или изменения не зафиксированы).
+   * `revertNote` — служебная заметка о том, что пользователь откатил
+   * изменения предыдущего запроса; добавляется к системному промпту.
    */
   run(
     query: string,
@@ -30,6 +32,7 @@ export interface IAgentOrchestrator {
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
     onSnapshot?: (patch: ISnapshotPatch | null) => void,
+    revertNote?: string,
   ): Promise<IChatMessage>
 
   /** Перезагрузить навыки и инструменты с диска/конфигурации. */

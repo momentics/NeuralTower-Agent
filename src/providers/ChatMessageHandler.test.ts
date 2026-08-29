@@ -725,4 +725,78 @@ describe("ChatMessageHandler", () => {
     resolveRun()
     await new Promise((r) => setTimeout(r, 20))
   })
+
+  // ── Обратная связь агенту после отката ───────────────────
+
+  it("после успешного отката следующий run получает заметку", async () => {
+    const record = {
+      runId: "run-1",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "abc",
+      endHash: "def",
+      files: ["/w/a.ts"],
+      createdAt: 1,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(record)
+    vi.mocked(snapshotService.revert).mockResolvedValue({
+      ok: true,
+      restored: ["/w/a.ts"],
+      deleted: [],
+      skipped: [],
+      failed: [],
+    })
+
+    await onMessage({ type: "revertSnapshot", runId: "run-1" })
+
+    onMessage({ type: "sendMessage", content: "ещё" })
+    await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1))
+    const args = getRunArgs()
+    const note = args[args.length - 1]
+    expect(note).toBeTypeOf("string")
+    expect(note).toContain("откатил")
+    expect(note).toContain("a.ts")
+    resolveRun()
+  })
+
+  it("после undo заметка сбрасывается", async () => {
+    const record = {
+      runId: "run-1",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "abc",
+      endHash: "def",
+      files: ["/w/a.ts"],
+      createdAt: 1,
+    }
+    const undoRecord = {
+      runId: "undo-run-1",
+      sessionId: "sess-1",
+      kind: "preRevert" as const,
+      revertsRunId: "run-1",
+      hash: "pre-hash",
+      endHash: "post-hash",
+      files: ["/w/a.ts"],
+      createdAt: 2,
+    }
+    vi.mocked(snapshotStore.get)
+      .mockResolvedValueOnce(record)
+      .mockResolvedValueOnce(undoRecord)
+    vi.mocked(snapshotService.revert).mockResolvedValue({
+      ok: true,
+      restored: ["/w/a.ts"],
+      deleted: [],
+      skipped: [],
+      failed: [],
+    })
+
+    await onMessage({ type: "revertSnapshot", runId: "run-1" })
+    await onMessage({ type: "undoRevertSnapshot", runId: "run-1" })
+
+    onMessage({ type: "sendMessage", content: "ещё" })
+    await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1))
+    const args = getRunArgs()
+    expect(args[args.length - 1]).toBeUndefined()
+    resolveRun()
+  })
 })

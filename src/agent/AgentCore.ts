@@ -146,6 +146,7 @@ export class AgentCore {
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
     onSnapshot?: (patch: ISnapshotPatch | null) => void,
+    revertNote?: string,
   ): Promise<IChatMessage> {
     if (this.disposed) {
       throw new AgentError("Агент освобождён")
@@ -193,6 +194,7 @@ export class AgentCore {
       signal,
       onCompaction,
       onSnapshot,
+      revertNote,
     )
   }
 

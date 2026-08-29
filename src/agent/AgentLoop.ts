@@ -325,6 +325,7 @@ export class AgentLoop {
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
     onSnapshot?: (patch: ISnapshotPatch | null) => void,
+    revertNote?: string,
   ): Promise<IChatMessage> {
     const currentMode = this.modeManager.getModeName()
 
@@ -334,9 +335,13 @@ export class AgentLoop {
       planContext = activePlan.toText()
     }
 
-    const systemPrompt = (await this.contextBuilder.buildSystemPrompt(activeSkills))
+    let systemPrompt = (await this.contextBuilder.buildSystemPrompt(activeSkills))
       + "\n\n" + this.modeManager.getSystemPromptAddon()
       + (planContext ? "\n\n" + planContext : "")
+
+    if (revertNote) {
+      systemPrompt = systemPrompt + "\n\n" + revertNote
+    }
 
     const conversation: IChatMessage[] = [
       { role: "system", content: systemPrompt, timestamp: Date.now() },

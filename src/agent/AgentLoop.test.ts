@@ -960,4 +960,33 @@ const loop = new AgentLoop(
     )
     expect(patches).toEqual([null])
   })
+
+  // ── revertNote ───────────────────────────────────────────
+
+  it("revertNote добавляется к системному промпту", async () => {
+    const mockToolExecutor = createMockToolExecutor()
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    await loop.run(
+      "test query", [], () => {}, undefined, undefined, undefined, undefined, undefined,
+      "TEST_REVERT_NOTE",
+    )
+    const conversation = vi.mocked(mockToolExecutor.callBackend).mock.calls[0][0] as IChatMessage[]
+    expect(conversation[0].role).toBe("system")
+    expect(conversation[0].content).toContain("TEST_REVERT_NOTE")
+  })
+
+  it("без revertNote системный промпт не меняется", async () => {
+    const mockToolExecutor = createMockToolExecutor()
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    await loop.run("test query", [], () => {})
+    const conversation = vi.mocked(mockToolExecutor.callBackend).mock.calls[0][0] as IChatMessage[]
+    expect(conversation[0].role).toBe("system")
+    expect(conversation[0].content).not.toContain("TEST_REVERT_NOTE")
+  })
 })

@@ -1,4 +1,5 @@
 import * as vscode from "vscode"
+import { basename } from "path"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { INotificationService } from "../services/notification/NotificationService"
@@ -31,6 +32,8 @@ export class ChatMessageHandler {
   private streaming = false
   private abortController: AbortController | null = null
   private readonly validModes: readonly string[] = Object.keys(BUILT_IN_MODES)
+  /** Заметка об откате пользователя для следующего запроса агента. */
+  private pendingRevertNote: string | null = null
 
   constructor(
     private readonly agent: IAgentOrchestrator,
@@ -117,6 +120,8 @@ export class ChatMessageHandler {
           }
           case "switchSession":
             this.sessionStore.setActive(msg.sessionId)
+            // Заметка привязана к конкретной сессии
+            this.pendingRevertNote = null
             const messages = this.sessionStore.getActiveMessages()
             await this.agent.restoreSession(messages)
             this.sendActiveMessages()
@@ -125,6 +130,8 @@ export class ChatMessageHandler {
             break
           case "createSession": {
             await this.sessionStore.newSession()
+            // Заметка привязана к конкретной сессии
+            this.pendingRevertNote = null
             this.agent.clearPlan()
             this.agent.resetSession()
             this.webview.postMessage({ type: "newChat" } as ExtToWebview)
@@ -315,6 +322,15 @@ export class ChatMessageHandler {
       }
     }
     if (ok) {
+      if (result.restored.length + result.deleted.length > 0 && record.kind === "request") {
+        const names = [...result.restored, ...result.deleted]
+          .slice(0, 10)
+          .map((f) => basename(f))
+          .join(", ")
+        this.pendingRevertNote =
+          `Пользователь откатил изменения агента (файлы: ${names}). ` +
+          "Не повторяй эти изменения, пока пользователь не подтвердит их снова."
+      }
       const count = result.restored.length + result.deleted.length
       this.notificationService.show("agentDone", `Изменения откатлены (${count} файлов)`)
       await this.refreshDiffViewer()
@@ -374,6 +390,8 @@ export class ChatMessageHandler {
         return
       }
       if (result.ok) {
+        // Изменения возвращены — заметка неактуальна
+        this.pendingRevertNote = null
         await this.snapshotStore.delete(undoRunId)
       }
       this.webview.postMessage({
@@ -526,6 +544,7 @@ export class ChatMessageHandler {
     await this.sessionStore.push({ role: "user", content, timestamp: userTimestamp })
 
     try {
+      const note = this.pendingRevertNote
       const result = await this.agent.run(content, (chunk) => {
         this.webview.postMessage({ type: "streamChunk", text: chunk } as ExtToWebview)
       }, (toolName, args) => {
@@ -543,7 +562,7 @@ export class ChatMessageHandler {
         } as ExtToWebview)
       }, this.abortController.signal, undefined, (patch) => {
         this.handleSnapshotInfo(patch, String(userTimestamp))
-      })
+      }, note ?? undefined)
 
       await this.sessionStore.push(result)
 
@@ -566,6 +585,7 @@ export class ChatMessageHandler {
     } finally {
       this.streaming = false
       this.abortController = null
+      this.pendingRevertNote = null
       this.sendSessionList()
     }
   }
