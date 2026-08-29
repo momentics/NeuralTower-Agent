@@ -22,7 +22,11 @@ export class ChatProvider implements IProvider {
   private panel: vscode.WebviewView | undefined
   private disposables: vscode.Disposable[] = []
   private messageHandler: ChatMessageHandler | null = null
-  private healthMonitor: { init(): void | Promise<void>; resume(): void } | null = null
+  private healthMonitor: {
+    init(): void | Promise<void>
+    resume(): void
+    onStatusChange?(cb: (connected: boolean) => void): void
+  } | null = null
 
   constructor(
     private readonly extUri: vscode.Uri,
@@ -39,7 +43,11 @@ export class ChatProvider implements IProvider {
   ) {}
 
   /** Установить монитор здоровья для ленивой инициализации при первом открытии sidebar. */
-  setHealthMonitor(monitor: { init(): void | Promise<void>; resume(): void }): void {
+  setHealthMonitor(monitor: {
+    init(): void | Promise<void>
+    resume(): void
+    onStatusChange?(cb: (connected: boolean) => void): void
+  }): void {
     this.healthMonitor = monitor
   }
 
@@ -71,6 +79,12 @@ export class ChatProvider implements IProvider {
     )
 
     this.messageHandler.subscribe(this.disposables)
+
+    // Статус подключения бэкенда в футере чата
+    this.healthMonitor?.onStatusChange?.((connected) => {
+      if (!this.panel) return
+      void this.panel.webview.postMessage({ type: "backendStatus", connected } as ExtToWebview)
+    })
 
     // Выборочный откат из DiffViewer (кнопка «Откатить выбранные файлы»)
     const messageHandler = this.messageHandler

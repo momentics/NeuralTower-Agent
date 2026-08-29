@@ -26,6 +26,23 @@ describe("NeuralTowerBackend", () => {
     expect(onConfigChangeSpy).toHaveBeenCalledWith({ url: "http://new", model: "new-model" })
   })
 
+  it("normalizes trailing slash in constructor", () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ url: "http://localhost:3000/" }))
+    expect(b.currentUrl()).toBe("http://localhost:3000")
+  })
+
+  it("normalizes trailing slash on updateConfig and persists canonical form", async () => {
+    await backend.updateConfig({ url: "http://localhost:3000//" })
+    expect(backend.currentUrl()).toBe("http://localhost:3000")
+    expect(onConfigChangeSpy).toHaveBeenCalledWith({ url: "http://localhost:3000" })
+  })
+
+  it("currentUrl tracks the live url", async () => {
+    expect(backend.currentUrl()).toBe(DEFAULT_BACKEND_URL)
+    await backend.updateConfig({ url: "http://other:1234" })
+    expect(backend.currentUrl()).toBe("http://other:1234")
+  })
+
   it("listModels returns model ids", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
       ok: true,

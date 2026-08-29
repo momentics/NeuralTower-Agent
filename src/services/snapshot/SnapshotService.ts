@@ -824,10 +824,11 @@ export class SnapshotService implements IService, ISnapshotService {
       await this.mutex.withLock(async () => {
         if (!this.mirrorReady) return
         await this.pruneSnapshotRef()
-        // --local: не копировать заимствованные объекты (alternates с Фазы 6);
-        // без alternates поведение совпадает с обычным gc
+        // git gc знает об alternates: заимствованные объекты остаются в
+        // репозитории пользователя и не копируются в зеркало, локальные
+        // недостижимые объекты удаляются
         const res = await this.git.run(
-          ["gc", `--prune=${this.config.retentionDays}.days`, "--local"],
+          ["gc", `--prune=${this.config.retentionDays}.days`],
           this.gitOpts(SNAPSHOT_GC_TIMEOUT_MS),
         )
         if (res.code !== 0) {

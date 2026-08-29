@@ -24,6 +24,12 @@ export class BackendHealthMonitor extends StatusBarIndicator implements IPlugin 
   private checking = false
   private consecutiveFailures = 0
   private initialized = false
+  private statusListener: ((connected: boolean) => void) | null = null
+
+  /** Подписаться на статус подключения (вызывается после каждой проверки). */
+  onStatusChange(cb: (connected: boolean) => void): void {
+    this.statusListener = cb
+  }
 
   constructor(
     private readonly backend: IBackend,
@@ -153,5 +159,6 @@ export class BackendHealthMonitor extends StatusBarIndicator implements IPlugin 
       this.setTooltip("Neural Tower: недоступно\nНажмите для настроек")
     }
     this.show()
+    this.statusListener?.(this.connected)
   }
 }

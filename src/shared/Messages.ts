@@ -33,6 +33,7 @@ export type ExtToWebview =
   | { type: "permissionRequest"; requestId: string; toolName: string; description: string }
   | { type: "modeChanged"; mode: AgentModeName; allowed: AgentModeName[] }
   | { type: "modeSwitchError"; message: string }
+  | { type: "backendStatus"; connected: boolean }
   | { type: "snapshotInfo"; runId: string; hash: string; fileCount: number }
   | { type: "snapshotReverted"; runId: string; ok: boolean; error?: string; skippedCount?: number; undoAvailable?: boolean }
   | { type: "undoReverted"; runId: string; ok: boolean; error?: string }

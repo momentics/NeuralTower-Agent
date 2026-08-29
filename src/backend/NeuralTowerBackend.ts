@@ -25,7 +25,8 @@ export class NeuralTowerBackend implements IBackend {
     config?: IBackendConfig,
     private readonly onConfigChange?: (partial: Partial<IBackendConfig>) => void,
   ) {
-    this.config = config ?? loadDefaultBackendConfig()
+    this.config = { ...(config ?? loadDefaultBackendConfig()) }
+    this.config.url = normalizeUrl(this.config.url)
   }
 
   setResumeCallback(cb: () => void): void {
@@ -41,17 +42,19 @@ export class NeuralTowerBackend implements IBackend {
   }
 
   async updateConfig(partial: Partial<IBackendConfig>): Promise<void> {
-    if (partial.url !== undefined) {
-      if (!validateUrl(partial.url)) {
-        throw new BackendError(`Неверный URL: ${partial.url}`)
+    const normalized: Partial<IBackendConfig> = { ...partial }
+    if (normalized.url !== undefined) {
+      if (!validateUrl(normalized.url)) {
+        throw new BackendError(`Неверный URL: ${normalized.url}`)
       }
-      this.config.url = partial.url
+      normalized.url = normalizeUrl(normalized.url)
     }
-    if (partial.model !== undefined) this.config.model = partial.model
-    if (partial.maxRetries !== undefined) this.config.maxRetries = partial.maxRetries
-    if (partial.timeoutMs !== undefined) this.config.timeoutMs = partial.timeoutMs
+    if (normalized.url !== undefined) this.config.url = normalized.url
+    if (normalized.model !== undefined) this.config.model = normalized.model
+    if (normalized.maxRetries !== undefined) this.config.maxRetries = normalized.maxRetries
+    if (normalized.timeoutMs !== undefined) this.config.timeoutMs = normalized.timeoutMs
 
-    this.onConfigChange?.(partial)
+    this.onConfigChange?.(normalized)
     this._resumeCallback?.()
   }
 
@@ -279,4 +282,13 @@ function validateUrl(url: string): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * Привести URL к каноническому виду: убрать хвостовые слэши.
+ * Иначе `${url}/v1/...` даёт двойной слэш (`//v1/...`), который
+ * серверы вывода (LM Studio, llama.cpp) отвечают на 404.
+ */
+function normalizeUrl(url: string): string {
+  return url.replace(/\/+$/, "")
 }

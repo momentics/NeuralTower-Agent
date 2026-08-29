@@ -53,6 +53,7 @@ interface SessionInfo {
 let currentEl: HTMLElement | null = null
 let sessions: SessionInfo[] = []
 let isStreaming = false
+let backendConnected = false
 let currentMode = "build"
 let allowedModes: string[] = ["plan", "explore"]
 let pendingPermission: { requestId: string; toolName: string; description: string } | null = null
@@ -430,10 +431,29 @@ window.addEventListener("message", (event: MessageEvent) => {
       )
       break
     }
+
+    case "backendStatus":
+      backendConnected = Boolean(data.connected)
+      renderStatus()
+      break
   }
 })
 
 // ── Состояние стриминга ───────────────────────────────
+
+/** Отрисовать статус-строку: приоритет — стриминг, затем реальное подключение к бэкенду. */
+function renderStatus(): void {
+  if (isStreaming) {
+    statusDot.className = "status-dot yellow"
+    statusText.textContent = "Работает"
+  } else if (backendConnected) {
+    statusDot.className = "status-dot green"
+    statusText.textContent = "Подключено"
+  } else {
+    statusDot.className = "status-dot red"
+    statusText.textContent = "Не подключено"
+  }
+}
 
 function setStreaming(streaming: boolean): void {
   isStreaming = streaming
@@ -441,14 +461,7 @@ function setStreaming(streaming: boolean): void {
   stopBtn.style.display = streaming ? "flex" : "none"
   sendBtn.disabled = streaming
   input.disabled = streaming
-
-  if (streaming) {
-    statusDot.className = "status-dot yellow"
-    statusText.textContent = "Работает"
-  } else {
-    statusDot.className = "status-dot green"
-    statusText.textContent = "Подключено"
-  }
+  renderStatus()
 }
 
 // ── Добавление сообщений ──────────────────────────────

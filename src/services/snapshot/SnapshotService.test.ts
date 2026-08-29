@@ -376,11 +376,44 @@ describeGit("SnapshotService (интеграция с git)", () => {
     expect(await fs.readFile(path.join(fx.repo, "a.txt"), "utf-8")).toBe("alpha\n")
   })
 
-  it("cleanup runs without errors and marks session done", async () => {
+  it("cleanup идемпотентен: повторный вызов не выполняет работу", async () => {
     await fx.service.track()
     await expect(fx.service.cleanup()).resolves.toBeUndefined()
     await expect(fx.service.cleanup()).resolves.toBeUndefined()
     expect(fx.service.isEnabled()).toBe(true)
+  })
+
+  it("cleanup удаляет недостижимые объекты (gc реально выполняется)", async () => {
+    const fx0 = await createFixture({ retentionDays: 0 })
+    try {
+      const h1 = (await fx0.service.track())!
+      await fs.writeFile(path.join(fx0.repo, "a.txt"), "changed\n", "utf-8")
+      const h2 = (await fx0.service.track())!
+      expect(h2).not.toBe(h1)
+      // Зафиксировать коммит цепочки до cleanup
+      const commitRes = await git(
+        ["--git-dir", fx0.mirror, "rev-parse", "refs/nt/snapshots^{commit}"],
+        fx0.repo,
+      )
+      expect(commitRes.code).toBe(0)
+      const lastCommit = commitRes.stdout.trim()
+      // Дать пройти секундной границе: git хранит даты коммитов с точностью
+      // до секунды, и rev-list --since=<now> при совпадении фазы секунды
+      // считает коммит «свежим» — тогда цепочка не перерезается
+      await new Promise((r) => setTimeout(r, 1100))
+      await fx0.service.cleanup()
+      // retentionDays=0: цепочка перерезана (ref удалён или заменён корневым
+      // коммитом — зависит от фазы секунды), исходный коммит недостижим в обоих случаях
+      // Коммит снимков удалён gc — gc реально выполнен, а не проглотил ошибку
+      const c = await git(["--git-dir", fx0.mirror, "cat-file", "-e", lastCommit], fx0.repo)
+      expect(c.code).not.toBe(0)
+      // Дерево текущего состояния индекса сохраняется (нужно для patch/restore)
+      const t = await git(["--git-dir", fx0.mirror, "cat-file", "-e", h2], fx0.repo)
+      expect(t.code).toBe(0)
+    } finally {
+      fx0.service.dispose()
+      await cleanup(fx0.root)
+    }
   })
 
 
