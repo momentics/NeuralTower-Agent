@@ -137,6 +137,8 @@ export function loadDefaultAutocompleteConfig(): IAutocompleteConfig {
 export const SNAPSHOT_DEFAULT_RETENTION_DAYS = 7
 /** Дефолтный максимальный размер файла для чекпоинта, байты. */
 export const SNAPSHOT_DEFAULT_MAX_FILE_SIZE = 2 * 1024 * 1024
+/** Дефолт: разогревать зеркало объектами репозитория пользователя. */
+export const SNAPSHOT_DEFAULT_SEED = true
 
 export interface ISnapshotConfig {
   /** Включить снапшоты (работает только для git-репозиториев). */
@@ -147,6 +149,9 @@ export interface ISnapshotConfig {
 
   /** Максимальный размер файла для стейджинга, байты. */
   maxFileSizeBytes: number
+
+  /** Разогревать зеркало объектами репозитория пользователя. */
+  seed: boolean
 }
 
 export function loadDefaultSnapshotConfig(): ISnapshotConfig {
@@ -154,6 +159,7 @@ export function loadDefaultSnapshotConfig(): ISnapshotConfig {
     enabled: true,
     retentionDays: SNAPSHOT_DEFAULT_RETENTION_DAYS,
     maxFileSizeBytes: SNAPSHOT_DEFAULT_MAX_FILE_SIZE,
+    seed: SNAPSHOT_DEFAULT_SEED,
   }
 }
 
@@ -210,6 +216,7 @@ export function loadAppConfig(): IAppConfig {
       enabled: cfg.get<boolean>("snapshots.enabled", loadDefaultSnapshotConfig().enabled)!,
       retentionDays: cfg.get<number>("snapshots.retentionDays", loadDefaultSnapshotConfig().retentionDays)!,
       maxFileSizeBytes: cfg.get<number>("snapshots.maxFileSizeBytes", loadDefaultSnapshotConfig().maxFileSizeBytes)!,
+      seed: cfg.get<boolean>("snapshots.seed", loadDefaultSnapshotConfig().seed)!,
     },
   }
 }

@@ -67,6 +67,7 @@ async function createFixture(configOverrides: Partial<ISnapshotConfig> = {}): Pr
     enabled: true,
     retentionDays: 7,
     maxFileSizeBytes: 2 * 1024 * 1024,
+    seed: true,
     ...configOverrides,
   }
 
@@ -502,6 +503,45 @@ describeGit("SnapshotService (интеграция с git)", () => {
   })
 
   it("снимок переживает cleanup", async () => {
+    const h = (await fx.service.track())!
+    await fs.writeFile(path.join(fx.repo, "a.txt"), "changed\n", "utf-8")
+    const p = await fx.service.patch(h)
+    await fx.service.cleanup()
+    const r = await fx.service.revert(fx.record(h, p.endHash, [toPosix(path.join(fx.repo, "a.txt"))]))
+    expect(r.ok).toBe(true)
+  })
+
+  it("разогрев создаёт alternates и переиспользует объекты", async () => {
+    const hash = (await fx.service.track())!
+    expect(hash).toBeTruthy()
+    // alternates указывает на objects исходного репозитория
+    // (realpath: на Windows temp-путь может быть в 8.3-форме, а git возвращает полную)
+    const alt = await fs.readFile(path.join(fx.mirror, "objects", "info", "alternates"), "utf-8")
+    const expectedObjects = toPosix(await fs.realpath(path.join(fx.repo, ".git", "objects")))
+    expect(toPosix(await fs.realpath(alt.trim()))).toBe(expectedObjects)
+    // oid a.txt в индексе зеркала совпадает с oid в индексе исходного репозитория
+    const mirrorIdx = await git(["--git-dir", fx.mirror, "ls-files", "-s", "--", "a.txt"], fx.repo)
+    const sourceIdx = await git(["ls-files", "-s", "--", "a.txt"], fx.repo)
+    expect(mirrorIdx.code).toBe(0)
+    expect(sourceIdx.code).toBe(0)
+    expect(mirrorIdx.stdout.trim()).toBe(sourceIdx.stdout.trim())
+  })
+
+  it("разогрев отключается настройкой", async () => {
+    const noSeed = await createFixture({ seed: false })
+    try {
+      const hash = (await noSeed.service.track())!
+      expect(hash).toBeTruthy()
+      await expect(
+        fs.access(path.join(noSeed.mirror, "objects", "info", "alternates")),
+      ).rejects.toThrow()
+    } finally {
+      noSeed.service.dispose()
+      await cleanup(noSeed.root)
+    }
+  })
+
+  it("снимки переживают cleanup с alternates", async () => {
     const h = (await fx.service.track())!
     await fs.writeFile(path.join(fx.repo, "a.txt"), "changed\n", "utf-8")
     const p = await fx.service.patch(h)

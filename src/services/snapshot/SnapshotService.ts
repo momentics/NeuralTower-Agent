@@ -71,6 +71,11 @@ interface IRevertOp {
  * не читается (кроме check-ignore/info-exclude в режиме только-чтение)
  * и не пишется.
  *
+ * Через `objects/info/alternates` зеркало использует объекты репозитория
+ * пользователя (разогрев, `snapshots.seed`). Заимствованные объекты живут
+ * в репозитории пользователя: если пользователь удалит репозиторий, часть
+ * старых снимков может стать недоступной — это допустимое ограничение.
+ *
  * Все публичные методы сериализованы единым Mutex. Ошибки track/patch
  * никогда не прерывают цикл агента: возвращаются null/пустой патч.
  */
@@ -221,6 +226,7 @@ export class SnapshotService implements IService, ISnapshotService {
     }
 
     await this.syncExclude()
+    await this.seedMirror()
     log.info(`Зеркальный репозиторий снапшотов инициализирован: ${this.gitDir}`)
   }
 
@@ -239,6 +245,68 @@ export class SnapshotService implements IService, ISnapshotService {
     ].filter(Boolean)
     const text = lines.length > 0 ? lines.join("\n") + "\n" : ""
     await fs.writeFile(path.join(infoDir, "exclude"), text, "utf-8")
+  }
+
+  /**
+   * Разогреть зеркало объектами репозитория пользователя:
+   * alternates на его objects + копия индекса (stat-кэш).
+   * Best-effort: сбой не отключает снапшоты.
+   */
+  private async seedMirror(): Promise<void> {
+    if (!this.config.seed || !this.sourceGitDir) return
+    try {
+      // Объекты лежат в общем каталоге: для связанного worktree
+      // это .git основного репозитория (файл commondir)
+      const commonDir = await this.resolveCommonDir(this.sourceGitDir)
+      const objectsDir = path.join(commonDir, "objects")
+      let objectsExist = true
+      try {
+        await fs.access(objectsDir)
+      } catch {
+        objectsExist = false
+      }
+      if (!objectsExist) {
+        log.warn("Разогрев зеркала пропущен: нет каталога objects в репозитории пользователя")
+        return
+      }
+      const altPath = path.join(this.gitDir, "objects", "info", "alternates")
+      await fs.mkdir(path.dirname(altPath), { recursive: true })
+      await fs.writeFile(altPath, toPosix(objectsDir) + "\n", "utf-8")
+      // Копия индекса пользователя: stat-кэш позволит git не пере-хэшировать
+      // неизменённые файлы при первом add.
+      // Только когда workspace — корень репозитория: пути индекса
+      // относительны корню, а work-tree зеркала — это workspace.
+      if (this.repoRoot && pathKey(this.workTree) === pathKey(this.repoRoot)) {
+        try {
+          await fs.copyFile(path.join(this.sourceGitDir, "index"), path.join(this.gitDir, "index"))
+          const refresh = await this.git.run(["update-index", "--really-refresh"], this.gitOpts())
+          if (refresh.code !== 0) {
+            log.warn(`Не удалось обновить stat-кэш после разогрева: ${refresh.stderr}`)
+          }
+        } catch {
+          // Индекса в репозитории пользователя нет (коммитов не было) — не критично
+        }
+      }
+      log.info("Зеркальный репозиторий разогрет объектами репозитория пользователя")
+    } catch (err: unknown) {
+      log.warn(`Не удалось разогреть зеркальный репозиторий: ${errorMessage(err)}`)
+    }
+  }
+
+  /**
+   * Общий git-каталог: для связанного worktree — .git основного
+   * репозитория (файл `commondir`), для обычного — сам каталог.
+   */
+  private async resolveCommonDir(gitDir: string): Promise<string> {
+    try {
+      const content = (await fs.readFile(path.join(gitDir, "commondir"), "utf-8")).trim()
+      if (content) {
+        return path.isAbsolute(content) ? content : path.resolve(gitDir, content)
+      }
+    } catch {
+      // Нет commondir — обычный репозиторий
+    }
+    return gitDir
   }
 
   // ── Сбор кандидатов и стейджинг ─────────────────────────
