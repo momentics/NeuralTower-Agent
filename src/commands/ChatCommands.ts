@@ -40,6 +40,6 @@ export function registerChatCommands(
     if (!vscode.workspace.workspaceFolders?.[0] || !gitService) return
     const dir = vscode.workspace.workspaceFolders[0].uri.fsPath
     const diff = await gitService.getDiff(dir)
-    diffViewer?.openPanel(diff)
+    diffViewer?.openPanel({ type: "workspace", diff })
   })
 }

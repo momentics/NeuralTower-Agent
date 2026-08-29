@@ -9,6 +9,7 @@ export {
   SNAPSHOT_GC_TIMEOUT_MS,
   SNAPSHOT_MAX_BUFFER,
   SNAPSHOT_REVERT_BATCH_SIZE,
+  SNAPSHOT_DIFF_MAX_CHARS,
   SNAPSHOT_LEDGER_MAX_RECORDS,
   SNAPSHOT_COMMIT_REF,
 } from "./SnapshotTypes"
@@ -21,4 +22,6 @@ export type {
   IRevertResult,
   IRevertOptions,
   SnapshotRecordKind,
+  IFileDiff,
+  IRequestDiff,
 } from "./SnapshotTypes"

@@ -16,6 +16,7 @@ export type WebviewToExt =
   | { type: "undoRevertSnapshot"; runId: string }
   | { type: "listCheckpoints" }
   | { type: "restoreCheckpoint"; runId: string }
+  | { type: "openRequestDiff"; runId: string }
 
 export type ExtToWebview =
   | { type: "messageConfirmed"; content: string }

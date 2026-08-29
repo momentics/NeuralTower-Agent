@@ -121,10 +121,21 @@ function createMockSnapshotService() {
     isEnabled: vi.fn(() => true),
     track: vi.fn(async () => "hash-1"),
     patch: vi.fn(async (hash: string) => ({ hash, endHash: hash, files: [] })),
+    requestDiff: vi.fn(async () => null),
     revert: vi.fn(async () => ({ ok: true, restored: [], deleted: [], skipped: [], failed: [] })),
     restore: vi.fn(async () => {}),
     cleanup: vi.fn(async () => {}),
     dispose: vi.fn(),
+  }
+}
+
+function createMockDiffViewer() {
+  return {
+    openPanel: vi.fn(),
+    isOpen: vi.fn(() => false),
+    close: vi.fn(),
+    dispose: vi.fn(),
+    setRevertSelectedHandler: vi.fn(),
   }
 }
 
@@ -146,6 +157,7 @@ describe("ChatMessageHandler", () => {
   let notificationService: ReturnType<typeof createMockNotificationService>
   let snapshotService: ReturnType<typeof createMockSnapshotService>
   let snapshotStore: ReturnType<typeof createMockSnapshotStore>
+  let diffViewer: ReturnType<typeof createMockDiffViewer>
   let handler: ChatMessageHandler
   let onMessage: (msg: unknown) => Promise<void>
   let resolveRun: () => void
@@ -161,6 +173,7 @@ describe("ChatMessageHandler", () => {
     notificationService = createMockNotificationService()
     snapshotService = createMockSnapshotService()
     snapshotStore = createMockSnapshotStore()
+    diffViewer = createMockDiffViewer()
     handler = new ChatMessageHandler(
       agent,
       sessionStore,
@@ -170,6 +183,7 @@ describe("ChatMessageHandler", () => {
       createMockSettingsProvider(),
       snapshotService,
       snapshotStore,
+      diffViewer,
     )
     handler.subscribe([])
     onMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0][0] as (msg: unknown) => Promise<void>
@@ -614,6 +628,91 @@ describe("ChatMessageHandler", () => {
         runId: "run-1",
         ok: false,
         error: "Все файлы этого запроса были изменены последующими запросами",
+      }),
+    )
+  })
+
+  it("openRequestDiff открывает панель в режиме request", async () => {
+    const record = {
+      runId: "run-1",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "abc",
+      endHash: "def",
+      files: ["/w/a.ts"],
+      createdAt: 1,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(record)
+    vi.mocked(snapshotService.requestDiff).mockResolvedValue({
+      runId: "run-1",
+      files: [{ path: "/w/a.ts", status: "modified" as const, diff: "", userTouched: false }],
+    })
+
+    await onMessage({ type: "openRequestDiff", runId: "run-1" })
+    await vi.waitFor(() => expect(diffViewer.openPanel).toHaveBeenCalledTimes(1))
+
+    expect(diffViewer.openPanel).toHaveBeenCalledWith({
+      type: "request",
+      runId: "run-1",
+      files: [{ path: "/w/a.ts", status: "modified", diff: "", userTouched: false }],
+    })
+  })
+
+  it("openRequestDiff без записи не открывает панель", async () => {
+    vi.mocked(snapshotStore.get).mockResolvedValue(null)
+    await onMessage({ type: "openRequestDiff", runId: "404" })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(diffViewer.openPanel).not.toHaveBeenCalled()
+  })
+
+  it("handleRevertSelected откатывает только выбранные и форсит их", async () => {
+    const record = {
+      runId: "run-1",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "abc",
+      endHash: "def",
+      files: ["/w/a.ts", "/w/b.ts"],
+      createdAt: 1,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(record)
+    vi.mocked(snapshotService.revert).mockResolvedValue({
+      ok: true,
+      restored: ["/w/a.ts"],
+      deleted: [],
+      skipped: [],
+      failed: [],
+    })
+
+    await handler.handleRevertSelected("run-1", ["/w/a.ts"])
+
+    expect(snapshotService.revert).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "run-1", files: ["/w/a.ts"] }),
+      { forceFiles: ["/w/a.ts"] },
+    )
+  })
+
+  it("handleRevertSelected отклоняет пути вне записи", async () => {
+    const record = {
+      runId: "run-1",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "abc",
+      endHash: "def",
+      files: ["/w/a.ts", "/w/b.ts"],
+      createdAt: 1,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(record)
+
+    await handler.handleRevertSelected("run-1", ["/other/x.ts"])
+
+    expect(snapshotService.revert).not.toHaveBeenCalled()
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "snapshotReverted",
+        runId: "run-1",
+        ok: false,
+        error: "Не выбраны файлы для отката",
       }),
     )
   })

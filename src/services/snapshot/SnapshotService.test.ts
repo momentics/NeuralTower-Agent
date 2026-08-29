@@ -510,6 +510,48 @@ describeGit("SnapshotService (интеграция с git)", () => {
     expect(r.ok).toBe(true)
   })
 
+  it("requestDiff определяет статусы modified/added/deleted", async () => {
+    const h = (await fx.service.track())!
+    await fs.writeFile(path.join(fx.repo, "a.txt"), "changed\n", "utf-8")
+    await fs.writeFile(path.join(fx.repo, "new.txt"), "new\n", "utf-8")
+    await fs.rm(path.join(fx.repo, "sub", "b.txt"))
+    const p = await fx.service.patch(h)
+    const d = await fx.service.requestDiff(fx.record(h, p.endHash, p.files))
+    expect(d).not.toBeNull()
+    const byName = new Map(d!.files.map((f) => [path.basename(f.path), f]))
+    expect(byName.get("a.txt")?.status).toBe("modified")
+    expect(byName.get("new.txt")?.status).toBe("added")
+    expect(byName.get("b.txt")?.status).toBe("deleted")
+    expect(d!.files.every((f) => f.userTouched === false)).toBe(true)
+  })
+
+  it("requestDiff показывает содержимое diff", async () => {
+    const h = (await fx.service.track())!
+    await fs.writeFile(path.join(fx.repo, "a.txt"), "changed\n", "utf-8")
+    const p = await fx.service.patch(h)
+    const d = await fx.service.requestDiff(fx.record(h, p.endHash, p.files))
+    const a = d!.files.find((f) => f.path === toPosix(path.join(fx.repo, "a.txt")))
+    expect(a).toBeTruthy()
+    expect(a!.diff).toContain("+changed")
+  })
+
+  it("requestDiff помечает правку пользователя", async () => {
+    const h = (await fx.service.track())!
+    const aFile = toPosix(path.join(fx.repo, "a.txt"))
+    await fs.writeFile(path.join(fx.repo, "a.txt"), "agent\n", "utf-8")
+    const p = await fx.service.patch(h)
+    // Пользователь изменил файл уже после запроса
+    await fs.writeFile(path.join(fx.repo, "a.txt"), "user\n", "utf-8")
+    const d = await fx.service.requestDiff(fx.record(h, p.endHash, [aFile]))
+    const a = d!.files.find((f) => f.path === aFile)
+    expect(a!.userTouched).toBe(true)
+  })
+
+  it("requestDiff возвращает null для несуществующего снимка", async () => {
+    const d = await fx.service.requestDiff(fx.record("0".repeat(40), "0".repeat(40), []))
+    expect(d).toBeNull()
+  })
+
   it("never touches the source repository .git", async () => {
     const gitDir = path.join(fx.repo, ".git")
     const before = await listDirWithHashes(gitDir)

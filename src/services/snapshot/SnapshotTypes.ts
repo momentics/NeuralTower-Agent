@@ -76,6 +76,26 @@ export interface IRevertOptions {
 }
 
 /**
+ * Файл предпросмотра запроса: статус и diff между
+ * состояниями «до» и «после» запроса.
+ */
+export interface IFileDiff {
+  /** Абсолютный путь файла. */
+  path: string
+  status: "modified" | "added" | "deleted"
+  /** Unified diff между состоянием «до» и «после» запроса (может быть урезан). */
+  diff: string
+  /** Файл изменялся пользователем после запроса. */
+  userTouched: boolean
+}
+
+/** Предпросмотр запроса: diff по файлам, без изменения рабочего дерева. */
+export interface IRequestDiff {
+  runId: string
+  files: IFileDiff[]
+}
+
+/**
  * Сервис снапшотов: зеркальный git-репозиторий в глобальном
  * хранилище; главный .git проекта не затрагивается.
  */
@@ -86,6 +106,8 @@ export interface ISnapshotService {
   track(): Promise<string | null>
   /** Деревья «до/после» запроса и список файлов, изменённых между ними. */
   patch(hash: string): Promise<ISnapshotPatch>
+  /** Предпросмотр изменений запроса: diff по файлам, без изменения рабочего дерева. */
+  requestDiff(record: ISnapshotRecord): Promise<IRequestDiff | null>
   /** Откатить файлы, изменённые после снимка (по списку из patch). */
   revert(record: ISnapshotRecord, opts?: IRevertOptions): Promise<IRevertResult>
   /** Полное восстановление рабочего дерева к снимку. */
@@ -138,6 +160,8 @@ export const SNAPSHOT_MAX_BUFFER = 4 * 1024 * 1024
 
 /** Число файлов в одном батче revert. */
 export const SNAPSHOT_REVERT_BATCH_SIZE = 100
+/** Лимит длины diff одного файла в предпросмотре запроса. */
+export const SNAPSHOT_DIFF_MAX_CHARS = 100_000
 /** Максимум записей в реестре. */
 export const SNAPSHOT_LEDGER_MAX_RECORDS = 500
 

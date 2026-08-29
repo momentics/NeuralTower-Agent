@@ -518,8 +518,19 @@ function attachRevertButton(bubble: HTMLElement, info: { runId: string; fileCoun
     vscode.postMessage({ type: "undoRevertSnapshot", runId: info.runId })
   })
 
+  const selectBtn = document.createElement("button")
+  selectBtn.type = "button"
+  selectBtn.className = "snapshot-select"
+  selectBtn.dataset.runId = info.runId
+  selectBtn.textContent = "Выбрать…"
+  selectBtn.title = "Посмотреть изменения и откатить выбранные файлы"
+  selectBtn.addEventListener("click", () => {
+    vscode.postMessage({ type: "openRequestDiff", runId: info.runId })
+  })
+
   row.appendChild(btn)
   row.appendChild(undoBtn)
+  row.appendChild(selectBtn)
   wrapper.appendChild(row)
   messages.scrollTop = messages.scrollHeight
 }

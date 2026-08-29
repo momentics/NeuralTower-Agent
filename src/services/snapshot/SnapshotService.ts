@@ -14,6 +14,7 @@ import {
   SNAPSHOT_GC_TIMEOUT_MS,
   SNAPSHOT_MAX_BUFFER,
   SNAPSHOT_REVERT_BATCH_SIZE,
+  SNAPSHOT_DIFF_MAX_CHARS,
   SNAPSHOT_STAT_CONCURRENCY,
   SNAPSHOT_COMMIT_REF,
   SnapshotError,
@@ -23,6 +24,8 @@ import {
   type IRevertResult,
   type IRevertOptions,
   type ISnapshotService,
+  type IFileDiff,
+  type IRequestDiff,
 } from "./SnapshotTypes"
 
 const log = createDomainLogger("Snapshot")
@@ -499,6 +502,83 @@ export class SnapshotService implements IService, ISnapshotService {
     } catch (err: unknown) {
       log.warn(`Не удалось вычислить изменения: ${errorMessage(err)}`)
       return { hash, endHash: hash, files: [] }
+    }
+  }
+
+  /**
+   * Предпросмотр изменений запроса: пофайловый diff между деревьями
+   * «до» и «после», статусы и пометки пользовательских правок.
+   * Рабочее дерево не изменяется. null — снимки недоступны.
+   */
+  async requestDiff(record: ISnapshotRecord): Promise<IRequestDiff | null> {
+    if (this.disposed) return null
+    if (!(await this.ensureEnabled())) return null
+    try {
+      return await this.mutex.withLock(async () => {
+        if (!this.mirrorReady) return null
+        // Оба дерева снимка должны существовать
+        for (const h of [record.hash, record.endHash]) {
+          const check = await this.git.run(["cat-file", "-e", `${h}^{tree}`], this.gitOpts())
+          if (check.code !== 0) return null
+        }
+        const probe: IRevertResult = { ok: true, restored: [], deleted: [], skipped: [], failed: [] }
+        const ops = this.buildOps(record.files, probe)
+        if (ops.length === 0) return { runId: record.runId, files: [] }
+        const rels = ops.map((o) => o.rel)
+        // Наличие файлов в обоих деревьях и пользовательские правки
+        // вычисляются один раз для всех путей
+        const [startRes, endRes, touchedRes] = await Promise.all([
+          this.runWithPathArgs(
+            ["ls-tree", "--name-only", record.hash],
+            rels,
+            SNAPSHOT_REVERT_TIMEOUT_MS,
+          ),
+          this.runWithPathArgs(
+            ["ls-tree", "--name-only", record.endHash],
+            rels,
+            SNAPSHOT_REVERT_TIMEOUT_MS,
+          ),
+          this.runWithPathArgs(
+            ["diff", "--name-only", "--no-ext-diff", record.endHash],
+            rels,
+            SNAPSHOT_REVERT_TIMEOUT_MS,
+          ),
+        ])
+        const haveStart = new Set(startRes.code === 0 ? splitLines(startRes.stdout).map(pathKey) : [])
+        const haveEnd = new Set(endRes.code === 0 ? splitLines(endRes.stdout).map(pathKey) : [])
+        const touched = new Set(touchedRes.code === 0 ? splitLines(touchedRes.stdout).map(pathKey) : [])
+        const files: IFileDiff[] = []
+        for (const op of ops) {
+          const key = pathKey(op.rel)
+          const inStart = haveStart.has(key)
+          const inEnd = haveEnd.has(key)
+          const status: IFileDiff["status"] = inStart && inEnd ? "modified" : inStart ? "deleted" : "added"
+          let userTouched = touched.has(key)
+          if (!inEnd) {
+            // Файла нет в состоянии «после»: если он появился на диске
+            // — пользователь воссоздал удалённый запросом файл
+            try {
+              await fs.access(op.file)
+              userTouched = true
+            } catch {
+              // Файла нет — как и в снимке
+            }
+          }
+          const diffRes = await this.git.run(
+            ["diff", "--no-ext-diff", "--no-color", record.hash, record.endHash, "--", op.rel],
+            this.gitOpts(),
+          )
+          let diff = diffRes.code === 0 ? diffRes.stdout : ""
+          if (diff.length > SNAPSHOT_DIFF_MAX_CHARS) {
+            diff = diff.slice(0, SNAPSHOT_DIFF_MAX_CHARS) + "\n… (diff урезан)"
+          }
+          files.push({ path: op.file, status, diff, userTouched })
+        }
+        return { runId: record.runId, files }
+      })
+    } catch (err: unknown) {
+      log.warn(`Не удалось построить предпросмотр: ${errorMessage(err)}`)
+      return null
     }
   }
 

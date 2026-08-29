@@ -71,6 +71,13 @@ export class ChatProvider implements IProvider {
     )
 
     this.messageHandler.subscribe(this.disposables)
+
+    // Выборочный откат из DiffViewer (кнопка «Откатить выбранные файлы»)
+    const messageHandler = this.messageHandler
+    this.diffViewer?.setRevertSelectedHandler((runId, files) => {
+      void messageHandler.handleRevertSelected(runId, files)
+    })
+
     this.messageHandler.sendSessionList()
     this.messageHandler.sendActiveMessages()
     this.messageHandler.sendModeChanged()

@@ -180,6 +180,12 @@ export class ChatMessageHandler {
               await this.handleRestoreCheckpoint(msg.runId)
             }
             break
+          case "openRequestDiff":
+            // Предпросмотр запроса недоступен во время выполнения агента
+            if (!this.streaming) {
+              void this.handleOpenRequestDiff(msg.runId)
+            }
+            break
         }
       } catch (err: unknown) {
         const msg = errorMessage(err)
@@ -448,6 +454,54 @@ export class ChatMessageHandler {
     }
   }
 
+  /** Открыть предпросмотр изменений запроса в DiffViewer (режим request). */
+  private async handleOpenRequestDiff(runId: string): Promise<void> {
+    if (!this.snapshotService || !this.snapshotStore || !this.diffViewer) return
+    const record = await this.snapshotStore.get(runId)
+    if (!record || record.kind !== "request") return
+    const requestDiff = await this.snapshotService.requestDiff(record)
+    if (requestDiff) {
+      this.diffViewer.openPanel({ type: "request", runId, files: requestDiff.files })
+    }
+  }
+
+  /**
+   * Выборочный откат: откатить только выбранные пользователем файлы
+   * (явная отметка — bypass защиты «изменялось после запроса»).
+   * Публичный: вызывается из DiffViewer через setRevertSelectedHandler
+   * в ответ на входящее сообщение «revertSelected».
+   */
+  async handleRevertSelected(runId: string, files: string[]): Promise<void> {
+    const record = await this.snapshotStore?.get(runId)
+    if (!this.snapshotService || !this.snapshotStore || !record || record.kind !== "request") {
+      this.postRevert(runId, false, "Чекпоинт не найден")
+      return
+    }
+    // Только файлы, входящие в запись запроса (защита от чужих путей)
+    const allowed = new Set(record.files.map(pathKey))
+    const toRevert = files.filter((f) => allowed.has(pathKey(f)))
+    if (toRevert.length === 0) {
+      this.postRevert(runId, false, "Не выбраны файлы для отката")
+      return
+    }
+    try {
+      const result = await this.performRevert(record, toRevert, toRevert)
+      if (!result) {
+        this.postRevert(runId, false, "Чекпоинты недоступны")
+        return
+      }
+      this.postRevert(
+        runId,
+        result.ok,
+        result.ok ? undefined : result.failed.map((f) => f.error).join("; "),
+        result.skipped.length,
+        result.undoAvailable,
+      )
+    } catch (err: unknown) {
+      this.postRevert(runId, false, errorMessage(err))
+    }
+  }
+
   /** Обновить статус diff в DiffViewer, если панель открыта. */
   private async refreshDiffViewer(): Promise<void> {
     if (!this.diffViewer?.isOpen() || !this.gitService) return
@@ -455,7 +509,7 @@ export class ChatMessageHandler {
     if (!dir) return
     try {
       const diff = await this.gitService.getDiff(dir)
-      this.diffViewer.openPanel(diff)
+      this.diffViewer.openPanel({ type: "workspace", diff })
     } catch (err: unknown) {
       log.warn(`Не удалось обновить diff после отката: ${errorMessage(err)}`)
     }

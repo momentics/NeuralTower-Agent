@@ -34,7 +34,7 @@ export async function sendAgentQuery(
     channel.appendLine("\nГотово.")
 
     const diff = await gitService.getDiff(workDir)
-    diffViewer?.openPanel(diff)
+    diffViewer?.openPanel({ type: "workspace", diff })
   } catch (err: unknown) {
     handleBackendError(err, (msg) => channel.appendLine(`\n${msg}`))
   }

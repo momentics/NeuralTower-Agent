@@ -78,19 +78,26 @@ const window = {
     append: () => {},
     dispose: () => {},
   }),
-  createWebviewPanel: () => ({
-    webview: {
-      html: "",
-      options: {},
-      cspSource: "unsafe-inline",
-      asWebviewUri: (uri: any) => uri.fsPath,
-      postMessage: () => Promise.resolve(true),
-      onDidReceiveMessage: () => ({ dispose: () => {} }),
-    },
-    reveal: () => {},
-    dispose: () => {},
-    onDidDispose: () => ({ dispose: () => {} }),
-  }),
+  createWebviewPanel: () => {
+    const panel: any = {
+      webview: {
+        html: "",
+        options: {},
+        cspSource: "unsafe-inline",
+        asWebviewUri: (uri: any) => uri.fsPath,
+        postMessage: () => Promise.resolve(true),
+        onDidReceiveMessage: (handler: Function) => {
+          panel._messageHandler = handler
+          return { dispose: () => {} }
+        },
+      },
+      reveal: () => {},
+      dispose: () => {},
+      onDidDispose: () => ({ dispose: () => {} }),
+    }
+    panel.fireMessage = (msg: unknown) => panel._messageHandler?.(msg)
+    return panel
+  },
   registerWebviewViewProvider: () => ({ dispose: () => {} }),
   registerWebviewPanelSerializer: () => ({ dispose: () => {} }),
   showInformationMessage: () => Promise.resolve(undefined),

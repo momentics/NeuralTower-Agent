@@ -851,6 +851,28 @@ body {
   cursor: default;
 }
 
+.snapshot-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-family: var(--font);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.snapshot-select:hover {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
 /* ═══════════════════════════════════════════
     CHECKPOINT LIST (список чекпоинтов)
     ═══════════════════════════════════════════ */

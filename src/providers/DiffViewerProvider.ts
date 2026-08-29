@@ -1,16 +1,27 @@
 import * as vscode from "vscode"
 import type { GitDiffOutcome } from "../services/git/GitService"
+import type { IFileDiff } from "../services/snapshot"
 import { buildWebviewHtml } from "../shared/WebviewBuilder"
+
+/**
+ * Режимы просмотрщика diff: diff рабочей области
+ * или предпросмотр изменений запроса (чекпоинт).
+ */
+export type DiffView =
+  | { type: "workspace"; diff: GitDiffOutcome }
+  | { type: "request"; runId: string; files: IFileDiff[] }
 
 /**
  * Интерфейс просмотрщика diff.
  */
 export interface IDiffViewerProvider {
-  openPanel(diff?: GitDiffOutcome): void
+  openPanel(view: DiffView): void
   /** Открыта ли панель. */
   isOpen(): boolean
   close(): void
   dispose(): void
+  /** Колбэк «откатить выбранные файлы» (устанавливается ChatProvider). */
+  setRevertSelectedHandler(handler: ((runId: string, files: string[]) => void) | null): void
 }
 
 export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposable {
@@ -19,13 +30,18 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
 
   private panel: vscode.WebviewPanel | undefined
   private disposables: vscode.Disposable[] = []
+  private revertHandler: ((runId: string, files: string[]) => void) | null = null
 
   constructor(private readonly extUri: vscode.Uri) {}
 
-  openPanel(diff?: GitDiffOutcome): void {
+  setRevertSelectedHandler(handler: ((runId: string, files: string[]) => void) | null): void {
+    this.revertHandler = handler
+  }
+
+  openPanel(view: DiffView): void {
     if (this.panel) {
       this.panel.reveal(vscode.ViewColumn.Two)
-      if (diff) this.updateDiff(diff)
+      this.updateView(view)
       return
     }
 
@@ -42,13 +58,27 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
 
     this.panel.webview.html = this.buildHtml()
 
+    // Входящие сообщения webview: «откатить выбранные файлы»
+    this.panel.webview.onDidReceiveMessage(
+      (msg: { type?: string; runId?: string; files?: unknown }) => {
+        if (msg?.type === "revertSelected" && this.revertHandler && typeof msg.runId === "string") {
+          const files = Array.isArray(msg.files)
+            ? msg.files.filter((f): f is string => typeof f === "string")
+            : []
+          this.revertHandler(msg.runId, files)
+        }
+      },
+      null,
+      this.disposables,
+    )
+
     this.panel.onDidDispose(() => {
       for (const d of this.disposables) d.dispose()
       this.disposables = []
       this.panel = undefined
     }, null, this.disposables)
 
-    if (diff) this.updateDiff(diff)
+    this.updateView(view)
   }
 
   isOpen(): boolean {
@@ -59,26 +89,34 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
     this.panel?.dispose()
   }
 
-  private updateDiff(diff: GitDiffOutcome): void {
+  private updateView(view: DiffView): void {
     if (!this.panel) return
-    if (!diff.ok) {
+    if (view.type === "workspace") {
+      if (!view.diff.ok) {
+        this.panel.webview.postMessage({
+          type: "diffUpdate",
+          diff: {
+            changed: [`Ошибка: ${view.diff.error}`],
+            additions: 0,
+            deletions: 0,
+          },
+        })
+        return
+      }
       this.panel.webview.postMessage({
         type: "diffUpdate",
         diff: {
-          changed: [`Ошибка: ${diff.error}`],
-          additions: 0,
-          deletions: 0,
+          changed: view.diff.changed,
+          additions: view.diff.additions,
+          deletions: view.diff.deletions,
         },
       })
       return
     }
     this.panel.webview.postMessage({
-      type: "diffUpdate",
-      diff: {
-        changed: diff.changed,
-        additions: diff.additions,
-        deletions: diff.deletions,
-      },
+      type: "requestDiffUpdate",
+      runId: view.runId,
+      files: view.files,
     })
   }
 
@@ -182,6 +220,11 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
       color: var(--text-primary);
     }
 
+    .icon-btn:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
     .icon-btn svg {
       width: 16px;
       height: 16px;
@@ -217,6 +260,15 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
     .diff-file.active { background: var(--bg-surface); color: var(--text-primary); }
 
     .diff-file svg { width: 12px; height: 12px; flex-shrink: 0; }
+
+    .diff-file-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .file-check { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
+    .diff-file .warn { color: var(--red); font-size: 11px; flex-shrink: 0; }
 
     .diff-content {
       flex: 1;
@@ -267,6 +319,7 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
 
     .diff-line.added .diff-line-text { color: var(--green); }
     .diff-line.removed .diff-line-text { color: var(--red); }
+    .diff-line.diff-hunk .diff-line-text { color: var(--accent); }
 
     .empty {
       color: var(--text-muted);
@@ -309,25 +362,141 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
       font-size: 14px;
     }`,
       inlineJs: `
-    const countEl = document.getElementById('count')
-    const addsEl = document.getElementById('adds')
-    const delsEl = document.getElementById('dels')
+    const vscode = acquireVsCodeApi()
+
+    const statAdds = document.getElementById('stat-adds')
+    const statDels = document.getElementById('stat-dels')
+    const statFiles = document.getElementById('stat-files')
     const fileList = document.getElementById('fileList')
     const empty = document.getElementById('empty')
     empty.style.display = 'block'
 
+    const workspaceBody = document.getElementById('diffWorkspace')
+    const requestBody = document.getElementById('diffRequest')
+    const requestFileList = document.getElementById('requestFileList')
+    const requestDiffContent = document.getElementById('requestDiffContent')
+    const revertSelectedBtn = document.getElementById('btn-revert-selected')
+
+    let requestRunId = null
+    let requestFiles = []
+
+    function pluralize(n) {
+      if (n % 10 === 1 && n % 100 !== 11) return ''
+      if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) return 'а'
+      return 'ов'
+    }
+
+    // Переключение режимов: workspace / предпросмотр запроса
+    function showWorkspace() {
+      if (workspaceBody) workspaceBody.style.display = ''
+      if (requestBody) requestBody.style.display = 'none'
+      if (revertSelectedBtn) revertSelectedBtn.style.display = 'none'
+    }
+
+    function showRequest() {
+      if (workspaceBody) workspaceBody.style.display = 'none'
+      if (requestBody) requestBody.style.display = ''
+      if (revertSelectedBtn) {
+        revertSelectedBtn.style.display = ''
+        revertSelectedBtn.disabled = false
+      }
+    }
+
+    // Построчный рендер unified diff (существующие CSS-классы .diff-line*)
+    function renderRequestDiff(file) {
+      requestDiffContent.innerHTML = ''
+      if (!file || !file.diff) {
+        const div = document.createElement('div')
+        div.className = 'empty'
+        div.textContent = file ? 'Нет diff' : 'Выберите файл'
+        requestDiffContent.appendChild(div)
+        return
+      }
+      file.diff.split('\\n').forEach((line) => {
+        const row = document.createElement('div')
+        let cls = 'diff-line'
+        if (line.startsWith('+++') || line.startsWith('---') || line.startsWith('@@')) {
+          cls += ' diff-hunk'
+        } else if (line.startsWith('+')) {
+          cls += ' added'
+        } else if (line.startsWith('-')) {
+          cls += ' removed'
+        }
+        row.className = cls
+        const num = document.createElement('span')
+        num.className = 'diff-line-num'
+        const sign = document.createElement('span')
+        sign.className = 'diff-line-sign'
+        sign.textContent = line.slice(0, 1)
+        const text = document.createElement('span')
+        text.className = 'diff-line-text'
+        text.textContent = line.slice(1)
+        row.appendChild(num)
+        row.appendChild(sign)
+        row.appendChild(text)
+        requestDiffContent.appendChild(row)
+      })
+    }
+
+    // Список файлов запроса: чекбокс + имя + ⚠ для правок пользователя
+    function renderRequestFiles() {
+      requestFileList.innerHTML = ''
+      requestFiles.forEach((file) => {
+        const row = document.createElement('div')
+        row.className = 'diff-file'
+
+        const check = document.createElement('input')
+        check.type = 'checkbox'
+        check.className = 'file-check'
+        check.checked = !file.userTouched
+        check.addEventListener('click', (e) => e.stopPropagation())
+
+        const name = document.createElement('span')
+        name.className = 'diff-file-name'
+        name.textContent = file.path.split('/').pop()
+        name.title = file.path
+
+        row.appendChild(check)
+        row.appendChild(name)
+
+        if (file.userTouched) {
+          const warn = document.createElement('span')
+          warn.className = 'warn'
+          warn.textContent = '⚠'
+          warn.title = 'Файл изменялся после запроса'
+          row.appendChild(warn)
+        }
+
+        row.addEventListener('click', () => {
+          requestFileList.querySelectorAll('.diff-file').forEach((el) => el.classList.remove('active'))
+          row.classList.add('active')
+          renderRequestDiff(file)
+        })
+        requestFileList.appendChild(row)
+      })
+    }
+
+    // «Откатить выбранные файлы»: собрать отмеченные пути и отправить extension
+    revertSelectedBtn.addEventListener('click', () => {
+      const files = []
+      requestFileList.querySelectorAll('.diff-file').forEach((row, i) => {
+        const check = row.querySelector('input.file-check')
+        if (check && check.checked && requestFiles[i]) files.push(requestFiles[i].path)
+      })
+      if (files.length === 0) return
+      vscode.postMessage({ type: 'revertSelected', runId: requestRunId, files })
+      revertSelectedBtn.disabled = true
+    })
+
     window.addEventListener('message', (event) => {
       const msg = event.data
       if (msg.type === 'diffUpdate') {
+        showWorkspace()
+        requestRunId = null
+        requestFiles = []
         const { changed, additions, deletions } = msg.diff
-        countEl.textContent = changed.length
-        addsEl.textContent = '+' + additions
-        delsEl.textContent = '-' + deletions
 
         // Обновить статистику в хедере
-        const statAdds = document.getElementById('stat-adds')
-        const statDels = document.getElementById('stat-dels')
-        const statFiles = document.getElementById('stat-files')
         if (statAdds) statAdds.textContent = '+' + additions
         if (statDels) statDels.textContent = '-' + deletions
         if (statFiles) statFiles.textContent = changed.length + ' файл' + pluralize(changed.length)
@@ -365,13 +534,18 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
           })
         }
       }
-    })
-
-    function pluralize(n) {
-      if (n % 10 === 1 && n % 100 !== 11) return ''
-      if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) return 'а'
-      return 'ов'
-    }`,
+      if (msg.type === 'requestDiffUpdate') {
+        requestRunId = msg.runId
+        requestFiles = Array.isArray(msg.files) ? msg.files : []
+        showRequest()
+        // В режиме предпросмотра статистика по файлам запроса
+        if (statAdds) statAdds.textContent = '+0'
+        if (statDels) statDels.textContent = '-0'
+        if (statFiles) statFiles.textContent = requestFiles.length + ' файл' + pluralize(requestFiles.length) + ' в запросе'
+        renderRequestFiles()
+        renderRequestDiff(null)
+      }
+    })`,
       body: `
   <div class="diff-header">
     <div class="diff-header-left">
@@ -384,6 +558,7 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
       </div>
     </div>
     <div class="diff-actions">
+      <button class="icon-btn" id="btn-revert-selected" title="Откатить выбранные файлы" style="display:none">↩</button>
       <button class="icon-btn" title="Принять все">
         <svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
       </button>
@@ -393,12 +568,17 @@ export class DiffViewerProvider implements IDiffViewerProvider, vscode.Disposabl
     </div>
   </div>
 
-  <div class="diff-body">
+  <div class="diff-body" id="diffWorkspace">
     <div class="diff-file-list" id="diffFileList"></div>
     <div class="diff-content">
       <ul class="file-list" id="fileList"></ul>
       <div class="empty" id="empty">Нет изменений</div>
     </div>
+  </div>
+
+  <div class="diff-body" id="diffRequest" style="display:none">
+    <div class="diff-file-list" id="requestFileList"></div>
+    <div class="diff-content" id="requestDiffContent"><div class="empty">Выберите файл</div></div>
   </div>`,
     })
   }
