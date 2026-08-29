@@ -27,6 +27,9 @@ export interface IBackend {
   /** Текущая конфигурация. */
   getConfig(): Promise<IBackendConfig>
 
+  /** Текущий адрес бэкенда (синхронный доступ к in-memory конфигурации). */
+  currentUrl(): string
+
   /** Обновить конфигурацию. */
   updateConfig(partial: Partial<IBackendConfig>): Promise<void>
 }

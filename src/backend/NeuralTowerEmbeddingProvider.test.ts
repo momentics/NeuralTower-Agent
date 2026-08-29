@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { NeuralTowerEmbeddingProvider } from "./NeuralTowerEmbeddingProvider"
 import { BackendError, ConnectionError } from "../core/Errors"
+import { DEFAULT_BACKEND_URL } from "../core/Config"
 
 const dim = 768
 const emb = (v: number) => new Array(dim).fill(v)
@@ -16,7 +17,7 @@ describe("NeuralTowerEmbeddingProvider", () => {
 
     it("uses custom config when provided", () => {
       const provider = new NeuralTowerEmbeddingProvider({
-        baseUrl: "http://custom:9999",
+        getBaseUrl: () => "http://custom:9999",
         model: "custom-model",
         batchSize: 64,
         timeoutMs: 5000,
@@ -91,7 +92,7 @@ describe("NeuralTowerEmbeddingProvider", () => {
 
       expect(result).toEqual([emb(1), emb(2)])
       expect(fetchMock).toHaveBeenCalledWith(
-        "http://localhost:30000/v1/embeddings",
+        `${DEFAULT_BACKEND_URL}/v1/embeddings`,
         expect.objectContaining({
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -101,6 +102,28 @@ describe("NeuralTowerEmbeddingProvider", () => {
           }),
         }),
       )
+    })
+
+    it("uses the current backend URL on every request (URL change is picked up)", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          data: [{ embedding: emb(1) }],
+        }),
+      })
+      vi.stubGlobal("fetch", fetchMock)
+
+      let url = "http://server-a:30000"
+      const provider = new NeuralTowerEmbeddingProvider({ getBaseUrl: () => url })
+      await provider.embed(["first"])
+      // Первый вызов: проверка доступности + батч
+      expect(fetchMock.mock.calls[0][0]).toBe("http://server-a:30000/v1/embeddings")
+      expect(fetchMock.mock.calls[1][0]).toBe("http://server-a:30000/v1/embeddings")
+
+      url = "http://server-b:40000"
+      await provider.embed(["second"])
+      // Второй вызов идёт на новый адрес
+      expect(fetchMock.mock.calls[2][0]).toBe("http://server-b:40000/v1/embeddings")
     })
 
     it("splits texts into batches when exceeding batch size", async () => {

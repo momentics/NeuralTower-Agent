@@ -17,6 +17,7 @@ describe("BackendHealthMonitor", () => {
       chat: vi.fn(),
       chatJson: vi.fn(),
       getConfig: vi.fn().mockResolvedValue({ url: "", model: "", maxRetries: 0, timeoutMs: 0 }),
+      currentUrl: vi.fn(() => ""),
       updateConfig: vi.fn().mockResolvedValue(undefined),
     }
 

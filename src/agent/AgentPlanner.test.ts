@@ -7,6 +7,7 @@ import { ToolRegistry } from "../tools/ToolRegistry"
 import type { IBackend } from "../core/IBackend"
 import type { SessionContext } from "./SessionContext"
 import type { IPlanStep } from "./Plan"
+import { TEST_BACKEND_URL, makeTestBackendConfig } from "../__tests__/fixtures"
 
 const createMockBackend = (): IBackend => ({
   chat: vi.fn(async () => ({ role: "assistant", content: "Test response", timestamp: Date.now() })),
@@ -17,7 +18,8 @@ const createMockBackend = (): IBackend => ({
       { description: "Step 2", suggestedTools: ["tool1"] },
     ],
   })),
-  getConfig: vi.fn(async () => ({ url: "http://localhost:30000", model: "test-model", maxRetries: 3, timeoutMs: 60000 })),
+  getConfig: vi.fn(async () => makeTestBackendConfig()),
+  currentUrl: vi.fn(() => TEST_BACKEND_URL),
   updateConfig: vi.fn(async () => {}),
   listModels: vi.fn(async () => ["test-model"]),
   healthCheck: vi.fn(async () => true),

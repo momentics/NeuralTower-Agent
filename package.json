@@ -3,7 +3,13 @@
   "displayName": "NeuralTower Agent",
   "description": "Интеллектуальный ассистент для разработки на базе локальной модели Neural Tower",
   "version": "0.1.4",
-  "repository": "https://github.com/NeuralTower-Agent/NeuralTower-Agent",
+  "publisher": "momentics",
+  "author": {
+    "name": "momentics",
+    "email": "momentics@gmail.com",
+    "url": "https://github.com/momentics"
+  },
+  "repository": "https://github.com/momentics/NeuralTower-Agent",
   "engines": {
     "vscode": "^1.85.0",
     "node": ">=22.5.0"

@@ -1,39 +1,26 @@
 const vscode = acquireVsCodeApi()
 
-const urlInput = document.getElementById("url") as HTMLInputElement
-const modelSelect = document.getElementById("model") as HTMLSelectElement
-const maxRetriesInput = document.getElementById("maxRetries") as HTMLInputElement
-const timeoutMsInput = document.getElementById("timeoutMs") as HTMLInputElement
-const maxIterationsInput = document.getElementById("maxIterations") as HTMLInputElement
-const maxSessionsInput = document.getElementById("maxSessions") as HTMLInputElement
-const autoApproveToggle = document.getElementById("autoApprove") as HTMLDivElement
-const notificationsEnabledToggle = document.getElementById("notificationsEnabled") as HTMLDivElement
-const notifyAgentDoneToggle = document.getElementById("notifyAgentDone") as HTMLDivElement
-const notifyPermissionsToggle = document.getElementById("notifyPermissions") as HTMLDivElement
-const btnSave = document.getElementById("btn-save") as HTMLButtonElement
-const btnTest = document.getElementById("btn-test") as HTMLButtonElement
-const statusEl = document.getElementById("status") as HTMLDivElement
-
-let cfg = {
-  url: "",
-  model: "",
-  maxRetries: 3,
-  timeoutMs: 60000,
-  maxIterations: 20,
-  maxSessions: 50,
-  autoApprove: false,
-  notificationsEnabled: true,
-  notifyAgentDone: true,
-  notifyPermissions: true,
-}
+const urlInput = document.getElementById("url")
+const modelSelect = document.getElementById("model")
+const maxRetriesInput = document.getElementById("maxRetries")
+const timeoutMsInput = document.getElementById("timeoutMs")
+const maxIterationsInput = document.getElementById("maxIterations")
+const maxSessionsInput = document.getElementById("maxSessions")
+const autoApproveToggle = document.getElementById("autoApprove")
+const notificationsEnabledToggle = document.getElementById("notificationsEnabled")
+const notifyAgentDoneToggle = document.getElementById("notifyAgentDone")
+const notifyPermissionsToggle = document.getElementById("notifyPermissions")
+const btnSave = document.getElementById("btn-save")
+const btnTest = document.getElementById("btn-test")
+const statusEl = document.getElementById("status")
 
 // ── Переключение toggle ─────────────────────────────
 
-window.toggleClick = function(el: HTMLElement): void {
+window.toggleClick = function (el) {
   el.classList.toggle("on")
 }
 
-function setToggle(el: HTMLElement | null, on: boolean): void {
+function setToggle(el, on) {
   if (!el) return
   if (on) {
     el.classList.add("on")
@@ -49,7 +36,6 @@ window.addEventListener("message", (event) => {
 
   switch (data.type) {
     case "settingsData":
-      cfg = data.config
       urlInput.value = data.config.url
       modelSelect.innerHTML = ""
       for (const m of data.models) {
@@ -65,14 +51,14 @@ window.addEventListener("message", (event) => {
         opt.textContent = data.config.model || "(none)"
         modelSelect.appendChild(opt)
       }
-      if (maxRetriesInput) maxRetriesInput.value = String(data.config.maxRetries ?? 3)
-      if (timeoutMsInput) timeoutMsInput.value = String(data.config.timeoutMs ?? 60000)
-      if (maxIterationsInput) maxIterationsInput.value = String(data.config.maxIterations ?? 20)
-      if (maxSessionsInput) maxSessionsInput.value = String(data.config.maxSessions ?? 50)
-      setToggle(autoApproveToggle, data.config.autoApprove ?? false)
-      setToggle(notificationsEnabledToggle, data.config.notificationsEnabled ?? true)
-      setToggle(notifyAgentDoneToggle, data.config.notifyAgentDone ?? true)
-      setToggle(notifyPermissionsToggle, data.config.notifyPermissions ?? true)
+      if (maxRetriesInput) maxRetriesInput.value = String(data.config.maxRetries)
+      if (timeoutMsInput) timeoutMsInput.value = String(data.config.timeoutMs)
+      if (maxIterationsInput) maxIterationsInput.value = String(data.config.maxIterations)
+      if (maxSessionsInput) maxSessionsInput.value = String(data.config.maxSessions)
+      setToggle(autoApproveToggle, data.config.autoApprove)
+      setToggle(notificationsEnabledToggle, data.config.notificationsEnabled)
+      setToggle(notifyAgentDoneToggle, data.config.notifyAgentDone)
+      setToggle(notifyPermissionsToggle, data.config.notifyPermissions)
       break
     case "settingsSaved":
       setStatus("Настройки сохранены", true)
@@ -90,8 +76,10 @@ btnSave.addEventListener("click", () => {
     type: "settingsSave",
     url: urlInput.value,
     model: modelSelect.value,
-    maxRetries: maxRetriesInput ? Number(maxRetriesInput.value) : 3,
-    timeoutMs: timeoutMsInput ? Number(timeoutMsInput.value) : 60000,
+    maxRetries: Number(maxRetriesInput.value),
+    timeoutMs: Number(timeoutMsInput.value),
+    maxIterations: Number(maxIterationsInput.value),
+    maxSessions: Number(maxSessionsInput.value),
     autoApprove: autoApproveToggle.classList.contains("on"),
     notificationsEnabled: notificationsEnabledToggle.classList.contains("on"),
     notifyAgentDone: notifyAgentDoneToggle.classList.contains("on"),
@@ -107,7 +95,7 @@ btnTest.addEventListener("click", () => {
 
 // ── Статус ──────────────────────────────────────────
 
-function setStatus(msg: string, ok: boolean): void {
+function setStatus(msg, ok) {
   statusEl.textContent = msg
   statusEl.className = `status-line ${ok ? "ok" : "err"}`
 }

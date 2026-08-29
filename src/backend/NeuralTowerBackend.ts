@@ -36,6 +36,10 @@ export class NeuralTowerBackend implements IBackend {
     return { ...this.config }
   }
 
+  currentUrl(): string {
+    return this.config.url
+  }
+
   async updateConfig(partial: Partial<IBackendConfig>): Promise<void> {
     if (partial.url !== undefined) {
       if (!validateUrl(partial.url)) {

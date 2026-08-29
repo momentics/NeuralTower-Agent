@@ -1,18 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
 import { AutocompleteService } from "./AutocompleteService"
 import * as vscode from "vscode"
+import { TEST_BACKEND_URL, makeTestBackendConfig } from "../../__tests__/fixtures"
 
 const mockBackend = {
   chat: vi.fn(),
   chatJson: vi.fn(),
   listModels: vi.fn(),
   healthCheck: vi.fn(),
-  getConfig: vi.fn().mockResolvedValue({
-    url: "http://localhost:30000",
-    model: "test-model",
-    maxRetries: 3,
-    timeoutMs: 60000,
-  }),
+  getConfig: vi.fn().mockResolvedValue(makeTestBackendConfig()),
+  currentUrl: vi.fn(() => TEST_BACKEND_URL),
   updateConfig: vi.fn(),
 }
 

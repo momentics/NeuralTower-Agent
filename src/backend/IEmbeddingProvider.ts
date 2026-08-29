@@ -37,8 +37,8 @@ export interface IEmbeddingProvider {
  * Конфигурация провайдера эмбеддингов.
  */
 export interface IEmbeddingProviderConfig {
-  /** URL бэкенда. */
-  baseUrl: string
+  /** Возвращает текущий адрес бэкенда (читается в момент запроса, а не при конструировании). */
+  getBaseUrl: () => string
 
   /** Модель эмбеддинга. */
   model: string

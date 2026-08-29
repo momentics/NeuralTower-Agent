@@ -16,6 +16,7 @@ describe("CommitMessageService", () => {
       chat: vi.fn().mockResolvedValue({ role: "assistant", content: "feat: add feature" }),
       chatJson: vi.fn(),
       getConfig: vi.fn().mockResolvedValue({ url: "", model: "", maxRetries: 0, timeoutMs: 0 }),
+      currentUrl: vi.fn(() => ""),
       updateConfig: vi.fn().mockResolvedValue(undefined),
     }
     gitService = {

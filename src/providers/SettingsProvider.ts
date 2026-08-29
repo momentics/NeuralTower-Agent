@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import type { IBackend } from "../core/IBackend"
 import type { SettingsToExt, ExtToSettings } from "../shared/Messages"
-import { UI_MIN_BACKEND_TIMEOUT_MS } from "../core/Config"
+import { UI_MIN_BACKEND_TIMEOUT_MS, UI_SETTINGS_MODELS_TIMEOUT_MS, loadDefaultAgentConfig, loadDefaultSessionConfig } from "../core/Config"
 import { buildWebviewHtml } from "../shared/WebviewBuilder"
 import { errorMessage } from "../core/Errors"
 import { createDomainLogger } from "../core/Logger"
@@ -70,14 +70,38 @@ export class SettingsProvider implements ISettingsProvider {
 
   private async loadData(): Promise<void> {
     const cfg = await this.backend.getConfig()
-    const models = await this.backend.listModels().catch(() => [])
     const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
     const autoApprove = vsCfg.get<boolean>("autoApprove.enabled", false)
+    const maxIterations = vsCfg.get<number>("agent.maxIterations", loadDefaultAgentConfig().maxIterations)
+    const maxSessions = vsCfg.get<number>("maxSessions", loadDefaultSessionConfig().maxSessions)
+    const notificationsEnabled = vsCfg.get<boolean>("notifications.enabled", true)
+    const notifyAgentDone = vsCfg.get<boolean>("notifications.agentCompletion", true)
+    const notifyPermissions = vsCfg.get<boolean>("notifications.permissionRequests", true)
+    const models = await this.loadModels()
     this.getWebview().postMessage({
       type: "settingsData",
-      config: { ...cfg, autoApprove },
+      config: {
+        ...cfg,
+        autoApprove,
+        maxIterations,
+        maxSessions,
+        notificationsEnabled,
+        notifyAgentDone,
+        notifyPermissions,
+      },
       models,
     } as ExtToSettings)
+  }
+
+  /**
+   * Загрузить список моделей, не блокируя панель: при недоступном сервере
+   * listModels повторяет запросы до таймаута бэкенда (несколько минут).
+   */
+  private async loadModels(): Promise<string[]> {
+    return Promise.race([
+      this.backend.listModels().catch(() => [] as string[]),
+      new Promise<string[]>((resolve) => setTimeout(() => resolve([]), UI_SETTINGS_MODELS_TIMEOUT_MS)),
+    ])
   }
 
   private setupHandler(): void {
@@ -85,6 +109,7 @@ export class SettingsProvider implements ISettingsProvider {
       try {
         switch (msg.type) {
           case "settingsSave": {
+            const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
             const url = typeof msg.url === "string" && msg.url.trim() ? msg.url.trim() : undefined
             const model = typeof msg.model === "string" && msg.model.trim() ? msg.model.trim() : undefined
             if (!url && !model) {
@@ -106,11 +131,22 @@ export class SettingsProvider implements ISettingsProvider {
               await this.backend.updateConfig({ timeoutMs: msg.timeoutMs })
             }
             if (typeof msg.autoApprove === "boolean") {
-              await vscode.workspace.getConfiguration("neuralTowerAgent").update(
-                "autoApprove.enabled",
-                msg.autoApprove,
-                true,
-              )
+              await vsCfg.update("autoApprove.enabled", msg.autoApprove, true)
+            }
+            if (typeof msg.maxIterations === "number" && msg.maxIterations >= 1 && msg.maxIterations <= 100) {
+              await vsCfg.update("agent.maxIterations", msg.maxIterations, true)
+            }
+            if (typeof msg.maxSessions === "number" && msg.maxSessions >= 5 && msg.maxSessions <= 200) {
+              await vsCfg.update("maxSessions", msg.maxSessions, true)
+            }
+            if (typeof msg.notificationsEnabled === "boolean") {
+              await vsCfg.update("notifications.enabled", msg.notificationsEnabled, true)
+            }
+            if (typeof msg.notifyAgentDone === "boolean") {
+              await vsCfg.update("notifications.agentCompletion", msg.notifyAgentDone, true)
+            }
+            if (typeof msg.notifyPermissions === "boolean") {
+              await vsCfg.update("notifications.permissionRequests", msg.notifyPermissions, true)
             }
             this.getWebview().postMessage({ type: "settingsSaved" } as ExtToSettings)
             vscode.window.showInformationMessage("Настройки сохранены")

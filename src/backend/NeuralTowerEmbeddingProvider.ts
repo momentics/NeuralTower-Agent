@@ -10,13 +10,13 @@
 
 import type { IEmbeddingProvider, IEmbeddingProviderConfig } from "./IEmbeddingProvider"
 import { BackendError, ConnectionError, errorMessage } from "../core/Errors"
+import { DEFAULT_BACKEND_URL } from "../core/Config"
 import { createDomainLogger } from "../core/Logger"
 
 const log = createDomainLogger("Embedding")
 
 const DEFAULT_EMBEDDING_DIMENSION = 1536
 const DEFAULT_EMBEDDING_MODEL = "nomic-embed-text"
-const DEFAULT_BACKEND_URL = "http://localhost:30000"
 const EMBEDDING_TIMEOUT_MS = 10000
 const DEFAULT_EMBEDDING_BATCH_SIZE = 256
 
@@ -31,7 +31,7 @@ export class NeuralTowerEmbeddingProvider implements IEmbeddingProvider {
 
   constructor(config?: Partial<IEmbeddingProviderConfig>) {
     this.config = {
-      baseUrl: config?.baseUrl ?? DEFAULT_BACKEND_URL,
+      getBaseUrl: config?.getBaseUrl ?? (() => DEFAULT_BACKEND_URL),
       model: config?.model ?? DEFAULT_EMBEDDING_MODEL,
       batchSize: config?.batchSize ?? DEFAULT_EMBEDDING_BATCH_SIZE,
       timeoutMs: config?.timeoutMs ?? EMBEDDING_TIMEOUT_MS,
@@ -69,7 +69,7 @@ export class NeuralTowerEmbeddingProvider implements IEmbeddingProvider {
    * Создать эмбеддинги для одного батча.
    */
   private async embedBatch(texts: string[]): Promise<number[][]> {
-    const url = this.config.baseUrl + "/v1/embeddings"
+    const url = this.config.getBaseUrl() + "/v1/embeddings"
 
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), this.config.timeoutMs)

@@ -10,6 +10,7 @@ import type { AgentToolExecutor } from "./AgentToolExecutor"
 import type { AgentPlanner } from "./AgentPlanner"
 import { Plan } from "./Plan"
 import type { IAgentTurnResult } from "./AgentTypes"
+import { TEST_BACKEND_URL, makeTestBackendConfig } from "../__tests__/fixtures"
 
 class MockCompactor extends Compactor {
   private _shouldCompact = false
@@ -40,7 +41,8 @@ class MockCompactor extends Compactor {
 const createMockBackend = (): IBackend => ({
   chat: vi.fn(async () => ({ role: "assistant", content: "Test response", timestamp: Date.now() })),
   chatJson: vi.fn(async () => ({})),
-  getConfig: vi.fn(async () => ({ url: "http://localhost:30000", model: "test-model", maxRetries: 3, timeoutMs: 60000 })),
+  getConfig: vi.fn(async () => makeTestBackendConfig()),
+  currentUrl: vi.fn(() => TEST_BACKEND_URL),
   updateConfig: vi.fn(async () => {}),
   listModels: vi.fn(async () => ["test-model"]),
   healthCheck: vi.fn(async () => true),

@@ -192,9 +192,9 @@ export function createBackend(config: IAppConfig, onConfigChange?: (partial: Par
   return new NeuralTowerBackend(config.backend, onConfigChange)
 }
 
-export function createEmbeddingProvider(config: IAppConfig): NeuralTowerEmbeddingProvider {
+export function createEmbeddingProvider(backend: IBackend, config: IAppConfig): NeuralTowerEmbeddingProvider {
   return new NeuralTowerEmbeddingProvider({
-    baseUrl: config.backend.url,
+    getBaseUrl: () => backend.currentUrl(),
     timeoutMs: config.backend.timeoutMs,
   })
 }
@@ -234,12 +234,13 @@ export function createIndexingStatusBar(
 // ── Домен: Инфраструктура поиска ──────────────────────────
 
 export function createSearchInfrastructure(
+  backend: IBackend,
   config: IAppConfig,
   workspaceRoot?: string,
 ): ISearchInfrastructureDeps {
   const fileIndex = new FileIndex()
   const repoAnalyzer = new RepoAnalyzer()
-  const embeddingProvider = createEmbeddingProvider(config)
+  const embeddingProvider = createEmbeddingProvider(backend, config)
   const vectorStore = createVectorStore()
 
   let fts: FullTextSearch | null = null
@@ -602,7 +603,7 @@ export async function createDeps(
 
   // ── Инфраструктура поиска ───────────────────────────────
   const { fileIndex, repoAnalyzer, embeddingProvider, codebaseSearch, graphDb, orchestrator } =
-    createSearchInfrastructure(config, workspaceRoot)
+    createSearchInfrastructure(backend, config, workspaceRoot)
 
   // ── Инструменты ─────────────────────────────────────────
   const todoStore = new TodoStore()

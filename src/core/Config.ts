@@ -9,9 +9,12 @@ import type { IBackendConfig } from "./IBackend"
 
 // ── Бэкенд ────────────────────────────────────────────────
 
+/** Дефолтный адрес сервера вывода Neural Tower (SGLang). Единственный источник дефолта в коде. */
+export const DEFAULT_BACKEND_URL = "http://localhost:30000"
+
 export function loadDefaultBackendConfig(): IBackendConfig {
   return {
-    url: "http://localhost:30000",
+    url: DEFAULT_BACKEND_URL,
     model: "qwen3.6-27b",
     maxRetries: 3,
     timeoutMs: 60000,
@@ -296,6 +299,8 @@ export const PERMISSION_TIMEOUT_MS = 30_000
 export const UI_ARGS_LOG_TRUNCATE = 200
 /** Минимальный таймаут бэкенда в миллисекундах */
 export const UI_MIN_BACKEND_TIMEOUT_MS = 1000
+/** Таймаут загрузки списка моделей в панели настроек, миллисекунды */
+export const UI_SETTINGS_MODELS_TIMEOUT_MS = 3000
 
 // ── Git ──────────────────────────────────────────────────────
 

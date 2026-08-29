@@ -9,11 +9,13 @@ import { ContextProviderRegistry } from "../core/providers/context/Registry"
 import { FileIndex } from "../repo/FileIndex"
 import { loadDefaultAgentConfig, loadDefaultCompactorConfig, loadDefaultContextConfig, loadDefaultSessionConfig, loadDefaultSnapshotConfig } from "../core/Config"
 import { TodoStore } from "./TodoStore"
+import { TEST_BACKEND_URL, makeTestBackendConfig } from "../__tests__/fixtures"
 
 const createMockBackend = (): IBackend => ({
   chat: vi.fn(async () => ({ role: "assistant", content: "Test response", timestamp: Date.now() })),
   chatJson: vi.fn(async () => ({})),
-  getConfig: vi.fn(async () => ({ url: "http://localhost:30000", model: "test-model", maxRetries: 3, timeoutMs: 60000 })),
+  getConfig: vi.fn(async () => makeTestBackendConfig()),
+  currentUrl: vi.fn(() => TEST_BACKEND_URL),
   updateConfig: vi.fn(async () => {}),
   listModels: vi.fn(async () => ["test-model"]),
   healthCheck: vi.fn(async () => true),
@@ -33,7 +35,7 @@ const createDeps = (): IAgentFullDependencies => {
   return {
     getWorkDir: () => "",
     config: {
-      backend: { url: "http://localhost:30000", model: "test-model", maxRetries: 3, timeoutMs: 60000 },
+      backend: makeTestBackendConfig(),
       agent: loadDefaultAgentConfig(),
       context: loadDefaultContextConfig(),
       compactor: loadDefaultCompactorConfig(),
@@ -173,7 +175,8 @@ describe("AgentOrchestrator", () => {
         return { role: "assistant", content: "slow", timestamp: Date.now() }
       }),
       chatJson: vi.fn(async () => ({})),
-      getConfig: vi.fn(async () => ({ url: "http://localhost:30000", model: "test-model", maxRetries: 3, timeoutMs: 60000 })),
+      getConfig: vi.fn(async () => makeTestBackendConfig()),
+      currentUrl: vi.fn(() => TEST_BACKEND_URL),
       updateConfig: vi.fn(async () => {}),
       listModels: vi.fn(async () => ["test-model"]),
       healthCheck: vi.fn(async () => true),
@@ -191,7 +194,8 @@ describe("AgentOrchestrator", () => {
         return { role: "assistant", content: "slow", timestamp: Date.now() }
       }),
       chatJson: vi.fn(async () => ({})),
-      getConfig: vi.fn(async () => ({ url: "http://localhost:30000", model: "test-model", maxRetries: 3, timeoutMs: 60000 })),
+      getConfig: vi.fn(async () => makeTestBackendConfig()),
+      currentUrl: vi.fn(() => TEST_BACKEND_URL),
       updateConfig: vi.fn(async () => {}),
       listModels: vi.fn(async () => ["test-model"]),
       healthCheck: vi.fn(async () => true),

@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NeuralTowerBackend } from "./NeuralTowerBackend"
+import { DEFAULT_BACKEND_URL } from "../core/Config"
+import { makeTestBackendConfig } from "../__tests__/fixtures"
 
 describe("NeuralTowerBackend", () => {
   let backend: NeuralTowerBackend
@@ -13,7 +15,7 @@ describe("NeuralTowerBackend", () => {
 
   it("getConfig returns defaults", async () => {
     const result = await backend.getConfig()
-    expect(result.url).toBe("http://localhost:30000")
+    expect(result.url).toBe(DEFAULT_BACKEND_URL)
     expect(result.model).toBe("qwen3.6-27b")
     expect(result.maxRetries).toBe(3)
     expect(result.timeoutMs).toBe(60000)
@@ -55,12 +57,7 @@ describe("NeuralTowerBackend", () => {
 
   it("healthCheck returns false on error", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("fail")))
-    const errorBackend = new NeuralTowerBackend({
-      url: "http://localhost:30000",
-      model: "test-model",
-      maxRetries: 0,
-      timeoutMs: 60000,
-    })
+    const errorBackend = new NeuralTowerBackend(makeTestBackendConfig({ maxRetries: 0 }))
     const result = await errorBackend.healthCheck()
     expect(result).toBe(false)
     vi.unstubAllGlobals()
