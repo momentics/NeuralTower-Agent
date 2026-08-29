@@ -77,4 +77,44 @@ describe("PersistentSessionStore", () => {
     store.setActive(id1)
     expect(store.activeId).toBe(id1)
   })
+
+  it("truncateMessages оставляет первые N сообщений сессии", async () => {
+    const dir = path.join(tmpDir, "truncate-n")
+    await fs.mkdir(dir, { recursive: true })
+    const s = new PersistentSessionStore(new FileSessionPersister(path.join(dir, "sessions.json")), 5)
+    await s.init()
+    const idA = s.activeId
+    const idB = await s.newSession()
+    s.setActive(idA)
+    for (let i = 1; i <= 5; i++) await s.push({ role: "user", content: `A${i}` })
+    s.setActive(idB)
+    await s.push({ role: "user", content: "B1" })
+    await s.push({ role: "user", content: "B2" })
+
+    await s.truncateMessages(idA, 2)
+
+    const a = s.getMessagesForSession(idA)
+    expect(a).toHaveLength(2)
+    expect(a[0].content).toBe("A1")
+    expect(a[1].content).toBe("A2")
+    const b = s.getMessagesForSession(idB)
+    expect(b).toHaveLength(2)
+    expect(s.getSession(idA)?.messageCount).toBe(2)
+    expect(s.getSession(idB)?.messageCount).toBe(2)
+  })
+
+  it("truncateMessages с count больше текущего — безоперационный", async () => {
+    const dir = path.join(tmpDir, "truncate-noop")
+    await fs.mkdir(dir, { recursive: true })
+    const s = new PersistentSessionStore(new FileSessionPersister(path.join(dir, "sessions.json")), 5)
+    await s.init()
+    const idA = s.activeId
+    for (let i = 1; i <= 3; i++) await s.push({ role: "user", content: `A${i}` })
+
+    await s.truncateMessages(idA, 10)
+
+    const a = s.getMessagesForSession(idA)
+    expect(a).toHaveLength(3)
+    expect(s.getSession(idA)?.messageCount).toBe(3)
+  })
 })

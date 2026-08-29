@@ -920,6 +920,12 @@ body {
 
 .checkpoint-restore:disabled { opacity: 0.5; cursor: default; }
 
+.checkpoint-restore-full {
+  margin-left: 4px;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .checkpoint-empty {
   font-size: 11px;
   color: var(--text-muted);

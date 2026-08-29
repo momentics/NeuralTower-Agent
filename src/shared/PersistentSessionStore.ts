@@ -64,6 +64,8 @@ export interface ISessionStore {
   getSession(id: string): IPersistedSession | undefined
   getMessagesForSession(id: string): IChatMessage[]
   clearActive(): Promise<void>
+  /** Оставить только первые count сообщений сессии (остальные удалить). */
+  truncateMessages(sessionId: string, count: number): Promise<void>
   dispose(): void
 }
 
@@ -259,6 +261,20 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
       )
       const session = this.data.sessions.find((s) => s.id === this.data.activeId)
       if (session) session.messageCount = 0
+      await this.saveLocked()
+    })
+  }
+
+  async truncateMessages(sessionId: string, count: number): Promise<void> {
+    await this.mutex.withLock(async () => {
+      let seen = 0
+      this.data.messages = this.data.messages.filter((m) => {
+        if (m.sessionId !== sessionId) return true
+        seen++
+        return seen <= count
+      })
+      const session = this.data.sessions.find((s) => s.id === sessionId)
+      if (session) session.messageCount = Math.min(session.messageCount, count)
       await this.saveLocked()
     })
   }

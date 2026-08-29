@@ -17,6 +17,7 @@ export type WebviewToExt =
   | { type: "listCheckpoints" }
   | { type: "restoreCheckpoint"; runId: string }
   | { type: "openRequestDiff"; runId: string }
+  | { type: "restoreSessionCheckpoint"; runId: string }
 
 export type ExtToWebview =
   | { type: "messageConfirmed"; content: string }
@@ -36,6 +37,7 @@ export type ExtToWebview =
   | { type: "snapshotReverted"; runId: string; ok: boolean; error?: string; skippedCount?: number; undoAvailable?: boolean }
   | { type: "undoReverted"; runId: string; ok: boolean; error?: string }
   | { type: "checkpointList"; checkpoints: Array<{ runId: string; createdAt: number; fileCount: number }> }
+  | { type: "sessionCheckpointRestored"; runId: string; ok: boolean; error?: string }
 
 export type SettingsToExt =
   | { type: "settingsSave"; url: string; model: string; maxRetries?: number; timeoutMs?: number; autoApprove?: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean }

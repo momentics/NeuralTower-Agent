@@ -96,6 +96,7 @@ function createMockSessionStore(): ISessionStore {
     getSession: vi.fn(),
     getMessagesForSession: vi.fn(() => []),
     clearActive: vi.fn(async () => {}),
+    truncateMessages: vi.fn(async () => {}),
     dispose: vi.fn(),
   }
 }
@@ -798,5 +799,102 @@ describe("ChatMessageHandler", () => {
     const args = getRunArgs()
     expect(args[args.length - 1]).toBeUndefined()
     resolveRun()
+  })
+
+  // ── Полный снимок сессии ─────────────────────────────────
+
+  it("restoreSessionCheckpoint: успех — truncate + restoreSession + пересылка", async () => {
+    const record = {
+      runId: "run-1",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "abc",
+      endHash: "def",
+      files: ["/w/a.ts"],
+      createdAt: 1,
+      messageCount: 2,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(record)
+    vi.mocked(snapshotStore.listBySession).mockResolvedValue([record])
+    vi.mocked(snapshotService.revert).mockResolvedValue({
+      ok: true,
+      restored: ["/w/a.ts"],
+      deleted: [],
+      skipped: [],
+      failed: [],
+    })
+    const msgs = [
+      { role: "user" as const, content: "m1", timestamp: 1 },
+      { role: "assistant" as const, content: "m2", timestamp: 2 },
+      { role: "user" as const, content: "m3", timestamp: 3 },
+      { role: "assistant" as const, content: "m4", timestamp: 4 },
+    ]
+    vi.mocked(sessionStore.getMessagesForSession).mockReturnValue(msgs)
+    vi.mocked(sessionStore.getActiveMessages).mockReturnValue(msgs.slice(0, 2))
+
+    await onMessage({ type: "restoreSessionCheckpoint", runId: "run-1" })
+
+    expect(sessionStore.truncateMessages).toHaveBeenCalledWith("sess-1", 2)
+    expect(agent.restoreSession).toHaveBeenCalledWith(msgs.slice(0, 2))
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "sessionCheckpointRestored", runId: "run-1", ok: true }),
+    )
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "messageConfirmed", content: "m1" }),
+    )
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "streamChunk", text: "m2" }),
+    )
+  })
+
+  it("restoreSessionCheckpoint: ошибка revert — переписка не трогается", async () => {
+    const record = {
+      runId: "run-1",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "abc",
+      endHash: "def",
+      files: ["/w/a.ts"],
+      createdAt: 1,
+      messageCount: 2,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(record)
+    vi.mocked(snapshotStore.listBySession).mockResolvedValue([record])
+    vi.mocked(snapshotService.revert).mockResolvedValue({
+      ok: false,
+      restored: [],
+      deleted: [],
+      skipped: [],
+      failed: [{ file: "/w/a.ts", error: "x" }],
+    })
+
+    await onMessage({ type: "restoreSessionCheckpoint", runId: "run-1" })
+
+    expect(sessionStore.truncateMessages).not.toHaveBeenCalled()
+    expect(agent.restoreSession).not.toHaveBeenCalled()
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "sessionCheckpointRestored", runId: "run-1", ok: false, error: "x" }),
+    )
+  })
+
+  it("restoreSessionCheckpoint без messageCount — ошибка", async () => {
+    const record = {
+      runId: "run-1",
+      sessionId: "sess-1",
+      kind: "request" as const,
+      hash: "abc",
+      endHash: "def",
+      files: ["/w/a.ts"],
+      createdAt: 1,
+    }
+    vi.mocked(snapshotStore.get).mockResolvedValue(record)
+
+    await onMessage({ type: "restoreSessionCheckpoint", runId: "run-1" })
+
+    expect(sessionStore.truncateMessages).not.toHaveBeenCalled()
+    expect(agent.restoreSession).not.toHaveBeenCalled()
+    expect(webview.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "sessionCheckpointRestored", runId: "run-1", ok: false }),
+    )
   })
 })

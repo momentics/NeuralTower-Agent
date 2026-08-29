@@ -48,6 +48,8 @@ export interface ISnapshotRecord {
   files: string[]
   /** Время создания снимка. */
   createdAt: number
+  /** Число сообщений сессии до запроса (для полного восстановления сессии). */
+  messageCount?: number
   /** Для kind=preRevert: runId откатываемого запроса. */
   revertsRunId?: string
 }

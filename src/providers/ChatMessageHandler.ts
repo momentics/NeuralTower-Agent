@@ -34,6 +34,8 @@ export class ChatMessageHandler {
   private readonly validModes: readonly string[] = Object.keys(BUILT_IN_MODES)
   /** Заметка об откате пользователя для следующего запроса агента. */
   private pendingRevertNote: string | null = null
+  /** Число сообщений активной сессии до последнего запроса (полный снимок сессии). */
+  private lastRunBeforeCount = 0
 
   constructor(
     private readonly agent: IAgentOrchestrator,
@@ -193,6 +195,12 @@ export class ChatMessageHandler {
               void this.handleOpenRequestDiff(msg.runId)
             }
             break
+          case "restoreSessionCheckpoint":
+            // Полное восстановление сессии недоступно во время выполнения агента
+            if (!this.streaming) {
+              await this.handleRestoreSessionCheckpoint(msg.runId)
+            }
+            break
         }
       } catch (err: unknown) {
         const msg = errorMessage(err)
@@ -270,6 +278,7 @@ export class ChatMessageHandler {
         hash: patch.hash,
         endHash: patch.endHash,
         files: patch.files,
+        messageCount: this.lastRunBeforeCount,
         createdAt: Date.now(),
       })
       .catch((err: unknown) => {
@@ -472,6 +481,46 @@ export class ChatMessageHandler {
     }
   }
 
+  /**
+   * Полное восстановление сессии к чекпоинту: откат файлов + отмотка переписки,
+   * памяти и плана агента. Переписка откатывается только если файлы откатились
+   * без ошибок (skipped допустимы).
+   */
+  private async handleRestoreSessionCheckpoint(runId: string): Promise<void> {
+    const post = (ok: boolean, error?: string): void => {
+      this.webview.postMessage({ type: "sessionCheckpointRestored", runId, ok, error } as ExtToWebview)
+    }
+    const record = await this.snapshotStore?.get(runId)
+    if (!this.snapshotService || !this.snapshotStore || !record || record.kind !== "request"
+      || record.messageCount === undefined) {
+      post(false, "Чекпоинт не найден")
+      return
+    }
+    try {
+      const [toRevert, skippedByLater] = await this.filterByLaterRequests(record)
+      const result = await this.performRevert(record, toRevert, [], skippedByLater)
+      if (!result) {
+        post(false, "Чекпоинты недоступны")
+        return
+      }
+      if (result.failed.length > 0) {
+        post(false, result.failed.map((f) => f.error).join("; "))
+        return
+      }
+      const sessionId = this.sessionStore.activeId
+      const messages = this.sessionStore.getMessagesForSession(sessionId).slice(0, record.messageCount)
+      await this.sessionStore.truncateMessages(sessionId, record.messageCount)
+      await this.agent.restoreSession(messages)
+      this.pendingRevertNote = null
+      post(true)
+      this.sendActiveMessages()
+      this.sendSessionList()
+      this.sendModeChanged()
+    } catch (err: unknown) {
+      post(false, errorMessage(err))
+    }
+  }
+
   /** Открыть предпросмотр изменений запроса в DiffViewer (режим request). */
   private async handleOpenRequestDiff(runId: string): Promise<void> {
     if (!this.snapshotService || !this.snapshotStore || !this.diffViewer) return
@@ -539,6 +588,8 @@ export class ChatMessageHandler {
     this.abortController = new AbortController()
     this.webview.postMessage({ type: "messageConfirmed", content } as ExtToWebview)
 
+    // Число сообщений до запроса — для полного восстановления сессии к чекпоинту
+    this.lastRunBeforeCount = this.sessionStore.getActiveMessages().length
     // runId запроса — timestamp user-сообщения
     const userTimestamp = Date.now()
     await this.sessionStore.push({ role: "user", content, timestamp: userTimestamp })

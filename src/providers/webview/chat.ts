@@ -344,14 +344,25 @@ window.addEventListener("message", (event: MessageEvent) => {
         const btn = document.createElement("button")
         btn.type = "button"
         btn.className = "checkpoint-restore"
-        btn.textContent = "Откатить"
+        btn.textContent = "Только файлы"
         btn.addEventListener("click", () => {
           if (!window.confirm("Откатить изменения этого запроса? Файлы, изменённые последующими запросами, не будут затронуты.")) return
           btn.disabled = true
           vscode.postMessage({ type: "restoreCheckpoint", runId: cp.runId })
         })
+        const fullBtn = document.createElement("button")
+        fullBtn.type = "button"
+        fullBtn.className = "checkpoint-restore checkpoint-restore-full"
+        fullBtn.textContent = "Файлы + переписка"
+        fullBtn.title = "Откатить файлы запроса и отмотать переписку к состоянию до него"
+        fullBtn.addEventListener("click", () => {
+          if (!window.confirm("Вернуть файлы и переписку к состоянию до этого запроса? Последующие сообщения будут удалены.")) return
+          fullBtn.disabled = true
+          vscode.postMessage({ type: "restoreSessionCheckpoint", runId: cp.runId })
+        })
         rowEl.appendChild(label)
         rowEl.appendChild(btn)
+        rowEl.appendChild(fullBtn)
         checkpointPanel.appendChild(rowEl)
       }
       break
@@ -398,6 +409,25 @@ window.addEventListener("message", (event: MessageEvent) => {
         if (revertBtn) { revertBtn.style.display = ""; revertBtn.disabled = false }
         if (undoBtn) undoBtn.style.display = "none"
       }
+      break
+    }
+
+    case "sessionCheckpointRestored": {
+      const ok = Boolean(data.ok)
+      if (ok) {
+        // Чистим чат: extension перешлёт переписку до чекпоинта
+        // (sendActiveMessages) — старые элементы удаляем, как в newChat
+        for (let i = messages.children.length - 1; i >= 0; i--) {
+          const child = messages.children[i]
+          if (child !== emptyState) child.remove()
+        }
+        currentEl = null
+        showEmpty()
+      }
+      showToast(
+        ok ? "Сессия восстановлена к выбранному моменту" : `Не удалось восстановить сессию: ${String(data.error ?? "ошибка")}`,
+        ok,
+      )
       break
     }
   }
