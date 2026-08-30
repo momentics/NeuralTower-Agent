@@ -15,7 +15,7 @@ export class NeuralTowerError extends Error {
 
 /** Сбой бэкенда: HTTP, сеть, таймаут и т. д. */
 export class BackendError extends NeuralTowerError {
-  constructor(message: string) {
+  constructor(message: string, public readonly retryable = false) {
     super(message)
     this.name = "BackendError"
   }
@@ -24,7 +24,7 @@ export class BackendError extends NeuralTowerError {
 /** Не удалось установить соединение с бэкендом. */
 export class ConnectionError extends BackendError {
   constructor(message: string) {
-    super(message)
+    super(message, true)
     this.name = "ConnectionError"
   }
 }
@@ -32,7 +32,7 @@ export class ConnectionError extends BackendError {
 /** Таймаут запроса к бэкенду. */
 export class TimeoutError extends BackendError {
   constructor(message: string) {
-    super(message)
+    super(message, true)
     this.name = "TimeoutError"
   }
 }

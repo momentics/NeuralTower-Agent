@@ -21,8 +21,9 @@ export interface IBackend {
   /**
    * Отправить чат-запрос с ожиданием структурированного JSON-ответа.
    * Используется для вызова инструментов, планирования и т. д.
+   * Параметр `signal` позволяет прервать запрос извне.
    */
-  chatJson<T>(messages: IChatMessage[]): Promise<T>
+  chatJson<T>(messages: IChatMessage[], signal?: AbortSignal): Promise<T>
 
   /** Текущая конфигурация. */
   getConfig(): Promise<IBackendConfig>

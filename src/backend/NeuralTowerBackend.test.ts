@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 import { NeuralTowerBackend } from "./NeuralTowerBackend"
 import { DEFAULT_BACKEND_URL } from "../core/Config"
 import { makeTestBackendConfig } from "../__tests__/fixtures"
+import { BackendError, TimeoutError } from "../core/Errors"
 
 describe("NeuralTowerBackend", () => {
   let backend: NeuralTowerBackend
@@ -197,6 +198,167 @@ describe("NeuralTowerBackend", () => {
       }),
     }))
     await expect(backend.chatJson<any>([{ role: "user", content: "hi" }])).rejects.toThrow("не-JSON")
+    vi.unstubAllGlobals()
+  })
+
+  it("SSE: строка, разорванная на два чанка", async () => {
+    const reader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({ done: false, value: Buffer.from('data: {"choices":[{"delta":{"cont') })
+        .mockResolvedValueOnce({ done: false, value: Buffer.from('ent":"Hello"}}]}\n\ndata: [DONE]\n') })
+        .mockResolvedValueOnce({ done: true }),
+      releaseLock: vi.fn(),
+    }
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      body: { getReader: () => reader },
+    }))
+
+    const onChunk = vi.fn()
+    const result = await backend.chat([{ role: "user", content: "hi" }], onChunk)
+
+    expect(result.content).toBe("Hello")
+    expect(onChunk).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
+  })
+
+  it("SSE: аргументы tool_calls, разорванные на чанки", async () => {
+    const reader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({
+          done: false,
+          value: Buffer.from('data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"read_file","arguments":"{\\"pa'),
+        })
+        .mockResolvedValueOnce({
+          done: false,
+          value: Buffer.from('th\\":\\"/x\\"}"}}]}}]}\n\ndata: [DONE]\n'),
+        })
+        .mockResolvedValueOnce({ done: true }),
+      releaseLock: vi.fn(),
+    }
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      body: { getReader: () => reader },
+    }))
+
+    const result = await backend.chat([{ role: "user", content: "hi" }], () => {})
+
+    expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolCalls![0].id).toBe("c1")
+    expect(result.toolCalls![0].toolName).toBe("read_file")
+    expect(JSON.parse(result.toolCalls![0].arguments)).toEqual({ path: "/x" })
+    vi.unstubAllGlobals()
+  })
+
+  it("SSE: окончания строк \\r\\n", async () => {
+    const chunks = 'data: {"choices":[{"delta":{"content":"Hi"}}]}\r\n\r\ndata: [DONE]\r\n'
+    const reader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({ done: false, value: Buffer.from(chunks) })
+        .mockResolvedValueOnce({ done: true }),
+      releaseLock: vi.fn(),
+    }
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      body: { getReader: () => reader },
+    }))
+
+    const result = await backend.chat([{ role: "user", content: "hi" }], () => {})
+    expect(result.content).toBe("Hi")
+    vi.unstubAllGlobals()
+  })
+
+  it("SSE: ошибка в потоке", async () => {
+    const reader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({ done: false, value: Buffer.from('data: {"error":{"message":"boom"}}\n') })
+        .mockResolvedValueOnce({ done: true }),
+      releaseLock: vi.fn(),
+    }
+
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      body: { getReader: () => reader },
+    }))
+
+    await expect(backend.chat([{ role: "user", content: "hi" }], () => {})).rejects.toThrow("Ошибка бэкенда в потоке: boom")
+    vi.unstubAllGlobals()
+  })
+
+  it("HTTP 400 не повторяется", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ maxRetries: 3 }))
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => "invalid",
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    let caught: unknown
+    try {
+      await b.listModels()
+    } catch (err) {
+      caught = err
+    }
+    expect(caught).toBeInstanceOf(BackendError)
+    expect((caught as BackendError).message).toContain("HTTP 400")
+    expect((caught as BackendError).message).not.toContain("Ошибка бэкенда")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
+  })
+
+  it("HTTP 500 повторяется, затем успех", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ maxRetries: 2 }))
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 500, text: async () => "err" })
+      .mockResolvedValueOnce({ ok: false, status: 500, text: async () => "err" })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: '{"ok":1}' } }] }),
+      })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await b.chatJson<{ ok: number }>([{ role: "user", content: "hi" }])
+    expect(result).toEqual({ ok: 1 })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    vi.unstubAllGlobals()
+  })
+
+  it("chatJson отменяется по сигналу", async () => {
+    vi.stubGlobal("fetch", vi.fn((_url: string, init?: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("The operation was aborted", "AbortError"))
+        })
+      }),
+    ))
+    const ac = new AbortController()
+    setTimeout(() => ac.abort(), 50)
+    await expect(backend.chatJson([{ role: "user", content: "hi", timestamp: 1 }], ac.signal)).rejects.toThrow()
+    vi.unstubAllGlobals()
+  })
+
+  it("Idle-таймаут: поток без данных прерывается TimeoutError, а не отменой пользователя", async () => {
+    vi.stubGlobal("fetch", vi.fn((_url: string, init?: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        body: {
+          getReader: () => ({
+            read: () => new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener("abort", () => {
+                reject(new DOMException("aborted", "AbortError"))
+              })
+            }),
+            releaseLock: vi.fn(),
+          }),
+        },
+      })),
+    )
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ timeoutMs: 50, maxRetries: 0 }))
+    await expect(b.chat([{ role: "user", content: "hi", timestamp: 1 }], () => {})).rejects.toBeInstanceOf(TimeoutError)
     vi.unstubAllGlobals()
   })
 })
