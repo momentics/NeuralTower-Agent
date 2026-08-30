@@ -135,7 +135,7 @@ export const chatHtml = `
         <span class="status-dot green" id="status-dot"></span>
         <span id="status-text">Подключено</span>
       </div>
-      <div class="status-item" id="status-model">qwen3.6-27b</div>
+      <div class="status-item" id="status-model"></div>
     </div>
     <div class="status-right">
       <div class="status-item" id="status-mode">

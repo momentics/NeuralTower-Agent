@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { ChatProvider } from "./ChatProvider"
+import type { IBackend } from "../core/IBackend"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { NotificationService } from "../services/notification/NotificationService"
 import type { PermissionManager } from "../services/permission/PermissionManager"
+import type { ISettingsProvider } from "./SettingsProvider"
 
 const createMockAgent = (): IAgentOrchestrator => ({
   run: vi.fn(async () => ({ role: "assistant", content: "Response", timestamp: Date.now() })),
@@ -54,6 +56,22 @@ const createMockPermissionManager = (): PermissionManager => ({
   onDidRequestPermission: vi.fn(() => ({ dispose: () => {} })),
 })
 
+const createMockSettingsProvider = (): ISettingsProvider => ({
+  show: vi.fn(),
+  dispose: vi.fn(),
+})
+
+const createMockBackend = (): IBackend =>
+  ({
+    getConfig: vi.fn(async () => ({ url: "http://localhost:30000", model: "test-model", maxRetries: 0, timeoutMs: 1000 })),
+    listModels: vi.fn(async () => []),
+    healthCheck: vi.fn(async () => true),
+    chat: vi.fn(),
+    chatJson: vi.fn(),
+    currentUrl: vi.fn(() => "http://localhost:30000"),
+    updateConfig: vi.fn(async () => {}),
+  }) as unknown as IBackend
+
 describe("ChatProvider", () => {
   let provider: ChatProvider
   let agent: IAgentOrchestrator
@@ -72,6 +90,8 @@ describe("ChatProvider", () => {
       sessionStore,
       notificationService,
       permissionManager,
+      createMockSettingsProvider(),
+      createMockBackend(),
     )
   })
 

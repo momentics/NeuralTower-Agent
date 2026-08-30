@@ -1,5 +1,6 @@
 import * as vscode from "vscode"
 import type { IProvider } from "../core/IProvider"
+import type { IBackend } from "../core/IBackend"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { INotificationService } from "../services/notification/NotificationService"
@@ -35,6 +36,7 @@ export class ChatProvider implements IProvider {
     private readonly notificationService: INotificationService,
     private readonly permissionManager: IPermissionManager,
     private readonly settingsProvider: ISettingsProvider,
+    private readonly backend: IBackend,
     private readonly snapshotService: ISnapshotService | null = null,
     private readonly snapshotStore: ISnapshotStore | null = null,
     private readonly diffViewer: IDiffViewerProvider | null = null,
@@ -71,6 +73,7 @@ export class ChatProvider implements IProvider {
       this.permissionManager,
       view.webview,
       this.settingsProvider,
+      this.backend,
       this.snapshotService,
       this.snapshotStore,
       this.diffViewer,
@@ -79,6 +82,7 @@ export class ChatProvider implements IProvider {
     )
 
     this.messageHandler.subscribe(this.disposables)
+    this.messageHandler.sendModelInfo()
 
     // Статус подключения бэкенда в футере чата
     this.healthMonitor?.onStatusChange?.((connected) => {
@@ -108,6 +112,20 @@ export class ChatProvider implements IProvider {
       this.sessionStore.newSession().catch(() => {})
       this.messageHandler.sendSessionList()
       this.panel.webview.postMessage({ type: "newChat" } as ExtToWebview)
+    }
+  }
+
+  /** Отправить текущую модель в webview (футер). */
+  postModelInfo(model: string): void {
+    if (this.panel) {
+      this.panel.webview.postMessage({ type: "modelInfo", model } as ExtToWebview)
+    }
+  }
+
+  /** Отправить статус агента в webview (строка состояния). */
+  postAgentStatus(text: string): void {
+    if (this.panel) {
+      this.panel.webview.postMessage({ type: "agentStatus", text } as ExtToWebview)
     }
   }
 

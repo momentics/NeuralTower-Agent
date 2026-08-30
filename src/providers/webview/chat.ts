@@ -32,6 +32,7 @@ const permDenyBtn = document.getElementById("perm-deny") as HTMLButtonElement
 const statusDot = document.getElementById("status-dot") as HTMLSpanElement
 const statusText = document.getElementById("status-text") as HTMLSpanElement
 const statusMode = document.getElementById("status-mode") as HTMLDivElement
+const statusModel = document.getElementById("status-model") as HTMLDivElement
 const sessionsSection = document.getElementById("sessions-section") as HTMLDivElement
 const newChatBtn = document.getElementById("btn-new-chat") as HTMLButtonElement
 const settingsBtn = document.getElementById("btn-settings") as HTMLButtonElement
@@ -53,6 +54,7 @@ interface SessionInfo {
 let currentEl: HTMLElement | null = null
 let sessions: SessionInfo[] = []
 let isStreaming = false
+let agentStatusText = ""
 let backendConnected = false
 let currentMode = "build"
 let allowedModes: string[] = ["plan", "explore"]
@@ -232,7 +234,20 @@ function closePermDialog(): void {
 
 function showPermDialog(requestId: string, toolName: string, description: string): void {
   pendingPermission = { requestId, toolName, description }
-  permDesc.innerHTML = `Инструмент <code>${toolName}</code> хочет выполнить действие. Разрешить?`
+  permDesc.innerHTML = ""
+  const head = document.createElement("div")
+  const code = document.createElement("code")
+  code.textContent = toolName
+  head.appendChild(document.createTextNode("Инструмент "))
+  head.appendChild(code)
+  head.appendChild(document.createTextNode(" хочет выполнить действие. Разрешить?"))
+  permDesc.appendChild(head)
+  if (description) {
+    const desc = document.createElement("div")
+    desc.className = "perm-detail"
+    desc.textContent = description
+    permDesc.appendChild(desc)
+  }
   permOverlay.style.display = "flex"
 }
 
@@ -245,13 +260,17 @@ window.addEventListener("message", (event: MessageEvent) => {
     case "messageConfirmed":
       hideEmpty()
       append("user", String(data.content))
-      currentEl = append("assistant", "")
+      currentEl = null
       break
 
-    case "streamChunk":
-      if (currentEl) currentEl.textContent += String(data.text)
+    case "streamChunk": {
+      const text = String(data.text ?? "")
+      if (!text) break
+      if (!currentEl) currentEl = append("assistant", "")
+      currentEl.textContent += text
       messages.scrollTop = messages.scrollHeight
       break
+    }
 
     case "streamDone":
       removeStreamingDot()
@@ -264,10 +283,12 @@ window.addEventListener("message", (event: MessageEvent) => {
       break
 
     case "streamError":
-      if (currentEl) currentEl.remove()
+      if (currentEl) {
+        if (!currentEl.textContent.trim()) currentEl.remove()
+        currentEl = null
+      }
       append("error", String(data.error))
       setStreaming(false)
-      currentEl = null
       break
 
     case "newChat":
@@ -282,12 +303,57 @@ window.addEventListener("message", (event: MessageEvent) => {
       break
 
     case "toolUse":
-      appendToolUse(String(data.toolName))
+      // Если у пузыря ассистента уже есть текст — закрываем его:
+      // следующий текстовый чанк создаст новый пузырь под строкой инструмента.
+      if (currentEl && currentEl.textContent.trim()) currentEl = null
+      appendToolUse(String(data.toolName), typeof data.args === "string" ? data.args : undefined)
       break
 
     case "toolResult":
       appendToolResult(String(data.toolName), String(data.output), Boolean(data.success))
       break
+
+    case "modelInfo":
+      statusModel.textContent = String(data.model ?? "")
+      break
+
+    case "agentStatus":
+      agentStatusText = String(data.text ?? "")
+      renderStatus()
+      break
+
+    case "history": {
+      const list = Array.isArray(data.messages)
+        ? (data.messages as Array<Record<string, unknown>>)
+        : []
+      for (let i = messages.children.length - 1; i >= 0; i--) {
+        const child = messages.children[i]
+        if (child !== emptyState) child.remove()
+      }
+      currentEl = null
+      if (list.length === 0) {
+        showEmpty()
+        break
+      }
+      hideEmpty()
+      for (const m of list) {
+        if (m.role === "user") {
+          append("user", String(m.content ?? ""))
+        } else if (m.role === "assistant") {
+          const calls = Array.isArray(m.toolCalls)
+            ? (m.toolCalls as Array<{ toolName: string; arguments: string }>)
+            : []
+          if (String(m.content ?? "").trim() !== "" || calls.length === 0) {
+            append("assistant", String(m.content ?? ""))
+          }
+          for (const tc of calls) appendToolUse(String(tc.toolName ?? ""), tc.arguments)
+        } else if (m.role === "tool") {
+          appendToolResult(String(m.name ?? ""), String(m.content ?? ""), true)
+        }
+      }
+      messages.scrollTop = messages.scrollHeight
+      break
+    }
 
     case "sessionList":
       sessions = data.sessions as SessionInfo[]
@@ -441,8 +507,13 @@ window.addEventListener("message", (event: MessageEvent) => {
 
 // ── Состояние стриминга ───────────────────────────────
 
-/** Отрисовать статус-строку: приоритет — стриминг, затем реальное подключение к бэкенду. */
+/** Отрисовать статус-строку: приоритет — статус агента, затем стриминг, затем подключение к бэкенду. */
 function renderStatus(): void {
+  if (agentStatusText) {
+    statusDot.className = "status-dot yellow"
+    statusText.textContent = agentStatusText
+    return
+  }
   if (isStreaming) {
     statusDot.className = "status-dot yellow"
     statusText.textContent = "Работает"
@@ -500,12 +571,39 @@ function removeStreamingDot(): void {
   }
 }
 
-function appendToolUse(toolName: string): void {
+function appendToolUse(toolName: string, argsJson?: string): void {
   const el = document.createElement("div")
   el.className = "tool-use"
-  el.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="var(--peach)" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg> ${toolName}`
+  const icon = document.createElement("span")
+  icon.className = "tool-icon"
+  icon.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="var(--peach)" stroke-width="2"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>'
+  const name = document.createElement("code")
+  name.textContent = toolName
+  el.appendChild(icon)
+  el.appendChild(name)
+  if (argsJson) {
+    const details = document.createElement("details")
+    details.className = "tool-args"
+    const summary = document.createElement("summary")
+    summary.textContent = "параметры"
+    const pre = document.createElement("pre")
+    pre.textContent = formatToolArgs(argsJson)
+    details.appendChild(summary)
+    details.appendChild(pre)
+    el.appendChild(details)
+  }
   messages.appendChild(el)
   messages.scrollTop = messages.scrollHeight
+}
+
+function formatToolArgs(argsJson: string): string {
+  let text: string
+  try {
+    text = JSON.stringify(JSON.parse(argsJson), null, 2) ?? argsJson
+  } catch {
+    text = argsJson
+  }
+  return text.length > 2000 ? text.slice(0, 2000) + "\n… (обрезано)" : text
 }
 
 function appendToolResult(toolName: string, output: string, success: boolean): void {
@@ -513,6 +611,17 @@ function appendToolResult(toolName: string, output: string, success: boolean): v
   el.className = `tool-result${success ? "" : " fail"}`
   const truncated = output.length > 500 ? output.slice(0, 500) + "..." : output
   el.textContent = `[${toolName}] ${truncated}`
+  if (output.length > 500) {
+    const details = document.createElement("details")
+    details.className = "tool-args"
+    const summary = document.createElement("summary")
+    summary.textContent = "полный вывод"
+    const pre = document.createElement("pre")
+    pre.textContent = output.length > 5000 ? output.slice(0, 5000) + "\n… (обрезано)" : output
+    details.appendChild(summary)
+    details.appendChild(pre)
+    el.appendChild(details)
+  }
   messages.appendChild(el)
   messages.scrollTop = messages.scrollHeight
 }

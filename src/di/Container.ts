@@ -172,7 +172,7 @@ export interface IContextDepsResult {
 }
 
 export interface IUIDepsResult {
-  chatProvider: IProvider
+  chatProvider: ChatProvider
   diffViewer: IDiffViewerProvider
   settingsProvider: SettingsProvider
 }
@@ -496,6 +496,7 @@ export function createUIDomain(
     notificationService,
     permissionManager,
     settingsProvider,
+    backend,
     snapshotService,
     snapshotStore,
     diffViewer,
@@ -564,6 +565,10 @@ export async function createDeps(
   const config = loadAppConfig()
   const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
 
+  // Ссылка на чат-провайдер для обновления футера при смене конфигурации
+  // (объявляется до бэкенда: колбэк onConfigChange ссылается на неё замыканием).
+  let chatProviderRef: ChatProvider | null = null
+
   const backend = createBackend(config, async (partial) => {
     try {
       if (partial.url !== undefined) await vsCfg.update("neuralTowerUrl", partial.url, true)
@@ -572,6 +577,10 @@ export async function createDeps(
       if (partial.timeoutMs !== undefined) await vsCfg.update("timeoutMs", partial.timeoutMs, true)
     } catch (err: unknown) {
       log.error(`Ошибка сохранения конфигурации: ${errorMessage(err)}`)
+    }
+    // Обновить модель в футере чата при смене конфигурации
+    if (partial.model !== undefined) {
+      chatProviderRef?.postModelInfo(partial.model)
     }
   })
 
@@ -680,6 +689,9 @@ export async function createDeps(
     gitService,
     () => workDirState.current,
   )
+  chatProviderRef = chatProvider
+  // Статусы агента в UI (например, «Создаю план…»)
+  agentDeps.onAgentStatus = (text) => chatProvider.postAgentStatus(text)
 
   // ── Мониторинг ──────────────────────────────────────────
   const { healthMonitor, commitMessageService, autocompleteService, codebaseIndexer, indexingStatusBar, telemetry } =

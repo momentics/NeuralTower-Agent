@@ -447,7 +447,7 @@ body {
    ═══════════════════════════════════════════ */
 .tool-use {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   padding: 4px 10px;
   margin-left: 32px;
@@ -462,6 +462,60 @@ body {
   width: 12px;
   height: 12px;
   flex-shrink: 0;
+}
+
+/* Параметры вызова инструмента (сворачиваемый блок) */
+.tool-use .tool-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.tool-use .tool-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+.tool-use code {
+  color: var(--peach);
+  font-size: 12px;
+}
+
+.tool-args {
+  margin-left: 19px;
+  width: 100%;
+}
+
+.tool-args summary {
+  cursor: pointer;
+  font-size: 11px;
+  color: var(--text-secondary);
+  user-select: none;
+}
+
+.tool-args pre {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  max-height: 160px;
+  overflow: auto;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+}
+
+/* Детали запроса разрешения (аргументы инструмента) */
+.perm-detail {
+  margin-top: 6px;
+  padding: 6px 8px;
+  max-height: 140px;
+  overflow: auto;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  color: var(--text-secondary);
 }
 
 .tool-result {
@@ -489,6 +543,16 @@ body {
 
 .tool-result.fail {
   color: var(--red);
+}
+
+/* Полный вывод раскрывается: при наличии блока details не клипсуем строку */
+.tool-result:has(details) {
+  max-height: none;
+  overflow: visible;
+}
+
+.tool-result:has(details)::after {
+  display: none;
 }
 
 /* ═══════════════════════════════════════════

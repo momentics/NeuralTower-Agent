@@ -19,6 +19,15 @@ export type WebviewToExt =
   | { type: "openRequestDiff"; runId: string }
   | { type: "restoreSessionCheckpoint"; runId: string }
 
+/** Сообщение истории для рендера webview (без system-сообщений). */
+export interface IHistoryMessage {
+  role: "user" | "assistant" | "tool"
+  content: string
+  toolCalls?: Array<{ id: string; toolName: string; arguments: string }>
+  toolCallId?: string
+  name?: string
+}
+
 export type ExtToWebview =
   | { type: "messageConfirmed"; content: string }
   | { type: "streamChunk"; text: string }
@@ -39,6 +48,9 @@ export type ExtToWebview =
   | { type: "undoReverted"; runId: string; ok: boolean; error?: string }
   | { type: "checkpointList"; checkpoints: Array<{ runId: string; createdAt: number; fileCount: number }> }
   | { type: "sessionCheckpointRestored"; runId: string; ok: boolean; error?: string }
+  | { type: "modelInfo"; model: string }
+  | { type: "agentStatus"; text: string }
+  | { type: "history"; messages: IHistoryMessage[] }
 
 export type SettingsToExt =
   | { type: "settingsSave"; url: string; model: string; maxRetries?: number; timeoutMs?: number; autoApprove?: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean }

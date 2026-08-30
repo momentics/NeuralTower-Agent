@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { ChatMessageHandler } from "./ChatMessageHandler"
+import type { IBackend } from "../core/IBackend"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { NotificationService } from "../services/notification/NotificationService"
@@ -117,6 +118,18 @@ function createMockSettingsProvider(): ISettingsProvider {
   return { show: vi.fn(), dispose: vi.fn() }
 }
 
+function createMockBackend(): IBackend {
+  return {
+    getConfig: vi.fn(async () => ({ url: "http://localhost:30000", model: "test-model", maxRetries: 0, timeoutMs: 1000 })),
+    listModels: vi.fn(async () => []),
+    healthCheck: vi.fn(async () => true),
+    chat: vi.fn(),
+    chatJson: vi.fn(),
+    currentUrl: vi.fn(() => "http://localhost:30000"),
+    updateConfig: vi.fn(async () => {}),
+  } as unknown as IBackend
+}
+
 function createMockSnapshotService() {
   return {
     isEnabled: vi.fn(() => true),
@@ -182,6 +195,7 @@ describe("ChatMessageHandler", () => {
       createMockPermissionManager(),
       webview as never,
       createMockSettingsProvider(),
+      createMockBackend(),
       snapshotService,
       snapshotStore,
       diffViewer,
@@ -839,12 +853,16 @@ describe("ChatMessageHandler", () => {
     expect(webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: "sessionCheckpointRestored", runId: "run-1", ok: true }),
     )
-    expect(webview.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "messageConfirmed", content: "m1" }),
-    )
-    expect(webview.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "streamChunk", text: "m2" }),
-    )
+    // Структурная история вместо хака messageConfirmed/streamChunk
+    const historyCall = vi
+      .mocked(webview.postMessage)
+      .mock.calls.map((c) => c[0])
+      .find((m) => (m as { type: string }).type === "history") as
+      | { messages: Array<{ role: string }> }
+      | undefined
+    expect(historyCall).toBeDefined()
+    expect(historyCall!.messages[0].role).toBe("user")
+    expect(historyCall!.messages[1].role).toBe("assistant")
   })
 
   it("restoreSessionCheckpoint: ошибка revert — переписка не трогается", async () => {
@@ -896,5 +914,89 @@ describe("ChatMessageHandler", () => {
     expect(webview.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: "sessionCheckpointRestored", runId: "run-1", ok: false }),
     )
+  })
+
+  // ── Фаза 6: структурная история, модель, персист tool-вызовов ──
+
+  it("sendActiveMessages отправляет структурную историю", () => {
+    vi.mocked(sessionStore.getActiveMessages).mockReturnValue([
+      { role: "user", content: "привет", timestamp: 1 },
+      {
+        role: "assistant",
+        content: "",
+        timestamp: 2,
+        toolCalls: [{ id: "c1", toolName: "t", arguments: "{}" }],
+      },
+      { role: "tool", toolCallId: "c1", name: "t", content: "out", timestamp: 3 },
+    ])
+
+    handler.sendActiveMessages()
+
+    const historyCalls = vi
+      .mocked(webview.postMessage)
+      .mock.calls.filter((c) => (c[0] as { type: string }).type === "history")
+    expect(historyCalls).toHaveLength(1)
+    const posted = historyCalls[0][0] as {
+      type: string
+      messages: Array<{ role: string; toolCalls?: Array<{ id: string; toolName: string; arguments: string }> }>
+    }
+    expect(posted.messages[0].role).toBe("user")
+    expect(posted.messages[1].toolCalls?.[0].id).toBe("c1")
+    expect(posted.messages[2].role).toBe("tool")
+  })
+
+  it("sendModelInfo отправляет модель из конфигурации бэкенда", async () => {
+    handler.sendModelInfo()
+    await vi.waitFor(() => {
+      expect(webview.postMessage).toHaveBeenCalledWith({ type: "modelInfo", model: "test-model" })
+    })
+  })
+
+  it("вызовы инструментов персистятся в сессию", async () => {
+    onMessage({ type: "sendMessage", content: "задача" })
+    await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1))
+    const args = getRunArgs()
+    const onToolUse = args[2] as (name: string, a: Record<string, unknown>, id: string) => void
+    const onToolResult = args[3] as (
+      name: string,
+      r: { output: string; success: boolean },
+      id: string,
+    ) => void
+    onToolUse("read", { path: "x" }, "c1")
+    onToolResult("read", { output: "ok", success: true }, "c1")
+
+    expect(sessionStore.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: "assistant",
+        toolCalls: [{ id: "c1", toolName: "read", arguments: '{"path":"x"}' }],
+      }),
+    )
+    expect(sessionStore.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        role: "tool",
+        toolCallId: "c1",
+        name: "read",
+        content: "ok",
+      }),
+    )
+    resolveRun()
+  })
+
+  it("заблокированный вызов персистится парой assistant+tool", async () => {
+    onMessage({ type: "sendMessage", content: "задача" })
+    await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1))
+    const args = getRunArgs()
+    const onToolUse = args[2] as (name: string, a: Record<string, unknown>, id: string) => void
+    onToolUse("write_file", { path: "y", _blocked: "ЗАБЛОКИРОВАНО режимом explore" }, "c2")
+
+    const pushes = vi.mocked(sessionStore.push).mock.calls.map((c) => c[0])
+    const assistantPush = pushes.find(
+      (m) => m.role === "assistant" && m.toolCalls?.some((tc) => tc.id === "c2"),
+    )
+    expect(assistantPush).toBeDefined()
+    const toolPush = pushes.find((m) => m.role === "tool" && m.toolCallId === "c2")
+    expect(toolPush).toBeDefined()
+    expect(toolPush!.content).toContain("ЗАБЛОКИРОВАНО")
+    resolveRun()
   })
 })

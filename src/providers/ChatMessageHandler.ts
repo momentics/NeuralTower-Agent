@@ -1,5 +1,6 @@
 import * as vscode from "vscode"
 import { basename } from "path"
+import type { IBackend } from "../core/IBackend"
 import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { INotificationService } from "../services/notification/NotificationService"
@@ -44,6 +45,7 @@ export class ChatMessageHandler {
     private readonly permissionManager: IPermissionManager,
     private readonly webview: vscode.Webview,
     private readonly settingsProvider: ISettingsProvider,
+    private readonly backend: IBackend,
     private readonly snapshotService: ISnapshotService | null = null,
     private readonly snapshotStore: ISnapshotStore | null = null,
     private readonly diffViewer: IDiffViewerProvider | null = null,
@@ -76,17 +78,31 @@ export class ChatMessageHandler {
     } as ExtToWebview)
   }
 
-  /** Отправить сообщения активной сессии. */
+  /** Отправить текущую модель в webview (футер чата). */
+  sendModelInfo(): void {
+    this.backend
+      .getConfig()
+      .then((c) => {
+        this.webview.postMessage({ type: "modelInfo", model: c.model } as ExtToWebview)
+      })
+      .catch(() => {})
+  }
+
+  /** Отправить сообщения активной сессии в webview (структурная история). */
   sendActiveMessages(): void {
     const messages = this.sessionStore.getActiveMessages()
-    for (const msg of messages) {
-      if (msg.role === "user") {
-        this.webview.postMessage({ type: "messageConfirmed", content: msg.content } as ExtToWebview)
-      } else if (msg.role === "assistant") {
-        this.webview.postMessage({ type: "streamChunk", text: msg.content } as ExtToWebview)
-        this.webview.postMessage({ type: "streamDone" } as ExtToWebview)
-      }
-    }
+    this.webview.postMessage({
+      type: "history",
+      messages: messages
+        .filter((m) => m.role !== "system")
+        .map((m) => ({
+          role: m.role,
+          content: m.content,
+          toolCalls: m.toolCalls,
+          toolCallId: m.toolCallId,
+          name: m.name,
+        })),
+    } as ExtToWebview)
   }
 
   /** Отправить текущий режим и допустимые переходы в webview. */
@@ -598,19 +614,47 @@ export class ChatMessageHandler {
       const note = this.pendingRevertNote
       const result = await this.agent.run(content, (chunk) => {
         this.webview.postMessage({ type: "streamChunk", text: chunk } as ExtToWebview)
-      }, (toolName, args) => {
+      }, (toolName, args, id) => {
         this.webview.postMessage({
           type: "toolUse",
           toolName,
           args: JSON.stringify(args),
         } as ExtToWebview)
-      }, (toolName, result) => {
+        // Персистентная история: assistant-сообщение с вызовом.
+        // Заблокированный вызов (маркер _blocked в аргументах) дополняем
+        // tool-сообщением сразу — иначе в восстановленной истории
+        // tool_call останется без ответа и нарушит протокол API.
+        const blocked = typeof args === "object" && args !== null && "_blocked" in args
+        void this.sessionStore.push({
+          role: "assistant",
+          content: "",
+          toolCalls: [{ id, toolName, arguments: JSON.stringify(args) }],
+          timestamp: Date.now(),
+        })
+        if (blocked) {
+          void this.sessionStore.push({
+            role: "tool",
+            toolCallId: id,
+            name: toolName,
+            content: String(args._blocked),
+            timestamp: Date.now(),
+          })
+        }
+      }, (toolName, result, id) => {
         this.webview.postMessage({
           type: "toolResult",
           toolName,
           output: result.output,
           success: result.success,
         } as ExtToWebview)
+        // Персистентная история: tool-сообщение с выводом.
+        void this.sessionStore.push({
+          role: "tool",
+          toolCallId: id,
+          name: toolName,
+          content: result.output,
+          timestamp: Date.now(),
+        })
       }, this.abortController.signal, undefined, (patch) => {
         this.handleSnapshotInfo(patch, String(userTimestamp))
       }, note ?? undefined)
