@@ -24,7 +24,6 @@ export interface IToolRegistrar {
 export interface IToolQuerier {
   list(): ITool[]
   get(name: string): ITool | undefined
-  toSchemaList(): string
   toToolDefinitions(): Array<{ name: string; description: string; parameters: Record<string, unknown> }>
 }
 
@@ -169,23 +168,6 @@ export class ToolRegistry implements IToolRegistry {
       success: false,
       durationMs: Date.now() - start,
     }
-  }
-
-  /**
-   * Сформировать краткий список схем для системного запроса модели.
-   * Модель получает эти данные, чтобы знать, какие инструменты доступны.
-   */
-  toSchemaList(): string {
-    const entries = this.list().map((t) => {
-      const params = Object.entries(t.schema.parameters).map(([k, p]) => {
-        const req = (t.schema.required ?? []).includes(k) ? " (обязат.)" : ""
-        return `  ${k}: ${p.type}${p.description ? ` — ${p.description}` : ""}${req}`
-      }).join("\n")
-      return `• ${t.name}: ${t.description}\n${params}`
-    })
-    return entries.length > 0
-      ? `Доступные инструменты (вызывайте через JSON \{"tool": "...", "args": {...}\}):\n${entries.join("\n\n")}`
-      : "Инструменты недоступны."
   }
 
   /**

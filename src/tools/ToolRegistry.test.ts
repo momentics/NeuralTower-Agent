@@ -105,19 +105,6 @@ describe("ToolRegistry", () => {
     expect(result.output).toContain("boom")
   })
 
-  it("toSchemaList returns formatted list", () => {
-    const registry = new ToolRegistry()
-    registry.register(createMockTool("tool_a"))
-    const schema = registry.toSchemaList()
-    expect(schema).toContain("tool_a")
-    expect(schema).toContain("Доступные инструменты")
-  })
-
-  it("toSchemaList returns message when empty", () => {
-    const registry = new ToolRegistry()
-    expect(registry.toSchemaList()).toContain("Инструменты недоступны")
-  })
-
   it("toToolDefinitions returns array of definitions", () => {
     const registry = new ToolRegistry()
     registry.register(createMockTool("tool_a"))
