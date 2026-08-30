@@ -10,6 +10,7 @@ import type { AgentToolExecutor } from "./AgentToolExecutor"
 import type { AgentPlanner } from "./AgentPlanner"
 import { Plan } from "./Plan"
 import type { IAgentTurnResult } from "./AgentTypes"
+import { AbortError, BackendError } from "../core/Errors"
 import { TEST_BACKEND_URL, makeTestBackendConfig } from "../__tests__/fixtures"
 
 class MockCompactor extends Compactor {
@@ -346,10 +347,11 @@ const loop = new AgentLoop(
     const secondCall = vi.mocked(mockToolExecutor.callBackend).mock.calls[1]
     const conversation = secondCall[0] as IChatMessage[]
     const recoveryMsg = conversation.find(
-      (m) => m.role === "user" && m.content.includes("Внимание: инструменты"),
+      (m) => m.role === "user" && m.content.includes("Внимание: "),
     )
     expect(recoveryMsg).toBeDefined()
-    expect(recoveryMsg?.content).toContain("read")
+    // Новый формат деталей: «имя: текст ошибки» (шаг 4.3).
+    expect(recoveryMsg?.content).toContain("read: file not found")
   })
 
   it("run breaks after max recovery attempts exceeded", async () => {
@@ -701,37 +703,39 @@ const loop = new AgentLoop(
     expect(planStepMsg).toBeDefined()
   })
 
-  it("run recovers when callBackend throws and continues loop", async () => {
+  it("run throws immediately when callBackend rejects with a backend error", async () => {
     const mockToolExecutor = createMockToolExecutor()
-    vi.mocked(mockToolExecutor.callBackend)
-      .mockRejectedValueOnce(new Error("Network error"))
-      .mockResolvedValueOnce({ type: "text", content: "Recovered" })
+    vi.mocked(mockToolExecutor.callBackend).mockRejectedValueOnce(
+      new BackendError("HTTP 400: model not found"),
+    )
 
     const loop = new AgentLoop(
       backend, memory, compactor, modeManager, sessionContext,
       contextBuilder, mockToolExecutor, planner,
     )
-    const result = await loop.run("test query", [], () => {})
+    await expect(loop.run("test query", [], () => {})).rejects.toThrow("HTTP 400: model not found")
 
-    expect(result.role).toBe("assistant")
-    expect(result.content).toBe("Recovered")
-    expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(2)
+    // Ошибка бэкенда не идёт в recovery-цикл: бэкенд вызван один раз,
+    // recovery-сообщение в разговор не добавлено.
+    expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(1)
+    const recent = memory.getRecent()
+    expect(
+      recent.some((m) => m.role === "user" && m.content.includes("Внимание: ")),
+    ).toBe(false)
   })
 
-  it("run breaks after max recovery attempts when callBackend throws", async () => {
+  it("run throws on the first iteration when callBackend always rejects", async () => {
     const mockToolExecutor = createMockToolExecutor()
-    vi.mocked(mockToolExecutor.callBackend).mockRejectedValue(new Error("Network error"))
+    vi.mocked(mockToolExecutor.callBackend).mockRejectedValue(new BackendError("HTTP 500: err"))
 
     const loop = new AgentLoop(
       backend, memory, compactor, modeManager, sessionContext,
       contextBuilder, mockToolExecutor, planner,
-      undefined,
-      2,
     )
-    const result = await loop.run("test query", [], () => {})
+    await expect(loop.run("test query", [], () => {})).rejects.toThrow("HTTP 500: err")
 
-    expect(result.role).toBe("assistant")
-    expect(result.content).toContain("максимальное число итераций")
+    // Ретраи на уровне цикла отсутствуют: бэкенд вызван ровно один раз.
+    expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(1)
   })
 
   it("run continues when initial compaction throws", async () => {
@@ -808,11 +812,50 @@ const loop = new AgentLoop(
     expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(2)
   })
 
-  it("run injects error message into conversation when callBackend throws", async () => {
+  it("отмена в ходе вызова бэкенда пробрасывается как AbortError", async () => {
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend).mockRejectedValueOnce(
+      new DOMException("aborted", "AbortError"),
+    )
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    await expect(loop.run("test query", [], () => {})).rejects.toBeInstanceOf(AbortError)
+    expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(1)
+  })
+
+  it("фолбэк по итерациям стримится в onChunk", async () => {
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend).mockResolvedValue({ type: "text" })
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    const onChunk = vi.fn()
+    const result = await loop.run("test query", [], onChunk)
+
+    expect(result.content).toContain("максимальное число итераций")
+    expect(onChunk).toHaveBeenCalledWith(
+      "Достигнуто максимальное число итераций. Операция может быть незавершённой.",
+    )
+  })
+
+  it("recovery-сообщение содержит текст ошибки инструмента", async () => {
     const mockToolExecutor = createMockToolExecutor()
     vi.mocked(mockToolExecutor.callBackend)
-      .mockRejectedValueOnce(new Error("Connection refused"))
-      .mockResolvedValueOnce({ type: "text", content: "After error" })
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ id: "c1", toolName: "bash", arguments: { command: "ls" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "Done" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValueOnce({
+      anyFailed: true,
+      failedTools: [{ name: "bash", error: "exit code 1" }],
+    })
 
     const loop = new AgentLoop(
       backend, memory, compactor, modeManager, sessionContext,
@@ -820,14 +863,40 @@ const loop = new AgentLoop(
     )
     await loop.run("test query", [], () => {})
 
-    expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(2)
     const secondCall = vi.mocked(mockToolExecutor.callBackend).mock.calls[1]
     const conversation = secondCall[0] as IChatMessage[]
-    const errorMsg = conversation.find(
-      (m) => m.role === "user" && m.content.includes("Внимание: инструменты"),
+    const recoveryMsg = conversation.find(
+      (m) => m.role === "user" && m.content.includes("bash: exit code 1"),
     )
-    expect(errorMsg).toBeDefined()
-    expect(errorMsg?.content).toContain("backend")
+    expect(recoveryMsg).toBeDefined()
+  })
+
+  it("сбой выполнения инструментов не прерывает run", async () => {
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ id: "c1", toolName: "bash", arguments: { command: "ls" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "Recovered" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockRejectedValueOnce(
+      new Error("Tool execution crashed"),
+    )
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    const result = await loop.run("test query", [], () => {})
+
+    expect(result.content).toBe("Recovered")
+    const secondCall = vi.mocked(mockToolExecutor.callBackend).mock.calls[1]
+    const conversation = secondCall[0] as IChatMessage[]
+    const recoveryMsg = conversation.find(
+      (m) => m.role === "user" && m.content.includes("tool_executor: Tool execution crashed"),
+    )
+    expect(recoveryMsg).toBeDefined()
   })
 
   // ── Интеграция со снапшотами ────────────────────────────

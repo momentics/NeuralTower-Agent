@@ -144,12 +144,36 @@ export class AgentLoop {
     anyFailed?: boolean
     failedTools?: { name: string; error: string }[]
     plan?: Plan | null
+    /** Оригинальный объект ошибки (для type: "error"). */
+    error?: unknown
   }> {
     let currentPlan: Plan | null = null
 
+    // Сбой бэкенда — отдельный catch: он не восстанавливается повторными
+    // итерациями и должен немедленно дойти до UI (D10).
+    let result: IAgentTurnResult
     try {
-      const result = await this.toolExecutor.callBackend(conversation, onChunk, signal)
+      result = await this.toolExecutor.callBackend(conversation, onChunk, signal)
+    } catch (err: unknown) {
+      // Отмена пользователем — пробрасываем как есть (не ошибка бэкенда).
+      if (err instanceof AbortError) throw err
+      if (err instanceof DOMException && err.name === "AbortError") throw new AbortError()
+      const msg = errorMessage(err)
+      log.error(`Ошибка бэкенда: ${msg}`)
+      currentPlan = this.planner.getPlan()
+      if (currentPlan) {
+        currentPlan.markFailed(msg)
+      }
+      return {
+        type: "error",
+        anyFailed: true,
+        failedTools: [{ name: "backend", error: msg }],
+        plan: currentPlan,
+        error: err,
+      }
+    }
 
+    try {
       if (result.type === "text") {
         if (result.content) {
           conversation.push({
@@ -208,7 +232,10 @@ export class AgentLoop {
 
       return { type: "text", plan: currentPlan }
     } catch (err: unknown) {
+      // Сбой выполнения инструментов — не сбой бэкенда: run() направит его
+      // в handleTurnFailure, а не в немедленный выход (D10).
       const msg = errorMessage(err)
+      log.error(`Ошибка выполнения инструментов: ${msg}`)
       currentPlan = this.planner.getPlan()
       if (currentPlan) {
         currentPlan.markFailed(msg)
@@ -216,7 +243,7 @@ export class AgentLoop {
       return {
         type: "error",
         anyFailed: true,
-        failedTools: [{ name: "backend", error: msg }],
+        failedTools: [{ name: "tool_executor", error: msg }],
         plan: currentPlan,
       }
     }
@@ -263,10 +290,10 @@ export class AgentLoop {
     }
 
     recoveryAttempts++
-    const failedNames = failedTools?.map((t) => t.name).join(", ") ?? "неизвестно"
+    const details = failedTools?.map((t) => `${t.name}: ${t.error}`).join("; ") ?? "неизвестно"
     conversation.push({
       role: "user",
-      content: `Внимание: инструменты ${failedNames} завершены с ошибкой. Проанализируйте ошибки выше и попробуйте выполнить задачу другим способом. Вы можете: повторить вызов с другими аргументами, использовать другой инструмент, или завершить задачу с описанием ошибки.`,
+      content: `Внимание: ${details}. Проанализируйте ошибки выше и попробуйте выполнить задачу другим способом. Вы можете: повторить вызов с другими аргументами, использовать другой инструмент, или завершить задачу с описанием ошибки.`,
       timestamp: Date.now(),
     })
     this.addToMemory(conversation[conversation.length - 1])
@@ -389,11 +416,13 @@ export class AgentLoop {
       } catch (err: unknown) {
         if (err === MAX_COMPACTIONS_ERROR) {
           await this.finishWithSnapshot(snapshotHash, onSnapshot)
-          return {
+          const msg: IChatMessage = {
             role: "assistant",
             content: "Контекст превышает допустимые пределы. Задача может быть незавершённой.",
             timestamp: Date.now(),
           }
+          onChunk(msg.content)
+          return msg
         }
         throw err
       }
@@ -431,9 +460,15 @@ export class AgentLoop {
       }
 
       // Ошибка
-      const { anyFailed, failedTools, plan: currentPlan } = turn
+      const { failedTools, plan: currentPlan, error: turnError } = turn
+      if (failedTools?.some((t) => t.name === "backend")) {
+        // Сбой бэкенда не восстанавливается повторными итерациями —
+        // выходим с оригинальной ошибкой, она дойдёт до UI.
+        await this.finishWithSnapshot(snapshotHash, onSnapshot)
+        throw turnError instanceof Error ? turnError : new Error(String(turnError ?? "Ошибка бэкенда"))
+      }
       const recovery = await this.handleTurnFailure(
-        workingConversation, Boolean(anyFailed), failedTools, currentPlan ?? null, recoveryAttempts,
+        workingConversation, true, failedTools, currentPlan ?? null, recoveryAttempts,
       )
       recoveryAttempts = recovery.recoveryAttempts
 
@@ -442,10 +477,12 @@ export class AgentLoop {
     }
 
     await this.finishWithSnapshot(snapshotHash, onSnapshot)
-    return {
+    const finalMsg: IChatMessage = {
       role: "assistant",
       content: "Достигнуто максимальное число итераций. Операция может быть незавершённой.",
       timestamp: Date.now(),
     }
+    onChunk(finalMsg.content)
+    return finalMsg
   }
 }
