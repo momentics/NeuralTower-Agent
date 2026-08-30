@@ -740,8 +740,8 @@ const loop = new AgentLoop(
     )
     await expect(loop.run("test query", [], () => {})).rejects.toThrow("HTTP 400: model not found")
 
-    // Ошибка бэкенда не идёт в recovery-цикл: бэкенд вызван один раз,
-    // recovery-сообщение в разговор не добавлено.
+    // Ошибка бэкенда не идёт в цикл восстановления: бэкенд вызван один раз,
+    // сообщение о сбое в разговор не добавлено.
     expect(mockToolExecutor.callBackend).toHaveBeenCalledTimes(1)
     const recent = memory.getRecent()
     expect(
