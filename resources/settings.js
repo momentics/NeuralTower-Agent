@@ -1,7 +1,8 @@
 const vscode = acquireVsCodeApi()
 
 const urlInput = document.getElementById("url")
-const modelSelect = document.getElementById("model")
+const modelInput = document.getElementById("model")
+const modelList = document.getElementById("model-list")
 const maxRetriesInput = document.getElementById("maxRetries")
 const timeoutMsInput = document.getElementById("timeoutMs")
 const maxIterationsInput = document.getElementById("maxIterations")
@@ -29,6 +30,15 @@ function setToggle(el, on) {
   }
 }
 
+// Дружелюбное имя модели: если ID — путь (SGLang возвращает путь к файлам
+// модели), показываем последний сегмент.
+function friendlyModelName(id) {
+  const s = String(id)
+  const parts = s.split(/[\\/]+/)
+  const last = parts[parts.length - 1]
+  return last && last !== s ? last : s
+}
+
 // ── Обработка сообщений ─────────────────────────────
 
 window.addEventListener("message", (event) => {
@@ -37,19 +47,22 @@ window.addEventListener("message", (event) => {
   switch (data.type) {
     case "settingsData":
       urlInput.value = data.config.url
-      modelSelect.innerHTML = ""
+      modelList.replaceChildren()
       for (const m of data.models) {
         const opt = document.createElement("option")
         opt.value = m
-        opt.textContent = m
-        if (m === data.config.model) opt.selected = true
-        modelSelect.appendChild(opt)
+        opt.label = friendlyModelName(m)
+        modelList.appendChild(opt)
       }
-      if (data.models.length === 0) {
-        const opt = document.createElement("option")
-        opt.value = data.config.model || ""
-        opt.textContent = data.config.model || "(none)"
-        modelSelect.appendChild(opt)
+      modelInput.value = data.config.model || ""
+      const models = data.models || []
+      if (models.length > 0 && data.config.model && !models.includes(data.config.model)) {
+        setStatus(
+          models.length === 1
+            ? `Модель «${data.config.model}» не найдена на сервере. Доступна: ${friendlyModelName(models[0])}`
+            : `Модель «${data.config.model}» не найдена на сервере`,
+          false,
+        )
       }
       if (maxRetriesInput) maxRetriesInput.value = String(data.config.maxRetries)
       if (timeoutMsInput) timeoutMsInput.value = String(data.config.timeoutMs)
@@ -72,10 +85,15 @@ window.addEventListener("message", (event) => {
 // ── Сохранение ──────────────────────────────────────
 
 btnSave.addEventListener("click", () => {
+  const model = modelInput.value.trim()
+  if (!model) {
+    setStatus("Укажите имя модели", false)
+    return
+  }
   vscode.postMessage({
     type: "settingsSave",
     url: urlInput.value,
-    model: modelSelect.value,
+    model,
     maxRetries: Number(maxRetriesInput.value),
     timeoutMs: Number(timeoutMsInput.value),
     maxIterations: Number(maxIterationsInput.value),

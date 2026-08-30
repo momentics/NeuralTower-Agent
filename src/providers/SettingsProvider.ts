@@ -116,7 +116,7 @@ export class SettingsProvider implements ISettingsProvider {
               this.getWebview().postMessage({
                 type: "settingsTestResult",
                 success: false,
-                message: "Укажите адрес сервера или модель",
+                message: "Укажите адрес сервера и модель",
               } as ExtToSettings)
               break
             }
@@ -204,9 +204,10 @@ export class SettingsProvider implements ISettingsProvider {
     <div class="setting-row">
       <div>
         <div class="setting-label">Модель</div>
-        <div class="setting-desc">ИИ-модель для агента</div>
+        <div class="setting-desc">ИИ-модель для агента (имя с сервера или свободное значение)</div>
       </div>
-      <select class="setting-select" id="model"><option value="">(нет)</option></select>
+      <input class="setting-input" id="model" type="text" list="model-list" autocomplete="off" spellcheck="false">
+      <datalist id="model-list"></datalist>
     </div>
     <div class="setting-row">
       <div>
