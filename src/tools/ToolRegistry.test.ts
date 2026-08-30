@@ -127,4 +127,11 @@ describe("ToolRegistry", () => {
     expect(defs[0].name).toBe("tool_a")
     expect(defs[0].parameters).toBeDefined()
   })
+
+  it("toToolDefinitions sanitizes invalid names", () => {
+    const registry = new ToolRegistry()
+    registry.register(createMockTool("bad:name"))
+    const defs = registry.toToolDefinitions()
+    expect(defs[0].name).toBe("bad_name")
+  })
 })

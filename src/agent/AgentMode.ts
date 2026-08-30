@@ -97,17 +97,23 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
     priority: 10,
     transitions: ["plan", "explore"],
     toolRules: [
-      { tool: "read", level: "allow" },
+      { tool: "read_file", level: "allow" },
       { tool: "glob", level: "allow" },
       { tool: "grep", level: "allow" },
       { tool: "web_fetch", level: "allow" },
-      { tool: "edit", level: "ask" },
-      { tool: "write", level: "ask" },
+      { tool: "lsp", level: "allow" },
+      { tool: "codebase_search", level: "allow" },
+      { tool: "todowrite", level: "allow" },
+      { tool: "ntgraph_*", level: "allow" },
+      { tool: "edit_file", level: "ask" },
+      { tool: "write_file", level: "ask" },
       { tool: "bash", level: "ask" },
       // git: read-only операции проходят без запроса (isSafeForArgs),
       // изменяющие и опасные — с подтверждением
       { tool: "git", level: "ask" },
-      { tool: "todo_write", level: "allow" },
+      { tool: "delete_file", level: "ask" },
+      { tool: "move_file", level: "ask" },
+      { tool: "create_dir", level: "ask" },
       { tool: "*", level: "ask" },
     ],
     systemPromptAddon: `# Режим: Построение
@@ -115,7 +121,7 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
 Вы работаете в режиме выполнения задач. Ваша цель — реализовать запрошенные изменения.
 
 Правила:
-- Разбивайте сложные задачи на шаги с помощью todo_write
+- Разбивайте сложные задачи на шаги с помощью todowrite
 - Перед изменением файла всегда читайте его содержимое
 - После изменений проверяйте результат
 - Фиксируйте изменения только по явной просьбе пользователя`,
@@ -128,16 +134,22 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
     priority: 5,
     transitions: ["build"],
     toolRules: [
-      { tool: "read", level: "allow" },
+      { tool: "read_file", level: "allow" },
       { tool: "glob", level: "allow" },
       { tool: "grep", level: "allow" },
       { tool: "web_fetch", level: "allow" },
-      { tool: "todo_write", level: "allow" },
-      { tool: "edit", level: "deny" },
-      { tool: "write", level: "deny" },
-      { tool: "bash", level: "deny" },
+      { tool: "lsp", level: "allow" },
+      { tool: "codebase_search", level: "allow" },
+      { tool: "todowrite", level: "allow" },
+      { tool: "ntgraph_*", level: "allow" },
       // git: чтение состояния (status/diff/log) без запроса, изменения — с подтверждением
       { tool: "git", level: "ask" },
+      { tool: "edit_file", level: "deny" },
+      { tool: "write_file", level: "deny" },
+      { tool: "bash", level: "deny" },
+      { tool: "delete_file", level: "deny" },
+      { tool: "move_file", level: "deny" },
+      { tool: "create_dir", level: "deny" },
       { tool: "*", level: "deny" },
     ],
     systemPromptAddon: `# Режим: Планирование
@@ -146,8 +158,8 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
 изучить кодовую базу и создать подробный план действий.
 
 Правила:
-- НЕ изменяйте файлы. У вас нет прав на edit, write и bash.
-- Используйте read, glob и grep для изучения кодовой базы.
+- НЕ изменяйте файлы. У вас нет прав на edit_file, write_file и bash.
+- Используйте read_file, glob и grep для изучения кодовой базы.
 - Создайте пошаговый план с конкретными действиями.
 - Укажите предлагаемые инструменты для каждого шага.
 - После завершения плана используйте плановый выход для перехода в режим Build.`,
@@ -160,16 +172,22 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
     priority: 3,
     transitions: ["build", "plan"],
     toolRules: [
-      { tool: "read", level: "allow" },
+      { tool: "read_file", level: "allow" },
       { tool: "glob", level: "allow" },
       { tool: "grep", level: "allow" },
       { tool: "web_fetch", level: "allow" },
-      { tool: "edit", level: "deny" },
-      { tool: "write", level: "deny" },
-      { tool: "bash", level: "deny" },
-      { tool: "todo_write", level: "deny" },
+      { tool: "lsp", level: "allow" },
+      { tool: "codebase_search", level: "allow" },
+      { tool: "ntgraph_*", level: "allow" },
       // git: чтение состояния (status/diff/log) без запроса, изменения — с подтверждением
       { tool: "git", level: "ask" },
+      { tool: "edit_file", level: "deny" },
+      { tool: "write_file", level: "deny" },
+      { tool: "bash", level: "deny" },
+      { tool: "delete_file", level: "deny" },
+      { tool: "move_file", level: "deny" },
+      { tool: "create_dir", level: "deny" },
+      { tool: "todowrite", level: "deny" },
       { tool: "*", level: "deny" },
     ],
     systemPromptAddon: `# Режим: Исследование
@@ -178,8 +196,8 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
 найти релевантные файлы и ответить на вопросы пользователя.
 
 Правила:
-- НЕ изменяйте файлы. У вас нет прав на edit, write и bash.
-- Используйте read, glob и grep для навигации по коду.
+- НЕ изменяйте файлы. У вас нет прав на edit_file, write_file и bash.
+- Используйте read_file, glob и grep для навигации по коду.
 - Отвечайте конкретно, со ссылками на файлы и строки.
 - Если задача требует изменений, предложите перейти в режим Build.`,
   },

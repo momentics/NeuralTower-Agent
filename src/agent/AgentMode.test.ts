@@ -8,8 +8,8 @@ import {
 
 describe("toolMatchesRule", () => {
   it("matches exact tool name", () => {
-    expect(toolMatchesRule("read", { tool: "read", level: "allow" })).toBe(true)
-    expect(toolMatchesRule("edit", { tool: "read", level: "allow" })).toBe(false)
+    expect(toolMatchesRule("read_file", { tool: "read_file", level: "allow" })).toBe(true)
+    expect(toolMatchesRule("edit_file", { tool: "read_file", level: "allow" })).toBe(false)
   })
 
   it("matches wildcard *", () => {
@@ -17,8 +17,8 @@ describe("toolMatchesRule", () => {
   })
 
   it("matches prefix wildcard", () => {
-    expect(toolMatchesRule("mcp_server:tool1", { tool: "mcp_*", level: "ask" })).toBe(true)
-    expect(toolMatchesRule("mcp_server:tool1", { tool: "read", level: "allow" })).toBe(false)
+    expect(toolMatchesRule("mcp_server_tool1", { tool: "mcp_*", level: "ask" })).toBe(true)
+    expect(toolMatchesRule("mcp_server_tool1", { tool: "read_file", level: "allow" })).toBe(false)
   })
 
   it("matches suffix wildcard", () => {
@@ -43,13 +43,13 @@ describe("resolveToolPermission", () => {
       description: "test",
       transitions: [] as const,
       toolRules: [
-        { tool: "read", level: "allow" as const },
+        { tool: "read_file", level: "allow" as const },
         { tool: "*", level: "ask" as const },
       ],
       systemPromptAddon: "",
       priority: 10,
     }
-    expect(resolveToolPermission(mode, "read")).toBe("allow")
+    expect(resolveToolPermission(mode, "read_file")).toBe("allow")
     expect(resolveToolPermission(mode, "bash")).toBe("ask")
   })
 
@@ -74,21 +74,38 @@ describe("BUILT_IN_MODES", () => {
     expect(BUILT_IN_MODES).toHaveProperty("explore")
   })
 
-  it("build mode allows read and asks for edit", () => {
-    expect(resolveToolPermission(BUILT_IN_MODES.build, "read")).toBe("allow")
-    expect(resolveToolPermission(BUILT_IN_MODES.build, "edit")).toBe("ask")
+  it("build mode allows read_file and asks for edit_file", () => {
+    expect(resolveToolPermission(BUILT_IN_MODES.build, "read_file")).toBe("allow")
+    expect(resolveToolPermission(BUILT_IN_MODES.build, "edit_file")).toBe("ask")
     expect(resolveToolPermission(BUILT_IN_MODES.build, "bash")).toBe("ask")
   })
 
-  it("plan mode denies edit, write, bash", () => {
-    expect(resolveToolPermission(BUILT_IN_MODES.plan, "edit")).toBe("deny")
-    expect(resolveToolPermission(BUILT_IN_MODES.plan, "write")).toBe("deny")
+  it("plan mode denies edit_file, write_file, bash", () => {
+    expect(resolveToolPermission(BUILT_IN_MODES.plan, "edit_file")).toBe("deny")
+    expect(resolveToolPermission(BUILT_IN_MODES.plan, "write_file")).toBe("deny")
     expect(resolveToolPermission(BUILT_IN_MODES.plan, "bash")).toBe("deny")
   })
 
-  it("explore mode denies edit and todo_write", () => {
-    expect(resolveToolPermission(BUILT_IN_MODES.explore, "edit")).toBe("deny")
-    expect(resolveToolPermission(BUILT_IN_MODES.explore, "todo_write")).toBe("deny")
+  it("explore mode denies edit_file and todowrite", () => {
+    expect(resolveToolPermission(BUILT_IN_MODES.explore, "edit_file")).toBe("deny")
+    expect(resolveToolPermission(BUILT_IN_MODES.explore, "todowrite")).toBe("deny")
+  })
+
+  it("explore mode allows read_file and ntgraph tools", () => {
+    expect(resolveToolPermission(BUILT_IN_MODES.explore, "read_file")).toBe("allow")
+    expect(resolveToolPermission(BUILT_IN_MODES.explore, "ntgraph_explore")).toBe("allow")
+  })
+
+  it("plan mode allows read_file", () => {
+    expect(resolveToolPermission(BUILT_IN_MODES.plan, "read_file")).toBe("allow")
+  })
+
+  it("build mode asks for unknown tools", () => {
+    expect(resolveToolPermission(BUILT_IN_MODES.build, "unknown_tool")).toBe("ask")
+  })
+
+  it("explore mode denies unknown tools", () => {
+    expect(resolveToolPermission(BUILT_IN_MODES.explore, "unknown_tool")).toBe("deny")
   })
 
   it("git is ask in build mode (read-only ops pass via isSafeForArgs)", () => {
@@ -145,9 +162,9 @@ describe("AgentModeManager", () => {
   })
 
   it("checks tool permission in current mode", () => {
-    expect(mgr.checkToolPermission("read")).toBe("allow")
+    expect(mgr.checkToolPermission("read_file")).toBe("allow")
     mgr.switchMode("plan")
-    expect(mgr.checkToolPermission("edit")).toBe("deny")
+    expect(mgr.checkToolPermission("edit_file")).toBe("deny")
   })
 
   it("returns system prompt addon", () => {

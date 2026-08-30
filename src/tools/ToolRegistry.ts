@@ -1,6 +1,10 @@
 import type { ITool } from "./ITool"
 import type { IToolResult } from "../agent/AgentTypes"
 import { safeExecute } from "../core/Errors"
+import { sanitizeToolName } from "./ToolNames"
+import { createDomainLogger } from "../core/Logger"
+
+const log = createDomainLogger("ToolRegistry")
 
 /**
  * Интерфейс реестра инструментов — методы регистрации.
@@ -188,11 +192,17 @@ export class ToolRegistry implements IToolRegistry {
    * Сформировать JSON Schema для tool_choice / вызова функций.
    */
   toToolDefinitions(): Array<{ name: string; description: string; parameters: Record<string, unknown> }> {
-    return this.list().map((t) => ({
-      name: t.name,
-      description: t.description,
-      parameters: toOpenAISchema(t.schema),
-    }))
+    return this.list().map((t) => {
+      const name = sanitizeToolName(t.name)
+      if (name !== t.name) {
+        log.warn(`Имя инструмента «${t.name}» некорректно для API — используется «${name}»`)
+      }
+      return {
+        name,
+        description: t.description,
+        parameters: toOpenAISchema(t.schema),
+      }
+    })
   }
 
   /** Очистить все инструменты. */

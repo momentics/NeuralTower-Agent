@@ -1,5 +1,6 @@
 import type { ITool, IToolSchema, IToolParam } from "../tools/ITool"
 import type { IToolResult } from "../agent/AgentTypes"
+import { sanitizeToolName } from "../tools/ToolNames"
 
 export interface IMCPToolDefinition {
   name: string
@@ -53,7 +54,7 @@ export class MCPToolAdapter {
     serverName: string,
     callToolFn: CallToolFn,
   ): ITool {
-    const fullName = `${serverName}:${mcpTool.name}`
+    const fullName = sanitizeToolName(`${serverName}_${mcpTool.name}`)
     return {
       name: fullName,
       description: mcpTool.description || `MCP-инструмент из ${serverName}`,
@@ -86,7 +87,7 @@ export class MCPToolAdapter {
     toolDef: INtGraphToolDefinition,
     callToolFn: CallToolFn,
   ): ITool {
-    const fullName = `ntgraph:${toolDef.name}`
+    const fullName = sanitizeToolName(toolDef.name)
     return {
       name: fullName,
       description: toolDef.description,
@@ -125,7 +126,7 @@ export class MCPToolAdapter {
       }
     }
     return {
-      name: `ntgraph:${tool.name}`,
+      name: sanitizeToolName(tool.name),
       description: tool.description,
       parameters: params,
       required: tool.inputSchema.required,
@@ -148,7 +149,7 @@ export class MCPToolAdapter {
       }
     }
     return {
-      name: `${serverName}:${tool.name}`,
+      name: sanitizeToolName(`${serverName}_${tool.name}`),
       description: tool.description || "",
       parameters: params,
       required: [],

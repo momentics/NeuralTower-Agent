@@ -1,5 +1,6 @@
 export type { ITool, IToolSchema, IToolParam } from "./ITool"
 export { ToolRegistry, type IToolRegistry, toOpenAISchema } from "./ToolRegistry"
+export { TOOL_NAME_PATTERN, isValidToolName, sanitizeToolName } from "./ToolNames"
 export { str, strOpt, num, numOpt, bool, arr, requiredStr, positiveNum, clamp } from "./ToolArgs"
 export { ReadFileTool } from "./builtins/ReadFileTool"
 export { WriteFileTool } from "./builtins/WriteFileTool"
