@@ -3,6 +3,7 @@ import { NeuralTowerBackend } from "./NeuralTowerBackend"
 import { DEFAULT_BACKEND_URL } from "../core/Config"
 import { makeTestBackendConfig } from "../__tests__/fixtures"
 import { BackendError, TimeoutError } from "../core/Errors"
+import type { IChatMessage } from "../core/IBackend"
 
 describe("NeuralTowerBackend", () => {
   let backend: NeuralTowerBackend
@@ -169,6 +170,51 @@ describe("NeuralTowerBackend", () => {
     expect(body.tools).toHaveLength(1)
     expect(body.tools[0].type).toBe("function")
     expect(body.tools[0].function.name).toBe("read")
+    vi.unstubAllGlobals()
+  })
+
+  it("chat передаёт нативный протокол в тело запроса", async () => {
+    const chunks = [
+      "data: [DONE]\n",
+    ].join("")
+
+    const reader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({ done: false, value: Buffer.from(chunks) })
+        .mockResolvedValueOnce({ done: true }),
+      releaseLock: vi.fn(),
+    }
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: { getReader: () => reader },
+    })
+
+    vi.stubGlobal("fetch", fetchMock)
+
+    const conversation: IChatMessage[] = [
+      { role: "user", content: "hi", timestamp: 1 },
+      {
+        role: "assistant", content: "", timestamp: 2,
+        toolCalls: [{ id: "c1", toolName: "read_file", arguments: '{"path":"x"}' }],
+      },
+      { role: "tool", toolCallId: "c1", name: "read_file", content: "ok", timestamp: 3 },
+    ]
+    await backend.chat(conversation, () => {})
+
+    const callArgs = fetchMock.mock.calls[0][1] as { body: string }
+    const body = JSON.parse(callArgs.body)
+    const messages = body.messages as Array<Record<string, unknown>>
+    const toolCalls = messages[1].tool_calls as Array<Record<string, unknown>>
+    expect(messages[1].role).toBe("assistant")
+    expect(messages[1].content).toBeNull()
+    expect(toolCalls[0].id).toBe("c1")
+    expect(toolCalls[0].type).toBe("function")
+    expect(toolCalls[0].function).toEqual({ name: "read_file", arguments: '{"path":"x"}' })
+    expect(messages[2].role).toBe("tool")
+    expect(messages[2].tool_call_id).toBe("c1")
+    expect(messages[2].name).toBe("read_file")
+    expect(messages[2].content).toBe("ok")
     vi.unstubAllGlobals()
   })
 

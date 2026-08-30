@@ -103,6 +103,32 @@ describe("PersistentSessionStore", () => {
     expect(s.getSession(idB)?.messageCount).toBe(2)
   })
 
+  it("tool-сообщения сохраняются и восстанавливаются", async () => {
+    const dir = path.join(tmpDir, "tool-messages")
+    await fs.mkdir(dir, { recursive: true })
+    const s = new PersistentSessionStore(new FileSessionPersister(path.join(dir, "sessions.json")), 5)
+    await s.init()
+    await s.push({ role: "assistant", content: "", toolCalls: [{ id: "c1", toolName: "t", arguments: "{}" }], timestamp: 1 })
+    await s.push({ role: "tool", toolCallId: "c1", name: "t", content: "out", timestamp: 2 })
+    const msgs = s.getActiveMessages()
+    expect(msgs.length).toBe(2)
+    expect(msgs[0].toolCalls?.[0].id).toBe("c1")
+    expect(msgs[1].role).toBe("tool")
+    expect(msgs[1].toolCallId).toBe("c1")
+    expect(msgs[1].name).toBe("t")
+
+    // Перезагрузка из файла: tool-поля переживают сериализацию.
+    const s2 = new PersistentSessionStore(new FileSessionPersister(path.join(dir, "sessions.json")), 5)
+    await s2.init()
+    const restored = s2.getActiveMessages()
+    expect(restored).toHaveLength(2)
+    expect(restored[0].toolCalls?.[0]).toEqual({ id: "c1", toolName: "t", arguments: "{}" })
+    expect(restored[1].role).toBe("tool")
+    expect(restored[1].toolCallId).toBe("c1")
+    expect(restored[1].name).toBe("t")
+    expect(restored[1].content).toBe("out")
+  })
+
   it("truncateMessages с count больше текущего — безоперационный", async () => {
     const dir = path.join(tmpDir, "truncate-noop")
     await fs.mkdir(dir, { recursive: true })

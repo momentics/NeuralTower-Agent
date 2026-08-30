@@ -5,7 +5,7 @@ import { ToolRegistry } from "../tools/ToolRegistry"
 import type { ITool } from "../tools/ITool"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import { AgentModeManager } from "./AgentMode"
-import type { IToolResult } from "./AgentTypes"
+import type { IAgentToolCall, IToolResult } from "./AgentTypes"
 import { TEST_BACKEND_URL, makeTestBackendConfig } from "../__tests__/fixtures"
 
 const createMockBackend = (): IBackend => ({
@@ -54,7 +54,7 @@ describe("AgentToolExecutor", () => {
     expect(executor).toBeDefined()
   })
 
-    it("callBackend returns text result when no tool calls in response", async () => {
+  it("callBackend returns text result when no tool calls in response", async () => {
     const executor = new AgentToolExecutor(
       backend,
       toolRegistry,
@@ -86,8 +86,31 @@ describe("AgentToolExecutor", () => {
     const result = await executor.callBackend(conversation, () => {})
     expect(result.type).toBe("tool_calls")
     expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolCalls![0].id).toBe("call_1")
     expect(result.toolCalls![0].toolName).toBe("read")
     expect(result.toolCalls![0].arguments).toEqual({ path: "/test" })
+  })
+
+  it("callBackend возвращает текст модели вместе с tool_calls", async () => {
+    vi.mocked(backend.chat).mockResolvedValue({
+      role: "assistant",
+      content: "Сейчас прочитаю",
+      toolCalls: [
+        { id: "c1", toolName: "read", arguments: "{}" },
+      ],
+      timestamp: Date.now(),
+    })
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      null,
+      modeManager,
+    )
+    const conversation: IChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
+    const result = await executor.callBackend(conversation, () => {})
+    expect(result.type).toBe("tool_calls")
+    expect(result.content).toBe("Сейчас прочитаю")
+    expect(result.toolCalls![0].id).toBe("c1")
   })
 
   it("callBackend falls back to text parsing when no native tool_calls", async () => {
@@ -108,6 +131,26 @@ describe("AgentToolExecutor", () => {
     expect(result.toolCalls).toHaveLength(1)
     expect(result.toolCalls![0].toolName).toBe("read")
     expect(result.toolCalls![0].arguments).toEqual({ path: "/test" })
+  })
+
+  it("fallback-вызовы из JSON-блоков получают локальный id", async () => {
+    vi.mocked(backend.chat).mockResolvedValue({
+      role: "assistant",
+      content: 'Сделаю\n{"tool": "glob", "args": {"pattern": "*.ts"}}',
+      timestamp: Date.now(),
+    })
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      null,
+      modeManager,
+    )
+    const conversation: IChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
+    const result = await executor.callBackend(conversation, () => {})
+    expect(result.type).toBe("tool_calls")
+    expect(result.toolCalls).toHaveLength(1)
+    expect(result.toolCalls![0].id).toMatch(/^call_nt_/)
+    expect(result.content).toContain("Сделаю")
   })
 
   it("callBackend throws on abort signal", async () => {
@@ -133,13 +176,47 @@ describe("AgentToolExecutor", () => {
       modeManager,
     )
     const conversation: IChatMessage[] = []
-    const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
-    const result = await executor.executeToolCalls(toolCalls, "build", conversation)
+    const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "read", arguments: { path: "/test" } }]
+    const onToolUse = vi.fn()
+    const onToolResult = vi.fn()
+    const result = await executor.executeToolCalls(
+      toolCalls, "build", conversation, undefined, undefined, onToolUse, onToolResult,
+    )
     expect(result.anyFailed).toBe(false)
     expect(mockTool.execute).toHaveBeenCalledWith({ path: "/test" }, undefined)
     expect(conversation).toHaveLength(2)
     expect(conversation[0].role).toBe("assistant")
-    expect(conversation[1].role).toBe("user")
+    expect(conversation[0].content).toBe("")
+    expect(conversation[0].toolCalls).toEqual([
+      { id: "c1", toolName: "read", arguments: '{"path":"/test"}' },
+    ])
+    expect(conversation[1].role).toBe("tool")
+    expect(conversation[1].toolCallId).toBe("c1")
+    expect(conversation[1].name).toBe("read")
+    expect(conversation[1].content).toBe("ok")
+    expect(onToolUse).toHaveBeenCalledWith("read", { path: "/test" }, "c1")
+    expect(onToolResult).toHaveBeenCalledWith(
+      "read",
+      expect.objectContaining({ output: "ok", success: true }),
+      "c1",
+    )
+  })
+
+  it("executeToolCalls передаёт текст модели в assistant-сообщение", async () => {
+    const mockTool = createMockTool("read")
+    toolRegistry.register(mockTool)
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      null,
+      modeManager,
+    )
+    const conversation: IChatMessage[] = []
+    const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "read", arguments: { path: "/test" } }]
+    await executor.executeToolCalls(toolCalls, "build", conversation, "Сейчас прочитаю")
+    expect(conversation[0].role).toBe("assistant")
+    expect(conversation[0].content).toBe("Сейчас прочитаю")
+    expect(conversation[0].toolCalls![0].id).toBe("c1")
   })
 
   it("executeToolCalls blocks denied tools by mode", async () => {
@@ -153,12 +230,66 @@ describe("AgentToolExecutor", () => {
       modeManager,
     )
     const conversation: IChatMessage[] = []
-    const toolCalls = [{ toolName: "edit", arguments: { path: "/test" } }]
+    const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "edit", arguments: { path: "/test" } }]
     const result = await executor.executeToolCalls(toolCalls, "plan", conversation)
     expect(result.anyFailed).toBe(true)
     expect(mockTool.execute).not.toHaveBeenCalled()
-    expect(conversation).toHaveLength(1)
-    expect(conversation[0].content).toContain("ЗАБЛОКИРОВАНО режимом plan")
+    expect(conversation).toHaveLength(2)
+    expect(conversation[0].role).toBe("assistant")
+    expect(conversation[1].role).toBe("tool")
+    expect(conversation[1].toolCallId).toBe("c1")
+    expect(conversation[1].name).toBe("edit")
+    expect(conversation[1].content).toContain("ЗАБЛОКИРОВАНО режимом plan")
+  })
+
+  it("заблокированный режимом инструмент даёт tool-сообщение с причиной", async () => {
+    modeManager.switchMode("explore")
+    const mockTool = createMockTool("write_file")
+    toolRegistry.register(mockTool)
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      null,
+      modeManager,
+    )
+    const conversation: IChatMessage[] = []
+    const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "write_file", arguments: { path: "/test" } }]
+    const onToolUse = vi.fn()
+    const result = await executor.executeToolCalls(
+      toolCalls, "explore", conversation, undefined, undefined, onToolUse,
+    )
+    expect(result.anyFailed).toBe(true)
+    expect(mockTool.execute).not.toHaveBeenCalled()
+    expect(conversation).toHaveLength(2)
+    expect(conversation[1].role).toBe("tool")
+    expect(conversation[1].toolCallId).toBe("c1")
+    expect(conversation[1].content).toContain("ЗАБЛОКИРОВАНО")
+    expect(onToolUse).toHaveBeenCalledWith(
+      "write_file",
+      { path: "/test", _blocked: expect.stringContaining("ЗАБЛОКИРОВАНО") },
+      "c1",
+    )
+  })
+
+  it("несуществующий инструмент даёт tool-сообщение со списком доступных", async () => {
+    const mockTool = createMockTool("read")
+    toolRegistry.register(mockTool)
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      null,
+      modeManager,
+    )
+    const conversation: IChatMessage[] = []
+    const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "nope", arguments: {} }]
+    const result = await executor.executeToolCalls(toolCalls, "build", conversation)
+    expect(result.anyFailed).toBe(true)
+    expect(mockTool.execute).not.toHaveBeenCalled()
+    expect(conversation).toHaveLength(2)
+    expect(conversation[1].role).toBe("tool")
+    expect(conversation[1].toolCallId).toBe("c1")
+    expect(conversation[1].content).toContain("не найден")
+    expect(conversation[1].content).toContain("read")
   })
 
   it("executeToolCalls asks permission for unsafe tools when permissionManager is set", async () => {
@@ -172,13 +303,16 @@ describe("AgentToolExecutor", () => {
       modeManager,
     )
     const conversation: IChatMessage[] = []
-    const toolCalls = [{ toolName: "bash", arguments: { command: "rm -rf /" } }]
+    const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "bash", arguments: { command: "rm -rf /" } }]
     const result = await executor.executeToolCalls(toolCalls, "build", conversation)
     expect(result.anyFailed).toBe(true)
     expect(permissionManager.checkPermission).toHaveBeenCalled()
     expect(mockTool.execute).not.toHaveBeenCalled()
-    expect(conversation).toHaveLength(1)
-    expect(conversation[0].content).toContain("ЗАБЛОКИРОВАНО политикой разрешений")
+    expect(conversation).toHaveLength(2)
+    expect(conversation[0].role).toBe("assistant")
+    expect(conversation[1].role).toBe("tool")
+    expect(conversation[1].toolCallId).toBe("c1")
+    expect(conversation[1].content).toContain("отклонил")
   })
 
   it("executeToolCalls marks anyFailed when tool execution fails", async () => {
@@ -191,9 +325,13 @@ describe("AgentToolExecutor", () => {
       modeManager,
     )
     const conversation: IChatMessage[] = []
-    const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
+    const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "read", arguments: { path: "/test" } }]
     const result = await executor.executeToolCalls(toolCalls, "build", conversation)
     expect(result.anyFailed).toBe(true)
+    expect(conversation).toHaveLength(2)
+    expect(conversation[1].role).toBe("tool")
+    expect(conversation[1].toolCallId).toBe("c1")
+    expect(conversation[1].content).toBe("error")
   })
 
   it("executeToolCalls handles tool that throws exception", async () => {
@@ -207,7 +345,7 @@ describe("AgentToolExecutor", () => {
       modeManager,
     )
     const conversation: IChatMessage[] = []
-    const toolCalls = [{ toolName: "read", arguments: { path: "/test" } }]
+    const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "read", arguments: { path: "/test" } }]
     const result = await executor.executeToolCalls(toolCalls, "build", conversation)
 
     expect(result.anyFailed).toBe(true)
@@ -216,6 +354,7 @@ describe("AgentToolExecutor", () => {
     expect(result.failedTools![0].error).toContain("не выполнен")
     expect(result.failedTools![0].error).toContain("Unexpected crash")
     expect(conversation).toHaveLength(2)
+    expect(conversation[1].role).toBe("tool")
     expect(conversation[1].content).toContain("не выполнен")
   })
 
@@ -232,14 +371,52 @@ describe("AgentToolExecutor", () => {
       modeManager,
     )
     const conversation: IChatMessage[] = []
-    const toolCalls = [
-      { toolName: "read", arguments: { path: "/test" } },
-      { toolName: "write", arguments: { path: "/out" } },
+    const toolCalls: IAgentToolCall[] = [
+      { id: "c1", toolName: "read", arguments: { path: "/test" } },
+      { id: "c2", toolName: "write", arguments: { path: "/out" } },
     ]
     const result = await executor.executeToolCalls(toolCalls, "build", conversation)
 
     expect(result.anyFailed).toBe(true)
     expect(throwingTool.execute).toHaveBeenCalledTimes(1)
     expect(okTool.execute).toHaveBeenCalledTimes(1)
+    expect(conversation).toHaveLength(3)
+    expect(conversation[1].role).toBe("tool")
+    expect(conversation[1].toolCallId).toBe("c1")
+    expect(conversation[2].role).toBe("tool")
+    expect(conversation[2].toolCallId).toBe("c2")
+    expect(conversation[2].content).toBe("ok")
+  })
+
+  it("сбой внутри итерации не оставляет tool_call без ответа", async () => {
+    const unsafeTool = createMockTool("bash", false)
+    const okTool = createMockTool("read")
+    toolRegistry.register(unsafeTool)
+    toolRegistry.register(okTool)
+    vi.mocked(permissionManager.checkPermission).mockRejectedValueOnce(new Error("perm crash"))
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      permissionManager,
+      modeManager,
+    )
+    const conversation: IChatMessage[] = []
+    const toolCalls: IAgentToolCall[] = [
+      { id: "c1", toolName: "bash", arguments: { command: "ls" } },
+      { id: "c2", toolName: "read", arguments: { path: "/test" } },
+    ]
+    const result = await executor.executeToolCalls(toolCalls, "build", conversation)
+
+    expect(result.anyFailed).toBe(true)
+    expect(unsafeTool.execute).not.toHaveBeenCalled()
+    expect(okTool.execute).toHaveBeenCalledTimes(1)
+    expect(conversation).toHaveLength(3)
+    expect(conversation[1].role).toBe("tool")
+    expect(conversation[1].toolCallId).toBe("c1")
+    expect(conversation[1].content).toContain("Ошибка выполнения")
+    expect(conversation[1].content).toContain("perm crash")
+    expect(conversation[2].role).toBe("tool")
+    expect(conversation[2].toolCallId).toBe("c2")
+    expect(conversation[2].content).toBe("ok")
   })
 })

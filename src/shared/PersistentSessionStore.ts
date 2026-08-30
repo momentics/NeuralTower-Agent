@@ -150,7 +150,13 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
   getActiveMessages(): IChatMessage[] {
     return this.data.messages
       .filter((m) => m.sessionId === this.data.activeId)
-      .map((m) => ({ role: m.role, content: m.content, timestamp: m.timestamp }))
+      .map((m) => {
+        const msg: IChatMessage = { role: m.role, content: m.content, timestamp: m.timestamp }
+        if (m.toolCalls) msg.toolCalls = m.toolCalls
+        if (m.toolCallId) msg.toolCallId = m.toolCallId
+        if (m.name) msg.name = m.name
+        return msg
+      })
   }
 
   async push(message: IChatMessage): Promise<void> {
@@ -161,6 +167,15 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
         content: message.content,
         timestamp: message.timestamp ?? Date.now(),
       }
+      if (message.toolCalls) {
+        pm.toolCalls = message.toolCalls.map((tc) => ({
+          id: tc.id,
+          toolName: tc.toolName,
+          arguments: tc.arguments,
+        }))
+      }
+      if (message.toolCallId) pm.toolCallId = message.toolCallId
+      if (message.name) pm.name = message.name
       this.data.messages.push(pm)
       const session = this.data.sessions.find((s) => s.id === this.data.activeId)
       if (session) {
@@ -251,7 +266,13 @@ export class PersistentSessionStore implements IPlugin, ISessionStore {
   getMessagesForSession(id: string): IChatMessage[] {
     return this.data.messages
       .filter((m) => m.sessionId === id)
-      .map((m) => ({ role: m.role, content: m.content, timestamp: m.timestamp }))
+      .map((m) => {
+        const msg: IChatMessage = { role: m.role, content: m.content, timestamp: m.timestamp }
+        if (m.toolCalls) msg.toolCalls = m.toolCalls
+        if (m.toolCallId) msg.toolCallId = m.toolCallId
+        if (m.name) msg.name = m.name
+        return msg
+      })
   }
 
   async clearActive(): Promise<void> {

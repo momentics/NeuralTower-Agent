@@ -43,9 +43,13 @@ export interface IBackendConfig {
 }
 
 export interface IChatMessage {
-  role: "system" | "user" | "assistant"
+  role: "system" | "user" | "assistant" | "tool"
   content: string
   toolCalls?: IToolCall[]
+  /** Для role="tool": id вызова инструмента, на который отвечает сообщение. */
+  toolCallId?: string
+  /** Для role="tool": имя инструмента. */
+  name?: string
   timestamp?: number
 }
 

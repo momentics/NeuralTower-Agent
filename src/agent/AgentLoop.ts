@@ -136,8 +136,8 @@ export class AgentLoop {
     currentMode: AgentModeName,
     onChunk: (text: string) => void,
     signal?: AbortSignal,
-    onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: IToolResult) => void,
+    onToolUse?: (name: string, args: Record<string, unknown>, id: string) => void,
+    onToolResult?: (name: string, result: IToolResult, id: string) => void,
   ): Promise<{
     type: "text" | "tool_calls" | "error"
     content?: string
@@ -179,6 +179,7 @@ export class AgentLoop {
           result.toolCalls,
           currentMode,
           conversation,
+          result.content,
           signal,
           onToolUse,
           onToolResult,
@@ -320,8 +321,8 @@ export class AgentLoop {
     query: string,
     activeSkills: ISkill[],
     onChunk: (text: string) => void,
-    onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: IToolResult) => void,
+    onToolUse?: (name: string, args: Record<string, unknown>, id: string) => void,
+    onToolResult?: (name: string, result: IToolResult, id: string) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
     onSnapshot?: (patch: ISnapshotPatch | null) => void,

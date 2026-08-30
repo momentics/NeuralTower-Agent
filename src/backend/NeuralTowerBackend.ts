@@ -367,9 +367,30 @@ export class NeuralTowerBackend implements IBackend {
   }
 }
 
-/** Преобразовать IChatMessage[] в формат API (без timestamp и toolCalls). */
-function mapMessages(messages: IChatMessage[]): Array<{ role: string; content: string }> {
-  return messages.map((m) => ({ role: m.role, content: m.content }))
+/** Преобразовать IChatMessage[] в формат API (без timestamp). */
+function mapMessages(messages: IChatMessage[]): Array<Record<string, unknown>> {
+  return messages.map((m) => {
+    if (m.role === "tool") {
+      return {
+        role: "tool",
+        tool_call_id: m.toolCallId ?? "",
+        name: m.name ?? "",
+        content: m.content,
+      }
+    }
+    if (m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0) {
+      return {
+        role: "assistant",
+        content: m.content || null,
+        tool_calls: m.toolCalls.map((tc) => ({
+          id: tc.id,
+          type: "function",
+          function: { name: tc.toolName, arguments: tc.arguments },
+        })),
+      }
+    }
+    return { role: m.role, content: m.content }
+  })
 }
 
 /** Проверить, что URL валидный и использует HTTP/HTTPS протокол. */

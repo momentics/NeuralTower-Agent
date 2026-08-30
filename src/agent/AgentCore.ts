@@ -141,8 +141,8 @@ export class AgentCore {
   async run(
     query: string,
     onChunk: (text: string) => void,
-    onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: IToolResult) => void,
+    onToolUse?: (name: string, args: Record<string, unknown>, id: string) => void,
+    onToolResult?: (name: string, result: IToolResult, id: string) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
     onSnapshot?: (patch: ISnapshotPatch | null) => void,

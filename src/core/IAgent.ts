@@ -21,14 +21,16 @@ export interface IAgentOrchestrator {
    * Обработчик `onSnapshot` вызывается на завершении запроса
    * со списком файлов, изменённых за запрос (null если снапшоты
    * недоступны или изменения не зафиксированы).
-   * `revertNote` — служебная заметка о том, что пользователь откатил
-   * изменения предыдущего запроса; добавляется к системному промпту.
-   */
+    * `revertNote` — служебная заметка о том, что пользователь откатил
+    * изменения предыдущего запроса; добавляется к системному промпту.
+    * `id` в onToolUse/onToolResult — идентификатор вызова инструмента
+    * (нужен для персистентной истории сессии).
+    */
   run(
     query: string,
     onChunk: (text: string) => void,
-    onToolUse?: (name: string, args: Record<string, unknown>) => void,
-    onToolResult?: (name: string, result: IToolResult) => void,
+    onToolUse?: (name: string, args: Record<string, unknown>, id: string) => void,
+    onToolResult?: (name: string, result: IToolResult, id: string) => void,
     signal?: AbortSignal,
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
     onSnapshot?: (patch: ISnapshotPatch | null) => void,

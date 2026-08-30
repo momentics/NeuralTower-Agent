@@ -9,9 +9,12 @@ export interface IPersistedSession {
 
 export interface IPersistedMessage {
   sessionId: string
-  role: "system" | "user" | "assistant"
+  role: "system" | "user" | "assistant" | "tool"
   content: string
   timestamp: number
+  toolCalls?: Array<{ id: string; toolName: string; arguments: string }>
+  toolCallId?: string
+  name?: string
 }
 
 export interface ISessionData {
