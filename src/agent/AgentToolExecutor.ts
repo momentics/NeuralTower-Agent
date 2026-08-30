@@ -8,10 +8,14 @@ import { makeLocalToolCallId } from "./AgentTypes"
 import { AbortError, errorMessage } from "../core/Errors"
 import { createDomainLogger } from "../core/Logger"
 import { extractJsonBlocks } from "../utils/ExtractJsonBlocks"
+import { TOOL_OUTPUT_MAX_CHARS } from "../core/Config"
 
 const log = createDomainLogger("AgentToolExecutor")
 
 export class AgentToolExecutor {
+  /** Максимальная длина вывода инструмента в разговоре (тестовая точка доступа). */
+  static maxOutputChars: number = TOOL_OUTPUT_MAX_CHARS
+
   constructor(
     private readonly backend: IBackend,
     private readonly toolRegistry: IToolRegistry,
@@ -132,19 +136,20 @@ export class AgentToolExecutor {
           toolResult = { output: `Ошибка выполнения: ${msg}`, success: false }
         }
 
-        onToolResult?.(tc.toolName, toolResult, tc.id)
+        const cappedOutput = this.capToolOutput(toolResult.output)
+        onToolResult?.(tc.toolName, { ...toolResult, output: cappedOutput }, tc.id)
 
         workingConversation.push({
           role: "tool",
           toolCallId: tc.id,
           name: tc.toolName,
-          content: toolResult.output,
+          content: cappedOutput,
           timestamp: Date.now(),
         })
 
         if (!toolResult.success) {
           anyFailed = true
-          failedTools.push({ name: tc.toolName, error: toolResult.output })
+          failedTools.push({ name: tc.toolName, error: cappedOutput })
         }
       } catch (err: unknown) {
         // Непредвиденный сбой внутри итерации (например, в менеджере
@@ -180,6 +185,15 @@ export class AgentToolExecutor {
 
   private resolveArgs(_toolName: string, args: Record<string, unknown>): Record<string, unknown> {
     return args
+  }
+
+  /**
+   * Ограничить вывод инструмента: длинный вывод (чтение крупного файла,
+   * лог команды) раздувает контекст модели и персистентную сессию.
+   */
+  private capToolOutput(output: string): string {
+    if (output.length <= AgentToolExecutor.maxOutputChars) return output
+    return output.slice(0, AgentToolExecutor.maxOutputChars) + "\n… (вывод обрезан)"
   }
 
  private extractToolCalls(content: string): IAgentToolCall[] | null {

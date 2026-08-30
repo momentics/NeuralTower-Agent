@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest"
+import { describe, it, expect, vi, beforeEach, afterAll } from "vitest"
 import { AgentToolExecutor } from "./AgentToolExecutor"
 import type { IBackend, IChatMessage } from "../core/IBackend"
 import { ToolRegistry } from "../tools/ToolRegistry"
@@ -7,6 +7,7 @@ import type { IPermissionManager } from "../services/permission/PermissionManage
 import { AgentModeManager } from "./AgentMode"
 import type { IAgentToolCall, IToolResult } from "./AgentTypes"
 import { TEST_BACKEND_URL, makeTestBackendConfig } from "../__tests__/fixtures"
+import { TOOL_OUTPUT_MAX_CHARS } from "../core/Config"
 
 const createMockBackend = (): IBackend => ({
   chat: vi.fn(async () => ({ role: "assistant", content: "Test response", timestamp: Date.now() })),
@@ -43,6 +44,10 @@ describe("AgentToolExecutor", () => {
     toolRegistry = new ToolRegistry()
     permissionManager = createMockPermissionManager()
     modeManager = new AgentModeManager()
+  })
+
+  afterAll(() => {
+    AgentToolExecutor.maxOutputChars = TOOL_OUTPUT_MAX_CHARS
   })
 
   it("creates instance with all dependencies", () => {
@@ -419,5 +424,35 @@ describe("AgentToolExecutor", () => {
     expect(conversation[2].role).toBe("tool")
     expect(conversation[2].toolCallId).toBe("c2")
     expect(conversation[2].content).toBe("ok")
+  })
+
+  it("вывод инструмента в разговоре ограничивается", async () => {
+    const mockTool = createMockTool("read", true, { output: "x".repeat(250), success: true })
+    toolRegistry.register(mockTool)
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      null,
+      modeManager,
+    )
+    const conversation: IChatMessage[] = []
+    const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "read", arguments: { path: "/test" } }]
+    const onToolResult = vi.fn()
+    AgentToolExecutor.maxOutputChars = 100
+    const expected = "x".repeat(100) + "\n… (вывод обрезан)"
+    const result = await executor.executeToolCalls(
+      toolCalls, "build", conversation, undefined, undefined, undefined, onToolResult,
+    )
+    expect(result.anyFailed).toBe(false)
+    expect(conversation).toHaveLength(2)
+    expect(conversation[1].role).toBe("tool")
+    // В разговор попадает обрезанный вывод: 100 символов + заметка.
+    expect(conversation[1].content).toBe(expected)
+    // onToolResult получает тот же ограниченный вывод (персистентная сессия).
+    expect(onToolResult).toHaveBeenCalledWith(
+      "read",
+      expect.objectContaining({ output: expected, success: true }),
+      "c1",
+    )
   })
 })

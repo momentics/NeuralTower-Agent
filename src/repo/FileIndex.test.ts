@@ -68,4 +68,17 @@ describe("FileIndex", () => {
     expect(stats.languages).toBe(0)
     expect(stats.totalSize).toBe(0)
   })
+
+  it("индекс масштабируется на 2000 файлов", async () => {
+    const bigDir = path.join(tmpDir, "big")
+    await fs.mkdir(bigDir, { recursive: true })
+    for (let i = 1; i <= 2000; i++) {
+      await fs.writeFile(path.join(bigDir, `file-${String(i).padStart(4, "0")}.ts`), `const f${i} = ${i}`)
+    }
+    const bigIndex = new FileIndex()
+    await bigIndex.build(bigDir)
+    expect(bigIndex.stats().totalFiles).toBe(2000)
+    expect(bigIndex.findByPattern("file-1500")).toHaveLength(1)
+    expect(bigIndex.findByName("file-1999.ts")).toHaveLength(1)
+  })
 })

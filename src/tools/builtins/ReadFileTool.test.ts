@@ -90,4 +90,22 @@ describe("ReadFileTool", () => {
     expect(result.success).toBe(true)
     expect(result.output).toContain("line1")
   })
+
+  it("крупный файл обрезается по байтовому лимиту", async () => {
+    // 700 строк по 1000 символов (~700 КБ) — превышает лимит 512 КБ.
+    const bigFile = path.join(tmpDir, "big.txt")
+    const line = "x".repeat(1000)
+    await fs.writeFile(bigFile, Array.from({ length: 700 }, () => line).join("\n"))
+    try {
+      const result = await tool.execute({ filepath: bigFile })
+      expect(result.success).toBe(true)
+      expect(result.output).toContain("обрезан")
+      // Небольшой запас на заметку об обрезке.
+      expect(Buffer.byteLength(result.output, "utf-8")).toBeLessThan(512 * 1024 + 200)
+      // Заметка указывает offset для продолжения чтения.
+      expect(result.output).toContain("offset=")
+    } finally {
+      await fs.rm(bigFile, { force: true })
+    }
+  })
 })
