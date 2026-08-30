@@ -78,6 +78,7 @@ const createMockPlanner = (): AgentPlanner => ({
   clearPlan: vi.fn(),
   getPlan: vi.fn(() => null),
   setCurrentPlan: vi.fn(),
+  persistPlan: vi.fn(async () => {}),
 } as unknown as AgentPlanner)
 
 const createMockSnapshotService = () => ({
@@ -255,6 +256,29 @@ describe("AgentLoop", () => {
 
     expect(testPlan.steps[0].status).toBe("done")
     expect(testPlan.steps[0].result).toBe("Step 1 done")
+  })
+
+  it("план персистится после хода", async () => {
+    const testPlan = new Plan({
+      title: "test plan",
+      reasoning: "reason",
+      steps: [{ description: "Step 1", suggestedTools: [] }],
+    })
+    testPlan.start()
+
+    const mockPlanner = createMockPlanner()
+    vi.mocked(mockPlanner.getPlan).mockReturnValue(testPlan)
+
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend).mockResolvedValueOnce({ type: "text", content: "Done" })
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, mockPlanner,
+    )
+    await loop.run("test query", [], () => {})
+
+    expect(mockPlanner.persistPlan).toHaveBeenCalled()
   })
 
   it("run marks plan step failed when any tool fails", async () => {

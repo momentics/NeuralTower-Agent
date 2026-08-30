@@ -66,6 +66,9 @@ export class Plan {
   /** Заголовок плана (из запроса пользователя). */
   public title: string
 
+  /** Идентификатор сессии, в которой план создан (для наблюдения за статусом). */
+  public sessionId?: string
+
   /** Обоснование плана от LLM. */
   public reasoning: string
 
@@ -102,9 +105,11 @@ export class Plan {
     reasoning: string
     steps: Omit<IPlanStep, "status" | "attempts">[]
     maxRetries?: number
+    sessionId?: string
   }) {
     this.id = input.id ?? `plan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
     this.title = input.title
+    this.sessionId = input.sessionId
     this.reasoning = input.reasoning
     this.steps = input.steps.map((s) => ({
       ...s,
@@ -299,6 +304,7 @@ export class Plan {
     return {
       id: this.id,
       title: this.title,
+      sessionId: this.sessionId,
       reasoning: this.reasoning,
       steps: this.steps,
       status: this.status,
@@ -323,6 +329,7 @@ export class Plan {
       maxRetries: data.maxRetries,
     })
     plan.status = data.status
+    plan.sessionId = data.sessionId
     plan.currentStepIndex = data.currentStepIndex
     // createdAt — только для чтения, используется значение из конструктора
     plan.updatedAt = data.updatedAt
@@ -375,6 +382,7 @@ export interface IPlanHandover {
 export interface IPlanSerialized {
   id: string
   title: string
+  sessionId?: string
   reasoning: string
   steps: IPlanStep[]
   status: PlanStatus

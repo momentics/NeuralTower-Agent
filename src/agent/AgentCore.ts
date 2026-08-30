@@ -158,31 +158,24 @@ export class AgentCore {
 
     const activeSkills: ISkill[] = this.skillManager.match(query)
 
-    // Восстановить план из файла, если он есть
     const workDir = this.deps.getWorkDir()
-    if (workDir) {
-      await this.planner.restorePlanFromFile(workDir)
-    }
 
-    // Создать план задачи, если автопланирование включено и плана нет
+    // Создать план задачи в ТЕКУЩЕМ режиме (без переключения),
+    // если автопланирование включено и плана ещё нет.
     if (this.deps.config.agent.autoPlan && !this.planner.getPlan()) {
-      // Переключить в режим планирования для создания плана
-      this.modeManager.switchMode("plan")
-
-      // Создать план задачи с учётом активных навыков
-      const plan = await this.planner.createPlan(query, activeSkills)
-
-      // Сохранить план на диск
-      if (workDir) {
-        try {
-          await this.planRepo.save(plan)
-        } catch (err: unknown) {
-          log.warn(`Не удалось сохранить план: ${errorMessage(err)}`)
+      this.deps.onAgentStatus?.("Создаю план…")
+      try {
+        const plan = await this.planner.createPlan(query, activeSkills, signal)
+        if (workDir) {
+          try {
+            await this.planRepo.save(plan)
+          } catch (err: unknown) {
+            log.warn(`Не удалось сохранить план: ${errorMessage(err)}`)
+          }
         }
+      } finally {
+        this.deps.onAgentStatus?.("")
       }
-
-      // Переключить в режим выполнения
-      this.modeManager.switchMode("build")
     }
 
     return this.agentLoop.run(

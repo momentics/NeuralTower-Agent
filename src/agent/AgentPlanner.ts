@@ -4,7 +4,7 @@ import type { ISkill } from "../skills/ISkill"
 import type { IPlanStep } from "./Plan"
 import { Plan } from "./Plan"
 import type { SessionContext } from "./SessionContext"
-import { PlanError, errorMessage } from "../core/Errors"
+import { AbortError, PlanError, errorMessage } from "../core/Errors"
 import { Replanner } from "./Replanner"
 import { PlanRepository } from "./PlanRepository"
 import { createDomainLogger } from "../core/Logger"
@@ -75,18 +75,6 @@ export class AgentPlanner {
   }
 
   /**
-   * Сериализовать план в системное сообщение для сохранения в сессии.
-   */
-  serializePlan(): IChatMessage | null {
-    if (!this.currentPlan) return null
-    return {
-      role: "system",
-      content: `${PLAN_MESSAGE_PREFIX}${JSON.stringify(this.currentPlan.toJSON())}`,
-      timestamp: Date.now(),
-    }
-  }
-
-  /**
    * Десериализовать план из системного сообщения.
    */
   deserializePlan(msg: IChatMessage): Plan | null {
@@ -120,32 +108,10 @@ export class AgentPlanner {
     return null
   }
 
-  /**
-   * Восстановить план из файла на диске.
-   * Ищет план в директории .neuraltower/plans/.
-   */
-  async restorePlanFromFile(_workDir: string): Promise<Plan | null> {
-    try {
-      const latest = await this.planRepo.findLatest()
-      if (!latest) return null
-      const plan = await this.planRepo.load(latest)
-      if (plan && (plan.status === "running" || plan.status === "paused")) {
-        this.currentPlan = plan
-        if (this.sessionContext) {
-          this.sessionContext.setPlan(plan)
-        }
-        return plan
-      }
-    } catch (err: unknown) {
-      const msg = errorMessage(err)
-      log.error(`Файл плана не найден или повреждён: ${msg}`)
-    }
-    return null
-  }
-
   async createPlan(
     query: string,
     activeSkills?: ISkill[],
+    signal?: AbortSignal,
   ): Promise<Plan> {
     const toolList = this.toolRegistry
       .list()
@@ -183,7 +149,7 @@ ${toolList}${skillsSection}
       }>([
         { role: "system", content: planningPrompt, timestamp: Date.now() },
         { role: "user", content: query, timestamp: Date.now() },
-      ])
+      ], signal)
 
       const plan = new Plan({
         title: query.slice(0, 80),
@@ -200,6 +166,9 @@ ${toolList}${skillsSection}
 
       return plan
     } catch (err: unknown) {
+      // Отмена пользователем — запасной план не нужен, пробрасываем.
+      if (err instanceof AbortError) throw err
+      if (err instanceof DOMException && err.name === "AbortError") throw new AbortError()
       // BackendError или PlanError — деградация к простому плану
       const plan = new Plan({
         title: query.slice(0, 80),
@@ -209,6 +178,19 @@ ${toolList}${skillsSection}
       this.currentPlan = plan
       plan.start()
       return plan
+    }
+  }
+
+  /**
+   * Сохранить текущий план на диск (если есть).
+   * Вызывается при каждом изменении статуса плана.
+   */
+  async persistPlan(): Promise<void> {
+    if (!this.currentPlan) return
+    try {
+      await this.planRepo.save(this.currentPlan)
+    } catch (err: unknown) {
+      log.warn(`Не удалось сохранить план: ${errorMessage(err)}`)
     }
   }
 

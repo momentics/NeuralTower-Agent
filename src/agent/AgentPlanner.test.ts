@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
+import * as fs from "fs/promises"
+import * as os from "os"
+import * as path from "path"
 import { AgentPlanner } from "./AgentPlanner"
 import { Plan } from "./Plan"
 import { Replanner } from "./Replanner"
@@ -7,6 +10,7 @@ import { ToolRegistry } from "../tools/ToolRegistry"
 import type { IBackend } from "../core/IBackend"
 import type { SessionContext } from "./SessionContext"
 import type { IPlanStep } from "./Plan"
+import { AbortError } from "../core/Errors"
 import { TEST_BACKEND_URL, makeTestBackendConfig } from "../__tests__/fixtures"
 
 const createMockBackend = (): IBackend => ({
@@ -92,6 +96,40 @@ describe("AgentPlanner", () => {
     const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
     await planner.createPlan("My test task")
     expect(sessionContext.setPlan).toHaveBeenCalled()
+  })
+
+  it("createPlan передаёт signal в chatJson", async () => {
+    let captured: AbortSignal | undefined
+    vi.mocked(backend.chatJson).mockImplementation(async (_m, signal) => {
+      captured = signal
+      return { reasoning: "r", steps: [{ description: "s", suggestedTools: [] }] }
+    })
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
+    const ac = new AbortController()
+    await planner.createPlan("t", undefined, ac.signal)
+    expect(captured).toBe(ac.signal)
+  })
+
+  it("createPlan пробрасывает отмену, не деградируя", async () => {
+    vi.mocked(backend.chatJson).mockRejectedValueOnce(new DOMException("aborted", "AbortError"))
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, planRepo)
+    await expect(planner.createPlan("t")).rejects.toBeInstanceOf(AbortError)
+    expect(planner.getPlan()).toBeNull()
+  })
+
+  it("persistPlan сохраняет план на диск", async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), "nt-plan-"))
+    const realRepo = new PlanRepository(dir)
+    const planner = new AgentPlanner(backend, toolRegistry, sessionContext, replanner, realRepo)
+    const plan = new Plan({ title: "T", reasoning: "R", steps: [{ description: "S1", suggestedTools: [] }] })
+    plan.start()
+    planner.setCurrentPlan(plan)
+    await planner.persistPlan()
+    const filePath = path.join(dir, ".neuraltower", "plans", `${plan.id}.json`)
+    const exists = await fs.access(filePath).then(() => true, () => false)
+    expect(exists).toBe(true)
+    const data = JSON.parse(await fs.readFile(filePath, "utf-8"))
+    expect(data.status).toBe("running")
   })
 
   it("clearPlan resets plan to null", () => {

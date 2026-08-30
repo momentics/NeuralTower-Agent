@@ -128,6 +128,16 @@ export class AgentLoop {
     })
   }
 
+  /** Сохранить активный план на диск (статус меняется после каждого хода). */
+  private async persistActivePlan(): Promise<void> {
+    const plan = this.planner.getPlan()
+    if (!plan) return
+    if (this.sessionContext) {
+      plan.sessionId = this.sessionContext.sessionID
+    }
+    await this.planner.persistPlan()
+  }
+
   /**
    * Выполнить один ход: вызвать бэкенд, обработать ответ (текст или инструменты).
    */
@@ -164,6 +174,7 @@ export class AgentLoop {
       if (currentPlan) {
         currentPlan.markFailed(msg)
       }
+      await this.persistActivePlan()
       return {
         type: "error",
         anyFailed: true,
@@ -187,6 +198,7 @@ export class AgentLoop {
           if (currentPlan && currentPlan.status === "running") {
             currentPlan.markDone(result.content.slice(0, PLAN_STEP_RESULT_MAX_CHARS))
           }
+          await this.persistActivePlan()
 
           return { type: "text", content: result.content, plan: currentPlan }
         }
@@ -221,6 +233,7 @@ export class AgentLoop {
             currentPlan.markDone()
           }
         }
+        await this.persistActivePlan()
 
         return {
           type: "tool_calls",
@@ -240,6 +253,7 @@ export class AgentLoop {
       if (currentPlan) {
         currentPlan.markFailed(msg)
       }
+      await this.persistActivePlan()
       return {
         type: "error",
         anyFailed: true,

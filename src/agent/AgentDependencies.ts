@@ -46,6 +46,9 @@ export interface IAgentDependencies {
 
   /** Файловый индекс. */
   readonly fileIndex: IFileIndex
+
+  /** Колбэк статуса для UI (например, «Создаю план…»). Пустой текст сбрасывает статус. */
+  onAgentStatus?: (text: string) => void
 }
 
 /**

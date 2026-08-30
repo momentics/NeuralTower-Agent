@@ -313,34 +313,29 @@ it("save writes to file", async () => {
     expect(p).toMatch(/\.neuraltower[\\/]+plans/)
   })
 
-  it("load reads from file", async () => {
-    const data = {
-      id: "test-1",
+  it("save с пустым workspaceDir не пишет файл", async () => {
+    const plan = new Plan({
       title: "T",
       reasoning: "R",
-      steps: [{ description: "S1", suggestedTools: [], status: "done", attempts: 1 }],
-      status: "completed",
-      currentStepIndex: 0,
-      maxRetries: 3,
-      createdAt: 1000,
-      updatedAt: 2000,
-    }
-    vi.mocked(fs.readFile).mockResolvedValueOnce(JSON.stringify(data))
-    const repo = new PlanRepository("/work")
-    const plan = await repo.load("/work/test.json")
-    expect(plan.id).toBe("test-1")
+      steps: [{ description: "S1", suggestedTools: [] }],
+    })
+    const repo = new PlanRepository("")
+    const p = await repo.save(plan)
+    expect(p).toBe("")
+    expect(vi.mocked(fs.writeFile)).not.toHaveBeenCalled()
+    expect(vi.mocked(fs.mkdir)).not.toHaveBeenCalled()
   })
 
-  it("load throws for invalid file", async () => {
-    vi.mocked(fs.readFile).mockResolvedValueOnce("not json")
-    const repo = new PlanRepository("/work")
-    await expect(repo.load("/work/test.json")).rejects.toThrow(/Невалидный файл плана/)
-  })
-
-  it("load throws for missing steps", async () => {
-    vi.mocked(fs.readFile).mockResolvedValueOnce(JSON.stringify({ id: "1" }))
-    const repo = new PlanRepository("/work")
-    await expect(repo.load("/work/test.json")).rejects.toThrow(/Невалидный файл плана/)
+  it("toJSON/fromJSON сохраняет sessionId", () => {
+    const plan = new Plan({
+      id: "test-s",
+      title: "T",
+      reasoning: "R",
+      steps: [],
+    })
+    plan.sessionId = "s1"
+    const restored = Plan.fromJSON(plan.toJSON())
+    expect(restored.sessionId).toBe("s1")
   })
 
   it("replanHistory is empty by default", () => {

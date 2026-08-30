@@ -89,6 +89,26 @@ describe("AgentCore", () => {
     expect(result.content).toBeDefined()
   })
 
+  it("autoPlan создаёт план без смены режима и со статусом в UI", async () => {
+    const statusCalls: string[] = []
+    deps.onAgentStatus = (text) => statusCalls.push(text)
+    vi.mocked(backend.chatJson).mockResolvedValueOnce({
+      reasoning: "r",
+      steps: [{ description: "s", suggestedTools: [] }],
+    })
+    const core = new AgentCore(backend, toolRegistry, skillManager, deps, new TodoStore())
+    const events: string[] = []
+    core.onModeChanged((m) => events.push(m))
+    await core.run("test query", () => {})
+    // Режим не переключался: событий onModeChanged нет.
+    expect(events).toEqual([])
+    // chatJson получает сигнал вторым аргументом (undefined при отсутствии).
+    expect(vi.mocked(backend.chatJson).mock.calls[0][1]).toBeUndefined()
+    // Статус показан и сброшен пустым текстом.
+    expect(statusCalls).toContain("Создаю план…")
+    expect(statusCalls[statusCalls.length - 1]).toBe("")
+  })
+
   it("throws on abort signal", async () => {
     const core = new AgentCore(backend, toolRegistry, skillManager, deps, new TodoStore())
     const ac = new AbortController()
