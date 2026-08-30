@@ -122,6 +122,7 @@ function createMockBackend(): IBackend {
   return {
     getConfig: vi.fn(async () => ({ url: "http://localhost:30000", model: "test-model", maxRetries: 0, timeoutMs: 1000 })),
     listModels: vi.fn(async () => []),
+    resolvedModel: vi.fn(async () => "test-model"),
     healthCheck: vi.fn(async () => true),
     chat: vi.fn(),
     chatJson: vi.fn(),
@@ -945,7 +946,7 @@ describe("ChatMessageHandler", () => {
     expect(posted.messages[2].role).toBe("tool")
   })
 
-  it("sendModelInfo отправляет модель из конфигурации бэкенда", async () => {
+  it("sendModelInfo отправляет разрешённую модель бэкенда", async () => {
     handler.sendModelInfo()
     await vi.waitFor(() => {
       expect(webview.postMessage).toHaveBeenCalledWith({ type: "modelInfo", model: "test-model" })

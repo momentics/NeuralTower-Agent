@@ -65,6 +65,7 @@ const createMockBackend = (): IBackend =>
   ({
     getConfig: vi.fn(async () => ({ url: "http://localhost:30000", model: "test-model", maxRetries: 0, timeoutMs: 1000 })),
     listModels: vi.fn(async () => []),
+    resolvedModel: vi.fn(async () => "test-model"),
     healthCheck: vi.fn(async () => true),
     chat: vi.fn(),
     chatJson: vi.fn(),

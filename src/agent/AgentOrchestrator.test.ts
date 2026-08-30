@@ -18,6 +18,7 @@ const createMockBackend = (): IBackend => ({
   currentUrl: vi.fn(() => TEST_BACKEND_URL),
   updateConfig: vi.fn(async () => {}),
   listModels: vi.fn(async () => ["test-model"]),
+  resolvedModel: vi.fn(async () => "test-model"),
   healthCheck: vi.fn(async () => true),
 })
 
@@ -179,6 +180,7 @@ describe("AgentOrchestrator", () => {
       currentUrl: vi.fn(() => TEST_BACKEND_URL),
       updateConfig: vi.fn(async () => {}),
       listModels: vi.fn(async () => ["test-model"]),
+  resolvedModel: vi.fn(async () => "test-model"),
       healthCheck: vi.fn(async () => true),
     }
     const orchestrator = new AgentOrchestrator(slowBackend, toolRegistry, skillManager, deps, null, new TodoStore())
@@ -198,6 +200,7 @@ describe("AgentOrchestrator", () => {
       currentUrl: vi.fn(() => TEST_BACKEND_URL),
       updateConfig: vi.fn(async () => {}),
       listModels: vi.fn(async () => ["test-model"]),
+  resolvedModel: vi.fn(async () => "test-model"),
       healthCheck: vi.fn(async () => true),
     }
     const orchestrator = new AgentOrchestrator(slowBackend, toolRegistry, skillManager, deps, null, new TodoStore())

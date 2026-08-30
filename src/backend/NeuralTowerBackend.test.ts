@@ -12,13 +12,17 @@ describe("NeuralTowerBackend", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     onConfigChangeSpy = vi.fn()
-    backend = new NeuralTowerBackend(undefined, onConfigChangeSpy)
+    // Явная модель в фикстуре: существующие тесты не должны попадать
+    // в автовыбор (дополнительный запрос /v1/models).
+    backend = new NeuralTowerBackend(makeTestBackendConfig(), onConfigChangeSpy)
   })
 
   it("getConfig returns defaults", async () => {
-    const result = await backend.getConfig()
+    const b = new NeuralTowerBackend(undefined)
+    const result = await b.getConfig()
     expect(result.url).toBe(DEFAULT_BACKEND_URL)
-    expect(result.model).toBe("qwen3.6-27b")
+    // Дефолтная модель пуста — автовыбор из списка сервера.
+    expect(result.model).toBe("")
     expect(result.maxRetries).toBe(3)
     expect(result.timeoutMs).toBe(60000)
   })
@@ -405,6 +409,170 @@ describe("NeuralTowerBackend", () => {
     )
     const b = new NeuralTowerBackend(makeTestBackendConfig({ timeoutMs: 50, maxRetries: 0 }))
     await expect(b.chat([{ role: "user", content: "hi", timestamp: 1 }], () => {})).rejects.toBeInstanceOf(TimeoutError)
+    vi.unstubAllGlobals()
+  })
+
+  // ── Автовыбор модели ─────────────────────────────────────
+
+  const makeReader = () => ({
+    read: vi.fn()
+      .mockResolvedValueOnce({ done: false, value: Buffer.from('data: {"choices":[{"delta":{"content":"ok"}}]}\ndata: [DONE]\n') })
+      .mockResolvedValueOnce({ done: true }),
+    releaseLock: vi.fn(),
+  })
+
+  it("авто-режим: единственная модель сервера уходит в запрос", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ model: "", maxRetries: 0 }))
+    const fetchMock = vi.fn((url: string) => {
+      if (url.endsWith("/v1/models")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [{ id: "server-model" }] }) })
+      }
+      return Promise.resolve({ ok: true, body: { getReader: () => makeReader() } })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await b.chat([{ role: "user", content: "hi" }], () => {})
+
+    expect(result.content).toBe("ok")
+    const postCall = fetchMock.mock.calls.find((c) => !String(c[0]).endsWith("/v1/models"))
+    const body = JSON.parse((postCall![1] as { body: string }).body)
+    expect(body.model).toBe("server-model")
+    vi.unstubAllGlobals()
+  })
+
+  it("авто-режим: несколько моделей на сервере — ошибка с перечнем", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ model: "", maxRetries: 0 }))
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "m1" }, { id: "m2" }] }),
+    }))
+    await expect(b.chat([{ role: "user", content: "hi" }], () => {})).rejects.toThrow("несколько моделей")
+    vi.unstubAllGlobals()
+  })
+
+  it("авто-режим: пустой список моделей — ошибка с указанием, как устранить", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ model: "", maxRetries: 0 }))
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ data: [] }) }))
+    await expect(b.chat([{ role: "user", content: "hi" }], () => {})).rejects.toThrow("не вернул список моделей")
+    vi.unstubAllGlobals()
+  })
+
+  it("авто-режим: сервер недоступен — ошибка с просьбой указать модель явно", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ model: "", maxRetries: 0 }))
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")))
+    await expect(b.chat([{ role: "user", content: "hi" }], () => {})).rejects.toThrow("Укажите модель явно в настройках")
+    vi.unstubAllGlobals()
+  })
+
+  it("явная модель: запрос /v1/models не выполняется", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ model: "my-model", maxRetries: 0 }))
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, body: { getReader: () => makeReader() } })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await b.chat([{ role: "user", content: "hi" }], () => {})
+
+    expect(result.content).toBe("ok")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as { body: string }).body)
+    expect(body.model).toBe("my-model")
+    vi.unstubAllGlobals()
+  })
+
+  it("список моделей кэшируется: два запроса — один /v1/models", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ model: "", maxRetries: 0 }))
+    const fetchMock = vi.fn((url: string) => {
+      if (url.endsWith("/v1/models")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [{ id: "server-model" }] }) })
+      }
+      return Promise.resolve({ ok: true, body: { getReader: () => makeReader() } })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await b.chat([{ role: "user", content: "hi" }], () => {})
+    await b.chat([{ role: "user", content: "hi" }], () => {})
+
+    const modelsCalls = fetchMock.mock.calls.filter((c) => String(c[0]).endsWith("/v1/models"))
+    expect(modelsCalls).toHaveLength(1)
+    vi.unstubAllGlobals()
+  })
+
+  it("404 в авто-режиме: список перечитывается и запрос повторяется с новой моделью", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ model: "", maxRetries: 0 }))
+    let modelsCall = 0
+    let postCall = 0
+    const fetchMock = vi.fn((url: string) => {
+      if (url.endsWith("/v1/models")) {
+        modelsCall++
+        // Первое чтение — старая модель, после 404 — новая (сервер перезапущен).
+        return Promise.resolve({ ok: true, json: async () => ({ data: [{ id: modelsCall === 1 ? "old-model" : "new-model" }] }) })
+      }
+      postCall++
+      if (postCall === 1) {
+        return Promise.resolve({ ok: false, status: 404, text: async () => "model not found" })
+      }
+      return Promise.resolve({ ok: true, body: { getReader: () => makeReader() } })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await b.chat([{ role: "user", content: "hi" }], () => {})
+
+    expect(result.content).toBe("ok")
+    expect(modelsCall).toBe(2)
+    const posts = fetchMock.mock.calls.filter((c) => !String(c[0]).endsWith("/v1/models"))
+    const body = JSON.parse((posts[1][1] as { body: string }).body)
+    expect(body.model).toBe("new-model")
+    vi.unstubAllGlobals()
+  })
+
+  it("404 с явной моделью: перечитывания нет, ошибка пробрасывается", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ model: "my-model", maxRetries: 0 }))
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404, text: async () => "model not found" })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(b.chat([{ role: "user", content: "hi" }], () => {})).rejects.toThrow("HTTP 404")
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    vi.unstubAllGlobals()
+  })
+
+  it("404 в авто-режиме при неизменном списке: возвращается исходная ошибка", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ model: "", maxRetries: 0 }))
+    const fetchMock = vi.fn((url: string) => {
+      if (url.endsWith("/v1/models")) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [{ id: "m1" }] }) })
+      }
+      return Promise.resolve({ ok: false, status: 404, text: async () => "model not found" })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(b.chat([{ role: "user", content: "hi" }], () => {})).rejects.toThrow("HTTP 404")
+    // models + POST + перечитывание models; повторного POST нет.
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+    vi.unstubAllGlobals()
+  })
+
+  it("resolvedModel: явная модель возвращается без сетевого запроса", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ model: "my-model" }))
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    await expect(b.resolvedModel()).resolves.toBe("my-model")
+    expect(fetchMock).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it("resolvedModel: авто-режим возвращает модель сервера", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ model: "" }))
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "server-model" }] }),
+    }))
+    await expect(b.resolvedModel()).resolves.toBe("server-model")
+    vi.unstubAllGlobals()
+  })
+
+  it("resolvedModel: авто-режим при недоступном сервере возвращает пустую строку", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ model: "", maxRetries: 0 }))
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ECONNREFUSED")))
+    await expect(b.resolvedModel()).resolves.toBe("")
     vi.unstubAllGlobals()
   })
 })

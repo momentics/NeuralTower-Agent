@@ -12,6 +12,7 @@ describe("CommitMessageService", () => {
     vi.clearAllMocks()
     backend = {
       listModels: vi.fn().mockResolvedValue([]),
+      resolvedModel: vi.fn().mockResolvedValue(""),
       healthCheck: vi.fn().mockResolvedValue(true),
       chat: vi.fn().mockResolvedValue({ role: "assistant", content: "feat: add feature" }),
       chatJson: vi.fn(),

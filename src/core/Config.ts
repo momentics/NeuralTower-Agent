@@ -15,7 +15,10 @@ export const DEFAULT_BACKEND_URL = "http://localhost:30000"
 export function loadDefaultBackendConfig(): IBackendConfig {
   return {
     url: DEFAULT_BACKEND_URL,
-    model: "qwen3.6-27b",
+    // Пустое имя модели — автовыбор: бэкенд берёт модель из списка сервера
+    // (/v1/models). Захардкоженное имя не совпадает с фактической моделью
+    // сервера и ломает первый запуск.
+    model: "",
     maxRetries: 3,
     timeoutMs: 60000,
   }

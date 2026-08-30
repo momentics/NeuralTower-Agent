@@ -63,6 +63,10 @@ window.addEventListener("message", (event) => {
             : `Модель «${data.config.model}» не найдена на сервере`,
           false,
         )
+      } else if (!data.config.model && models.length === 1) {
+        setStatus(`Модель выбрана автоматически: ${friendlyModelName(models[0])}`, true)
+      } else if (!data.config.model && models.length > 1) {
+        setStatus(`На сервере несколько моделей — укажите модель в поле «Модель»`, false)
       }
       if (maxRetriesInput) maxRetriesInput.value = String(data.config.maxRetries)
       if (timeoutMsInput) timeoutMsInput.value = String(data.config.timeoutMs)
@@ -85,15 +89,11 @@ window.addEventListener("message", (event) => {
 // ── Сохранение ──────────────────────────────────────
 
 btnSave.addEventListener("click", () => {
-  const model = modelInput.value.trim()
-  if (!model) {
-    setStatus("Укажите имя модели", false)
-    return
-  }
+  // Пустое поле модели — осмысленное состояние: автовыбор с сервера.
   vscode.postMessage({
     type: "settingsSave",
     url: urlInput.value,
-    model,
+    model: modelInput.value.trim(),
     maxRetries: Number(maxRetriesInput.value),
     timeoutMs: Number(timeoutMsInput.value),
     maxIterations: Number(maxIterationsInput.value),

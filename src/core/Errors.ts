@@ -15,7 +15,11 @@ export class NeuralTowerError extends Error {
 
 /** Сбой бэкенда: HTTP, сеть, таймаут и т. д. */
 export class BackendError extends NeuralTowerError {
-  constructor(message: string, public readonly retryable = false) {
+  /**
+   * @param retryable — допустим ли повтор запроса.
+   * @param status — HTTP-статус ответа, если сбой связан с HTTP-ответом.
+   */
+  constructor(message: string, public readonly retryable = false, public readonly status?: number) {
     super(message)
     this.name = "BackendError"
   }

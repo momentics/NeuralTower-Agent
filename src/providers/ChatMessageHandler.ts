@@ -80,10 +80,12 @@ export class ChatMessageHandler {
 
   /** Отправить текущую модель в webview (футер чата). */
   sendModelInfo(): void {
+    // Показываем разрешённую модель: в авто-режиме это имя, выбранное
+    // с сервера, а не пустое поле конфигурации.
     this.backend
-      .getConfig()
-      .then((c) => {
-        this.webview.postMessage({ type: "modelInfo", model: c.model } as ExtToWebview)
+      .resolvedModel()
+      .then((model) => {
+        this.webview.postMessage({ type: "modelInfo", model } as ExtToWebview)
       })
       .catch(() => {})
   }

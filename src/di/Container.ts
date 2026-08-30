@@ -436,7 +436,8 @@ export function createContextDomain(
   // Платформенно-независимые провайдеры
   providers.push(register(makeEnvironmentProvider(
     getWorkDir,
-    () => backend.getConfig().then((c) => c.model),
+    // Разрешённое имя модели: в авто-режиме — то, что реально уходит в запрос.
+    () => backend.resolvedModel().then((m) => m || "авто"),
     gitService,
   )))
   providers.push(register(makeGitDiffProvider(getWorkDir, gitService)))
@@ -578,9 +579,12 @@ export async function createDeps(
     } catch (err: unknown) {
       log.error(`Ошибка сохранения конфигурации: ${errorMessage(err)}`)
     }
-    // Обновить модель в футере чата при смене конфигурации
-    if (partial.model !== undefined) {
-      chatProviderRef?.postModelInfo(partial.model)
+    // Обновить модель в футере чата при смене конфигурации: показываем
+    // разрешённое имя (в авто-режиме — модель, выбранную с сервера).
+    // Адрес тоже влияет на разрешённую модель: другой сервер — другой список.
+    if (partial.model !== undefined || partial.url !== undefined) {
+      const resolved = await backend.resolvedModel()
+      chatProviderRef?.postModelInfo(resolved)
     }
   })
 

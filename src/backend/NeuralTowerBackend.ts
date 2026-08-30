@@ -8,6 +8,8 @@ const log = createDomainLogger("Backend")
 const RETRY_BASE_DELAY_MS = 1000
 const RETRY_MAX_DELAY_MS = 10000
 const SSE_MAX_RESPONSE_CHARS = 5_000_000
+/** Время жизни кэша списка моделей при автовыборе, миллисекунды. */
+const MODEL_LIST_TTL_MS = 60_000
 
 /**
  * Бэкенд Neural Tower. Подключается к локальному серверу
@@ -20,6 +22,8 @@ const SSE_MAX_RESPONSE_CHARS = 5_000_000
 export class NeuralTowerBackend implements IBackend {
   private config: IBackendConfig
   private _resumeCallback: (() => void) | null = null
+  /** Кэш списка моделей для автовыбора: привязан к URL и ограничен по времени. */
+  private modelCache: { url: string; models: string[]; at: number } | null = null
 
   constructor(
     config?: IBackendConfig,
@@ -54,8 +58,128 @@ export class NeuralTowerBackend implements IBackend {
     if (normalized.maxRetries !== undefined) this.config.maxRetries = normalized.maxRetries
     if (normalized.timeoutMs !== undefined) this.config.timeoutMs = normalized.timeoutMs
 
+    // Список моделей другого сервера не переносится: сбрасываем кэш.
+    if (normalized.url !== undefined) this.modelCache = null
+
     this.onConfigChange?.(normalized)
     this._resumeCallback?.()
+  }
+
+  // ── Автовыбор модели ──────────────────────────────────────
+
+  /**
+   * Список моделей сервера с кэшированием: повторный запрос в пределах
+   * TTL и при том же URL не идёт в сеть.
+   */
+  private async getModelList(force: boolean): Promise<string[]> {
+    const url = this.config.url
+    if (
+      !force &&
+      this.modelCache &&
+      this.modelCache.url === url &&
+      Date.now() - this.modelCache.at < MODEL_LIST_TTL_MS
+    ) {
+      return this.modelCache.models
+    }
+    const models = await this.listModels()
+    this.modelCache = { url, models, at: Date.now() }
+    return models
+  }
+
+  /** Сбросить кэш списка моделей (при 404 «модель не найдена»). */
+  private invalidateModelCache(): void {
+    this.modelCache = null
+  }
+
+  /**
+   * Разрешить имя модели для запроса.
+   * Явная модель (непустое поле конфигурации) возвращается как есть.
+   * В авто-режиме (пустое поле) модель выбирается из списка сервера:
+   * ровно одна — используется; несколько — ошибка с перечнем, чтобы не
+   * подставлять произвольную модель; список пуст или сервер недоступен —
+   * ошибка с указанием, как устранить.
+   */
+  private async resolveModel(): Promise<string> {
+    const explicit = this.config.model.trim()
+    if (explicit) return explicit
+    let models: string[]
+    try {
+      models = await this.getModelList(false)
+    } catch (err: unknown) {
+      throw new BackendError(
+        `Автовыбор модели не выполнен: сервер не вернул список моделей (${errorMessage(err)}). Укажите модель явно в настройках или проверьте адрес сервера.`,
+      )
+    }
+    if (models.length === 1) return models[0]
+    if (models.length > 1) {
+      const names = models.slice(0, 5).map(shortModelName).join(", ")
+      throw new BackendError(
+        `На сервере несколько моделей (${models.length}), автовыбор невозможен. Укажите модель в настройках. Доступные: ${names}`,
+      )
+    }
+    throw new BackendError(
+      "Сервер не вернул список моделей. Укажите модель явно в настройках или проверьте адрес сервера.",
+    )
+  }
+
+  /**
+   * Имя модели для отображения (футер чата, контекст окружения):
+   * разрешённая модель или пустая строка, если автовыбор сейчас невозможен.
+   */
+  async resolvedModel(): Promise<string> {
+    const explicit = this.config.model.trim()
+    if (explicit) return explicit
+    try {
+      return await this.resolveModel()
+    } catch {
+      return ""
+    }
+  }
+
+  /**
+   * POST в endpoint чат-комплетаций с разрешением модели.
+   * Если сервер ответил 404 (модель не найдена), а модель была выбрана
+   * автоматически, список моделей перечитывается один раз и запрос
+   * повторяется — это покрывает перезапуск сервера с другой моделью.
+   * Для явной модели 404 — настоящая ошибка: повтор не выполняется.
+   */
+  private async postCompletion(
+    body: Record<string, unknown>,
+    signal: AbortSignal | undefined,
+    opts?: { streaming?: boolean },
+  ): Promise<Response> {
+    const cfg = await this.getConfig()
+    const auto = cfg.model.trim() === ""
+    const doRequest = (model: string): Promise<Response> =>
+      this.request(
+        `${cfg.url}/v1/chat/completions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...body, model }),
+        },
+        signal,
+        opts,
+      )
+
+    const model = await this.resolveModel()
+    try {
+      return await doRequest(model)
+    } catch (err: unknown) {
+      if (auto && err instanceof BackendError && err.status === 404) {
+        this.invalidateModelCache()
+        let fresh: string
+        try {
+          fresh = await this.resolveModel()
+        } catch {
+          // Перечитать список не удалось (сервер недоступен) —
+          // показываем исходную ошибку 404, она информативнее.
+          throw err
+        }
+        if (fresh !== model) return doRequest(fresh)
+      }
+      throw err
+    }
   }
 
   async listModels(): Promise<string[]> {
@@ -86,7 +210,6 @@ export class NeuralTowerBackend implements IBackend {
     const cfg = await this.getConfig()
 
     const body: Record<string, unknown> = {
-      model: cfg.model,
       messages: mapMessages(messages),
       stream: true,
     }
@@ -141,16 +264,7 @@ export class NeuralTowerBackend implements IBackend {
     let res: Response
     try {
       resetIdleTimer()
-      res = await this.request(
-        `${cfg.url}/v1/chat/completions`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-        ctrl.signal,
-        { streaming: true },
-      )
+      res = await this.postCompletion(body, ctrl.signal, { streaming: true })
     } catch (err: unknown) {
       signal?.removeEventListener("abort", onAbort)
       if (idleTimer) clearTimeout(idleTimer)
@@ -270,17 +384,10 @@ export class NeuralTowerBackend implements IBackend {
    * Одиночный JSON-вызов для структурированных ответов.
    */
   async chatJson<T>(messages: IChatMessage[], signal?: AbortSignal): Promise<T> {
-    const cfg = await this.getConfig()
-    const res = await this.request(
-      `${cfg.url}/v1/chat/completions`,
+    const res = await this.postCompletion(
       {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: cfg.model,
-          messages: mapMessages(messages),
-          response_format: { type: "json_object" },
-        }),
+        messages: mapMessages(messages),
+        response_format: { type: "json_object" },
       },
       signal,
     )
@@ -337,11 +444,13 @@ export class NeuralTowerBackend implements IBackend {
           // 5xx и 429 — повторяемые; остальные 4xx — немедленный отказ
           // (повтор не изменит результата: невалидная модель, имена инструментов и т. п.).
           if (res.status >= 500 || res.status === 429) {
-            throw new BackendError(`HTTP ${res.status}: ${detail}`, true)
+            throw new BackendError(`HTTP ${res.status}: ${detail}`, true, res.status)
           }
           // Префикс «Ошибка бэкенда: » добавляет handleBackendError — не дублируем его здесь,
           // иначе в UI получится «Ошибка бэкенда: Ошибка бэкенда (HTTP 400): …».
-          throw new BackendError(`HTTP ${res.status}: ${detail}`)
+          // Статус сохраняется в ошибке: по 404 вызывающий решает,
+          // перечитывать ли список моделей (автовыбор).
+          throw new BackendError(`HTTP ${res.status}: ${detail}`, false, res.status)
         }
         return res
       } catch (err: unknown) {
@@ -391,6 +500,16 @@ function mapMessages(messages: IChatMessage[]): Array<Record<string, unknown>> {
     }
     return { role: m.role, content: m.content }
   })
+}
+
+/**
+ * Короткое имя модели для сообщений об ошибках: если ID — путь
+ * (SGLang возвращает путь к файлам модели), показываем последний сегмент.
+ */
+function shortModelName(id: string): string {
+  const parts = id.split(/[\\/]+/)
+  const last = parts[parts.length - 1]
+  return last && last !== id ? last : id
 }
 
 /** Проверить, что URL валидный и использует HTTP/HTTPS протокол. */

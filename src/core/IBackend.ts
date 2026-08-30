@@ -25,6 +25,14 @@ export interface IBackend {
    */
   chatJson<T>(messages: IChatMessage[], signal?: AbortSignal): Promise<T>
 
+  /**
+   * Имя модели, которое фактически уйдёт в запрос.
+   * Для явной модели — она сама; в авто-режиме (пустое поле «Модель») —
+   * модель, выбранная из списка сервера. Пустая строка, если автовыбор
+   * сейчас невозможен (сервер недоступен) — для отображения в UI.
+   */
+  resolvedModel(): Promise<string>
+
   /** Текущая конфигурация. */
   getConfig(): Promise<IBackendConfig>
 
@@ -37,6 +45,7 @@ export interface IBackend {
 
 export interface IBackendConfig {
   url: string
+  /** Имя модели; пустая строка — автовыбор из списка моделей сервера. */
   model: string
   maxRetries: number
   timeoutMs: number

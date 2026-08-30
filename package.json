@@ -181,8 +181,8 @@
         },
         "neuralTowerAgent.model": {
           "type": "string",
-          "default": "qwen3.6-27b",
-          "description": "Имя модели по умолчанию"
+          "default": "",
+          "description": "Имя модели (пусто — автовыбор из списка моделей сервера)"
         },
         "neuralTowerAgent.maxRetries": {
           "type": "number",

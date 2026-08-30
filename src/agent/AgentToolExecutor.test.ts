@@ -15,6 +15,7 @@ const createMockBackend = (): IBackend => ({
   currentUrl: vi.fn(() => TEST_BACKEND_URL),
   updateConfig: vi.fn(async () => {}),
   listModels: vi.fn(async () => ["test-model"]),
+  resolvedModel: vi.fn(async () => "test-model"),
   healthCheck: vi.fn(async () => true),
 })
 

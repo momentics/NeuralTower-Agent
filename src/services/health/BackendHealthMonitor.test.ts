@@ -13,6 +13,7 @@ describe("BackendHealthMonitor", () => {
 
     backend = {
       listModels: vi.fn().mockResolvedValue([]),
+      resolvedModel: vi.fn().mockResolvedValue(""),
       healthCheck: vi.fn().mockResolvedValue(true),
       chat: vi.fn(),
       chatJson: vi.fn(),

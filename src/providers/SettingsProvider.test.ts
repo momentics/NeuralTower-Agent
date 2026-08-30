@@ -11,6 +11,7 @@ const createMockBackend = (): IBackend => ({
   currentUrl: vi.fn(() => TEST_BACKEND_URL),
   updateConfig: vi.fn(async () => {}),
   listModels: vi.fn(async () => ["test-model"]),
+  resolvedModel: vi.fn(async () => "test-model"),
   healthCheck: vi.fn(async () => true),
 })
 
@@ -92,8 +93,44 @@ describe("SettingsProvider", () => {
       ) as { success?: boolean; message?: string } | undefined
       expect(result).toBeDefined()
       expect(result?.success).toBe(false)
-      expect(result?.message).toBe("Укажите адрес сервера и модель")
+      expect(result?.message).toBe("Укажите адрес сервера или модель")
     })
     expect(backend.updateConfig).not.toHaveBeenCalled()
+  })
+
+  it("settingsSave с пустой model переключает бэкенд в авто-режим", async () => {
+    const provider = new SettingsProvider({ fsPath: "/ext" } as any, backend)
+    const createSpy = vi.spyOn(vscode.window, "createWebviewPanel")
+    provider.show()
+    const panel = createSpy.mock.results[0].value as {
+      webview: { postMessage: (m: unknown) => Promise<boolean> }
+      fireMessage: (msg: unknown) => void
+    }
+    const posted: unknown[] = []
+    panel.webview.postMessage = (m: unknown) => {
+      posted.push(m)
+      return Promise.resolve(true)
+    }
+    panel.fireMessage({
+      type: "settingsSave",
+      url: "http://localhost:30000",
+      model: "   ",
+      maxRetries: 3,
+      timeoutMs: 60000,
+      maxIterations: 20,
+      maxSessions: 50,
+      autoApprove: false,
+      notificationsEnabled: true,
+      notifyAgentDone: true,
+      notifyPermissions: true,
+    })
+    await vi.waitFor(() => {
+      expect(posted.some((m) => (m as { type?: string }).type === "settingsSaved")).toBe(true)
+    })
+    // Пустая модель сохраняется явно: это переход в авто-режим.
+    expect(backend.updateConfig).toHaveBeenCalledWith({
+      url: "http://localhost:30000",
+      model: "",
+    })
   })
 })

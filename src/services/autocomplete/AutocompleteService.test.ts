@@ -7,6 +7,7 @@ const mockBackend = {
   chat: vi.fn(),
   chatJson: vi.fn(),
   listModels: vi.fn(),
+  resolvedModel: vi.fn().mockResolvedValue("test-model"),
   healthCheck: vi.fn(),
   getConfig: vi.fn().mockResolvedValue(makeTestBackendConfig()),
   currentUrl: vi.fn(() => TEST_BACKEND_URL),

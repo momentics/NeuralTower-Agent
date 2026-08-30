@@ -51,6 +51,7 @@ describe("SubagentRunner", () => {
     vi.clearAllMocks()
     backend = {
       listModels: vi.fn().mockResolvedValue(["model"]),
+      resolvedModel: vi.fn().mockResolvedValue(""),
       healthCheck: vi.fn().mockResolvedValue(true),
       chat: vi.fn(),
       chatJson: vi.fn(),

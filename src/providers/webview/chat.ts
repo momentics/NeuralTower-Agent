@@ -314,7 +314,9 @@ window.addEventListener("message", (event: MessageEvent) => {
       break
 
     case "modelInfo":
-      statusModel.textContent = String(data.model ?? "")
+      // Пустое имя — авто-режим, автовыбор пока невозможен
+      // (например, сервер не запущен).
+      statusModel.textContent = String(data.model ?? "") || "авто"
       break
 
     case "agentStatus":

@@ -110,19 +110,22 @@ export class SettingsProvider implements ISettingsProvider {
         switch (msg.type) {
           case "settingsSave": {
             const vsCfg = vscode.workspace.getConfiguration("neuralTowerAgent")
-            const url = typeof msg.url === "string" && msg.url.trim() ? msg.url.trim() : undefined
-            const model = typeof msg.model === "string" && msg.model.trim() ? msg.model.trim() : undefined
+            const url = typeof msg.url === "string" ? msg.url.trim() : ""
+            const model = typeof msg.model === "string" ? msg.model.trim() : ""
             if (!url && !model) {
               this.getWebview().postMessage({
                 type: "settingsTestResult",
                 success: false,
-                message: "Укажите адрес сервера и модель",
+                message: "Укажите адрес сервера или модель",
               } as ExtToSettings)
               break
             }
             const config: Record<string, unknown> = {}
             if (url) config.url = url
-            if (model) config.model = model
+            // Модель отправляем всегда: пустое значение — осмысленное
+            // состояние (автовыбор), позволяющее вернуться к нему
+            // из явного имени.
+            config.model = model
             await this.backend.updateConfig(config)
             if (typeof msg.maxRetries === "number" && msg.maxRetries >= 0 && msg.maxRetries <= 10) {
               await this.backend.updateConfig({ maxRetries: msg.maxRetries })
@@ -204,9 +207,9 @@ export class SettingsProvider implements ISettingsProvider {
     <div class="setting-row">
       <div>
         <div class="setting-label">Модель</div>
-        <div class="setting-desc">ИИ-модель для агента (имя с сервера или свободное значение)</div>
+        <div class="setting-desc">ИИ-модель для агента (пусто — автовыбор с сервера, или явное имя)</div>
       </div>
-      <input class="setting-input" id="model" type="text" list="model-list" autocomplete="off" spellcheck="false">
+      <input class="setting-input" id="model" type="text" list="model-list" placeholder="авто (модель с сервера)" autocomplete="off" spellcheck="false">
       <datalist id="model-list"></datalist>
     </div>
     <div class="setting-row">
