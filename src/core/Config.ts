@@ -83,7 +83,7 @@ export interface ICompactorConfig {
   /** Буфер токенов до порога сжатия. */
   bufferTokens: number
 
-  /** Токенов для сохранения хвоста истории. */
+  /** Токенов для сохранения хвоста истории (выбирается по ходам). */
   keepTokens: number
 
   /** Максимальная длина вывода инструмента для сжатия. */
@@ -97,7 +97,7 @@ export function loadDefaultCompactorConfig(): ICompactorConfig {
   return {
     contextLimit: 128_000,
     bufferTokens: 20_000,
-    keepTokens: 8_000,
+    keepTokens: 12_000,
     maxToolOutputChars: 2_000,
     summaryMaxTokens: 4_096,
   }

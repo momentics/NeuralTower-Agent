@@ -72,6 +72,12 @@ export class AgentLoop {
       return [
         { role: "system", content: systemPrompt, timestamp: Date.now() },
         ...result.compactedHistory,
+        {
+          role: "user",
+          content:
+            "История разговора сжата в сводку. Если задача не завершена — продолжите со следующего шага; не повторяйте уже выполненные действия.",
+          timestamp: Date.now(),
+        },
       ]
     }
     return null
@@ -417,6 +423,10 @@ export class AgentLoop {
       if (signal?.aborted) {
         throw new AbortError()
       }
+
+      // Очистка старых tool-выводов (дешёвая операция, без вызова LLM):
+      // полный текст остаётся доступен по файлу из Фазы 1.
+      workingConversation = this.compactor.pruneOldToolOutputs(workingConversation)
 
       // Периодическая компактизация контекста
       try {

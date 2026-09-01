@@ -682,6 +682,71 @@ const loop = new AgentLoop(
     expect(result.content).toContain("Контекст превышает допустимые пределы")
   })
 
+  it("после компактизации в разговор добавлено синтетическое сообщение продолжения", async () => {
+    const mockCompactor = new MockCompactor(null)
+    mockCompactor.enableCompaction()
+    mockCompactor.setCompactionResult({
+      needsCompaction: true,
+      compactedHistory: [{ role: "user", content: "Summary", timestamp: Date.now() }],
+      summary: "Summary",
+      tokensBefore: 500,
+      tokensAfter: 100,
+    })
+
+    const mockToolExecutor = createMockToolExecutor()
+    vi.mocked(mockToolExecutor.callBackend)
+      .mockResolvedValueOnce({
+        type: "tool_calls",
+        toolCalls: [{ toolName: "read", arguments: { path: "test.ts" } }],
+      })
+      .mockResolvedValueOnce({ type: "text", content: "Done" })
+
+    vi.mocked(mockToolExecutor.executeToolCalls).mockResolvedValue({
+      anyFailed: false,
+    })
+
+    const loop = new AgentLoop(
+      backend, memory, mockCompactor, modeManager, sessionContext,
+      contextBuilder, mockToolExecutor, planner,
+    )
+    await loop.run("test query", [], () => {})
+
+    // Второй вызов — после компактизации: в разговоре есть сигнал продолжить.
+    const secondCall = vi.mocked(mockToolExecutor.callBackend).mock.calls[1]
+    const conversation = secondCall[0] as IChatMessage[]
+    const continueMsg = conversation.find(
+      (m) => m.role === "user" && m.content.includes("История разговора сжата в сводку"),
+    )
+    expect(continueMsg).toBeDefined()
+  })
+
+  it("старые tool-выводы очищены перед отправкой в бэкенд", async () => {
+    // История: 8 пар «user + tool» — достаточно, чтобы часть выводов
+    // оказалась вне последних шести сообщений (зона prune).
+    for (let i = 0; i < 8; i++) {
+      memory.add({ role: "user", content: `u${i}`, timestamp: i })
+      memory.add({ role: "tool", toolCallId: `t${i}`, name: "bash", content: `вывод ${i}`, timestamp: i })
+    }
+
+    const loop = new AgentLoop(
+      backend, memory, compactor, modeManager, sessionContext,
+      contextBuilder, toolExecutor, planner,
+    )
+    await loop.run("test query", [], () => {})
+
+    const conversation = vi.mocked(toolExecutor.callBackend).mock.calls[0][0] as IChatMessage[]
+    const toolMsgs = conversation.filter((m) => m.role === "tool")
+    expect(toolMsgs).toHaveLength(8)
+    // Старые tool-выводы (вне последних шести сообщений) — маркер очистки.
+    for (let i = 0; i < 5; i++) {
+      expect(toolMsgs[i].content).toBe("[Старый вывод инструмента очищен]")
+    }
+    // Последние tool-выводы сохранены без изменений.
+    for (let i = 5; i < 8; i++) {
+      expect(toolMsgs[i].content).toBe(`вывод ${i}`)
+    }
+  })
+
   it("run re-injects plan step after compaction", async () => {
     const testPlan = new Plan({
       title: "test plan",

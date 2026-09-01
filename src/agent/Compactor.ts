@@ -3,10 +3,15 @@ import { estimateTokens } from "../core/TokenUtils"
 import { loadDefaultCompactorConfig, type ICompactorConfig } from "../core/Config"
 import { createDomainLogger } from "../core/Logger"
 import { errorMessage } from "../core/Errors"
+import { FULL_OUTPUT_MARKER } from "../tools/Truncate"
 
 const log = createDomainLogger("Compactor")
 
 const FALLBACK_SUMMARY_MAX_CHARS = 500
+/** Число последних сообщений, tool-выводы которых не очищаются (prune). */
+const PRUNE_PROTECT_MESSAGES = 6
+/** Маркер очищенного старого tool-вывода. */
+const PRUNED_MARKER = "[Старый вывод инструмента очищен]"
 
 /**
  * Настройки сжатия контекста — алиас для ICompactorConfig.
@@ -152,29 +157,59 @@ export class Compactor {
     }
   }
 
+  /**
+   * Разделить историю на head (для сводки) и recent (хвост).
+   * Точка разреза — только начало user-сообщения: ход не режется
+   * посередине, хвост начинается с очередного запроса пользователя.
+   * Если хвост с ближайшей user-границы не укладывается в keepTokens,
+   * разрез не выполняется (head пуст) — сжатие откладывается.
+   */
   private splitMessages(messages: IChatMessage[]): {
     head: IChatMessage[]
     recent: IChatMessage[]
   } {
     let recentTokens = 0
     let splitIndex = 0
+    let userBoundary = -1
 
     for (let i = messages.length - 1; i >= 0; i--) {
       const msgTokens = estimateMessageTokens(messages[i])
-      if (recentTokens + msgTokens > this.options.keepTokens) {
-        if (recentTokens > 0) {
-          splitIndex = i + 1
-          break
+      if (messages[i].role === "user") {
+        userBoundary = i
+      }
+      if (recentTokens + msgTokens > this.options.keepTokens && recentTokens > 0) {
+        // Бюджет хвоста исчерпан: разрезаем на последней user-границе,
+        // чтобы не разрывать ход посередине.
+        if (userBoundary > 0) {
+          splitIndex = userBoundary
         }
+        break
       }
       recentTokens += msgTokens
-      splitIndex = i
     }
 
     return {
       head: messages.slice(0, splitIndex),
       recent: messages.slice(splitIndex),
     }
+  }
+
+  /**
+   * Очистить старые tool-выводы: у сообщений вне последних
+   * PRUNE_PROTECT_MESSAGES содержимое tool-сообщений заменяется маркером.
+   * Если в выводе был указатель на файл с полным текстом (Фаза 1),
+   * указатель сохраняется — модель может перечитать полный вывод.
+   * Возвращает новый массив (исходный не изменяется).
+   */
+  pruneOldToolOutputs(messages: IChatMessage[]): IChatMessage[] {
+    if (messages.length <= PRUNE_PROTECT_MESSAGES) return messages
+    const boundary = messages.length - PRUNE_PROTECT_MESSAGES
+    return messages.map((m, i) => {
+      if (i >= boundary || m.role !== "tool") return m
+      const pathMatch = m.content.match(new RegExp(`${FULL_OUTPUT_MARKER} (.+)`))
+      const pointer = pathMatch ? `\n${FULL_OUTPUT_MARKER} ${pathMatch[1]}` : ""
+      return { ...m, content: PRUNED_MARKER + pointer }
+    })
   }
 
   private async summarize(messages: IChatMessage[]): Promise<string> {
