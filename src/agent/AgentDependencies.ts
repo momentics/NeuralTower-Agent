@@ -12,6 +12,7 @@ import type { ISnapshotService } from "../services/snapshot/SnapshotTypes"
 import type { TodoStore } from "./TodoStore"
 import type { ToolOutputTruncator } from "../tools/Truncate"
 import type { IAgentMode } from "./AgentMode"
+import type { IProjectMemory } from "./AgentMemory"
 
 /**
  * Фабрика для создания экземпляров AgentOrchestrator.
@@ -51,6 +52,9 @@ export interface IAgentDependencies {
 
   /** Обрезатель вывода инструментов (полный текст — в файл). */
   readonly toolOutputTruncator: ToolOutputTruncator
+
+  /** Начальная память о проекте (загружена с диска при старте). */
+  readonly initialMemory?: IProjectMemory
 
   /** Пользовательские режимы (из .neuraltower/modes). */
   readonly customModes?: IAgentMode[]

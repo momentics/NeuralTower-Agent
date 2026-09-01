@@ -118,6 +118,7 @@ export const BUILT_IN_MODES: Record<string, IAgentMode> = {
       { tool: "delete_file", level: "ask" },
       { tool: "move_file", level: "ask" },
       { tool: "create_dir", level: "ask" },
+      { tool: "remember", level: "allow" },
       { tool: "*", level: "ask" },
     ],
     systemPromptAddon: `# Режим: Построение
@@ -157,6 +158,7 @@ export const BUILT_IN_MODES: Record<string, IAgentMode> = {
       { tool: "move_file", level: "deny" },
       { tool: "create_dir", level: "deny" },
       { tool: "task", level: "deny" },
+      { tool: "remember", level: "allow" },
       { tool: "*", level: "deny" },
     ],
     systemPromptAddon: `# Режим: Планирование
@@ -198,6 +200,7 @@ export const BUILT_IN_MODES: Record<string, IAgentMode> = {
       { tool: "create_dir", level: "deny" },
       { tool: "task", level: "deny" },
       { tool: "todowrite", level: "deny" },
+      { tool: "remember", level: "allow" },
       { tool: "*", level: "deny" },
     ],
     systemPromptAddon: `# Режим: Исследование
@@ -240,6 +243,7 @@ export const BUILT_IN_MODES: Record<string, IAgentMode> = {
       { tool: "create_dir", level: "deny" },
       { tool: "todowrite", level: "deny" },
       { tool: "task", level: "deny" },
+      { tool: "remember", level: "allow" },
       { tool: "*", level: "deny" },
     ],
     systemPromptAddon: `# Режим: Вопрос

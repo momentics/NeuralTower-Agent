@@ -1,6 +1,8 @@
 import * as vscode from "vscode"
 import * as path from "path"
-import { createHash } from "crypto"
+import { workspaceKey } from "../utils/WorkspaceKey"
+import { MemoryStore } from "../services/memory/MemoryStore"
+import type { IProjectMemory } from "../agent/AgentMemory"
 import type { IAppConfig, ISessionConfig } from "../core/Config"
 import type { IGitService } from "../services/git/GitService"
 import { GitRunner, type IGitRunner } from "../services/git/GitRunner"
@@ -99,6 +101,7 @@ import {
   QuestionTool,
   TaskTool,
   SkillTool,
+  RememberTool,
 } from "../tools"
 import { ToolOutputTruncator } from "../tools/Truncate"
 import { loadUserModes } from "../agent/UserModeLoader"
@@ -306,19 +309,6 @@ export async function createServicesDomain(
 
 // ── Домен: Снапшоты (чекпоинты) ───────────────────────────
 
-/**
- * Стабильный идентификатор workspace для директории зеркала:
- * 16 hex-символов sha256 нормализованного пути.
- * На Windows путь приводится к нижнему регистру (регистронезависимость ФС).
- */
-function snapshotKeyForWorkspace(workspaceRoot: string): string {
-  let normalized = workspaceRoot.replace(/\\/g, "/").replace(/\/+$/, "")
-  if (process.platform === "win32") {
-    normalized = normalized.toLowerCase()
-  }
-  return createHash("sha256").update(normalized).digest("hex").slice(0, 16)
-}
-
 export function createSnapshotDomain(
   workspaceRoot: string | undefined,
   globalStorageUri: vscode.Uri,
@@ -328,7 +318,7 @@ export function createSnapshotDomain(
 ): { snapshotService: ISnapshotService | null; snapshotStore: ISnapshotStore | null } {
   if (!workspaceRoot) return { snapshotService: null, snapshotStore: null }
 
-  const dir = path.join(globalStorageUri.fsPath, "snapshot", snapshotKeyForWorkspace(workspaceRoot))
+  const dir = path.join(globalStorageUri.fsPath, "snapshot", workspaceKey(workspaceRoot))
   const snapshotService = new SnapshotService(
     workspaceRoot,
     dir,
@@ -352,6 +342,7 @@ export async function createToolsDomain(
   taskLauncher: SubagentLauncherHolder,
   getWorkDir: () => string | null,
   globalSkillsDir: string | undefined,
+  memoryStore: MemoryStore | null,
 ): Promise<IToolsDeps> {
   const tools = new ToolRegistry()
 
@@ -379,6 +370,9 @@ export async function createToolsDomain(
     tools.register(new GlobTool(workspaceRoot))
     tools.register(new GrepTool(workspaceRoot))
     tools.register(new GitTool(workspaceRoot, gitRunner))
+    if (memoryStore) {
+      tools.register(new RememberTool(memoryStore))
+    }
   }
 
   tools.register(new BashTool())
@@ -515,6 +509,7 @@ export function createUIDomain(
   gitService: IGitService,
   getWorkDir: () => string,
   questionService: QuestionServiceHolder,
+  memoryStore: MemoryStore | null,
 ): IUIDepsResult {
   const settingsProvider = new SettingsProvider(extUri, backend)
   const diffViewer = new DiffViewerProvider(extUri)
@@ -532,6 +527,7 @@ export function createUIDomain(
     gitService,
     getWorkDir,
     questionService,
+    memoryStore,
   )
 
   return { chatProvider, diffViewer, settingsProvider }
@@ -627,6 +623,25 @@ export async function createDeps(
   // ── Корень рабочей области ──────────────────────────────
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
 
+  // ── Память проекта ───────────────────────────────────────
+  let memoryStore: MemoryStore | null = null
+  let initialMemory: IProjectMemory | undefined
+  if (workspaceRoot) {
+    memoryStore = new MemoryStore(
+      path.join(ctx.globalStorageUri.fsPath, "memory", `${workspaceKey(workspaceRoot)}.json`),
+    )
+    const loaded = await memoryStore.load()
+    if (loaded) {
+      initialMemory = {
+        repo: loaded.repo || path.basename(workspaceRoot),
+        languages: loaded.languages,
+        commands: loaded.commands,
+        notes: loaded.notes,
+        conventions: loaded.conventions,
+      }
+    }
+  }
+
   // ── Снапшоты (чекпоинты) ────────────────────────────────
   const { snapshotService, snapshotStore } = createSnapshotDomain(
     workspaceRoot, ctx.globalStorageUri, gitService, config, gitRunner,
@@ -665,6 +680,7 @@ export async function createDeps(
     taskLauncher,
     () => workDirState.current,
     path.join(ctx.globalStorageUri.fsPath, "skills"),
+    memoryStore,
   )
   await syncMCP(mcpManager, tools)
 
@@ -715,6 +731,7 @@ export async function createDeps(
     contextManager,
     fileIndex,
     toolOutputTruncator,
+    initialMemory,
     customModes,
     gitService,
     permissionManager,
@@ -782,6 +799,7 @@ export async function createDeps(
     gitService,
     () => workDirState.current,
     questionService,
+    memoryStore,
   )
   chatProviderRef = chatProvider
   // Статусы агента в UI (например, «Создаю план…»)

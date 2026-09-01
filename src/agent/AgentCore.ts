@@ -35,6 +35,9 @@ function createAgentInternals(
  deps: IAgentFullDependencies,
 ) {
   const memory = new AgentMemory(deps.config.agent.maxTokens)
+  if (deps.initialMemory) {
+    memory.setProject(deps.initialMemory)
+  }
   const modeManager = new AgentModeManager()
   for (const mode of deps.customModes ?? []) {
     modeManager.registerMode(mode)
@@ -261,10 +264,20 @@ export class AgentCore {
   }
 
   /**
+   * Применить начальную память проекта заново (после очистки сессии).
+   */
+  private applyInitialMemory(): void {
+    if (this.deps.initialMemory) {
+      this.memory.setProject(this.deps.initialMemory)
+    }
+  }
+
+  /**
    * Восстановить сессию из истории сообщений.
    */
   async restoreSession(messages: IChatMessage[]): Promise<void> {
     this.memory.clear()
+    this.applyInitialMemory()
     this.sessionContext.reset()
     this.planner.clearPlan()
     this.todoStore.clear()
@@ -280,6 +293,7 @@ export class AgentCore {
    */
   resetSession(): void {
     this.memory.clear()
+    this.applyInitialMemory()
     this.sessionContext.reset()
     this.planner.clearPlan()
     this.todoStore.clear()

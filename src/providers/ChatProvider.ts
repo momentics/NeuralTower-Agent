@@ -8,6 +8,7 @@ import type { IPermissionManager } from "../services/permission/PermissionManage
 import type { IGitService } from "../services/git/GitService"
 import type { ISnapshotService, ISnapshotStore } from "../services/snapshot"
 import type { QuestionServiceHolder } from "../services/question/QuestionService"
+import type { MemoryStore } from "../services/memory/MemoryStore"
 import type { ISettingsProvider } from "./SettingsProvider"
 import type { ExtToWebview } from "../shared/Messages"
 import { buildWebviewHtml } from "../shared/WebviewBuilder"
@@ -44,6 +45,7 @@ export class ChatProvider implements IProvider {
     private readonly gitService: IGitService | null = null,
     private readonly getWorkDir: () => string = () => "",
     private readonly questionService: QuestionServiceHolder,
+    private readonly memoryStore: MemoryStore | null = null,
   ) {}
 
   /** Установить монитор здоровья для ленивой инициализации при первом открытии sidebar. */
@@ -82,6 +84,7 @@ export class ChatProvider implements IProvider {
       this.gitService,
       this.getWorkDir,
       this.questionService,
+      this.memoryStore,
     )
 
     this.messageHandler.subscribe(this.disposables)

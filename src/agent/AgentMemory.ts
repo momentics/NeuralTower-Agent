@@ -26,6 +26,8 @@ export interface IProjectMemory {
   commands: Record<string, string>
   /** Архитектурные заметки, полученные в ходе сессий. */
   notes: string[]
+  /** Конвенции и правила проекта. */
+  conventions: string[]
 }
 
 export class AgentMemory {
@@ -35,6 +37,7 @@ export class AgentMemory {
     languages: [],
     commands: {},
     notes: [],
+    conventions: [],
   }
 
   private readonly maxTokens: number
@@ -99,6 +102,11 @@ export class AgentMemory {
     if (mem.languages) this.project.languages = mem.languages
     if (mem.commands) Object.assign(this.project.commands, mem.commands)
     if (mem.notes) this.project.notes.push(...mem.notes)
+    if (mem.conventions) {
+      for (const c of mem.conventions) {
+        if (!this.project.conventions.includes(c)) this.project.conventions.push(c)
+      }
+    }
   }
 
   /** Вернуть память о проекте. */
@@ -117,6 +125,9 @@ export class AgentMemory {
     if (this.project.notes.length) {
       parts.push(`Заметки:\n${this.project.notes.map((n) => `  - ${n}`).join("\n")}`)
     }
+    if (this.project.conventions.length) {
+      parts.push(`Конвенции:\n${this.project.conventions.map((c) => `  - ${c}`).join("\n")}`)
+    }
     return parts.length > 0 ? `\n## Контекст проекта\n${parts.join("\n")}` : ""
   }
 
@@ -133,6 +144,6 @@ export class AgentMemory {
   /** Очистить всю память. */
   clear(): void {
     this.shortTerm = []
-    this.project = { repo: "", languages: [], commands: {}, notes: [] }
+    this.project = { repo: "", languages: [], commands: {}, notes: [], conventions: [] }
   }
 }

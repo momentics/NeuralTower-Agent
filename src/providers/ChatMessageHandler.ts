@@ -6,6 +6,7 @@ import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { INotificationService } from "../services/notification/NotificationService"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import type { QuestionServiceHolder } from "../services/question/QuestionService"
+import type { MemoryStore } from "../services/memory/MemoryStore"
 import type { IGitService } from "../services/git/GitService"
 import type { ISnapshotService, ISnapshotStore, ISnapshotPatch, ISnapshotRecord, IRevertResult } from "../services/snapshot"
 import { pathKey } from "../services/snapshot"
@@ -56,6 +57,7 @@ export class ChatMessageHandler {
     private readonly gitService: IGitService | null = null,
     private readonly getWorkDir: () => string = () => "",
     private readonly questionHolder: QuestionServiceHolder,
+    private readonly memoryStore: MemoryStore | null = null,
   ) {}
 
   /** Получить disposable для всех подписок. */
@@ -762,6 +764,10 @@ export class ChatMessageHandler {
 
       await this.sessionStore.push(result)
 
+      // Автоизвлечение фактов о проекте (вспомогательная операция,
+      // не блокирует завершение запроса)
+      void this.extractProjectMemory(content)
+
       const plan = this.agent.getPlan()
       if (plan) {
         await this.sessionStore.push({
@@ -783,6 +789,66 @@ export class ChatMessageHandler {
       this.abortController = null
       this.pendingRevertNote = null
       this.sendSessionList()
+    }
+  }
+
+  /**
+   * Извлечь факты о проекте из завершённого разговора и сохранить
+   * в память проекта. Вспомогательная операция: ошибки логируются,
+   * пользователю не показываются.
+   */
+  private async extractProjectMemory(query: string): Promise<void> {
+    if (!this.memoryStore) return
+    try {
+      const tail = this.sessionStore.getActiveMessages().slice(-30)
+      const transcript = tail
+        .filter((m) => m.role !== "system")
+        .map((m) => `${m.role === "tool" ? "tool" : m.role}: ${m.content}`)
+        .join("\n")
+        .slice(-30_000)
+
+      const system =
+        "Ты — сервис извлечения фактов о проекте из разговора пользователя с ИИ-агентом. " +
+        "Верни только JSON-объект с полями: " +
+        "commands (объект: имя команды → команда; имена: build, test, lint и т. п.), " +
+        "notes (массив строк: архитектурные и проектные факты), " +
+        "conventions (массив строк: конвенции и правила кода проекта). " +
+        "Включай только факты, явно упомянутые в разговоре, без домыслов. " +
+        "Если фактов нет — верни пустые объекты и массивы."
+
+      const extracted = await this.backend.chatJson<{
+        commands?: Record<string, string>
+        notes?: string[]
+        conventions?: string[]
+      }>([
+        { role: "system", content: system },
+        { role: "user", content: `Запрос: ${query}\n\nРазговор:\n${transcript}` },
+      ])
+
+      const commands = extracted.commands && typeof extracted.commands === "object"
+        ? Object.fromEntries(
+            Object.entries(extracted.commands).filter(([, v]) => typeof v === "string"),
+          )
+        : {}
+      const notes = (extracted.notes ?? []).filter((n) => typeof n === "string" && n.trim().length > 0)
+      const conventions = (extracted.conventions ?? []).filter((n) => typeof n === "string" && n.trim().length > 0)
+      if (Object.keys(commands).length === 0 && notes.length === 0 && conventions.length === 0) return
+
+      this.memoryStore.update((data) => {
+        for (const [k, v] of Object.entries(commands)) {
+          data.commands[k] = v
+        }
+        for (const n of notes) {
+          if (!data.notes.includes(n)) data.notes.push(n)
+        }
+        for (const c of conventions) {
+          if (!data.conventions.includes(c)) data.conventions.push(c)
+        }
+        if (data.notes.length > 50) data.notes.splice(0, data.notes.length - 50)
+        if (data.conventions.length > 30) data.conventions.splice(0, data.conventions.length - 30)
+      })
+    } catch (err: unknown) {
+      log.warn(`Не удалось извлечь память проекта: ${errorMessage(err)}`)
     }
   }
 }

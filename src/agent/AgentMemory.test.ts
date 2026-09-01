@@ -102,6 +102,20 @@ describe("AgentMemory", () => {
     expect(memory.getRecent()).toEqual([])
   })
 
+  it("conventions попадают в projectContext", () => {
+    const mem = new AgentMemory()
+    mem.setProject({ conventions: ["Коммиты — imperative mood"] })
+    expect(mem.projectContext()).toContain("Конвенции:")
+    expect(mem.projectContext()).toContain("Коммиты — imperative mood")
+  })
+
+  it("setProject не дублирует конвенции", () => {
+    const mem = new AgentMemory()
+    mem.setProject({ conventions: ["A"] })
+    mem.setProject({ conventions: ["A", "B"] })
+    expect(mem.getProject().conventions).toEqual(["A", "B"])
+  })
+
   it("restoreFromMessages loads messages into memory", () => {
     const messages = [
       { role: "user" as const, content: "hello", timestamp: 1 },
