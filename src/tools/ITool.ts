@@ -17,6 +17,7 @@ export interface IToolParam {
   enum?: string[]
   items?: IToolParam
   properties?: Record<string, IToolParam>
+  required?: string[]
   default?: unknown
 }
 

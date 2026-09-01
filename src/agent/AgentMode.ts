@@ -109,6 +109,7 @@ export const BUILT_IN_MODES: Record<string, IAgentMode> = {
       { tool: "question", level: "allow" },
       { tool: "skill", level: "allow" },
       { tool: "edit_file", level: "ask" },
+      { tool: "multi_edit", level: "ask" },
       { tool: "write_file", level: "ask" },
       { tool: "bash", level: "ask" },
       // git: read-only операции проходят без запроса (isSafeForArgs),
@@ -152,6 +153,7 @@ export const BUILT_IN_MODES: Record<string, IAgentMode> = {
       // git: чтение состояния (status/diff/log) без запроса, изменения — с подтверждением
       { tool: "git", level: "ask" },
       { tool: "edit_file", level: "deny" },
+      { tool: "multi_edit", level: "deny" },
       { tool: "write_file", level: "deny" },
       { tool: "bash", level: "deny" },
       { tool: "delete_file", level: "deny" },
@@ -193,6 +195,7 @@ export const BUILT_IN_MODES: Record<string, IAgentMode> = {
       // git: чтение состояния (status/diff/log) без запроса, изменения — с подтверждением
       { tool: "git", level: "ask" },
       { tool: "edit_file", level: "deny" },
+      { tool: "multi_edit", level: "deny" },
       { tool: "write_file", level: "deny" },
       { tool: "bash", level: "deny" },
       { tool: "delete_file", level: "deny" },

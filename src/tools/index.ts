@@ -5,6 +5,7 @@ export { str, strOpt, num, numOpt, bool, arr, requiredStr, positiveNum, clamp } 
 export { ReadFileTool } from "./builtins/ReadFileTool"
 export { WriteFileTool } from "./builtins/WriteFileTool"
 export { EditFileTool } from "./builtins/EditFileTool"
+export { MultiEditTool } from "./builtins/MultiEditTool"
 export { DeleteFileTool } from "./builtins/DeleteFileTool"
 export { CreateDirTool } from "./builtins/CreateDirTool"
 export { MoveFileTool } from "./builtins/MoveFileTool"

@@ -87,6 +87,7 @@ import {
   ReadFileTool,
   WriteFileTool,
   EditFileTool,
+  MultiEditTool,
   DeleteFileTool,
   CreateDirTool,
   MoveFileTool,
@@ -365,6 +366,7 @@ export async function createToolsDomain(
     tools.register(new ReadFileTool(workspaceRoot))
     tools.register(new WriteFileTool(workspaceRoot))
     tools.register(new EditFileTool(workspaceRoot))
+    tools.register(new MultiEditTool(workspaceRoot))
     tools.register(new DeleteFileTool(workspaceRoot))
     tools.register(new CreateDirTool(workspaceRoot))
     tools.register(new MoveFileTool(workspaceRoot))
