@@ -412,6 +412,56 @@ describe("NeuralTowerBackend", () => {
     vi.unstubAllGlobals()
   })
 
+  it("chat запрашивает include_usage и привязывает usage к результату", async () => {
+    const chunks = [
+      'data: {"choices":[{"delta":{"content":"Привет"}}]}\n',
+      'data: {"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15}}\n',
+      "data: [DONE]\n",
+    ].join("")
+
+    const reader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({ done: false, value: Buffer.from(chunks) })
+        .mockResolvedValueOnce({ done: true }),
+      releaseLock: vi.fn(),
+    }
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: { getReader: () => reader },
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const result = await backend.chat([{ role: "user", content: "hi" }], vi.fn())
+
+    expect(result.usage).toEqual({ promptTokens: 10, completionTokens: 5, totalTokens: 15 })
+
+    // Тело запроса содержит stream_options
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.stream_options).toEqual({ include_usage: true })
+    vi.unstubAllGlobals()
+  })
+
+  it("chat без usage в ответе — result.usage отсутствует", async () => {
+    const chunks = [
+      'data: {"choices":[{"delta":{"content":"ok"}}]}\n',
+      "data: [DONE]\n",
+    ].join("")
+    const reader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({ done: false, value: Buffer.from(chunks) })
+        .mockResolvedValueOnce({ done: true }),
+      releaseLock: vi.fn(),
+    }
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      body: { getReader: () => reader },
+    }))
+    const result = await backend.chat([{ role: "user", content: "hi" }], vi.fn())
+    expect(result.usage).toBeUndefined()
+    vi.unstubAllGlobals()
+  })
+
   // ── Автовыбор модели ─────────────────────────────────────
 
   const makeReader = () => ({

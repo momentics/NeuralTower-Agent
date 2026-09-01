@@ -53,6 +53,7 @@ export type ExtToWebview =
   | { type: "checkpointList"; checkpoints: Array<{ runId: string; createdAt: number; fileCount: number }> }
   | { type: "sessionCheckpointRestored"; runId: string; ok: boolean; error?: string }
   | { type: "modelInfo"; model: string }
+  | { type: "agentUsage"; usage: { promptTokens: number; completionTokens: number; totalTokens: number } }
   | { type: "agentStatus"; text: string }
   | { type: "history"; messages: IHistoryMessage[] }
   | { type: "planUpdate"; plan: IPlanSerialized | null }

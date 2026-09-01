@@ -764,6 +764,11 @@ export class ChatMessageHandler {
 
       await this.sessionStore.push(result)
 
+      // Расход токенов запроса — в строку состояния webview
+      if (result.usage) {
+        this.webview.postMessage({ type: "agentUsage", usage: result.usage } as ExtToWebview)
+      }
+
       // Автоизвлечение фактов о проекте (вспомогательная операция,
       // не блокирует завершение запроса)
       void this.extractProjectMemory(content)

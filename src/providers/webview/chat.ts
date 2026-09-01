@@ -34,6 +34,7 @@ const statusDot = document.getElementById("status-dot") as HTMLSpanElement
 const statusText = document.getElementById("status-text") as HTMLSpanElement
 const statusMode = document.getElementById("status-mode") as HTMLDivElement
 const statusModel = document.getElementById("status-model") as HTMLDivElement
+const statusTokens = document.getElementById("status-tokens") as HTMLDivElement
 const sessionsSection = document.getElementById("sessions-section") as HTMLDivElement
 const newChatBtn = document.getElementById("btn-new-chat") as HTMLButtonElement
 const settingsBtn = document.getElementById("btn-settings") as HTMLButtonElement
@@ -65,6 +66,8 @@ let currentEl: HTMLElement | null = null
 let sessions: SessionInfo[] = []
 let isStreaming = false
 let agentStatusText = ""
+/** Накопленный за сессию расход токенов (сумма totalTokens запросов). */
+let sessionTokens = 0
 let backendConnected = false
 let currentMode = "build"
 let allowedModes: string[] = ["plan", "explore"]
@@ -448,6 +451,8 @@ window.addEventListener("message", (event: MessageEvent) => {
       contextPills.innerHTML = ""
       renderPlan(null)
       renderTodos([])
+      sessionTokens = 0
+      statusTokens.textContent = ""
       break
 
     case "toolUse":
@@ -466,6 +471,13 @@ window.addEventListener("message", (event: MessageEvent) => {
       // (например, сервер не запущен).
       statusModel.textContent = String(data.model ?? "") || "авто"
       break
+
+    case "agentUsage": {
+      const usage = data.usage as { totalTokens?: number } | undefined
+      sessionTokens += Number(usage?.totalTokens ?? 0)
+      statusTokens.textContent = `≈ ${formatTokens(sessionTokens)} токенов`
+      break
+    }
 
     case "agentStatus":
       agentStatusText = String(data.text ?? "")
@@ -672,6 +684,13 @@ window.addEventListener("message", (event: MessageEvent) => {
 })
 
 // ── Состояние стриминга ───────────────────────────────
+
+/** Компактный расход токенов: 1234 → 1K, 1234567 → 1.2M. */
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
+  if (n >= 1_000) return `${Math.round(n / 1_000)}K`
+  return String(n)
+}
 
 /** Отрисовать статус-строку: приоритет — статус агента, затем стриминг, затем подключение к бэкенду. */
 function renderStatus(): void {

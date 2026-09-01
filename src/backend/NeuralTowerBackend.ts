@@ -1,4 +1,4 @@
-import type { IBackend, IBackendConfig, IChatMessage, IToolCall, IToolDefinition } from "../core/IBackend"
+import type { IBackend, IBackendConfig, IChatMessage, ITokenUsage, IToolCall, IToolDefinition } from "../core/IBackend"
 import { AbortError, BackendError, ConnectionError, TimeoutError, errorMessage } from "../core/Errors"
 import { loadDefaultBackendConfig } from "../core/Config"
 import { createDomainLogger } from "../core/Logger"
@@ -212,6 +212,8 @@ export class NeuralTowerBackend implements IBackend {
     const body: Record<string, unknown> = {
       messages: mapMessages(messages),
       stream: true,
+      // Финальный чанк потока несёт расход токенов (поддерживается SGLang)
+      stream_options: { include_usage: true },
     }
 
     if (tools && tools.length > 0) {
@@ -283,6 +285,7 @@ export class NeuralTowerBackend implements IBackend {
     const dec = new TextDecoder()
     let buffer = ""
     let sawDone = false
+    let usage: ITokenUsage | null = null
 
     // Строка SSE может быть разорвана между сетевыми чанками — накапливаем
     // остаток в buffer и разбираем только полные строки.
@@ -296,6 +299,11 @@ export class NeuralTowerBackend implements IBackend {
       }
       let p: {
         error?: { message?: string }
+        usage?: {
+          prompt_tokens?: number
+          completion_tokens?: number
+          total_tokens?: number
+        }
         choices?: Array<{
           delta?: {
             content?: string
@@ -315,6 +323,15 @@ export class NeuralTowerBackend implements IBackend {
       }
       if (p.error) {
         throw new BackendError(`Ошибка бэкенда в потоке: ${p.error.message ?? JSON.stringify(p.error)}`)
+      }
+      // Чанк с usage обычно не содержит choices — проверяем до выхода
+      // по отсутствию delta.
+      if (p.usage && typeof p.usage === "object") {
+        usage = {
+          promptTokens: p.usage.prompt_tokens ?? 0,
+          completionTokens: p.usage.completion_tokens ?? 0,
+          totalTokens: p.usage.total_tokens ?? 0,
+        }
       }
       const delta = p.choices?.[0]?.delta
       if (!delta) return
@@ -376,6 +393,9 @@ export class NeuralTowerBackend implements IBackend {
     const result: IChatMessage = { role: "assistant", content: full, timestamp: Date.now() }
     if (toolCalls.size > 0) {
       result.toolCalls = Array.from(toolCalls.values())
+    }
+    if (usage) {
+      result.usage = usage
     }
     return result
   }

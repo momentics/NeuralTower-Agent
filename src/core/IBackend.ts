@@ -51,6 +51,13 @@ export interface IBackendConfig {
   timeoutMs: number
 }
 
+/** Расход токенов на запрос (из usage ответа сервера). */
+export interface ITokenUsage {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
 export interface IChatMessage {
   role: "system" | "user" | "assistant" | "tool"
   content: string
@@ -60,6 +67,8 @@ export interface IChatMessage {
   /** Для role="tool": имя инструмента. */
   name?: string
   timestamp?: number
+  /** Расход токенов (assistant-сообщения, если сервер вернул usage). */
+  usage?: ITokenUsage
 }
 
 export interface IToolCall {
