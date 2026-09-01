@@ -50,11 +50,11 @@ export const DEFAULT_FIND_OPTIONS: ISearchOptions = {
  * Порог числа кандидатов с одинаковым именем, при превышении которого
  * fuzzy-совпадение отключается — имя считается «вездесущим» (например,
  * `init`/`update`/`render` в каждом виджете вложенной темы). Настраивается
- * через переменную среды `CODEGRAPH_AMBIGUOUS_NAME_CEILING`.
+ * через переменную среды `NTGRAPH_AMBIGUOUS_NAME_CEILING`.
  */
 const DEFAULT_AMBIGUOUS_NAME_CEILING = 500;
 function resolveAmbiguousNameCeiling(): number {
-  const raw = process.env.CODEGRAPH_AMBIGUOUS_NAME_CEILING;
+  const raw = process.env.NTGRAPH_AMBIGUOUS_NAME_CEILING;
   if (!raw) return DEFAULT_AMBIGUOUS_NAME_CEILING;
   const parsed = Number.parseInt(raw, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_AMBIGUOUS_NAME_CEILING;

@@ -1726,9 +1726,9 @@ export function clearNameMatcherMemos(context: IResolutionContext): void {
 // Профилирование NameMatcher
 // =============================================================================
 
-/** Профиль времени выполнения (активно только при CODEGRAPH_RESOLVE_PROFILE=2). */
+/** Профиль времени выполнения (активно только при NTGRAPH_RESOLVE_PROFILE=2). */
 const NM_PROFILE: Map<string, { n: number; ns: bigint }> | null =
-  process.env.CODEGRAPH_RESOLVE_PROFILE === '2'
+  process.env.NTGRAPH_RESOLVE_PROFILE === '2'
     ? new Map()
     : null;
 

@@ -4,7 +4,7 @@
  * resolveBatch() разбивает батч на чанки, распределяет по пулу и собирает
  * результаты в порядке чанков, чтобы порядок вставки рёбер совпадал с
  * последовательным путём. Любой сбой воркера — сбой батча, вызывающий
- * откат к последовательному пути. Выключатель: CODEGRAPH_NO_PARALLEL_RESOLVE=1.
+ * откат к последовательному пути. Выключатель: NTGRAPH_NO_PARALLEL_RESOLVE=1.
  */
 
 import { Worker } from 'worker_threads';
@@ -44,10 +44,10 @@ const CHUNK_SIZE = 500;
 /**
  * Минимум ссылок для создания пула. Запуск пула стоит CPU, который
  * конкурирует с последовательным разрешением. Порог 150000 ссылок.
- * Переопределяется: CODEGRAPH_PARALLEL_RESOLVE_MIN=<ссылки>.
+ * Переопределяется: NTGRAPH_PARALLEL_RESOLVE_MIN=<ссылки>.
  */
 export function minRefsForPool(): number {
-  const raw = process.env.CODEGRAPH_PARALLEL_RESOLVE_MIN;
+  const raw = process.env.NTGRAPH_PARALLEL_RESOLVE_MIN;
   if (raw !== undefined) {
     const parsed = Number.parseInt(raw, 10);
     if (Number.isFinite(parsed) && parsed >= 0) return parsed;
@@ -91,10 +91,10 @@ export class ResolverPool {
   /**
    * Создаёт пул, если скомпилированный воркер существует, выключатель
    * выключен, и машина имеет ядра и память. Возвращает null иначе.
-   * CODEGRAPH_RESOLVE_WORKERS переопределяет размер (0 — отключает).
+   * NTGRAPH_RESOLVE_WORKERS переопределяет размер (0 — отключает).
    */
   static tryCreate(dbPath: string, projectRoot: string): ResolverPool | null {
-    if (process.env.CODEGRAPH_NO_PARALLEL_RESOLVE === '1') return null;
+    if (process.env.NTGRAPH_NO_PARALLEL_RESOLVE === '1') return null;
     const workerScript = path.join(__dirname, 'ResolverWorker.js');
     if (!fs.existsSync(workerScript)) return null;
     let dbSizeBytes = 0;
@@ -106,7 +106,7 @@ export class ResolverPool {
     const ap = os.availableParallelism();
     const budget = memoryBudgetBytes();
     const size = ResolverPool.resolvePoolSize({
-      explicit: process.env.CODEGRAPH_RESOLVE_WORKERS,
+      explicit: process.env.NTGRAPH_RESOLVE_WORKERS,
       availableParallelism: ap,
       memoryBudget: budget,
       dbSizeBytes,

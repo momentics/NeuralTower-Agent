@@ -472,7 +472,7 @@ export class ExtractionOrchestrator {
       // собран бандл воркера (out/ParserWorker.js после compile/build:worker).
       const workerScriptPath = resolveParseWorkerPath();
       if (workerScriptPath) {
-        const poolSize = resolveParsePoolSize(process.env.CODEGRAPH_PARSE_WORKERS, os.cpus().length);
+        const poolSize = resolveParsePoolSize(process.env.NTGRAPH_PARSE_WORKERS, os.cpus().length);
         if (poolSize > 0) {
           parsePool = new ParseWorkerPool({
             languages: [...neededLanguages] as Language[],

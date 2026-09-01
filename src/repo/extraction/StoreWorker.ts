@@ -37,9 +37,9 @@ const port = parentPort;
 let db: SqliteDatabase | null = null;
 let queries: QueryBuilder | null = null;
 
-// CODEGRAPH_SYNTH_TIMINGS: разделение времени работы writer на две части —
+// NTGRAPH_SYNTH_TIMINGS: разделение времени работы writer на две части —
 // decode+finalize (материализация JS-объектов) и SQL store — выводится один раз при close.
-const STORE_TIMINGS = !!process.env.CODEGRAPH_SYNTH_TIMINGS;
+const STORE_TIMINGS = !!process.env.NTGRAPH_SYNTH_TIMINGS;
 let decodeNs = 0n;
 let storeNs = 0n;
 let bundleCount = 0;

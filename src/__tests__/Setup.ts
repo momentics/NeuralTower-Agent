@@ -2,7 +2,7 @@ import { vi } from "vitest"
 
 // Отключаем пул воркеров в тестах — используем in-process WASM-парсинг
 // (реальный воркер покрывается отдельным интеграционным тестом).
-process.env.CODEGRAPH_PARSE_WORKERS = "0"
+process.env.NTGRAPH_PARSE_WORKERS = "0"
 
 // Заглушка для crypto.randomBytes при генерации HTML вебвью
 vi.mock("crypto", async (importOriginal) => {

@@ -36,7 +36,7 @@ export class WalCheckpointValve {
 
   constructor(
     private readonly db: SqliteDatabase,
-    softMb: number = resolveWalValveMb(process.env.CODEGRAPH_WAL_VALVE_MB),
+    softMb: number = resolveWalValveMb(process.env.NTGRAPH_WAL_VALVE_MB),
     private readonly intervalMs: number = CHECK_INTERVAL_MS,
     private readonly log: (msg: string) => void = () => {}
   ) {
