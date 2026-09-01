@@ -23,8 +23,9 @@ export interface ISkillManager {
 export class SkillManager implements ISkillManager {
   private skills: ISkill[] = []
 
-  /** Зарегистрировать навык. */
+  /** Зарегистрировать навык. Навык с тем же именем заменяет существующий. */
   register(skill: ISkill): void {
+    this.skills = this.skills.filter((s) => s.name !== skill.name)
     this.skills.push(skill)
   }
 

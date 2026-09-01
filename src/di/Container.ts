@@ -98,8 +98,10 @@ import {
   GitTool,
   QuestionTool,
   TaskTool,
+  SkillTool,
 } from "../tools"
 import { ToolOutputTruncator } from "../tools/Truncate"
+import { loadSkillsFromDir } from "../skills/SkillFileLoader"
 import { QuestionServiceHolder } from "../services/question/QuestionService"
 import { SubagentLauncherHolder, filterSubagentTools } from "../agent/TaskLauncher"
 
@@ -339,7 +341,7 @@ export function createSnapshotDomain(
 
 // ── Домен: Инструменты ────────────────────────────────────
 
-export function createToolsDomain(
+export async function createToolsDomain(
   workspaceRoot: string | undefined,
   codebaseSearch: ICodebaseSearch | undefined,
   todoStore: TodoStore,
@@ -347,8 +349,23 @@ export function createToolsDomain(
   questionService: QuestionServiceHolder,
   taskLauncher: SubagentLauncherHolder,
   getWorkDir: () => string | null,
-): IToolsDeps {
+  globalSkillsDir: string | undefined,
+): Promise<IToolsDeps> {
   const tools = new ToolRegistry()
+
+  const skills = new SkillManager()
+  skills.registerMany(BUILT_IN_SKILLS)
+
+  // Пользовательские навыки: глобальный каталог, затем проектный
+  // (.neuraltower/skills). Проектные переопределяют глобальные по имени.
+  if (globalSkillsDir) {
+    for (const s of await loadSkillsFromDir(globalSkillsDir)) skills.register(s)
+  }
+  if (workspaceRoot) {
+    for (const s of await loadSkillsFromDir(path.join(workspaceRoot, ".neuraltower", "skills"))) {
+      skills.register(s)
+    }
+  }
 
   if (workspaceRoot) {
     tools.register(new ReadFileTool(workspaceRoot))
@@ -367,6 +384,7 @@ export function createToolsDomain(
   tools.register(new LspTool(() => workspaceRoot ?? process.cwd()))
   tools.register(new TodoWriteTool(todoStore))
   tools.register(new QuestionTool(questionService))
+  tools.register(new SkillTool(skills))
   tools.register(new TaskTool(taskLauncher, getWorkDir))
 
   if (codebaseSearch) {
@@ -379,9 +397,6 @@ export function createToolsDomain(
   } catch (err: unknown) {
     log.warn(`MCP-инициализация не выполнена: ${errorMessage(err)}`)
   }
-
-  const skills = new SkillManager()
-  skills.registerMany(BUILT_IN_SKILLS)
 
   return { tools, mcpManager, skills }
 }
@@ -639,7 +654,7 @@ export async function createDeps(
   const todoStore = new TodoStore()
   const questionService = new QuestionServiceHolder()
   const taskLauncher = new SubagentLauncherHolder()
-  const { tools, mcpManager, skills } = createToolsDomain(
+  const { tools, mcpManager, skills } = await createToolsDomain(
     workspaceRoot,
     codebaseSearch,
     todoStore,
@@ -647,6 +662,7 @@ export async function createDeps(
     questionService,
     taskLauncher,
     () => workDirState.current,
+    path.join(ctx.globalStorageUri.fsPath, "skills"),
   )
   await syncMCP(mcpManager, tools)
 

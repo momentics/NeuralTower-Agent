@@ -106,6 +106,7 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
       { tool: "todowrite", level: "allow" },
       { tool: "ntgraph_*", level: "allow" },
       { tool: "question", level: "allow" },
+      { tool: "skill", level: "allow" },
       { tool: "edit_file", level: "ask" },
       { tool: "write_file", level: "ask" },
       { tool: "bash", level: "ask" },
@@ -145,6 +146,7 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
       { tool: "todowrite", level: "allow" },
       { tool: "ntgraph_*", level: "allow" },
       { tool: "question", level: "allow" },
+      { tool: "skill", level: "allow" },
       // git: чтение состояния (status/diff/log) без запроса, изменения — с подтверждением
       { tool: "git", level: "ask" },
       { tool: "edit_file", level: "deny" },
@@ -183,6 +185,7 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
       { tool: "lsp", level: "allow" },
       { tool: "codebase_search", level: "allow" },
       { tool: "question", level: "allow" },
+      { tool: "skill", level: "allow" },
       { tool: "ntgraph_*", level: "allow" },
       // git: чтение состояния (status/diff/log) без запроса, изменения — с подтверждением
       { tool: "git", level: "ask" },

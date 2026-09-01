@@ -103,4 +103,13 @@ describe("SkillManager", () => {
     expect(mgr.list()).toHaveLength(0)
     expect(mgr.match("a").length).toBe(0)
   })
+
+  it("register заменяет навык с тем же именем", () => {
+    const m = new SkillManager()
+    m.register({ name: "a", description: "1", triggers: [], instructions: "old" })
+    m.register({ name: "a", description: "2", triggers: [], instructions: "new" })
+    const list = m.list()
+    expect(list.length).toBe(1)
+    expect(list[0].instructions).toBe("new")
+  })
 })

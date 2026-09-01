@@ -25,6 +25,13 @@ export class AgentContextBuilder {
   async buildSystemPrompt(skills: ISkill[]): Promise<string> {
     const base = this.baseSystemPrompt()
     const skillCtx = this.skillManager.buildContext(skills)
+    const allSkills = this.skillManager.list()
+    const skillsSection =
+      allSkills.length > 0
+        ? `# Доступные навыки\nНавыки предоставляют специализированные инструкции для конкретных задач. Загружайте инструкции навыка инструментом skill с аргументом name, когда задача соответствует описанию навыка.\n${allSkills
+            .map((s) => `- ${s.name}: ${s.description}`)
+            .join("\n")}`
+        : ""
     const projectCtx = this.memory.projectContext()
     const indexStats = this.fileIndex.stats()
     const indexInfo =
@@ -58,7 +65,7 @@ export class AgentContextBuilder {
 
     const [gitContext, contextManagerContent] = await Promise.all([gitPromise, contextManagerPromise])
 
-    const parts = [contextManagerContent, base, projectCtx, skillCtx, indexInfo, gitContext].filter(Boolean)
+    const parts = [contextManagerContent, base, projectCtx, skillCtx, skillsSection, indexInfo, gitContext].filter(Boolean)
     return parts.join("\n\n")
   }
 
