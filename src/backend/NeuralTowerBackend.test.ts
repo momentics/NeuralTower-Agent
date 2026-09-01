@@ -462,6 +462,46 @@ describe("NeuralTowerBackend", () => {
     vi.unstubAllGlobals()
   })
 
+  it("temperature из конфигурации уходит в тело запроса", async () => {
+    await backend.updateConfig({ temperature: 0.7 })
+    const chunks = 'data: {"choices":[{"delta":{"content":"ok"}}]}\ndata: [DONE]\n'
+    const reader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({ done: false, value: Buffer.from(chunks) })
+        .mockResolvedValueOnce({ done: true }),
+      releaseLock: vi.fn(),
+    }
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: { getReader: () => reader },
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    await backend.chat([{ role: "user", content: "hi" }], vi.fn())
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.temperature).toBe(0.7)
+    vi.unstubAllGlobals()
+  })
+
+  it("temperature null — параметр не отправляется", async () => {
+    const b = new NeuralTowerBackend(makeTestBackendConfig({ temperature: null }))
+    const chunks = 'data: {"choices":[{"delta":{"content":"ok"}}]}\ndata: [DONE]\n'
+    const reader = {
+      read: vi.fn()
+        .mockResolvedValueOnce({ done: false, value: Buffer.from(chunks) })
+        .mockResolvedValueOnce({ done: true }),
+      releaseLock: vi.fn(),
+    }
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      body: { getReader: () => reader },
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    await b.chat([{ role: "user", content: "hi" }], vi.fn())
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)
+    expect(body.temperature).toBeUndefined()
+    vi.unstubAllGlobals()
+  })
+
   // ── Автовыбор модели ─────────────────────────────────────
 
   const makeReader = () => ({

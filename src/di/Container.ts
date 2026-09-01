@@ -607,6 +607,7 @@ export async function createDeps(
       if (partial.model !== undefined) await vsCfg.update("model", partial.model, true)
       if (partial.maxRetries !== undefined) await vsCfg.update("maxRetries", partial.maxRetries, true)
       if (partial.timeoutMs !== undefined) await vsCfg.update("timeoutMs", partial.timeoutMs, true)
+      if (partial.temperature !== undefined) await vsCfg.update("temperature", partial.temperature, true)
     } catch (err: unknown) {
       log.error(`Ошибка сохранения конфигурации: ${errorMessage(err)}`)
     }

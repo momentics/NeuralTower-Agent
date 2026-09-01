@@ -60,10 +60,10 @@ export type ExtToWebview =
   | { type: "todoUpdate"; todos: ITodoItem[] }
 
 export type SettingsToExt =
-  | { type: "settingsSave"; url: string; model: string; maxRetries?: number; timeoutMs?: number; autoApprove?: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean }
+  | { type: "settingsSave"; url: string; model: string; maxRetries?: number; timeoutMs?: number; temperature?: number | null; autoApprove?: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean }
   | { type: "settingsTest"; url?: string }
 
 export type ExtToSettings =
-  | { type: "settingsData"; config: { url: string; model: string; maxRetries: number; timeoutMs: number; autoApprove: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean; mcpServers?: Array<{ name: string; command: string; ready: boolean; toolCount: number }> }; models: string[] }
+  | { type: "settingsData"; config: { url: string; model: string; maxRetries: number; timeoutMs: number; temperature?: number | null; autoApprove: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean; mcpServers?: Array<{ name: string; command: string; ready: boolean; toolCount: number }> }; models: string[] }
   | { type: "settingsSaved" }
   | { type: "settingsTestResult"; success: boolean; message: string }

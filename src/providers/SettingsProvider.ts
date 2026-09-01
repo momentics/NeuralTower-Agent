@@ -147,6 +147,9 @@ export class SettingsProvider implements ISettingsProvider {
             if (typeof msg.timeoutMs === "number" && msg.timeoutMs >= UI_MIN_BACKEND_TIMEOUT_MS) {
               await this.backend.updateConfig({ timeoutMs: msg.timeoutMs })
             }
+            if (msg.temperature === null || (typeof msg.temperature === "number" && msg.temperature >= 0 && msg.temperature <= 2)) {
+              await this.backend.updateConfig({ temperature: msg.temperature })
+            }
             if (typeof msg.autoApprove === "boolean") {
               await vsCfg.update("autoApprove.enabled", msg.autoApprove, true)
             }
@@ -237,6 +240,13 @@ export class SettingsProvider implements ISettingsProvider {
         <div class="setting-label">Таймаут (мс)</div>
       </div>
       <input class="setting-input" id="timeoutMs" type="number" value="60000" min="1000" style="width:100px">
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">Температура</div>
+        <div class="setting-desc">0–2; пусто — значение по умолчанию сервера</div>
+      </div>
+      <input class="setting-input" id="temperature" type="number" step="0.1" min="0" max="2" style="width:70px">
     </div>
   </div>
 

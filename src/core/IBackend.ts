@@ -49,6 +49,11 @@ export interface IBackendConfig {
   model: string
   maxRetries: number
   timeoutMs: number
+  /**
+   * Температура генерации (0–2). null — параметр не отправляется
+   * (значение по умолчанию сервера).
+   */
+  temperature?: number | null
 }
 
 /** Расход токенов на запрос (из usage ответа сервера). */

@@ -5,6 +5,7 @@ const modelInput = document.getElementById("model")
 const modelList = document.getElementById("model-list")
 const maxRetriesInput = document.getElementById("maxRetries")
 const timeoutMsInput = document.getElementById("timeoutMs")
+const temperatureInput = document.getElementById("temperature")
 const maxIterationsInput = document.getElementById("maxIterations")
 const maxSessionsInput = document.getElementById("maxSessions")
 const autoApproveToggle = document.getElementById("autoApprove")
@@ -70,6 +71,7 @@ window.addEventListener("message", (event) => {
       }
       if (maxRetriesInput) maxRetriesInput.value = String(data.config.maxRetries)
       if (timeoutMsInput) timeoutMsInput.value = String(data.config.timeoutMs)
+      if (temperatureInput) temperatureInput.value = data.config.temperature != null ? String(data.config.temperature) : ""
       if (maxIterationsInput) maxIterationsInput.value = String(data.config.maxIterations)
       if (maxSessionsInput) maxSessionsInput.value = String(data.config.maxSessions)
       setToggle(autoApproveToggle, data.config.autoApprove)
@@ -120,6 +122,7 @@ btnSave.addEventListener("click", () => {
     model: modelInput.value.trim(),
     maxRetries: Number(maxRetriesInput.value),
     timeoutMs: Number(timeoutMsInput.value),
+    temperature: temperatureInput && temperatureInput.value.trim() !== "" ? Number(temperatureInput.value) : null,
     maxIterations: Number(maxIterationsInput.value),
     maxSessions: Number(maxSessionsInput.value),
     autoApprove: autoApproveToggle.classList.contains("on"),

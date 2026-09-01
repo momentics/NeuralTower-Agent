@@ -197,6 +197,13 @@
           "minimum": 1000,
           "description": "Таймаут запроса в миллисекундах"
         },
+        "neuralTowerAgent.temperature": {
+          "type": ["number", "null"],
+          "default": null,
+          "minimum": 0,
+          "maximum": 2,
+          "description": "Температура генерации (0–2). null — значение по умолчанию сервера"
+        },
         "neuralTowerAgent.maxSessions": {
           "type": "number",
           "default": 50,

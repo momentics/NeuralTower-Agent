@@ -120,6 +120,8 @@ function registerConfigChangeListener(deps: Awaited<ReturnType<typeof createDeps
     if (maxRetries !== undefined && maxRetries !== current.maxRetries) updates.maxRetries = maxRetries
     const timeoutMs = cfg.get<number>("timeoutMs")
     if (timeoutMs !== undefined && timeoutMs !== current.timeoutMs) updates.timeoutMs = timeoutMs
+    const temperature = cfg.get<number | null>("temperature")
+    if (temperature !== undefined && temperature !== current.temperature) updates.temperature = temperature
     if (Object.keys(updates).length > 0) {
       try {
         await deps.backend.updateConfig(updates)

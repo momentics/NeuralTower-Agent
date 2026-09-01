@@ -57,6 +57,7 @@ export class NeuralTowerBackend implements IBackend {
     if (normalized.model !== undefined) this.config.model = normalized.model
     if (normalized.maxRetries !== undefined) this.config.maxRetries = normalized.maxRetries
     if (normalized.timeoutMs !== undefined) this.config.timeoutMs = normalized.timeoutMs
+    if (normalized.temperature !== undefined) this.config.temperature = normalized.temperature
 
     // Список моделей другого сервера не переносится: сбрасываем кэш.
     if (normalized.url !== undefined) this.modelCache = null
@@ -150,17 +151,23 @@ export class NeuralTowerBackend implements IBackend {
   ): Promise<Response> {
     const cfg = await this.getConfig()
     const auto = cfg.model.trim() === ""
-    const doRequest = (model: string): Promise<Response> =>
-      this.request(
+    const doRequest = (model: string): Promise<Response> => {
+      const fullBody: Record<string, unknown> = { ...body, model }
+      // null/undefined — не отправлять (сервер использует своё значение)
+      if (typeof cfg.temperature === "number") {
+        fullBody.temperature = cfg.temperature
+      }
+      return this.request(
         `${cfg.url}/v1/chat/completions`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...body, model }),
+          body: JSON.stringify(fullBody),
         },
         signal,
         opts,
       )
+    }
 
     const model = await this.resolveModel()
     try {

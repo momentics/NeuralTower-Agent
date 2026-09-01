@@ -21,7 +21,14 @@ export function loadDefaultBackendConfig(): IBackendConfig {
     model: "",
     maxRetries: 3,
     timeoutMs: 60000,
+    temperature: null,
   }
+}
+
+/** Температура из настроек: число 0–2 (зажимается) или null — не отправлять. */
+function readTemperature(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || Number.isNaN(value)) return null
+  return Math.min(2, Math.max(0, value))
 }
 
 // ── Агент ─────────────────────────────────────────────────
@@ -196,6 +203,7 @@ export function loadAppConfig(): IAppConfig {
       model: cfg.get<string>("model", loadDefaultBackendConfig().model)!,
       maxRetries: cfg.get<number>("maxRetries", loadDefaultBackendConfig().maxRetries)!,
       timeoutMs: cfg.get<number>("timeoutMs", loadDefaultBackendConfig().timeoutMs)!,
+      temperature: readTemperature(cfg.get<number | null>("temperature", null)),
     },
     agent: {
       maxIterations: cfg.get<number>("agent.maxIterations", loadDefaultAgentConfig().maxIterations)!,
