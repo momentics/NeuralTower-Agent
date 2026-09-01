@@ -10,6 +10,7 @@ import type { IAppConfig } from "../core/Config"
 import type { IFileIndex } from "../repo/FileIndex"
 import type { ISnapshotService } from "../services/snapshot/SnapshotTypes"
 import type { TodoStore } from "./TodoStore"
+import type { ToolOutputTruncator } from "../tools/Truncate"
 
 /**
  * Фабрика для создания экземпляров AgentOrchestrator.
@@ -46,6 +47,9 @@ export interface IAgentDependencies {
 
   /** Файловый индекс. */
   readonly fileIndex: IFileIndex
+
+  /** Обрезатель вывода инструментов (полный текст — в файл). */
+  readonly toolOutputTruncator: ToolOutputTruncator
 
   /** Колбэк статуса для UI (например, «Создаю план…»). Пустой текст сбрасывает статус. */
   onAgentStatus?: (text: string) => void

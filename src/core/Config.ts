@@ -176,6 +176,7 @@ export interface IAppConfig {
   agent: IAgentConfig
   context: IContextConfig
   compactor: ICompactorConfig
+  toolOutput: IToolOutputConfig
   session: ISessionConfig
   autocomplete: IAutocompleteConfig
   snapshots: ISnapshotConfig
@@ -209,6 +210,10 @@ export function loadAppConfig(): IAppConfig {
     },
     compactor: {
       ...loadDefaultCompactorConfig(),
+    },
+    toolOutput: {
+      ...loadDefaultToolOutputConfig(),
+      maxChars: cfg.get<number>("toolOutput.maxChars", loadDefaultToolOutputConfig().maxChars)!,
     },
     session: {
       maxSessions: cfg.get<number>("maxSessions", loadDefaultSessionConfig().maxSessions)!,
@@ -263,10 +268,19 @@ export const FS_MAX_READ_OUTPUT_BYTES = 512 * 1024
 
 // ── Вывод инструментов ─────────────────────────────────────
 
-/** Максимальная длина вывода инструмента в разговоре и в персистентной
- * сессии. Один большой вывод (чтение крупного файла, лог команды) не
- * должен раздувать контекст модели (1 токен ≈ 4 символа). */
-export const TOOL_OUTPUT_MAX_CHARS = 100_000
+/**
+ * Настройки вывода инструментов: лимит длины в разговоре.
+ * Более длинный вывод обрезается, полный текст сохраняется в файл
+ * (см. ToolOutputTruncator).
+ */
+export interface IToolOutputConfig {
+  /** Максимальная длина вывода инструмента в разговоре, символы. */
+  maxChars: number
+}
+
+export function loadDefaultToolOutputConfig(): IToolOutputConfig {
+  return { maxChars: 30_000 }
+}
 
 // ── Bash-инструмент ──────────────────────────────────────────
 

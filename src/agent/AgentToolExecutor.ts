@@ -8,19 +8,17 @@ import { makeLocalToolCallId } from "./AgentTypes"
 import { AbortError, errorMessage } from "../core/Errors"
 import { createDomainLogger } from "../core/Logger"
 import { extractJsonBlocks } from "../utils/ExtractJsonBlocks"
-import { TOOL_OUTPUT_MAX_CHARS } from "../core/Config"
+import type { ToolOutputTruncator } from "../tools/Truncate"
 
 const log = createDomainLogger("AgentToolExecutor")
 
 export class AgentToolExecutor {
-  /** Максимальная длина вывода инструмента в разговоре (тестовая точка доступа). */
-  static maxOutputChars: number = TOOL_OUTPUT_MAX_CHARS
-
   constructor(
     private readonly backend: IBackend,
     private readonly toolRegistry: IToolRegistry,
     private readonly permissionManager: IPermissionManager | null,
     private readonly modeManager: AgentModeManager,
+    private readonly truncator: ToolOutputTruncator,
   ) {}
 
   async callBackend(
@@ -136,7 +134,7 @@ export class AgentToolExecutor {
           toolResult = { output: `Ошибка выполнения: ${msg}`, success: false }
         }
 
-        const cappedOutput = this.capToolOutput(toolResult.output)
+        const cappedOutput = await this.truncateOutput(toolResult.output, tc.id)
         onToolResult?.(tc.toolName, { ...toolResult, output: cappedOutput }, tc.id)
 
         workingConversation.push({
@@ -188,12 +186,11 @@ export class AgentToolExecutor {
   }
 
   /**
-   * Ограничить вывод инструмента: длинный вывод (чтение крупного файла,
-   * лог команды) раздувает контекст модели и персистентную сессию.
+   * Обрезать вывод инструмента: длинный вывод сокращается, полный текст
+   * сохраняется в файл (модель перечитывает его через read_file).
    */
-  private capToolOutput(output: string): string {
-    if (output.length <= AgentToolExecutor.maxOutputChars) return output
-    return output.slice(0, AgentToolExecutor.maxOutputChars) + "\n… (вывод обрезан)"
+  private async truncateOutput(output: string, callId: string): Promise<string> {
+    return this.truncator.truncate(output, callId)
   }
 
  private extractToolCalls(content: string): IAgentToolCall[] | null {

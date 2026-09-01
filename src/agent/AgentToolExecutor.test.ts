@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterAll } from "vitest"
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import { AgentToolExecutor } from "./AgentToolExecutor"
 import type { IBackend, IChatMessage } from "../core/IBackend"
 import { ToolRegistry } from "../tools/ToolRegistry"
@@ -7,7 +7,7 @@ import type { IPermissionManager } from "../services/permission/PermissionManage
 import { AgentModeManager } from "./AgentMode"
 import type { IAgentToolCall, IToolResult } from "./AgentTypes"
 import { TEST_BACKEND_URL, makeTestBackendConfig } from "../__tests__/fixtures"
-import { TOOL_OUTPUT_MAX_CHARS } from "../core/Config"
+import { ToolOutputTruncator } from "../tools/Truncate"
 
 const createMockBackend = (): IBackend => ({
   chat: vi.fn(async () => ({ role: "assistant", content: "Test response", timestamp: Date.now() })),
@@ -46,16 +46,13 @@ describe("AgentToolExecutor", () => {
     modeManager = new AgentModeManager()
   })
 
-  afterAll(() => {
-    AgentToolExecutor.maxOutputChars = TOOL_OUTPUT_MAX_CHARS
-  })
-
   it("creates instance with all dependencies", () => {
     const executor = new AgentToolExecutor(
       backend,
       toolRegistry,
       permissionManager,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     expect(executor).toBeDefined()
   })
@@ -66,6 +63,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     const result = await executor.callBackend(conversation, () => {})
@@ -87,6 +85,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     const result = await executor.callBackend(conversation, () => {})
@@ -111,6 +110,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     const result = await executor.callBackend(conversation, () => {})
@@ -130,6 +130,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     const result = await executor.callBackend(conversation, () => {})
@@ -150,6 +151,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     const result = await executor.callBackend(conversation, () => {})
@@ -167,6 +169,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = [{ role: "user", content: "hello", timestamp: Date.now() }]
     await expect(executor.callBackend(conversation, () => {}, ac.signal)).rejects.toThrow("Задача прервана")
@@ -180,6 +183,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = []
     const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "read", arguments: { path: "/test" } }]
@@ -216,6 +220,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = []
     const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "read", arguments: { path: "/test" } }]
@@ -234,6 +239,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = []
     const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "edit", arguments: { path: "/test" } }]
@@ -257,6 +263,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = []
     const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "write_file", arguments: { path: "/test" } }]
@@ -285,6 +292,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = []
     const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "nope", arguments: {} }]
@@ -307,6 +315,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       permissionManager,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = []
     const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "bash", arguments: { command: "rm -rf /" } }]
@@ -329,6 +338,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = []
     const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "read", arguments: { path: "/test" } }]
@@ -349,6 +359,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = []
     const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "read", arguments: { path: "/test" } }]
@@ -375,6 +386,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = []
     const toolCalls: IAgentToolCall[] = [
@@ -405,6 +417,7 @@ describe("AgentToolExecutor", () => {
       toolRegistry,
       permissionManager,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
     )
     const conversation: IChatMessage[] = []
     const toolCalls: IAgentToolCall[] = [
@@ -426,32 +439,34 @@ describe("AgentToolExecutor", () => {
     expect(conversation[2].content).toBe("ok")
   })
 
-  it("вывод инструмента в разговоре ограничивается", async () => {
-    const mockTool = createMockTool("read", true, { output: "x".repeat(250), success: true })
+  it("длинный вывод инструмента обрезается, в разговор попадают начало и конец", async () => {
+    const long = "x".repeat(50_000)
+    const mockTool = createMockTool("read", true, { output: long, success: true })
     toolRegistry.register(mockTool)
     const executor = new AgentToolExecutor(
       backend,
       toolRegistry,
       null,
       modeManager,
+      new ToolOutputTruncator(() => null, () => 100),
     )
     const conversation: IChatMessage[] = []
     const toolCalls: IAgentToolCall[] = [{ id: "c1", toolName: "read", arguments: { path: "/test" } }]
     const onToolResult = vi.fn()
-    AgentToolExecutor.maxOutputChars = 100
-    const expected = "x".repeat(100) + "\n… (вывод обрезан)"
     const result = await executor.executeToolCalls(
       toolCalls, "build", conversation, undefined, undefined, undefined, onToolResult,
     )
     expect(result.anyFailed).toBe(false)
     expect(conversation).toHaveLength(2)
     expect(conversation[1].role).toBe("tool")
-    // В разговор попадает обрезанный вывод: 100 символов + заметка.
-    expect(conversation[1].content).toBe(expected)
-    // onToolResult получает тот же ограниченный вывод (персистентная сессия).
+    // В разговор попадает обрезанный вывод: начало + маркер + конец.
+    expect(conversation[1].content).toContain("вывод обрезан")
+    expect(conversation[1].content).not.toBe(long)
+    expect(conversation[1].content.length).toBeLessThan(long.length)
+    // onToolResult получает тот же обрезанный вывод (персистентная сессия).
     expect(onToolResult).toHaveBeenCalledWith(
       "read",
-      expect.objectContaining({ output: expected, success: true }),
+      expect.objectContaining({ output: conversation[1].content, success: true }),
       "c1",
     )
   })

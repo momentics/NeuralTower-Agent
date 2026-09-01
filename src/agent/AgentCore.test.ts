@@ -10,6 +10,7 @@ import { FileIndex } from "../repo/FileIndex"
 import { loadDefaultAgentConfig, loadDefaultCompactorConfig, loadDefaultContextConfig, loadDefaultSessionConfig, loadDefaultSnapshotConfig } from "../core/Config"
 import { TodoStore } from "./TodoStore"
 import { TEST_BACKEND_URL, makeTestBackendConfig } from "../__tests__/fixtures"
+import { ToolOutputTruncator } from "../tools/Truncate"
 
 const createMockBackend = (): IBackend => ({
   chat: vi.fn(async () => ({ role: "assistant", content: "Test response", timestamp: Date.now() })),
@@ -46,6 +47,7 @@ const createDeps = (): IAgentFullDependencies => {
     contextProviderRegistry: registry,
     contextManager,
     fileIndex,
+    toolOutputTruncator: new ToolOutputTruncator(() => null, () => 30_000),
     gitService: null,
     permissionManager: null,
     mcpManager: null,

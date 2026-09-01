@@ -97,6 +97,7 @@ import {
   CodebaseSearchTool,
   GitTool,
 } from "../tools"
+import { ToolOutputTruncator } from "../tools/Truncate"
 
 const log = createDomainLogger("DI")
 
@@ -660,6 +661,12 @@ export async function createDeps(
     () => workDirState.current,
   )
 
+  // ── Обрезка вывода инструментов ─────────────────────────
+  const toolOutputTruncator = new ToolOutputTruncator(
+    () => path.join(ctx.globalStorageUri.fsPath, "tool-outputs"),
+    () => config.toolOutput.maxChars,
+  )
+
   // ── Агент ───────────────────────────────────────────────
   const agentDeps: IAgentFullDependencies = {
     getWorkDir: () => workDirState.current,
@@ -667,6 +674,7 @@ export async function createDeps(
     contextProviderRegistry,
     contextManager,
     fileIndex,
+    toolOutputTruncator,
     gitService,
     permissionManager,
     mcpManager,

@@ -58,6 +58,7 @@ function createAgentInternals(
     toolRegistry,
     deps.permissionManager,
     modeManager,
+    deps.toolOutputTruncator,
   )
 
   const replanner = new Replanner(backend, toolRegistry)
