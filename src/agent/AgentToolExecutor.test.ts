@@ -470,4 +470,32 @@ describe("AgentToolExecutor", () => {
       "c1",
     )
   })
+
+  it("doom loop: N одинаковых подряд вызовов принудительно подтверждается", async () => {
+    const mockTool = createMockTool("bash", false)
+    toolRegistry.register(mockTool)
+    const seen: Array<{ forceReason?: string }> = []
+    const perm = {
+      checkPermission: async (_t: unknown, _a: unknown, _ms?: number, opts?: { forceReason?: string }) => {
+        seen.push(opts ?? {})
+        return true
+      },
+    } as unknown as IPermissionManager
+    const executor = new AgentToolExecutor(
+      backend,
+      toolRegistry,
+      perm,
+      modeManager,
+      new ToolOutputTruncator(() => null, () => 30_000),
+      2, // лимит doom loop
+    )
+
+    const call = { id: "c1", toolName: "bash", arguments: { command: "npm test" } }
+    await executor.executeToolCalls([call], "build", [])
+    await executor.executeToolCalls([{ ...call, id: "c2" }], "build", [])
+
+    // Первый вызов — обычное подтверждение, второй — с forceReason
+    expect(seen[0].forceReason).toBeUndefined()
+    expect(seen[1].forceReason).toContain("зацикливание")
+  })
 })

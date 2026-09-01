@@ -7,7 +7,7 @@ import type { IAgentFullDependencies } from "./AgentDependencies"
 import { ContextManager } from "../core/ContextManager"
 import { ContextProviderRegistry } from "../core/providers/context/Registry"
 import { FileIndex } from "../repo/FileIndex"
-import { loadDefaultAgentConfig, loadDefaultCompactorConfig, loadDefaultContextConfig, loadDefaultSessionConfig, loadDefaultSnapshotConfig } from "../core/Config"
+import { loadDefaultAgentConfig, loadDefaultCompactorConfig, loadDefaultContextConfig, loadDefaultPermissionConfig, loadDefaultSessionConfig, loadDefaultSnapshotConfig } from "../core/Config"
 import { TodoStore } from "./TodoStore"
 import { TEST_BACKEND_URL, makeTestBackendConfig } from "../__tests__/fixtures"
 import { ToolOutputTruncator } from "../tools/Truncate"
@@ -43,6 +43,7 @@ const createDeps = (): IAgentFullDependencies => {
       compactor: loadDefaultCompactorConfig(),
       session: loadDefaultSessionConfig(),
       snapshots: loadDefaultSnapshotConfig(),
+      permissions: loadDefaultPermissionConfig(),
     },
     contextProviderRegistry: registry,
     contextManager,

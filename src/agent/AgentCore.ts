@@ -65,6 +65,7 @@ function createAgentInternals(
     deps.permissionManager,
     modeManager,
     deps.toolOutputTruncator,
+    deps.config.permissions.doomLoopLimit,
   )
 
   const replanner = new Replanner(backend, toolRegistry)

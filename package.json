@@ -289,6 +289,43 @@
           "default": 30000,
           "minimum": 1000,
           "description": "Максимальная длина вывода инструмента в разговоре, символы. Более длинный вывод обрезается, полный текст сохраняется в файл"
+        },
+        "neuralTowerAgent.permissions.bash": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pattern": { "type": "string" },
+              "level": { "type": "string", "enum": ["allow", "deny"] }
+            },
+            "required": ["pattern", "level"]
+          },
+          "default": [
+            { "pattern": "git status", "level": "allow" },
+            { "pattern": "git diff", "level": "allow" },
+            { "pattern": "git log", "level": "allow" }
+          ],
+          "description": "Паттерны команд bash: префикс (git status) или префикс со звёздочкой (git *). Первое совпадение побеждает"
+        },
+        "neuralTowerAgent.permissions.files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "pattern": { "type": "string" },
+              "level": { "type": "string", "enum": ["allow", "deny"] }
+            },
+            "required": ["pattern", "level"]
+          },
+          "default": [],
+          "description": "Паттерны путей к файлам (glob: src/**/*.ts, .env*). Применяются к файловым инструментам. Первое совпадение побеждает"
+        },
+        "neuralTowerAgent.permissions.doomLoopLimit": {
+          "type": "number",
+          "default": 3,
+          "minimum": 2,
+          "maximum": 10,
+          "description": "Число одинаковых подряд вызовов инструмента, после которого запрашивается подтверждение (защита от зацикливания)"
         }
       }
     }

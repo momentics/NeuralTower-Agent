@@ -180,6 +180,7 @@ export interface IAppConfig {
   session: ISessionConfig
   autocomplete: IAutocompleteConfig
   snapshots: ISnapshotConfig
+  permissions: IPermissionPatternsConfig
 }
 
 /**
@@ -228,6 +229,18 @@ export function loadAppConfig(): IAppConfig {
       retentionDays: cfg.get<number>("snapshots.retentionDays", loadDefaultSnapshotConfig().retentionDays)!,
       maxFileSizeBytes: cfg.get<number>("snapshots.maxFileSizeBytes", loadDefaultSnapshotConfig().maxFileSizeBytes)!,
       seed: cfg.get<boolean>("snapshots.seed", loadDefaultSnapshotConfig().seed)!,
+    },
+    permissions: {
+      bash: sanitizePatternRules(
+        cfg.get<IPermissionPatternRule[]>("permissions.bash", loadDefaultPermissionConfig().bash),
+      ),
+      files: sanitizePatternRules(
+        cfg.get<IPermissionPatternRule[]>("permissions.files", loadDefaultPermissionConfig().files),
+      ),
+      doomLoopLimit: (() => {
+        const v = cfg.get<number>("permissions.doomLoopLimit", loadDefaultPermissionConfig().doomLoopLimit)
+        return typeof v === "number" && v >= 2 && v <= 10 ? v : loadDefaultPermissionConfig().doomLoopLimit
+      })(),
     },
   }
 }
@@ -320,6 +333,46 @@ export const INDEX_DEFAULT_MAX_FILES = 20_000
 
 /** Таймаут запроса разрешения в миллисекундах */
 export const PERMISSION_TIMEOUT_MS = 30_000
+
+/** Правило-паттерн разрешения (команда или путь к файлу). */
+export interface IPermissionPatternRule {
+  pattern: string
+  level: "allow" | "deny"
+}
+
+export interface IPermissionPatternsConfig {
+  /** Паттерны команд оболочки (bash). */
+  bash: IPermissionPatternRule[]
+  /** Паттерны путей к файлам (файловые инструменты). */
+  files: IPermissionPatternRule[]
+  /** Doom loop: N одинаковых подряд вызовов принудительно подтверждается. */
+  doomLoopLimit: number
+}
+
+export function loadDefaultPermissionConfig(): IPermissionPatternsConfig {
+  return {
+    bash: [
+      { pattern: "git status", level: "allow" },
+      { pattern: "git diff", level: "allow" },
+      { pattern: "git log", level: "allow" },
+    ],
+    files: [],
+    doomLoopLimit: 3,
+  }
+}
+
+/** Отбросить невалидные правила (pattern не строка, level не allow/deny). */
+export function sanitizePatternRules(rules: unknown): IPermissionPatternRule[] {
+  if (!Array.isArray(rules)) return []
+  return rules.filter(
+    (r): r is IPermissionPatternRule =>
+      !!r &&
+      typeof r === "object" &&
+      typeof (r as IPermissionPatternRule).pattern === "string" &&
+      ((r as IPermissionPatternRule).level === "allow" ||
+        (r as IPermissionPatternRule).level === "deny"),
+  )
+}
 
 // ── UI ───────────────────────────────────────────────────────
 

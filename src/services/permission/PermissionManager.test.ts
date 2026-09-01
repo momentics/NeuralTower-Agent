@@ -189,6 +189,74 @@ describe("PermissionManager — isSafeForArgs (per-operation classification)", (
   })
 })
 
+describe("PermissionManager — паттерны, .env, doom loop", () => {
+  let pm: PermissionManager
+
+  beforeEach(() => {
+    pm = new PermissionManager()
+  })
+
+  const tool = (name: string, isSafe = false) =>
+    ({ name, isSafe, execute: vi.fn() } as any)
+
+  it("bash-паттерн allow: без запроса", async () => {
+    pm.setPatternRules({ bash: [{ pattern: "npm test", level: "allow" }] })
+    const handler = vi.fn()
+    pm.onDidRequestPermission(handler)
+    const result = await pm.checkPermission(tool("bash"), { command: "npm test -- --watch" })
+    expect(result).toBe(true)
+    expect(handler).not.toHaveBeenCalled()
+  })
+
+  it("bash-паттерн deny: даже при allow на инструмент", async () => {
+    pm.setPermission("bash", "allow")
+    pm.setPatternRules({ bash: [{ pattern: "rm *", level: "deny" }] })
+    const result = await pm.checkPermission(tool("bash"), { command: "rm -rf build" })
+    expect(result).toBe(false)
+  })
+
+  it("file-паттерн allow: без запроса", async () => {
+    pm.setPatternRules({ files: [{ pattern: "src/**/*.ts", level: "allow" }] })
+    const result = await pm.checkPermission(tool("edit_file"), { filepath: "src/a/b.ts" })
+    expect(result).toBe(true)
+  })
+
+  it(".env: подтверждение даже при allow на инструмент", async () => {
+    pm.setPermission("read_file", "allow")
+    const checkPromise = pm.checkPermission(tool("read_file"), { filepath: ".env" }, 5000)
+    const reqs = (pm as any).pendingRequests
+    expect(reqs).toHaveLength(1)
+    expect(reqs[0].description).toContain(".env")
+    pm.resolveRequest(reqs[0].id, true, false)
+    expect(await checkPromise).toBe(true)
+  })
+
+  it(".env.example: не защищён", async () => {
+    pm.setPermission("read_file", "allow")
+    const result = await pm.checkPermission(tool("read_file"), { filepath: ".env.example" })
+    expect(result).toBe(true)
+  })
+
+  it("forceReason: подтверждение даже при allow", async () => {
+    pm.setPermission("bash", "allow")
+    const checkPromise = pm.checkPermission(tool("bash"), { command: "x" }, 5000, {
+      forceReason: "Повторный одинаковый вызов bash (3 раза подряд) — возможное зацикливание",
+    })
+    const reqs = (pm as any).pendingRequests
+    expect(reqs).toHaveLength(1)
+    expect(reqs[0].description).toContain("зацикливание")
+    pm.resolveRequest(reqs[0].id, true, false)
+    expect(await checkPromise).toBe(true)
+  })
+
+  it("setPatternRules не затирает не переданные поля", () => {
+    pm.setPatternRules({ bash: [{ pattern: "npm *", level: "allow" }] })
+    expect(pm.getAutoApprove()).toBeDefined()
+    // doomLoopLimit сохранён из дефолта
+    expect((pm as any).patternRules.doomLoopLimit).toBe(3)
+  })
+})
+
 describe("PermissionManager — persistence", () => {
   it("persists permissions to Memento on setPermission", () => {
     const memento = createMockMemento()

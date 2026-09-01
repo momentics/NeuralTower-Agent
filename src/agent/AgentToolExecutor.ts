@@ -13,12 +13,16 @@ import type { ToolOutputTruncator } from "../tools/Truncate"
 const log = createDomainLogger("AgentToolExecutor")
 
 export class AgentToolExecutor {
+  /** Подписи последних вызовов инструментов (детектор зацикливания). */
+  private recentCalls: string[] = []
+
   constructor(
     private readonly backend: IBackend,
     private readonly toolRegistry: IToolRegistry,
     private readonly permissionManager: IPermissionManager | null,
     private readonly modeManager: AgentModeManager,
     private readonly truncator: ToolOutputTruncator,
+    private readonly doomLoopLimit: number = 3,
   ) {}
 
   async callBackend(
@@ -108,8 +112,24 @@ export class AgentToolExecutor {
           continue
         }
 
-        if (this.permissionManager && modePerm !== "allow") {
-          const allowed = await this.permissionManager.checkPermission(tool, tc.arguments)
+        // Doom loop: подпись вызова (имя + стабильный JSON аргументов).
+        // N одинаковых подряд вызовов — признак зацикливания модели.
+        const callSig = this.callSignature(tc.toolName, tc.arguments)
+        this.recentCalls.push(callSig)
+        if (this.recentCalls.length > this.doomLoopLimit) this.recentCalls.shift()
+        const doomCount = this.recentCalls.filter((s) => s === callSig).length
+        const doom = doomCount >= this.doomLoopLimit
+
+        if (this.permissionManager && (modePerm !== "allow" || doom)) {
+          const forceReason = doom
+            ? `Повторный одинаковый вызов ${tc.toolName} (${doomCount} раз подряд) — возможное зацикливание`
+            : undefined
+          const allowed = await this.permissionManager.checkPermission(
+            tool,
+            tc.arguments,
+            undefined,
+            forceReason ? { forceReason } : undefined,
+          )
           if (!allowed) {
             const reason = "Пользователь отклонил вызов инструмента."
             this.recordBlockedTool(tc.toolName, tc.arguments, reason, tc.id, onToolUse)
@@ -193,6 +213,11 @@ export class AgentToolExecutor {
     return this.truncator.truncate(output, callId)
   }
 
+  /** Подпись вызова: имя + стабильный JSON (ключи в алфавитном порядке). */
+  private callSignature(toolName: string, args: Record<string, unknown>): string {
+    return `${toolName}:${stableStringify(args)}`
+  }
+
  private extractToolCalls(content: string): IAgentToolCall[] | null {
  const calls: IAgentToolCall[] = []
 
@@ -221,6 +246,19 @@ export class AgentToolExecutor {
 
     return calls.length > 0 ? calls : null
   }
+}
+
+/** Стабильная JSON-сериялизация: ключи объектов в алфавитном порядке. */
+function stableStringify(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "null"
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`
+  }
+  const obj = value as Record<string, unknown>
+  const keys = Object.keys(obj).sort()
+  return `{${keys.map((k) => `${JSON.stringify(k)}:${stableStringify(obj[k])}`).join(",")}}`
 }
 
 /**

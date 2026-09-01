@@ -620,6 +620,9 @@ export async function createDeps(
   const { sessionStore, permissionManager, gitService, notificationService } =
     await createServicesDomain(ctx, vsCfg, config.session, gitRunner)
 
+  // Паттерн-правила разрешений (настройки)
+  permissionManager.setPatternRules(config.permissions)
+
   // ── Корень рабочей области ──────────────────────────────
   const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
 

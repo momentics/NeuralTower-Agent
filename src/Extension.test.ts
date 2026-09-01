@@ -122,6 +122,7 @@ vi.mock("./services/permission/PermissionManager", () => {
   const PermissionManager = vi.fn(function PermissionManager() {
     this.init = vi.fn();
     this.setAutoApprove = vi.fn();
+    this.setPatternRules = vi.fn();
     this.dispose = vi.fn();
   });
   return { PermissionManager };

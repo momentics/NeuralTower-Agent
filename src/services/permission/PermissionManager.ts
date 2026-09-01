@@ -2,17 +2,36 @@ import * as vscode from "vscode"
 import type { ITool } from "../../tools/ITool"
 import type { PermissionLevel, IToolPermission, IPermissionRequest, IAutoApproveConfig } from "../../shared/PermissionTypes"
 import type { IPlugin } from "../../shared/Types"
-import { PERMISSION_TIMEOUT_MS } from "../../core/Config"
+import { PERMISSION_TIMEOUT_MS, loadDefaultPermissionConfig, type IPermissionPatternsConfig } from "../../core/Config"
+import { matchCommandPattern, matchPathPattern } from "../../utils/PatternMatch"
 
 /**
  * Интерфейс PermissionManager — публичный API.
  */
 export interface IPermissionManager {
-  checkPermission(tool: ITool, args: Record<string, unknown>, timeoutMs?: number): Promise<boolean>
- onDidRequestPermission(handler: (req: IPermissionRequest) => void): vscode.Disposable
+  checkPermission(
+    tool: ITool,
+    args: Record<string, unknown>,
+    timeoutMs?: number,
+    opts?: { forceReason?: string },
+  ): Promise<boolean>
+  /** Установить паттерн-правила (из настроек). */
+  setPatternRules(rules: Partial<IPermissionPatternsConfig>): void
+  onDidRequestPermission(handler: (req: IPermissionRequest) => void): vscode.Disposable
   resolveRequest(requestId: string, allowed: boolean, always: boolean): boolean
   dispose(): void
 }
+
+/** Инструменты, у которых доступ к .env требует подтверждения. */
+const ENV_SENSITIVE_TOOLS = new Set([
+  "read_file",
+  "write_file",
+  "edit_file",
+  "multi_edit",
+  "delete_file",
+  "move_file",
+  "create_dir",
+])
 
 export class PermissionManager implements IPlugin, IPermissionManager {
   name = "permission-manager"
@@ -20,6 +39,7 @@ export class PermissionManager implements IPlugin, IPermissionManager {
   private static readonly KEY_AUTO_APPROVE = "neuralTowerAgent.autoApprove"
 
   private permissions: Map<string, PermissionLevel> = new Map()
+  private patternRules: IPermissionPatternsConfig = loadDefaultPermissionConfig()
   private autoApprove: IAutoApproveConfig = {
     enabled: false,
     tools: [],
@@ -78,13 +98,31 @@ export class PermissionManager implements IPlugin, IPermissionManager {
     tool: ITool,
     args: Record<string, unknown>,
     timeoutMs = PERMISSION_TIMEOUT_MS,
+    opts?: { forceReason?: string },
   ): Promise<boolean> {
     const level = this.getPermissionLevel(tool.name)
-
-    if (level === "allow") return true
     if (level === "deny") return false
 
+    // Защита .env: файлы с секретами всегда подтверждаются,
+    // даже при сохранённом allow на инструмент.
+    if (this.isEnvFileAccess(tool.name, args)) {
+      return this.askPermission(tool.name, "Доступ к .env-файлу (может содержать секреты)", args, timeoutMs)
+    }
+
+    // Doom loop: повторные одинаковые вызовы принудительно
+    // подтверждаются, даже при сохранённом allow.
+    if (opts?.forceReason) {
+      return this.askPermission(tool.name, opts.forceReason, args, timeoutMs)
+    }
+
+    // Паттерн-правила: deny-паттерн сильнее сохранённого allow —
+    // явно запрещённая команда или путь не выполняются.
+    const patternLevel = this.checkPatternRules(tool.name, args)
+    if (patternLevel === "deny") return false
+
+    if (level === "allow") return true
     if (tool.isSafe || tool.isSafeForArgs?.(args)) return true
+    if (patternLevel === "allow") return true
 
     if (this.autoApprove.enabled && this.autoApprove.tools.includes(tool.name)) return true
 
@@ -105,6 +143,15 @@ export class PermissionManager implements IPlugin, IPermissionManager {
     this.persistAutoApprove()
   }
 
+  /** Установить паттерн-правила (из настроек). */
+  setPatternRules(rules: Partial<IPermissionPatternsConfig>): void {
+    this.patternRules = {
+      bash: rules.bash ?? this.patternRules.bash,
+      files: rules.files ?? this.patternRules.files,
+      doomLoopLimit: rules.doomLoopLimit ?? this.patternRules.doomLoopLimit,
+    }
+  }
+
   getAutoApprove(): IAutoApproveConfig {
     return { ...this.autoApprove }
   }
@@ -123,6 +170,45 @@ export class PermissionManager implements IPlugin, IPermissionManager {
   }
 
   // ── Приватные методы ────────────────────────────────────
+
+  /**
+   * Паттерн-правила для вызова. bash — по команде; файловые
+   * инструменты — по пути. Первое совпадение побеждает.
+   * null — правила не применимы.
+   */
+  private checkPatternRules(toolName: string, args: Record<string, unknown>): "allow" | "deny" | null {
+    if (toolName === "bash") {
+      const cmd = typeof args.command === "string" ? args.command : ""
+      for (const rule of this.patternRules.bash) {
+        if (matchCommandPattern(rule.pattern, cmd)) return rule.level
+      }
+      return null
+    }
+    const p = this.extractPathArg(args)
+    if (!p) return null
+    for (const rule of this.patternRules.files) {
+      if (matchPathPattern(rule.pattern, p)) return rule.level
+    }
+    return null
+  }
+
+  /** Извлечь путь к файлу из аргументов (по известным именам аргументов). */
+  private extractPathArg(args: Record<string, unknown>): string | null {
+    for (const key of ["filepath", "path", "file", "target", "source", "destination"]) {
+      const v = args[key]
+      if (typeof v === "string" && v.length > 0) return v
+    }
+    return null
+  }
+
+  /** Обращается ли вызов к .env-файлу (кроме .env.example). */
+  private isEnvFileAccess(toolName: string, args: Record<string, unknown>): boolean {
+    if (!ENV_SENSITIVE_TOOLS.has(toolName)) return false
+    const p = this.extractPathArg(args)
+    if (!p) return false
+    const base = p.replace(/\\/g, "/").split("/").pop() ?? ""
+    return /\.env(\..+)?$/.test(base) && !base.endsWith(".env.example")
+  }
 
   /**
    * Сохранить текущие разрешения в Memento.
