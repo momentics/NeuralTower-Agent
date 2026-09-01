@@ -317,6 +317,15 @@ export const NET_DEFAULT_USER_AGENT = "NeuralTower-Agent/0.1"
 /** Максимальное число редиректов */
 export const NET_MAX_REDIRECTS = 5
 
+// ── Веб-поиск ─────────────────────────────────────────────
+
+/** Таймаут запроса веб-поиска, миллисекунды */
+export const WEB_SEARCH_TIMEOUT_MS = 15_000
+/** Максимальная длина HTML-ответа веб-поиска, символы */
+export const WEB_SEARCH_MAX_HTML_CHARS = 300_000
+/** Максимальное число результатов веб-поиска */
+export const WEB_SEARCH_MAX_RESULTS = 10
+
 // ── MCP ──────────────────────────────────────────────────────
 
 /** Таймаут MCP-запроса в миллисекундах */

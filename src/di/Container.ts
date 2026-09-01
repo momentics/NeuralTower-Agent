@@ -95,6 +95,7 @@ import {
   GrepTool,
   BashTool,
   WebFetchTool,
+  WebSearchTool,
   LspTool,
   TodoWriteTool,
   CodebaseSearchTool,
@@ -380,6 +381,7 @@ export async function createToolsDomain(
 
   tools.register(new BashTool())
   tools.register(new WebFetchTool())
+  tools.register(new WebSearchTool())
   tools.register(new LspTool(() => workspaceRoot ?? process.cwd()))
   tools.register(new TodoWriteTool(todoStore))
   tools.register(new QuestionTool(questionService))
