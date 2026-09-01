@@ -96,8 +96,10 @@ import {
   TodoWriteTool,
   CodebaseSearchTool,
   GitTool,
+  QuestionTool,
 } from "../tools"
 import { ToolOutputTruncator } from "../tools/Truncate"
+import { QuestionServiceHolder } from "../services/question/QuestionService"
 
 const log = createDomainLogger("DI")
 
@@ -340,6 +342,7 @@ export function createToolsDomain(
   codebaseSearch: ICodebaseSearch | undefined,
   todoStore: TodoStore,
   gitRunner: IGitRunner,
+  questionService: QuestionServiceHolder,
 ): IToolsDeps {
   const tools = new ToolRegistry()
 
@@ -359,6 +362,7 @@ export function createToolsDomain(
   tools.register(new WebFetchTool())
   tools.register(new LspTool(() => workspaceRoot ?? process.cwd()))
   tools.register(new TodoWriteTool(todoStore))
+  tools.register(new QuestionTool(questionService))
 
   if (codebaseSearch) {
     tools.register(new CodebaseSearchTool(codebaseSearch))
@@ -488,6 +492,7 @@ export function createUIDomain(
   snapshotStore: ISnapshotStore | null,
   gitService: IGitService,
   getWorkDir: () => string,
+  questionService: QuestionServiceHolder,
 ): IUIDepsResult {
   const settingsProvider = new SettingsProvider(extUri, backend)
   const diffViewer = new DiffViewerProvider(extUri)
@@ -504,6 +509,7 @@ export function createUIDomain(
     diffViewer,
     gitService,
     getWorkDir,
+    questionService,
   )
 
   return { chatProvider, diffViewer, settingsProvider }
@@ -621,11 +627,13 @@ export async function createDeps(
 
   // ── Инструменты ─────────────────────────────────────────
   const todoStore = new TodoStore()
+  const questionService = new QuestionServiceHolder()
   const { tools, mcpManager, skills } = createToolsDomain(
     workspaceRoot,
     codebaseSearch,
     todoStore,
     gitRunner,
+    questionService,
   )
   await syncMCP(mcpManager, tools)
 
@@ -700,6 +708,7 @@ export async function createDeps(
     snapshotStore,
     gitService,
     () => workDirState.current,
+    questionService,
   )
   chatProviderRef = chatProvider
   // Статусы агента в UI (например, «Создаю план…»)

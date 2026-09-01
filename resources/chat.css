@@ -1040,3 +1040,53 @@ body {
   background: var(--bg-hover);
   border-radius: 3px;
 }
+
+/* ═══════════════════════════════════════════
+   QUESTION DIALOG
+   ═══════════════════════════════════════════ */
+.perm-title .info {
+  color: var(--accent);
+}
+
+.perm-title .info svg {
+  width: 16px;
+  height: 16px;
+}
+
+.question-dialog {
+  width: 300px;
+}
+
+.question-options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.question-option {
+  text-align: left;
+  white-space: normal;
+}
+
+.question-input-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.question-input-row input {
+  flex: 1;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: var(--font);
+}
+
+.question-input-row input:focus {
+  outline: none;
+  border-color: var(--accent);
+}

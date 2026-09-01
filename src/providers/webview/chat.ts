@@ -39,6 +39,11 @@ const settingsBtn = document.getElementById("btn-settings") as HTMLButtonElement
 const sessionsBtn = document.getElementById("btn-sessions") as HTMLButtonElement
 const checkpointsBtn = document.getElementById("btn-checkpoints") as HTMLButtonElement
 const modeErrorEl = document.getElementById("mode-error") as HTMLDivElement
+const questionOverlay = document.getElementById("question-overlay") as HTMLDivElement
+const questionText = document.getElementById("question-text") as HTMLDivElement
+const questionOptions = document.getElementById("question-options") as HTMLDivElement
+const questionInput = document.getElementById("question-input") as HTMLInputElement
+const questionSendBtn = document.getElementById("question-send") as HTMLButtonElement
 
 // ── Типы и состояние ──────────────────────────────────
 
@@ -59,6 +64,7 @@ let backendConnected = false
 let currentMode = "build"
 let allowedModes: string[] = ["plan", "explore"]
 let pendingPermission: { requestId: string; toolName: string; description: string } | null = null
+let pendingQuestion: { requestId: string } | null = null
 let modeErrorTimer: number | null = null
 let pendingSnapshot: { runId: string; fileCount: number } | null = null
 const snapshotInfos = new Map<string, { fileCount: number }>()
@@ -251,6 +257,49 @@ function showPermDialog(requestId: string, toolName: string, description: string
   permOverlay.style.display = "flex"
 }
 
+// ── Вопрос агента ─────────────────────────────────────────
+
+function sendQuestionAnswer(answer: string): void {
+  if (!pendingQuestion) return
+  const id = pendingQuestion.requestId
+  closeQuestionDialog()
+  vscode.postMessage({ type: "questionResponse", requestId: id, answer })
+}
+
+function closeQuestionDialog(): void {
+  questionOverlay.style.display = "none"
+  pendingQuestion = null
+}
+
+function showQuestionDialog(requestId: string, question: string, options: string[]): void {
+  pendingQuestion = { requestId }
+  questionText.textContent = question
+  questionOptions.innerHTML = ""
+  for (const opt of options) {
+    const btn = document.createElement("button")
+    btn.type = "button"
+    btn.className = "perm-btn question-option"
+    btn.textContent = opt
+    btn.addEventListener("click", () => sendQuestionAnswer(opt))
+    questionOptions.appendChild(btn)
+  }
+  questionInput.value = ""
+  questionOverlay.style.display = "flex"
+  questionInput.focus()
+}
+
+questionSendBtn.addEventListener("click", () => {
+  const answer = questionInput.value.trim()
+  if (answer) sendQuestionAnswer(answer)
+})
+
+questionInput.addEventListener("keydown", (e: KeyboardEvent) => {
+  if (e.key === "Enter") {
+    const answer = questionInput.value.trim()
+    if (answer) sendQuestionAnswer(answer)
+  }
+})
+
 // ── Сообщения от extension ────────────────────────────
 
 window.addEventListener("message", (event: MessageEvent) => {
@@ -371,6 +420,10 @@ window.addEventListener("message", (event: MessageEvent) => {
 
     case "permissionRequest":
       showPermDialog(String(data.requestId), String(data.toolName), String(data.description))
+      break
+
+    case "questionRequest":
+      showQuestionDialog(String(data.requestId), String(data.question), Array.isArray(data.options) ? (data.options as string[]) : [])
       break
 
     case "modeChanged":

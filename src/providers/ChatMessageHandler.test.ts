@@ -6,6 +6,7 @@ import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { NotificationService } from "../services/notification/NotificationService"
 import type { PermissionManager } from "../services/permission/PermissionManager"
 import type { ISettingsProvider } from "./SettingsProvider"
+import { QuestionServiceHolder } from "../services/question/QuestionService"
 
 /**
  * Mock агента с реальной матрицей переходов режимов
@@ -177,6 +178,7 @@ describe("ChatMessageHandler", () => {
   let onMessage: (msg: unknown) => Promise<void>
   let resolveRun: () => void
   let getRunArgs: () => unknown[]
+  let questionHolder: QuestionServiceHolder
 
   beforeEach(() => {
     const mock = createMockAgent()
@@ -189,6 +191,7 @@ describe("ChatMessageHandler", () => {
     snapshotService = createMockSnapshotService()
     snapshotStore = createMockSnapshotStore()
     diffViewer = createMockDiffViewer()
+    questionHolder = new QuestionServiceHolder()
     handler = new ChatMessageHandler(
       agent,
       sessionStore,
@@ -200,6 +203,9 @@ describe("ChatMessageHandler", () => {
       snapshotService,
       snapshotStore,
       diffViewer,
+      undefined,
+      undefined,
+      questionHolder,
     )
     handler.subscribe([])
     onMessage = vi.mocked(webview.onDidReceiveMessage).mock.calls[0][0] as (msg: unknown) => Promise<void>
@@ -999,5 +1005,39 @@ describe("ChatMessageHandler", () => {
     expect(toolPush).toBeDefined()
     expect(toolPush!.content).toContain("ЗАБЛОКИРОВАНО")
     resolveRun()
+  })
+
+  // ── Вопросы агенту ───────────────────────────────────────
+
+  it("question: запрос уходит в webview, ответ резолвит промис", async () => {
+    // subscribe() привязал к держателю реализацию askUser — проверяем полный цикл
+    const answerPromise = questionHolder.ask("Точно удалить?", ["да", "нет"])
+
+    const req = vi
+      .mocked(webview.postMessage)
+      .mock.calls.map((c) => c[0])
+      .find((m) => (m as { type: string }).type === "questionRequest") as
+      | { type: string; requestId: string; question: string; options: string[] }
+      | undefined
+    expect(req).toBeDefined()
+    expect(req!.question).toBe("Точно удалить?")
+    expect(req!.options).toEqual(["да", "нет"])
+
+    await onMessage({ type: "questionResponse", requestId: req!.requestId, answer: "да" })
+    expect(await answerPromise).toBe("да")
+  })
+
+  it("question: неизвестный requestId не резолвит ничего", async () => {
+    const answerPromise = questionHolder.ask("Вопрос?", [])
+    await onMessage({ type: "questionResponse", requestId: "q-чужой", answer: "да" })
+    // Промис не резолвлен — отменяем через abort
+    handler.abort()
+    expect(await answerPromise).toBeNull()
+  })
+
+  it("question: abort отменяет ожидающий вопрос (null)", async () => {
+    const answerPromise = questionHolder.ask("Вопрос?", [])
+    handler.abort()
+    expect(await answerPromise).toBeNull()
   })
 })

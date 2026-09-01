@@ -9,6 +9,7 @@ export type WebviewToExt =
   | { type: "renameSession"; sessionId: string; title: string }
   | { type: "sessionList" }
   | { type: "permissionResponse"; requestId: string; allowed: boolean; always: boolean }
+  | { type: "questionResponse"; requestId: string; answer: string }
   | { type: "stopAgent" }
   | { type: "settings" }
   | { type: "switchMode"; mode: string }
@@ -40,6 +41,7 @@ export type ExtToWebview =
   | { type: "switchSession"; sessionId: string }
   | { type: "agentDone" }
   | { type: "permissionRequest"; requestId: string; toolName: string; description: string }
+  | { type: "questionRequest"; requestId: string; question: string; options: string[] }
   | { type: "modeChanged"; mode: AgentModeName; allowed: AgentModeName[] }
   | { type: "modeSwitchError"; message: string }
   | { type: "backendStatus"; connected: boolean }

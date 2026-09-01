@@ -7,6 +7,7 @@ import type { INotificationService } from "../services/notification/Notification
 import type { IPermissionManager } from "../services/permission/PermissionManager"
 import type { IGitService } from "../services/git/GitService"
 import type { ISnapshotService, ISnapshotStore } from "../services/snapshot"
+import type { QuestionServiceHolder } from "../services/question/QuestionService"
 import type { ISettingsProvider } from "./SettingsProvider"
 import type { ExtToWebview } from "../shared/Messages"
 import { buildWebviewHtml } from "../shared/WebviewBuilder"
@@ -42,6 +43,7 @@ export class ChatProvider implements IProvider {
     private readonly diffViewer: IDiffViewerProvider | null = null,
     private readonly gitService: IGitService | null = null,
     private readonly getWorkDir: () => string = () => "",
+    private readonly questionService: QuestionServiceHolder,
   ) {}
 
   /** Установить монитор здоровья для ленивой инициализации при первом открытии sidebar. */
@@ -79,6 +81,7 @@ export class ChatProvider implements IProvider {
       this.diffViewer,
       this.gitService,
       this.getWorkDir,
+      this.questionService,
     )
 
     this.messageHandler.subscribe(this.disposables)

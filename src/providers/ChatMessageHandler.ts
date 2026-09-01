@@ -5,6 +5,7 @@ import type { IAgentOrchestrator } from "../core/IAgent"
 import type { ISessionStore } from "../shared/PersistentSessionStore"
 import type { INotificationService } from "../services/notification/NotificationService"
 import type { IPermissionManager } from "../services/permission/PermissionManager"
+import type { QuestionServiceHolder } from "../services/question/QuestionService"
 import type { IGitService } from "../services/git/GitService"
 import type { ISnapshotService, ISnapshotStore, ISnapshotPatch, ISnapshotRecord, IRevertResult } from "../services/snapshot"
 import { pathKey } from "../services/snapshot"
@@ -19,6 +20,9 @@ import { UI_ARGS_LOG_TRUNCATE } from "../core/Config"
 
 const log = createDomainLogger("ChatHandler")
 const PLAN_MARKER = "__PLAN__"
+
+/** Таймаут ожидания ответа на вопрос, миллисекунды. */
+const QUESTION_TIMEOUT_MS = 300_000
 
 /** Результат отката с флагом возможности отмены (undo-запись создана). */
 interface IPerformedRevert extends IRevertResult {
@@ -37,6 +41,8 @@ export class ChatMessageHandler {
   private pendingRevertNote: string | null = null
   /** Число сообщений активной сессии до последнего запроса (полный снимок сессии). */
   private lastRunBeforeCount = 0
+  /** Ожидающие вопросы: id → резолвер и таймер. */
+  private pendingQuestions = new Map<string, { resolve: (answer: string | null) => void; timer: ReturnType<typeof setTimeout> }>()
 
   constructor(
     private readonly agent: IAgentOrchestrator,
@@ -51,6 +57,7 @@ export class ChatMessageHandler {
     private readonly diffViewer: IDiffViewerProvider | null = null,
     private readonly gitService: IGitService | null = null,
     private readonly getWorkDir: () => string = () => "",
+    private readonly questionHolder: QuestionServiceHolder,
   ) {}
 
   /** Получить disposable для всех подписок. */
@@ -58,12 +65,19 @@ export class ChatMessageHandler {
     disposables.push(this.createMessageHandler())
     disposables.push(this.createPermissionHandler())
     disposables.push(this.agent.onModeChanged(() => this.sendModeChanged()))
+    this.questionHolder.setImpl({ ask: (q, options, signal) => this.askUser(q, options, signal) })
+    disposables.push({ dispose: () => this.questionHolder.setImpl(null) })
   }
 
   /** Прервать выполнение агента. */
   abort(): void {
     this.abortController?.abort()
     this.abortController = null
+    for (const [id, p] of this.pendingQuestions) {
+      clearTimeout(p.timer)
+      p.resolve(null)
+      this.pendingQuestions.delete(id)
+    }
   }
 
   /** Отправить список сессий. */
@@ -125,6 +139,7 @@ export class ChatMessageHandler {
         if (
           this.streaming &&
           msg.type !== "permissionResponse" &&
+          msg.type !== "questionResponse" &&
           msg.type !== "stopAgent" &&
           msg.type !== "switchMode"
         ) {
@@ -177,6 +192,15 @@ export class ChatMessageHandler {
           case "permissionResponse":
             this.handlePermissionResponse(msg)
             break
+          case "questionResponse": {
+            const p = this.pendingQuestions.get(msg.requestId)
+            if (p) {
+              this.pendingQuestions.delete(msg.requestId)
+              clearTimeout(p.timer)
+              p.resolve(typeof msg.answer === "string" ? msg.answer : null)
+            }
+            break
+          }
           case "stopAgent":
             this.abortController?.abort()
             break
@@ -255,6 +279,51 @@ export class ChatMessageHandler {
         error: `Истёк срок запроса разрешения для "${msg.requestId}"`,
       } as ExtToWebview)
     }
+  }
+
+  /**
+   * Задать вопрос пользователю через webview и дождаться ответа.
+   * Возвращает null при таймауте или отмене.
+   */
+  private askUser(question: string, options: string[], signal?: AbortSignal): Promise<string | null> {
+    return new Promise((resolve) => {
+      const id = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const timer = setTimeout(() => {
+        const p = this.pendingQuestions.get(id)
+        if (p) {
+          this.pendingQuestions.delete(id)
+          resolve(null)
+        }
+      }, QUESTION_TIMEOUT_MS)
+      this.pendingQuestions.set(id, {
+        timer,
+        resolve: (answer) => {
+          clearTimeout(timer)
+          this.pendingQuestions.delete(id)
+          resolve(answer)
+        },
+      })
+      if (signal) {
+        signal.addEventListener(
+          "abort",
+          () => {
+            const p = this.pendingQuestions.get(id)
+            if (p) {
+              this.pendingQuestions.delete(id)
+              clearTimeout(p.timer)
+              resolve(null)
+            }
+          },
+          { once: true },
+        )
+      }
+      this.webview.postMessage({
+        type: "questionRequest",
+        requestId: id,
+        question,
+        options,
+      } as ExtToWebview)
+    })
   }
 
   /**

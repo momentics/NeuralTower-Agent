@@ -100,6 +100,24 @@ export const chatHtml = `
     </div>
   </div>
 
+  <!-- Question dialog overlay -->
+  <div id="question-overlay" class="perm-overlay" style="display:none">
+    <div class="perm-dialog question-dialog">
+      <div class="perm-title">
+        <span class="info">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        </span>
+        Вопрос агента
+      </div>
+      <div class="perm-desc" id="question-text"></div>
+      <div id="question-options" class="question-options"></div>
+      <div class="question-input-row">
+        <input id="question-input" type="text" placeholder="Ваш ответ..." autocomplete="off">
+        <button class="perm-btn allow" id="question-send" type="button">Ответить</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Input area -->
   <form id="chat-form">
     <div id="input-area">
