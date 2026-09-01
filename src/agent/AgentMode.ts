@@ -112,6 +112,7 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
       // git: read-only операции проходят без запроса (isSafeForArgs),
       // изменяющие и опасные — с подтверждением
       { tool: "git", level: "ask" },
+      { tool: "task", level: "ask" },
       { tool: "delete_file", level: "ask" },
       { tool: "move_file", level: "ask" },
       { tool: "create_dir", level: "ask" },
@@ -152,6 +153,7 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
       { tool: "delete_file", level: "deny" },
       { tool: "move_file", level: "deny" },
       { tool: "create_dir", level: "deny" },
+      { tool: "task", level: "deny" },
       { tool: "*", level: "deny" },
     ],
     systemPromptAddon: `# Режим: Планирование
@@ -190,6 +192,7 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
       { tool: "delete_file", level: "deny" },
       { tool: "move_file", level: "deny" },
       { tool: "create_dir", level: "deny" },
+      { tool: "task", level: "deny" },
       { tool: "todowrite", level: "deny" },
       { tool: "*", level: "deny" },
     ],

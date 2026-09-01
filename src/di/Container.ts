@@ -45,7 +45,7 @@ import { ContextManager } from "../core/ContextManager"
 import { ContextProviderRegistry } from "../core/providers/context/Registry"
 import { FileIndex } from "../repo/FileIndex"
 import { RepoAnalyzer } from "../repo/RepoAnalyzer"
-import { SubagentRunner } from "../agent/SubagentRunner"
+import { SubagentRunner, type SubagentHandle } from "../agent/SubagentRunner"
 import { TodoStore } from "../agent/TodoStore"
 import { InMemoryVectorStore } from "../repo/InMemoryVectorStore"
 import { FullTextSearch } from "../repo/FullTextSearch"
@@ -97,9 +97,11 @@ import {
   CodebaseSearchTool,
   GitTool,
   QuestionTool,
+  TaskTool,
 } from "../tools"
 import { ToolOutputTruncator } from "../tools/Truncate"
 import { QuestionServiceHolder } from "../services/question/QuestionService"
+import { SubagentLauncherHolder, filterSubagentTools } from "../agent/TaskLauncher"
 
 const log = createDomainLogger("DI")
 
@@ -343,6 +345,8 @@ export function createToolsDomain(
   todoStore: TodoStore,
   gitRunner: IGitRunner,
   questionService: QuestionServiceHolder,
+  taskLauncher: SubagentLauncherHolder,
+  getWorkDir: () => string | null,
 ): IToolsDeps {
   const tools = new ToolRegistry()
 
@@ -363,6 +367,7 @@ export function createToolsDomain(
   tools.register(new LspTool(() => workspaceRoot ?? process.cwd()))
   tools.register(new TodoWriteTool(todoStore))
   tools.register(new QuestionTool(questionService))
+  tools.register(new TaskTool(taskLauncher, getWorkDir))
 
   if (codebaseSearch) {
     tools.register(new CodebaseSearchTool(codebaseSearch))
@@ -625,15 +630,23 @@ export async function createDeps(
   const { fileIndex, repoAnalyzer, embeddingProvider, codebaseSearch, graphDb, orchestrator } =
     createSearchInfrastructure(backend, config, workspaceRoot)
 
+  // ── Состояние рабочей директории ────────────────────────
+  const workDirState = {
+    current: workspaceRoot ?? "",
+  }
+
   // ── Инструменты ─────────────────────────────────────────
   const todoStore = new TodoStore()
   const questionService = new QuestionServiceHolder()
+  const taskLauncher = new SubagentLauncherHolder()
   const { tools, mcpManager, skills } = createToolsDomain(
     workspaceRoot,
     codebaseSearch,
     todoStore,
     gitRunner,
     questionService,
+    taskLauncher,
+    () => workDirState.current,
   )
   await syncMCP(mcpManager, tools)
 
@@ -650,11 +663,6 @@ export async function createDeps(
     } catch (err: unknown) {
       log.warn(`Инициализация движка ntgraph не выполнена: ${errorMessage(err)}`)
     }
-  }
-
-  // ── Состояние рабочей директории ────────────────────────
-  const workDirState = {
-    current: workspaceRoot ?? "",
   }
 
   // ── Контекст (должен создаваться до агента) ─────────────
@@ -689,12 +697,52 @@ export async function createDeps(
     snapshotService,
   }
 
+  // Субагент получает собственный реестр без task и question:
+  // исключены рекурсия запусков и вопросы пользователю.
   const spawnFactory: AgentSpawnFactory = (deps, b, t, s, ts) =>
-    new AgentOrchestrator(b, t, s, deps, null, ts)
+    new AgentOrchestrator(b, filterSubagentTools(t), s, deps, null, ts)
 
   const { agent, subagentRunner } = createAgentDomain(
     backend, tools, skills, agentDeps, spawnFactory, todoStore,
   )
+
+  // Пускатель субагентов для инструмента task
+  taskLauncher.setImpl({
+    launch: async (cfg, signal) => {
+      let handle: SubagentHandle
+      try {
+        handle = await subagentRunner.spawn(
+          {
+            name: cfg.name,
+            task:
+              "Вы — субагент, запущенный основным агентом для отдельной задачи. " +
+              "Работайте автономно, не задавайте вопросов пользователю. " +
+              "Ваше финальное сообщение — ответ на задачу: полное и краткое.\n\n" +
+              `Задача: ${cfg.task}`,
+            mode: cfg.mode,
+            workDir: cfg.workDir,
+            maxIterations: 15,
+            timeoutMs: 300_000,
+          },
+          undefined,
+          undefined,
+        )
+      } catch (err: unknown) {
+        return { ok: false, output: "", error: errorMessage(err) }
+      }
+      if (signal) {
+        signal.addEventListener("abort", () => handle.cancel(), { once: true })
+      }
+      const result = await handle.wait()
+      if (signal?.aborted || result.status === "cancelled") {
+        return { ok: false, output: "", error: "Отменено" }
+      }
+      if (result.status !== "completed") {
+        return { ok: false, output: "", error: result.error ?? result.status }
+      }
+      return { ok: true, output: result.output }
+    },
+  })
 
   // ── Интерфейс ───────────────────────────────────────────
   const { chatProvider, diffViewer, settingsProvider } = createUIDomain(
