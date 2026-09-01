@@ -56,14 +56,15 @@ export type EdgeKind = (typeof EdgeKind)[keyof typeof EdgeKind];
 /** Вид ссылки — вид ребра или функциональная ссылка. */
 export type ReferenceKind = EdgeKind | 'function_ref';
 
-/** Поддерживаемые языки (43 значения). */
+/** Поддерживаемые языки (50 значений). */
 export const Language = Object.freeze([
   'typescript', 'javascript', 'tsx', 'jsx', 'python', 'go', 'rust', 'java',
   'c', 'cpp', 'csharp', 'razor', 'php', 'ruby', 'swift', 'kotlin', 'dart',
   'svelte', 'vue', 'astro', 'liquid', 'pascal', 'scala', 'lua', 'luau',
   'objc', 'r', 'yaml', 'twig', 'xml', 'properties', 'unknown',
   'html', 'css', 'sql', 'json', 'markdown', 'shell', 'dockerfile', 'toml', 'ini',
-  'cobol', 'cfml', 'cfscript', 'arkts'
+  'cobol', 'cfml', 'cfscript', 'arkts',
+  'solidity', 'elixir', 'ocaml', 'rescript', 'zig'
 ] as const);
 
 export type Language = (typeof Language)[number];

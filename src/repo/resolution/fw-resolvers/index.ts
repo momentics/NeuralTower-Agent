@@ -22,4 +22,7 @@ import './go';
 import './play';
 import './swift';
 import './terraform';
+import './cargo-workspace';
+import './aspnet-core';
+import './react-native';
 import '../SwiftObjcBridge';

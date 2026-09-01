@@ -27,6 +27,8 @@ import { CfmlExtractor } from './Cfml';
 import { DfmExtractor } from './Dfm';
 import { MybatisExtractor } from './Mybatis';
 import { DefaultExtractor } from './Default';
+import { GenericAstExtractor, YamlExtractor } from './GenericAst';
+import { GENERIC_SPECS } from './generic-specs';
 
 const EXTRACTOR_MAP = new Map<string, IExtractor>();
 
@@ -56,6 +58,21 @@ function ensureExtractors(): void {
   EXTRACTOR_MAP.set('cfscript', new CfmlExtractor());
   EXTRACTOR_MAP.set('pascal', new DfmExtractor());
   EXTRACTOR_MAP.set('xml', new MybatisExtractor());
+  EXTRACTOR_MAP.set('dart', new GenericAstExtractor(GENERIC_SPECS.dart));
+  EXTRACTOR_MAP.set('scala', new GenericAstExtractor(GENERIC_SPECS.scala));
+  EXTRACTOR_MAP.set('solidity', new GenericAstExtractor(GENERIC_SPECS.solidity));
+  EXTRACTOR_MAP.set('lua', new GenericAstExtractor(GENERIC_SPECS.lua));
+  EXTRACTOR_MAP.set('luau', new GenericAstExtractor(GENERIC_SPECS.lua));
+  EXTRACTOR_MAP.set('objc', new GenericAstExtractor(GENERIC_SPECS.objc));
+  EXTRACTOR_MAP.set('elixir', new GenericAstExtractor(GENERIC_SPECS.elixir));
+  EXTRACTOR_MAP.set('ocaml', new GenericAstExtractor(GENERIC_SPECS.ocaml));
+  EXTRACTOR_MAP.set('rescript', new GenericAstExtractor(GENERIC_SPECS.rescript));
+  EXTRACTOR_MAP.set('zig', new GenericAstExtractor(GENERIC_SPECS.zig));
+  EXTRACTOR_MAP.set('shell', new GenericAstExtractor(GENERIC_SPECS.shell));
+  EXTRACTOR_MAP.set('css', new GenericAstExtractor(GENERIC_SPECS.css));
+  EXTRACTOR_MAP.set('json', new GenericAstExtractor(GENERIC_SPECS.json));
+  EXTRACTOR_MAP.set('toml', new GenericAstExtractor(GENERIC_SPECS.toml));
+  EXTRACTOR_MAP.set('yaml', new YamlExtractor());
   EXTRACTOR_MAP.set('default', new DefaultExtractor());
 }
 

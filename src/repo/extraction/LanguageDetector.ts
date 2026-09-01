@@ -66,6 +66,12 @@ export const EXTENSION_TO_LANGUAGE: Record<string, Language> = {
   '.cfm': 'cfml',
   '.cfc': 'cfml',
   '.dfm': 'pascal',
+  '.sol': 'solidity',
+  '.ex': 'elixir',
+  '.exs': 'elixir',
+  '.ml': 'ocaml',
+  '.res': 'rescript',
+  '.zig': 'zig',
 };
 
 /**
@@ -100,7 +106,7 @@ export function detectLanguage(filePath: string, content?: string): Language {
 }
 
 // Языки, которые поддерживаются только на уровне файла (без символьной структуры)
-const FILE_LEVEL_ONLY_LANGUAGES = ['yaml', 'properties', 'xml'];
+const FILE_LEVEL_ONLY_LANGUAGES = ['properties', 'xml'];
 
 /**
  * Проверяет, является ли файл исходным (не бинарным, не генерированным).
@@ -140,7 +146,7 @@ export function isLanguageSupported(lang: string): boolean {
  * Проверяет, является ли языком только на уровне файла (без символьной структуры).
  */
 export function isFileLevelOnlyLanguage(lang: string): boolean {
-  // Для yaml, properties, xml — файлов без символьной структуры
+  // Для properties, xml — файлов без символьной структуры
   return FILE_LEVEL_ONLY_LANGUAGES.includes(lang);
 }
 

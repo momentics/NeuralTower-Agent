@@ -188,8 +188,8 @@ describe("isLanguageSupported", () => {
     expect(isLanguageSupported("kotlin")).toBe(true)
   })
 
-  it("returns false for dart", () => {
-    expect(isLanguageSupported("dart")).toBe(false)
+  it("returns true for dart", () => {
+    expect(isLanguageSupported("dart")).toBe(true)
   })
 
   it("returns true for vue", () => {
@@ -220,36 +220,36 @@ describe("isLanguageSupported", () => {
     expect(isLanguageSupported("pascal")).toBe(true)
   })
 
-  it("returns false for scala", () => {
-    expect(isLanguageSupported("scala")).toBe(false)
+  it("returns true for scala", () => {
+    expect(isLanguageSupported("scala")).toBe(true)
   })
 
-  it("returns false for lua", () => {
-    expect(isLanguageSupported("lua")).toBe(false)
+  it("returns true for lua", () => {
+    expect(isLanguageSupported("lua")).toBe(true)
   })
 
-  it("returns false for yaml", () => {
-    expect(isLanguageSupported("yaml")).toBe(false)
+  it("returns true for yaml", () => {
+    expect(isLanguageSupported("yaml")).toBe(true)
   })
 
-  it("returns false for json", () => {
-    expect(isLanguageSupported("json")).toBe(false)
+  it("returns true for json", () => {
+    expect(isLanguageSupported("json")).toBe(true)
   })
 
   it("returns false for markdown", () => {
     expect(isLanguageSupported("markdown")).toBe(false)
   })
 
-  it("returns false for shell", () => {
-    expect(isLanguageSupported("shell")).toBe(false)
+  it("returns true for shell", () => {
+    expect(isLanguageSupported("shell")).toBe(true)
   })
 
   it("returns false for sql", () => {
     expect(isLanguageSupported("sql")).toBe(false)
   })
 
-  it("returns false for css", () => {
-    expect(isLanguageSupported("css")).toBe(false)
+  it("returns true for css", () => {
+    expect(isLanguageSupported("css")).toBe(true)
   })
 
   it("returns false for html", () => {
@@ -269,8 +269,8 @@ describe("isLanguageSupported", () => {
 // Тесты для функции isFileLevelOnlyLanguage — определение языков, которые парсятся только на уровне файла
 
 describe("isFileLevelOnlyLanguage", () => {
-  it("returns true for yaml", () => {
-    expect(isFileLevelOnlyLanguage("yaml")).toBe(true)
+  it("returns false for yaml", () => {
+    expect(isFileLevelOnlyLanguage("yaml")).toBe(false)
   })
 
   it("returns true for properties", () => {
@@ -522,9 +522,9 @@ describe("WasmRuntime (grammars)", () => {
 // Тесты для функции getSupportedLanguages — проверка списка поддерживаемых языков
 
 describe("getSupportedLanguages", () => {
-  it("returns array of 24 languages", () => {
+  it("returns array of 39 languages", () => {
     const langs = getSupportedLanguages()
-    expect(langs).toHaveLength(24)
+    expect(langs).toHaveLength(39)
   })
 
   it("contains typescript", () => {
@@ -567,8 +567,8 @@ describe("getSupportedLanguages", () => {
     expect(getSupportedLanguages()).toContain("php")
   })
 
-  it("does not contain yaml", () => {
-    expect(getSupportedLanguages()).not.toContain("yaml")
+  it("contains yaml", () => {
+    expect(getSupportedLanguages()).toContain("yaml")
   })
 
   it("returns new array on each call", () => {

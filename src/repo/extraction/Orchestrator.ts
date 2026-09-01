@@ -565,7 +565,7 @@ export class ExtractionOrchestrator {
           // Определение языка
           const language = detectLanguage(filePath, content);
 
-          // Языки только на уровне файла (yaml, properties, xml) — создаём file-узел
+          // Языки только на уровне файла (properties, xml) — создаём file-узел
           if (isFileLevelOnlyLanguage(language)) {
             const fileBasename = path.basename(filePath);
             const lines = content.split('\n');

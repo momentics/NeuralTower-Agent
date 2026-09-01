@@ -156,8 +156,8 @@ x = 1  # comment`
 // --- File-level only languages ---
 
 describe("File-level only languages", () => {
-  it("yaml is file-level only", () => {
-    expect(isFileLevelOnlyLanguage("yaml")).toBe(true)
+  it("yaml is NOT file-level only", () => {
+    expect(isFileLevelOnlyLanguage("yaml")).toBe(false)
   })
 
   it("properties is file-level only", () => {

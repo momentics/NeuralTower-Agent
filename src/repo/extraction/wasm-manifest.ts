@@ -40,6 +40,12 @@ export function grammarNamesForLanguage(language: string, filePath?: string): st
     case 'astro':
       // Скриптовая/фронтматтерная часть парсится TS-грамматикой.
       return ['typescript'];
+    case 'shell':
+      // .sh/.bash/.zsh парсятся bash-грамматикой
+      return ['bash'];
+    case 'luau':
+      // .luau парсится lua-грамматикой
+      return ['lua'];
     default:
       return WASM_MANIFEST[language] ? [language] : [];
   }
