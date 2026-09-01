@@ -9,16 +9,29 @@ import type { ISettingsProvider } from "./SettingsProvider"
 import { QuestionServiceHolder } from "../services/question/QuestionService"
 import { TodoStore } from "../agent/TodoStore"
 
+/** Список режимов, который возвращает mock-агент (встроенные + пользовательский). */
+const MODES = [
+  { name: "build", displayName: "Построение" },
+  { name: "plan", displayName: "Планирование" },
+  { name: "explore", displayName: "Исследование" },
+  { name: "ask", displayName: "Вопрос" },
+  { name: "reviewer", displayName: "Ревью" },
+]
+
 /**
  * Mock агента с реальной матрицей переходов режимов
- * (build/plan/explore) и событием onModeChanged.
+ * (build/plan/explore/ask + пользовательский reviewer)
+ * и событием onModeChanged.
  */
 function createMockAgent() {
   let mode = "build"
+  const builtIn = ["build", "plan", "explore", "ask"]
   const transitions: Record<string, string[]> = {
-    build: ["plan", "explore"],
-    plan: ["build"],
-    explore: ["build", "plan"],
+    build: ["plan", "explore", "ask"],
+    plan: ["build", "ask"],
+    explore: ["build", "plan", "ask"],
+    ask: ["build", "plan", "explore"],
+    reviewer: ["build"],
   }
   let modeHandler: ((m: string) => void) | null = null
   let runResolver: ((v: { role: string; content: string; timestamp: number }) => void) | null = null
@@ -64,9 +77,26 @@ function createMockAgent() {
       systemPromptAddon: "",
       priority: 1,
     })),
+    listModes: vi.fn(() =>
+      MODES.map((m) => ({
+        name: m.name,
+        displayName: m.displayName,
+        description: "",
+        toolRules: [],
+        transitions: transitions[m.name] ?? [],
+        systemPromptAddon: "",
+        priority: 1,
+      })),
+    ),
     switchMode: vi.fn((next: string) => {
       if (next === mode) return true
-      if (!(transitions[mode] ?? []).includes(next)) return false
+      if (builtIn.includes(next)) {
+        if (!(transitions[mode] ?? []).includes(next)) return false
+      } else {
+        // Пользовательский режим: доступен из режимов,
+        // перечисленных в его transitions
+        if (!(transitions[next] ?? []).includes(mode)) return false
+      }
       mode = next
       if (modeHandler) modeHandler(next)
       return true
@@ -227,7 +257,8 @@ describe("ChatMessageHandler", () => {
     expect(webview.postMessage).toHaveBeenCalledWith({
       type: "modeChanged",
       mode: "build",
-      allowed: ["plan", "explore"],
+      allowed: ["plan", "explore", "ask"],
+      modes: MODES,
     })
   })
 
@@ -237,7 +268,8 @@ describe("ChatMessageHandler", () => {
     expect(webview.postMessage).toHaveBeenCalledWith({
       type: "modeChanged",
       mode: "plan",
-      allowed: ["build"],
+      allowed: ["build", "ask"],
+      modes: MODES,
     })
   })
 
@@ -247,7 +279,22 @@ describe("ChatMessageHandler", () => {
     expect(webview.postMessage).toHaveBeenCalledWith({
       type: "modeChanged",
       mode: "plan",
+      allowed: ["build", "ask"],
+      modes: MODES,
+    })
+  })
+
+  it("switchMode принимает пользовательский режим", async () => {
+    await onMessage({ type: "switchMode", mode: "reviewer" })
+    expect(agent.switchMode).toHaveBeenCalledWith("reviewer")
+    expect(webview.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "modeSwitchError" }),
+    )
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: "modeChanged",
+      mode: "reviewer",
       allowed: ["build"],
+      modes: MODES,
     })
   })
 
@@ -266,7 +313,7 @@ describe("ChatMessageHandler", () => {
     expect(agent.switchMode).toHaveBeenLastCalledWith("explore")
     expect(webview.postMessage).toHaveBeenCalledWith({
       type: "modeSwitchError",
-      message: "Переход в режим «explore» недоступен из режима «plan». Доступно: build",
+      message: "Переход в режим «explore» недоступен из режима «plan». Доступно: build, ask",
     })
   })
 

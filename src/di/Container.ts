@@ -101,6 +101,8 @@ import {
   SkillTool,
 } from "../tools"
 import { ToolOutputTruncator } from "../tools/Truncate"
+import { loadUserModes } from "../agent/UserModeLoader"
+import type { IAgentMode } from "../agent/AgentMode"
 import { loadSkillsFromDir } from "../skills/SkillFileLoader"
 import { QuestionServiceHolder } from "../services/question/QuestionService"
 import { SubagentLauncherHolder, filterSubagentTools } from "../agent/TaskLauncher"
@@ -699,6 +701,12 @@ export async function createDeps(
     () => config.toolOutput.maxChars,
   )
 
+  // Пользовательские режимы (.neuraltower/modes)
+  let customModes: IAgentMode[] = []
+  if (workspaceRoot) {
+    customModes = await loadUserModes(path.join(workspaceRoot, ".neuraltower", "modes"))
+  }
+
   // ── Агент ───────────────────────────────────────────────
   const agentDeps: IAgentFullDependencies = {
     getWorkDir: () => workDirState.current,
@@ -707,6 +715,7 @@ export async function createDeps(
     contextManager,
     fileIndex,
     toolOutputTruncator,
+    customModes,
     gitService,
     permissionManager,
     mcpManager,

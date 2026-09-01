@@ -184,7 +184,7 @@ describe("AgentCore", () => {
   it("getModeInfo returns current mode descriptor", () => {
     const core = new AgentCore(backend, toolRegistry, skillManager, deps, new TodoStore())
     expect(core.getModeInfo().name).toBe("build")
-    expect(core.getModeInfo().transitions).toEqual(["plan", "explore"])
+    expect(core.getModeInfo().transitions).toEqual(["plan", "explore", "ask"])
   })
 
   it("onModeChanged receives switch events", () => {

@@ -68,6 +68,9 @@ export interface IAgentOrchestrator {
   /** Вернуть полное описание текущего режима (имя, переходы, правила инструментов). */
   getModeInfo(): IAgentMode
 
+  /** Вернуть все доступные режимы. */
+  listModes(): IAgentMode[]
+
   /** Переключить режим. Возвращает false, если переход не допустим. */
   switchMode(mode: AgentModeName): boolean
 

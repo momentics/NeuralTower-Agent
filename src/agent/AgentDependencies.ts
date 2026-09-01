@@ -11,6 +11,7 @@ import type { IFileIndex } from "../repo/FileIndex"
 import type { ISnapshotService } from "../services/snapshot/SnapshotTypes"
 import type { TodoStore } from "./TodoStore"
 import type { ToolOutputTruncator } from "../tools/Truncate"
+import type { IAgentMode } from "./AgentMode"
 
 /**
  * Фабрика для создания экземпляров AgentOrchestrator.
@@ -50,6 +51,9 @@ export interface IAgentDependencies {
 
   /** Обрезатель вывода инструментов (полный текст — в файл). */
   readonly toolOutputTruncator: ToolOutputTruncator
+
+  /** Пользовательские режимы (из .neuraltower/modes). */
+  readonly customModes?: IAgentMode[]
 
   /** Колбэк статуса для UI (например, «Создаю план…»). Пустой текст сбрасывает статус. */
   onAgentStatus?: (text: string) => void

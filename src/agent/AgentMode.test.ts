@@ -68,10 +68,11 @@ describe("resolveToolPermission", () => {
 })
 
 describe("BUILT_IN_MODES", () => {
-  it("has all three modes", () => {
+  it("has all built-in modes", () => {
     expect(BUILT_IN_MODES).toHaveProperty("build")
     expect(BUILT_IN_MODES).toHaveProperty("plan")
     expect(BUILT_IN_MODES).toHaveProperty("explore")
+    expect(BUILT_IN_MODES).toHaveProperty("ask")
   })
 
   it("build mode allows read_file and asks for edit_file", () => {
@@ -125,8 +126,27 @@ describe("BUILT_IN_MODES", () => {
     expect(BUILT_IN_MODES.build.transitions).toContain("explore")
   })
 
-  it("plan only transitions to build", () => {
-    expect(BUILT_IN_MODES.plan.transitions).toEqual(["build"])
+  it("plan transitions to build and ask", () => {
+    expect(BUILT_IN_MODES.plan.transitions).toEqual(["build", "ask"])
+  })
+
+  it("режим ask: только чтение и вопросы", () => {
+    const ask = BUILT_IN_MODES["ask"]
+    expect(ask).toBeDefined()
+    expect(resolveToolPermission(ask, "read_file")).toBe("allow")
+    expect(resolveToolPermission(ask, "question")).toBe("allow")
+    expect(resolveToolPermission(ask, "bash")).toBe("deny")
+    expect(resolveToolPermission(ask, "edit_file")).toBe("deny")
+    expect(resolveToolPermission(ask, "task")).toBe("deny")
+  })
+
+  it("переходы включают ask", () => {
+    expect(BUILT_IN_MODES["build"].transitions).toContain("ask")
+    expect(BUILT_IN_MODES["plan"].transitions).toContain("ask")
+    expect(BUILT_IN_MODES["explore"].transitions).toContain("ask")
+    expect(BUILT_IN_MODES["ask"].transitions).toEqual(
+      expect.arrayContaining(["build", "plan", "explore"]),
+    )
   })
 })
 
@@ -173,10 +193,11 @@ describe("AgentModeManager", () => {
 
   it("lists modes sorted by priority", () => {
     const modes = mgr.listModes()
-    expect(modes).toHaveLength(3)
+    expect(modes).toHaveLength(4)
     expect(modes[0].name).toBe("build")
     expect(modes[1].name).toBe("plan")
-    expect(modes[2].name).toBe("explore")
+    expect(modes[2].name).toBe("ask")
+    expect(modes[3].name).toBe("explore")
   })
 
   it("registers custom mode", () => {
@@ -190,6 +211,22 @@ describe("AgentModeManager", () => {
       priority: 10,
     })
     expect(mgr.getMode().displayName).toBe("Custom Build")
+  })
+
+  it("пользовательский режим регистрируется и переключается", () => {
+    const mgr = new AgentModeManager()
+    mgr.registerMode({
+      name: "reviewer",
+      displayName: "Ревью",
+      description: "t",
+      toolRules: [{ tool: "*", level: "deny" }],
+      transitions: ["build"],
+      systemPromptAddon: "x",
+      priority: 1,
+    })
+    expect(mgr.switchMode("reviewer")).toBe(true)
+    expect(mgr.getModeName()).toBe("reviewer")
+    expect(mgr.listModes().map((m) => m.name)).toContain("reviewer")
   })
 })
 

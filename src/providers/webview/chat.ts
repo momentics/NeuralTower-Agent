@@ -1,6 +1,7 @@
 /**
  * Webview чата: сообщения, сессии, стриминг, разрешения
- * и режимы агента (build / plan / explore).
+ * и режимы агента (встроенные build / plan / explore / ask
+ * и пользовательские из .neuraltower/modes).
  *
  * Бандлится esbuild в out/webview/chat.js (IIFE) и грузится в webview
  * с nonce. Все обработчики событий привязываются через addEventListener
@@ -77,36 +78,68 @@ const modeNames: Record<string, string> = {
   build: "Построение",
   plan: "Планирование",
   explore: "Исследование",
+  ask: "Вопрос",
 }
 
 const modeIcons: Record<string, string> = {
   build: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>',
   plan: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>',
   explore: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+  ask: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>',
 }
 
 // ── Режимы агента ─────────────────────────────────────
 
-/** Применить состояние режима от extension: активный чип, disabled, статус-бар. */
-function applyMode(mode: string, allowed: string[]): void {
+/** Перерисовать чипы режимов и применить состояние. */
+function renderModeChips(
+  mode: string,
+  allowed: string[],
+  modes: Array<{ name: string; displayName: string }>,
+): void {
   currentMode = mode
   allowedModes = Array.isArray(allowed) ? allowed : []
-  const chips = document.querySelectorAll<HTMLElement>(".mode-chip")
-  chips.forEach((chip) => {
-    const m = chip.dataset.mode ?? ""
-    const isActive = m === mode
-    const isDisabled = !isActive && !allowedModes.includes(m)
-    chip.classList.toggle("inactive", !isActive)
-    chip.classList.toggle("disabled", isDisabled)
-    if (isActive) {
-      chip.title = "Текущий режим"
-    } else if (isDisabled) {
-      chip.title = `Недоступно из режима «${modeNames[mode] ?? mode}»`
-    } else {
-      chip.title = modeNames[m] ?? m
-    }
-  })
-  statusMode.innerHTML = `${modeIcons[mode] ?? ""} ${modeNames[mode] ?? mode}`
+  const bar = document.getElementById("mode-bar")
+  if (!bar) return
+
+  const known =
+    modes && modes.length > 0
+      ? modes
+      : Object.keys(modeNames).map((n) => ({ name: n, displayName: modeNames[n] }))
+
+  // Удалить старые чипы (сохраняя #mode-error)
+  for (const child of Array.from(bar.children)) {
+    if (child.id !== "mode-error") child.remove()
+  }
+
+  const errorEl = document.getElementById("mode-error")
+  for (const m of known) {
+    const chip = document.createElement("div")
+    chip.className = "mode-chip"
+    chip.dataset.mode = m.name
+    const isActive = m.name === mode
+    const isDisabled = !isActive && !allowedModes.includes(m.name)
+    if (!isActive) chip.classList.add("inactive")
+    if (isDisabled) chip.classList.add("disabled")
+    chip.innerHTML = modeIcons[m.name] ?? ""
+    const label = document.createElement("span")
+    label.textContent = m.displayName
+    chip.appendChild(label)
+    chip.title = isActive
+      ? "Текущий режим"
+      : isDisabled
+        ? `Недоступно из режима «${known.find((k) => k.name === mode)?.displayName ?? mode}»`
+        : m.displayName
+    chip.addEventListener("click", () => requestModeSwitch(m.name))
+    bar.insertBefore(chip, errorEl)
+  }
+
+  const current = known.find((k) => k.name === mode)
+  // Иконка — статичный SVG; имя режима (может быть из пользовательского
+  // файла) — только через textContent.
+  statusMode.innerHTML = modeIcons[mode] ?? ""
+  const modeLabel = document.createElement("span")
+  modeLabel.textContent = current?.displayName ?? mode
+  statusMode.appendChild(modeLabel)
 }
 
 /** Показать временную ошибку под панелью режимов (3 секунды). */
@@ -159,14 +192,6 @@ input.addEventListener("input", () => {
 
 stopBtn.addEventListener("click", () => {
   vscode.postMessage({ type: "stopAgent" })
-})
-
-// ── Режимы: чипы ──────────────────────────────────────
-
-document.querySelectorAll<HTMLElement>(".mode-chip").forEach((chip) => {
-  chip.addEventListener("click", () => {
-    requestModeSwitch(chip.dataset.mode ?? "")
-  })
 })
 
 // ── Быстрые действия ──────────────────────────────────
@@ -501,7 +526,11 @@ window.addEventListener("message", (event: MessageEvent) => {
       break
 
     case "modeChanged":
-      applyMode(String(data.mode), data.allowed as string[])
+      renderModeChips(
+        String(data.mode),
+        (data.allowed as string[]) ?? [],
+        (data.modes as Array<{ name: string; displayName: string }>) ?? [],
+      )
       break
 
     case "modeSwitchError":

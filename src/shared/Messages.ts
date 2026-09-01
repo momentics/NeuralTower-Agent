@@ -44,7 +44,7 @@ export type ExtToWebview =
   | { type: "agentDone" }
   | { type: "permissionRequest"; requestId: string; toolName: string; description: string }
   | { type: "questionRequest"; requestId: string; question: string; options: string[] }
-  | { type: "modeChanged"; mode: AgentModeName; allowed: AgentModeName[] }
+  | { type: "modeChanged"; mode: AgentModeName; allowed: AgentModeName[]; modes: Array<{ name: string; displayName: string }> }
   | { type: "modeSwitchError"; message: string }
   | { type: "backendStatus"; connected: boolean }
   | { type: "snapshotInfo"; runId: string; hash: string; fileCount: number }

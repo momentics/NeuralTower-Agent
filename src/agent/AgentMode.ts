@@ -14,9 +14,10 @@ export type ModeChangeHandler = (mode: AgentModeName) => void
  */
 
 /**
- * Доступные режимы агента.
+ * Имя режима агента. Встроенные режимы — build/plan/explore/ask;
+ * пользовательские режимы загружаются из .neuraltower/modes/*.md.
  */
-export type AgentModeName = "build" | "plan" | "explore"
+export type AgentModeName = string
 
 /**
  * Правило разрешения для инструмента.
@@ -89,13 +90,13 @@ export function resolveToolPermission(
 /**
  * Встроенные режимы агента.
  */
-export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
+export const BUILT_IN_MODES: Record<string, IAgentMode> = {
   build: {
     name: "build",
     displayName: "Построение",
     description: "Основной режим: выполнение задач, редактирование файлов, запуск команд",
     priority: 10,
-    transitions: ["plan", "explore"],
+    transitions: ["plan", "explore", "ask"],
     toolRules: [
       { tool: "read_file", level: "allow" },
       { tool: "glob", level: "allow" },
@@ -135,7 +136,7 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
     displayName: "Планирование",
     description: "Режим планирования: анализ, исследование, создание плана без изменений",
     priority: 5,
-    transitions: ["build"],
+    transitions: ["build", "ask"],
     toolRules: [
       { tool: "read_file", level: "allow" },
       { tool: "glob", level: "allow" },
@@ -176,7 +177,7 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
     displayName: "Исследование",
     description: "Режим исследования: чтение и поиск без изменений",
     priority: 3,
-    transitions: ["build", "plan"],
+    transitions: ["build", "plan", "ask"],
     toolRules: [
       { tool: "read_file", level: "allow" },
       { tool: "glob", level: "allow" },
@@ -209,6 +210,48 @@ export const BUILT_IN_MODES: Record<AgentModeName, IAgentMode> = {
 - Используйте read_file, glob и grep для навигации по коду.
 - Отвечайте конкретно, со ссылками на файлы и строки.
 - Если задача требует изменений, предложите перейти в режим Build.`,
+  },
+
+  ask: {
+    name: "ask",
+    displayName: "Вопрос",
+    description: "Режим вопросов: ответы о кодовой базе и проекте без изменений",
+    priority: 4,
+    transitions: ["build", "plan", "explore"],
+    toolRules: [
+      { tool: "read_file", level: "allow" },
+      { tool: "glob", level: "allow" },
+      { tool: "grep", level: "allow" },
+      { tool: "web_fetch", level: "allow" },
+      { tool: "web_search", level: "allow" },
+      { tool: "lsp", level: "allow" },
+      { tool: "codebase_search", level: "allow" },
+      { tool: "ntgraph_*", level: "allow" },
+      { tool: "question", level: "allow" },
+      { tool: "skill", level: "allow" },
+      // git: чтение состояния (status/diff/log) без запроса, изменения — с подтверждением
+      { tool: "git", level: "ask" },
+      { tool: "edit_file", level: "deny" },
+      { tool: "write_file", level: "deny" },
+      { tool: "multi_edit", level: "deny" },
+      { tool: "bash", level: "deny" },
+      { tool: "delete_file", level: "deny" },
+      { tool: "move_file", level: "deny" },
+      { tool: "create_dir", level: "deny" },
+      { tool: "todowrite", level: "deny" },
+      { tool: "task", level: "deny" },
+      { tool: "*", level: "deny" },
+    ],
+    systemPromptAddon: `# Режим: Вопрос
+
+Вы работаете в режиме вопросов. Ваша задача — ответить на вопросы
+пользователя о кодовой базе и проекте.
+
+Правила:
+- НЕ изменяйте файлы. У вас нет прав на edit_file, write_file и bash.
+- Используйте read_file, glob, grep и инструменты поиска для изучения кода.
+- Отвечайте конкретно, со ссылками на файлы и строки.
+- Если задача требует изменений, предложите перейти в режим Построение.`,
   },
 }
 
@@ -244,8 +287,21 @@ export class AgentModeManager {
       return true
     }
     const current = this.getMode()
-    if (!current.transitions.includes(newMode)) {
+    const target = this.overrides.get(newMode) ?? BUILT_IN_MODES[newMode]
+    if (!target) {
       return false
+    }
+    if (BUILT_IN_MODES[newMode]) {
+      // Встроенный режим: переход по списку допустимых текущим режимом.
+      if (!current.transitions.includes(newMode)) {
+        return false
+      }
+    } else {
+      // Пользовательский режим: доступен из режимов, перечисленных
+      // в его transitions (по умолчанию — из любого встроенного).
+      if (!target.transitions.includes(this.currentMode)) {
+        return false
+      }
     }
     this.currentMode = newMode
     this.emitModeChanged()
@@ -272,9 +328,18 @@ export class AgentModeManager {
    */
   listModes(): IAgentMode[] {
     const modes: IAgentMode[] = []
-    for (const [name] of Object.entries(BUILT_IN_MODES)) {
-      const mode = this.overrides.get(name as AgentModeName) ?? BUILT_IN_MODES[name as AgentModeName]
-      modes.push(mode)
+    const seen = new Set<string>()
+    for (const name of Object.keys(BUILT_IN_MODES)) {
+      modes.push(this.overrides.get(name) ?? BUILT_IN_MODES[name])
+      seen.add(name)
+    }
+    // Пользовательские режимы с новыми именами (не переопределяющие
+    // встроенные) добавляются после встроенных.
+    for (const [name, mode] of this.overrides) {
+      if (!seen.has(name)) {
+        modes.push(mode)
+        seen.add(name)
+      }
     }
     return modes.sort((a, b) => b.priority - a.priority)
   }

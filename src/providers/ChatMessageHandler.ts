@@ -11,7 +11,6 @@ import type { ISnapshotService, ISnapshotStore, ISnapshotPatch, ISnapshotRecord,
 import { pathKey } from "../services/snapshot"
 import type { ISettingsProvider } from "./SettingsProvider"
 import type { IDiffViewerProvider } from "./DiffViewerProvider"
-import { BUILT_IN_MODES } from "../agent/AgentMode"
 import type { AgentModeName } from "../agent/AgentMode"
 import type { WebviewToExt, ExtToWebview } from "../shared/Messages"
 import { handleBackendError, errorMessage } from "../core/Errors"
@@ -36,7 +35,6 @@ interface IPerformedRevert extends IRevertResult {
 export class ChatMessageHandler {
   private streaming = false
   private abortController: AbortController | null = null
-  private readonly validModes: readonly string[] = Object.keys(BUILT_IN_MODES)
   /** Заметка об откате пользователя для следующего запроса агента. */
   private pendingRevertNote: string | null = null
   /** Число сообщений активной сессии до последнего запроса (полный снимок сессии). */
@@ -126,13 +124,19 @@ export class ChatMessageHandler {
     } as ExtToWebview)
   }
 
-  /** Отправить текущий режим и допустимые переходы в webview. */
+  /** Все доступные режимы (встроенные + пользовательские). */
+  private get validModes(): string[] {
+    return this.agent.listModes().map((m) => m.name)
+  }
+
+  /** Отправить текущий режим, допустимые переходы и список режимов. */
   sendModeChanged(): void {
     const info = this.agent.getModeInfo()
     this.webview.postMessage({
       type: "modeChanged",
       mode: info.name,
       allowed: info.transitions,
+      modes: this.agent.listModes().map((m) => ({ name: m.name, displayName: m.displayName })),
     } as ExtToWebview)
   }
 

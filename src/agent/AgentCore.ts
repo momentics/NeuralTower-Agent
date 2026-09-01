@@ -36,6 +36,9 @@ function createAgentInternals(
 ) {
   const memory = new AgentMemory(deps.config.agent.maxTokens)
   const modeManager = new AgentModeManager()
+  for (const mode of deps.customModes ?? []) {
+    modeManager.registerMode(mode)
+  }
   const sessionContext = new SessionContext(
     `session-${Date.now()}`,
     deps.contextManager,
@@ -234,6 +237,13 @@ export class AgentCore {
    */
   getModeInfo(): IAgentMode {
     return this.modeManager.getMode()
+  }
+
+  /**
+   * Вернуть все доступные режимы (встроенные + пользовательские).
+   */
+  listModes(): IAgentMode[] {
+    return this.modeManager.listModes()
   }
 
   /**

@@ -127,6 +127,13 @@ export class AgentOrchestrator implements IAgentOrchestrator {
   }
 
   /**
+   * Вернуть все доступные режимы (встроенные + пользовательские).
+   */
+  listModes(): IAgentMode[] {
+    return this.core.listModes()
+  }
+
+  /**
    * Подписаться на события смены режима.
    * Подписка переживает пересоздание внутреннего core
    * (restoreSession, reload).
