@@ -206,3 +206,34 @@ h2 {
 .status-line.err {
   color: var(--red);
 }
+
+/* ═══════════════════════════════════════════
+   MCP-СЕРВЕРЫ
+   ═══════════════════════════════════════════ */
+.mcp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.mcp-row {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  align-items: baseline;
+}
+
+.mcp-name {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mcp-cmd {
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.mcp-empty {
+  color: var(--text-secondary);
+}

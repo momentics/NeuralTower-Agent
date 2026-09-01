@@ -76,6 +76,30 @@ window.addEventListener("message", (event) => {
       setToggle(notificationsEnabledToggle, data.config.notificationsEnabled)
       setToggle(notifyAgentDoneToggle, data.config.notifyAgentDone)
       setToggle(notifyPermissionsToggle, data.config.notifyPermissions)
+      const mcpList = document.getElementById("mcp-list")
+      if (mcpList) {
+        mcpList.replaceChildren()
+        const servers = data.config.mcpServers || []
+        if (servers.length === 0) {
+          const empty = document.createElement("div")
+          empty.className = "mcp-row mcp-empty"
+          empty.textContent = "Внешние MCP-серверы не настроены"
+          mcpList.appendChild(empty)
+        }
+        for (const s of servers) {
+          const row = document.createElement("div")
+          row.className = "mcp-row"
+          const name = document.createElement("span")
+          name.className = "mcp-name"
+          name.textContent = `${s.ready ? "●" : "○"} ${s.name}`
+          const cmd = document.createElement("span")
+          cmd.className = "mcp-cmd"
+          cmd.textContent = `${s.command}${s.toolCount > 0 ? ` · ${s.toolCount} инструментов` : s.ready ? "" : " · не подключен"}`
+          row.appendChild(name)
+          row.appendChild(cmd)
+          mcpList.appendChild(row)
+        }
+      }
       break
     case "settingsSaved":
       setStatus("Настройки сохранены", true)

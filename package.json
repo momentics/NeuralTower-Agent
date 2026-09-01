@@ -326,6 +326,11 @@
           "minimum": 2,
           "maximum": 10,
           "description": "Число одинаковых подряд вызовов инструмента, после которого запрашивается подтверждение (защита от зацикливания)"
+        },
+        "neuralTowerAgent.mcpServers": {
+          "type": "object",
+          "default": {},
+          "description": "Внешние MCP-серверы: имя → { command, args, env }. Файл .mcp.json в корне проекта переопределяет по имени"
         }
       }
     }

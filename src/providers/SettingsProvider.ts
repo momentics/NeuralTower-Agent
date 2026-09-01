@@ -1,5 +1,6 @@
 import * as vscode from "vscode"
 import type { IBackend } from "../core/IBackend"
+import type { IMCPManager } from "../mcp/MCPManager"
 import type { SettingsToExt, ExtToSettings } from "../shared/Messages"
 import { UI_MIN_BACKEND_TIMEOUT_MS, UI_SETTINGS_MODELS_TIMEOUT_MS, loadDefaultAgentConfig, loadDefaultSessionConfig } from "../core/Config"
 import { buildWebviewHtml } from "../shared/WebviewBuilder"
@@ -23,6 +24,7 @@ export class SettingsProvider implements ISettingsProvider {
   constructor(
     private readonly extUri: vscode.Uri,
     private readonly backend: IBackend,
+    private readonly mcpManager: IMCPManager | null = null,
   ) {}
 
   /**
@@ -78,6 +80,17 @@ export class SettingsProvider implements ISettingsProvider {
     const notifyAgentDone = vsCfg.get<boolean>("notifications.agentCompletion", true)
     const notifyPermissions = vsCfg.get<boolean>("notifications.permissionRequests", true)
     const models = await this.loadModels()
+    const mcpServers = this.mcpManager
+      ? this.mcpManager.listServers().map((c) => {
+          const tools = this.mcpManager!.getToolsByServer().find((s) => s.server === c.name)?.tools ?? []
+          return {
+            name: c.name,
+            command: c.command,
+            ready: this.mcpManager!.getReadyServers().includes(c.name),
+            toolCount: tools.length,
+          }
+        })
+      : []
     this.getWebview().postMessage({
       type: "settingsData",
       config: {
@@ -88,6 +101,7 @@ export class SettingsProvider implements ISettingsProvider {
         notificationsEnabled,
         notifyAgentDone,
         notifyPermissions,
+        mcpServers,
       },
       models,
     } as ExtToSettings)
@@ -274,6 +288,12 @@ export class SettingsProvider implements ISettingsProvider {
       </div>
       <div class="toggle on" id="notifyPermissions" onclick="toggleClick(this)"></div>
     </div>
+  </div>
+
+  <div class="settings-section">
+    <div class="settings-section-title">MCP-серверы</div>
+    <div class="setting-desc">Внешние серверы: настройка neuralTowerAgent.mcpServers и .mcp.json проекта</div>
+    <div id="mcp-list" class="mcp-list"></div>
   </div>
 
   <div class="settings-actions">

@@ -104,6 +104,7 @@ import {
   RememberTool,
 } from "../tools"
 import { ToolOutputTruncator } from "../tools/Truncate"
+import { loadMcpServers, type IMcpServerEntry } from "../mcp/McpConfig"
 import { loadUserModes } from "../agent/UserModeLoader"
 import type { IAgentMode } from "../agent/AgentMode"
 import { loadSkillsFromDir } from "../skills/SkillFileLoader"
@@ -504,6 +505,7 @@ export function createUIDomain(
   notificationService: INotificationService,
   permissionManager: IPermissionManager,
   backend: IBackend,
+  mcpManager: IMCPManager,
   snapshotService: ISnapshotService | null,
   snapshotStore: ISnapshotStore | null,
   gitService: IGitService,
@@ -511,7 +513,7 @@ export function createUIDomain(
   questionService: QuestionServiceHolder,
   memoryStore: MemoryStore | null,
 ): IUIDepsResult {
-  const settingsProvider = new SettingsProvider(extUri, backend)
+  const settingsProvider = new SettingsProvider(extUri, backend, mcpManager)
   const diffViewer = new DiffViewerProvider(extUri)
   const chatProvider = new ChatProvider(
     extUri,
@@ -685,6 +687,12 @@ export async function createDeps(
     path.join(ctx.globalStorageUri.fsPath, "skills"),
     memoryStore,
   )
+  // Внешние MCP-серверы: настройки VS Code + .mcp.json (проект переопределяет)
+  const vsMcpServers = vsCfg.get<Record<string, IMcpServerEntry>>("mcpServers", {}) ?? {}
+  const mcpServerConfigs = await loadMcpServers(vsMcpServers, workspaceRoot ?? null)
+  for (const serverConfig of mcpServerConfigs) {
+    mcpManager.register(serverConfig)
+  }
   await syncMCP(mcpManager, tools)
 
   // ── Движок MCP ntgraph (граф-инструменты для агента) ────
@@ -797,6 +805,7 @@ export async function createDeps(
     notificationService,
     permissionManager,
     backend,
+    mcpManager,
     snapshotService,
     snapshotStore,
     gitService,

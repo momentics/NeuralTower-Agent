@@ -63,6 +63,6 @@ export type SettingsToExt =
   | { type: "settingsTest"; url?: string }
 
 export type ExtToSettings =
-  | { type: "settingsData"; config: { url: string; model: string; maxRetries: number; timeoutMs: number; autoApprove: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean }; models: string[] }
+  | { type: "settingsData"; config: { url: string; model: string; maxRetries: number; timeoutMs: number; autoApprove: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean; mcpServers?: Array<{ name: string; command: string; ready: boolean; toolCount: number }> }; models: string[] }
   | { type: "settingsSaved" }
   | { type: "settingsTestResult"; success: boolean; message: string }
