@@ -1090,3 +1090,56 @@ body {
   outline: none;
   border-color: var(--accent);
 }
+
+/* ── Состояние агента: план и задачи ───────────────────── */
+
+.agent-state-panel {
+  margin: 4px 8px;
+  font-size: 11px;
+}
+
+.agent-state-panel summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  padding: 4px 0;
+  user-select: none;
+}
+
+.plan-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: var(--text-primary);
+}
+
+.plan-step {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.plan-step-icon {
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.plan-step-done .plan-step-icon { color: var(--green); }
+.plan-step-failed .plan-step-icon { color: var(--red); }
+.plan-step-running .plan-step-icon { color: var(--accent); }
+
+.plan-step-desc {
+  color: var(--text-primary);
+}
+
+.todo-row {
+  display: flex;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.todo-icon {
+  flex-shrink: 0;
+  font-family: var(--mono);
+}
+
+.todo-completed .todo-icon { color: var(--green); }
+.todo-in_progress .todo-icon { color: var(--accent); }

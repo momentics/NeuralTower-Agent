@@ -36,6 +36,18 @@ export const chatHtml = `
     <div id="mode-error" class="mode-error"></div>
   </div>
 
+  <!-- Agent state: plan and tasks -->
+  <div id="agent-state">
+    <details id="plan-panel" class="agent-state-panel" style="display:none">
+      <summary>План</summary>
+      <div id="plan-body"></div>
+    </details>
+    <details id="todo-panel" class="agent-state-panel" style="display:none">
+      <summary>Задачи</summary>
+      <div id="todo-body"></div>
+    </details>
+  </div>
+
   <!-- Sessions -->
   <div id="sessions-section">
     <div class="sessions-header">

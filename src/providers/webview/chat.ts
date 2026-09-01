@@ -44,6 +44,10 @@ const questionText = document.getElementById("question-text") as HTMLDivElement
 const questionOptions = document.getElementById("question-options") as HTMLDivElement
 const questionInput = document.getElementById("question-input") as HTMLInputElement
 const questionSendBtn = document.getElementById("question-send") as HTMLButtonElement
+const planPanel = document.getElementById("plan-panel") as HTMLDetailsElement
+const planBody = document.getElementById("plan-body") as HTMLDivElement
+const todoPanel = document.getElementById("todo-panel") as HTMLDetailsElement
+const todoBody = document.getElementById("todo-body") as HTMLDivElement
 
 // ── Типы и состояние ──────────────────────────────────
 
@@ -300,6 +304,74 @@ questionInput.addEventListener("keydown", (e: KeyboardEvent) => {
   }
 })
 
+// ── Состояние агента: план и задачи ─────────────────────
+
+const planStatusIcons: Record<string, string> = {
+  pending: "○",
+  running: "▶",
+  done: "✓",
+  failed: "✗",
+  skipped: "−",
+}
+
+/** Отрисовать панель плана (скрыть, если плана нет). */
+function renderPlan(plan: Record<string, unknown> | null): void {
+  if (!plan) {
+    planPanel.style.display = "none"
+    return
+  }
+  planPanel.style.display = ""
+  const steps = Array.isArray(plan.steps) ? (plan.steps as Array<Record<string, unknown>>) : []
+  planBody.innerHTML = ""
+  const title = document.createElement("div")
+  title.className = "plan-title"
+  title.textContent = `${String(plan.title ?? "")} · ${String(plan.status ?? "")}`
+  planBody.appendChild(title)
+  for (const s of steps) {
+    const status = String(s.status ?? "pending")
+    const row = document.createElement("div")
+    row.className = `plan-step plan-step-${status}`
+    const icon = document.createElement("span")
+    icon.className = "plan-step-icon"
+    icon.textContent = planStatusIcons[status] ?? "○"
+    const desc = document.createElement("span")
+    desc.className = "plan-step-desc"
+    desc.textContent = String(s.description ?? "")
+    row.appendChild(icon)
+    row.appendChild(desc)
+    planBody.appendChild(row)
+  }
+}
+
+const todoStatusIcons: Record<string, string> = {
+  pending: "[ ]",
+  in_progress: "[~]",
+  completed: "[x]",
+  cancelled: "[-]",
+}
+
+/** Отрисовать панель списка задач (скрыть, если задач нет). */
+function renderTodos(todos: Array<{ content: string; status: string }>): void {
+  if (!todos || todos.length === 0) {
+    todoPanel.style.display = "none"
+    return
+  }
+  todoPanel.style.display = ""
+  todoBody.innerHTML = ""
+  for (const t of todos) {
+    const row = document.createElement("div")
+    row.className = `todo-row todo-${t.status}`
+    const icon = document.createElement("span")
+    icon.className = "todo-icon"
+    icon.textContent = todoStatusIcons[t.status] ?? "[ ]"
+    const content = document.createElement("span")
+    content.textContent = t.content
+    row.appendChild(icon)
+    row.appendChild(content)
+    todoBody.appendChild(row)
+  }
+}
+
 // ── Сообщения от extension ────────────────────────────
 
 window.addEventListener("message", (event: MessageEvent) => {
@@ -349,6 +421,8 @@ window.addEventListener("message", (event: MessageEvent) => {
       currentEl = null
       setStreaming(false)
       contextPills.innerHTML = ""
+      renderPlan(null)
+      renderTodos([])
       break
 
     case "toolUse":
@@ -432,6 +506,14 @@ window.addEventListener("message", (event: MessageEvent) => {
 
     case "modeSwitchError":
       showModeError(String(data.message))
+      break
+
+    case "planUpdate":
+      renderPlan((data.plan as Record<string, unknown> | null) ?? null)
+      break
+
+    case "todoUpdate":
+      renderTodos((data.todos as Array<{ content: string; status: string }>) ?? [])
       break
 
     case "snapshotInfo": {

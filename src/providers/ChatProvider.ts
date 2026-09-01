@@ -102,6 +102,8 @@ export class ChatProvider implements IProvider {
     this.messageHandler.sendSessionList()
     this.messageHandler.sendActiveMessages()
     this.messageHandler.sendModeChanged()
+    // Состояние агента (план и задачи) — при открытии панели
+    this.messageHandler.sendAgentState()
 
     // Ленивая инициализация мониторинга здоровья — только когда пользователь открыл sidebar
     if (this.healthMonitor) {

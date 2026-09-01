@@ -1,4 +1,6 @@
 import type { AgentModeName } from "../agent/AgentMode"
+import type { IPlanSerialized } from "../agent/Plan"
+import type { ITodoItem } from "../agent/TodoStore"
 
 export type WebviewToExt =
   | { type: "sendMessage"; content: string }
@@ -53,6 +55,8 @@ export type ExtToWebview =
   | { type: "modelInfo"; model: string }
   | { type: "agentStatus"; text: string }
   | { type: "history"; messages: IHistoryMessage[] }
+  | { type: "planUpdate"; plan: IPlanSerialized | null }
+  | { type: "todoUpdate"; todos: ITodoItem[] }
 
 export type SettingsToExt =
   | { type: "settingsSave"; url: string; model: string; maxRetries?: number; timeoutMs?: number; autoApprove?: boolean; maxIterations?: number; maxSessions?: number; notificationsEnabled?: boolean; notifyAgentDone?: boolean; notifyPermissions?: boolean }

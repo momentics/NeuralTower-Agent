@@ -148,6 +148,7 @@ export class AgentCore {
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
     onSnapshot?: (patch: ISnapshotPatch | null) => void,
     revertNote?: string,
+    onPlanUpdate?: (plan: Plan | null) => void,
   ): Promise<IChatMessage> {
     if (this.disposed) {
       throw new AgentError("Агент освобождён")
@@ -189,6 +190,7 @@ export class AgentCore {
       onCompaction,
       onSnapshot,
       revertNote,
+      onPlanUpdate,
     )
   }
 

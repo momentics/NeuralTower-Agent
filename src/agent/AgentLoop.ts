@@ -36,6 +36,8 @@ export class AgentLoop {
   private readonly maxReplanAttempts: number
   private readonly maxCompactions: number
   private readonly snapshot: ISnapshotService | null
+  /** Колбэк обновления плана для UI (устанавливается в run). */
+  private planUpdateCb: ((plan: Plan | null) => void) | null = null
 
   private pushSessionMessage(msg: IChatMessage): void {
     if (this.sessionContext) {
@@ -142,6 +144,8 @@ export class AgentLoop {
       plan.sessionId = this.sessionContext.sessionID
     }
     await this.planner.persistPlan()
+    // Сообщить UI об обновлённом статусе плана (живое обновление панели).
+    this.planUpdateCb?.(this.planner.getPlan())
   }
 
   /**
@@ -374,8 +378,14 @@ export class AgentLoop {
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
     onSnapshot?: (patch: ISnapshotPatch | null) => void,
     revertNote?: string,
+    onPlanUpdate?: (plan: Plan | null) => void,
   ): Promise<IChatMessage> {
     const currentMode = this.modeManager.getModeName()
+
+    // Колбэк обновления плана для UI: сразу отправляем текущее состояние
+    // (план может быть восстановлен из предыдущей сессии).
+    this.planUpdateCb = onPlanUpdate ?? null
+    this.planUpdateCb?.(this.planner.getPlan())
 
     let planContext = ""
     const activePlan = this.planner.getPlan()

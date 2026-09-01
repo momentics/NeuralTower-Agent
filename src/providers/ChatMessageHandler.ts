@@ -65,6 +65,11 @@ export class ChatMessageHandler {
     disposables.push(this.createMessageHandler())
     disposables.push(this.createPermissionHandler())
     disposables.push(this.agent.onModeChanged(() => this.sendModeChanged()))
+    // Живое обновление списка задач: инструмент todowrite меняет хранилище,
+    // webview получает todoUpdate немедленно.
+    this.agent.getTodoStore().onDidChange = (todos) => {
+      this.webview.postMessage({ type: "todoUpdate", todos } as ExtToWebview)
+    }
     this.questionHolder.setImpl({ ask: (q, options, signal) => this.askUser(q, options, signal) })
     disposables.push({ dispose: () => this.questionHolder.setImpl(null) })
   }
@@ -131,6 +136,19 @@ export class ChatMessageHandler {
     } as ExtToWebview)
   }
 
+  /** Отправить текущий план и список задач в webview. */
+  sendAgentState(): void {
+    const plan = this.agent.getPlan()
+    this.webview.postMessage({
+      type: "planUpdate",
+      plan: plan ? plan.toJSON() : null,
+    } as ExtToWebview)
+    this.webview.postMessage({
+      type: "todoUpdate",
+      todos: this.agent.getTodoStore().getItems(),
+    } as ExtToWebview)
+  }
+
   // ── Создание обработчиков ────────────────────────────────
 
   private createMessageHandler(): vscode.Disposable {
@@ -162,6 +180,7 @@ export class ChatMessageHandler {
             this.sendActiveMessages()
             this.sendSessionList()
             this.sendModeChanged()
+            this.sendAgentState()
             break
           case "createSession": {
             await this.sessionStore.newSession()
@@ -172,6 +191,7 @@ export class ChatMessageHandler {
             this.webview.postMessage({ type: "newChat" } as ExtToWebview)
             this.sendSessionList()
             this.sendModeChanged()
+            this.sendAgentState()
             break
           }
           case "deleteSession":
@@ -728,7 +748,13 @@ export class ChatMessageHandler {
         })
       }, this.abortController.signal, undefined, (patch) => {
         this.handleSnapshotInfo(patch, String(userTimestamp))
-      }, note ?? undefined)
+      }, note ?? undefined, (plan) => {
+        // Живое обновление панели плана: статус шага меняется после каждого хода
+        this.webview.postMessage({
+          type: "planUpdate",
+          plan: plan ? plan.toJSON() : null,
+        } as ExtToWebview)
+      })
 
       await this.sessionStore.push(result)
 

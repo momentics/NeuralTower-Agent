@@ -86,4 +86,15 @@ describe("TodoStore", () => {
     expect(formatted).toContain("0 активных")
     expect(formatted).toContain("0 завершено")
   })
+
+  it("onDidChange вызывается при setItems и clear", () => {
+    const store = new TodoStore()
+    const calls: ITodoItem[][] = []
+    store.onDidChange = (items) => calls.push(items)
+    store.setItems([{ content: "a", status: "pending", priority: "high" }])
+    store.clear()
+    expect(calls.length).toBe(2)
+    expect(calls[0].length).toBe(1)
+    expect(calls[1].length).toBe(0)
+  })
 })

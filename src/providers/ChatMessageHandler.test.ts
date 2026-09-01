@@ -7,6 +7,7 @@ import type { NotificationService } from "../services/notification/NotificationS
 import type { PermissionManager } from "../services/permission/PermissionManager"
 import type { ISettingsProvider } from "./SettingsProvider"
 import { QuestionServiceHolder } from "../services/question/QuestionService"
+import { TodoStore } from "../agent/TodoStore"
 
 /**
  * Mock агента с реальной матрицей переходов режимов
@@ -22,11 +23,20 @@ function createMockAgent() {
   let modeHandler: ((m: string) => void) | null = null
   let runResolver: ((v: { role: string; content: string; timestamp: number }) => void) | null = null
   let runArgs: unknown[] = []
+  const todoStore = new TodoStore()
+  // План «создаётся внутри run» — как в реальном агенте (autoPlan)
+  let activePlan: { toJSON(): Record<string, unknown> } | null = null
 
   const agent = {
     run: vi.fn(
       (...args: unknown[]) => {
         runArgs = args
+        activePlan = {
+          toJSON: () => ({ id: "plan-1", title: "Тестовый план", status: "running", steps: [] }),
+        }
+        // Имитация AgentLoop.run: колбэк onPlanUpdate получает текущий план
+        const onPlanUpdate = args[args.length - 1] as ((p: unknown) => void) | undefined
+        onPlanUpdate?.(activePlan)
         return new Promise<{ role: string; content: string; timestamp: number }>((resolve) => {
           runResolver = resolve
         })
@@ -42,7 +52,8 @@ function createMockAgent() {
       }
     }),
     clearPlan: vi.fn(),
-    getPlan: vi.fn(() => null),
+    getPlan: vi.fn(() => activePlan),
+    getTodoStore: vi.fn(() => todoStore),
     getMode: vi.fn(() => mode),
     getModeInfo: vi.fn(() => ({
       name: mode,
@@ -774,7 +785,8 @@ describe("ChatMessageHandler", () => {
     onMessage({ type: "sendMessage", content: "ещё" })
     await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1))
     const args = getRunArgs()
-    const note = args[args.length - 1]
+    // revertNote — восьмой аргумент run (после него идёт onPlanUpdate)
+    const note = args[7]
     expect(note).toBeTypeOf("string")
     expect(note).toContain("откатил")
     expect(note).toContain("a.ts")
@@ -818,7 +830,8 @@ describe("ChatMessageHandler", () => {
     onMessage({ type: "sendMessage", content: "ещё" })
     await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1))
     const args = getRunArgs()
-    expect(args[args.length - 1]).toBeUndefined()
+    // revertNote — восьмой аргумент run (после него идёт onPlanUpdate)
+    expect(args[7]).toBeUndefined()
     resolveRun()
   })
 
@@ -1039,5 +1052,30 @@ describe("ChatMessageHandler", () => {
     const answerPromise = questionHolder.ask("Вопрос?", [])
     handler.abort()
     expect(await answerPromise).toBeNull()
+  })
+
+  // ── Состояние агента: план и задачи ──────────────────────
+
+  it("planUpdate отправляется при изменении плана", async () => {
+    onMessage({ type: "sendMessage", content: "задача" })
+    await vi.waitFor(() => expect(agent.run).toHaveBeenCalledTimes(1))
+    // Мок-агент создал план внутри run и передал его в onPlanUpdate
+    await vi.waitFor(() => {
+      const planUpdates = vi
+        .mocked(webview.postMessage)
+        .mock.calls.map((c) => c[0])
+        .filter((m) => (m as { type: string }).type === "planUpdate")
+      expect(planUpdates.some((m) => (m as { plan: unknown }).plan !== null)).toBe(true)
+    })
+    resolveRun()
+  })
+
+  it("todoUpdate отправляется при изменении списка задач", () => {
+    const store = agent.getTodoStore()
+    store.setItems([{ content: "Задача А", status: "pending", priority: "high" }])
+    expect(webview.postMessage).toHaveBeenCalledWith({
+      type: "todoUpdate",
+      todos: [{ content: "Задача А", status: "pending", priority: "high" }],
+    })
   })
 })

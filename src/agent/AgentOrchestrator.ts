@@ -89,9 +89,10 @@ export class AgentOrchestrator implements IAgentOrchestrator {
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
     onSnapshot?: (patch: ISnapshotPatch | null) => void,
     revertNote?: string,
+    onPlanUpdate?: (plan: Plan | null) => void,
   ): Promise<IChatMessage> {
     const combined = AbortSignal.any([this.abortController.signal, signal].filter((s): s is AbortSignal => !!s))
-    return this.core.run(query, onChunk, onToolUse, onToolResult, combined, onCompaction, onSnapshot, revertNote)
+    return this.core.run(query, onChunk, onToolUse, onToolResult, combined, onCompaction, onSnapshot, revertNote, onPlanUpdate)
   }
 
   // ── Планирование ───────────────────────────────────────

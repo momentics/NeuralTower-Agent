@@ -20,8 +20,12 @@ export interface ITodoStore {
 export class TodoStore implements ITodoStore {
   private items: ITodoItem[] = []
 
+  /** Колбэк изменения списка задач (для живого обновления UI). */
+  onDidChange?: (items: ITodoItem[]) => void
+
   setItems(items: ITodoItem[]): void {
     this.items = items
+    this.onDidChange?.(this.getItems())
   }
 
   getItems(): ITodoItem[] {
@@ -30,6 +34,7 @@ export class TodoStore implements ITodoStore {
 
   clear(): void {
     this.items = []
+    this.onDidChange?.(this.items)
   }
 
   formatItems(): string {

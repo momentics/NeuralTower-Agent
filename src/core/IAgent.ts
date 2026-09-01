@@ -5,6 +5,7 @@ import type { Plan } from "../agent/Plan"
 import type { IToolResult } from "../agent/AgentTypes"
 import type { AgentModeName, IAgentMode } from "../agent/AgentMode"
 import type { ISnapshotPatch } from "../services/snapshot/SnapshotTypes"
+import type { TodoStore } from "../agent/TodoStore"
 
 /**
  * Интерфейс оркестратора агента. Управляет циклом агента:
@@ -25,6 +26,8 @@ export interface IAgentOrchestrator {
     * изменения предыдущего запроса; добавляется к системному промпту.
     * `id` в onToolUse/onToolResult — идентификатор вызова инструмента
     * (нужен для персистентной истории сессии).
+    * `onPlanUpdate` вызывается при создании плана и после каждого изменения
+    * статуса шага (null, если плана нет) — для живого обновления UI.
     */
   run(
     query: string,
@@ -35,6 +38,7 @@ export interface IAgentOrchestrator {
     onCompaction?: (tokensBefore: number, tokensAfter: number) => void,
     onSnapshot?: (patch: ISnapshotPatch | null) => void,
     revertNote?: string,
+    onPlanUpdate?: (plan: Plan | null) => void,
   ): Promise<IChatMessage>
 
   /** Перезагрузить навыки и инструменты с диска/конфигурации. */
@@ -54,6 +58,9 @@ export interface IAgentOrchestrator {
 
   /** Вернуть текущий план (или null, если плана нет). */
   getPlan(): Plan | null
+
+  /** Вернуть хранилище задач (todo). */
+  getTodoStore(): TodoStore
 
   /** Вернуть имя текущего режима. */
   getMode(): AgentModeName
